@@ -44,6 +44,7 @@ namespace Alice
         {
             DirectX::XMFLOAT3 position;
             DirectX::XMFLOAT3 normal;
+            DirectX::XMFLOAT2 texcoord;
         };
 
         struct CBPerObject
@@ -99,6 +100,8 @@ namespace Alice
         bool CreateCubeGeometry();
         bool CreateShadersAndInputLayout();
         bool CreateConstantBuffers();
+        bool CreateTextures();
+        bool CreateSamplerState();
 
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
                                const DirectX::XMMATRIX& view,
@@ -126,6 +129,12 @@ namespace Alice
 
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbLighting;
+
+        // 텍스처 / 샘플러
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_diffuseSRV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_normalSRV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_specularSRV;
+        Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerState;
 
         LightingParameters                              m_lightingParameters;
 
