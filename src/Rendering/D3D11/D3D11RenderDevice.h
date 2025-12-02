@@ -1,0 +1,47 @@
+#pragma once
+
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
+#include <cstdint>
+#include <wrl/client.h>
+#include <d3d11.h>
+
+#include "Rendering/IRenderDevice.h"
+
+namespace Alice
+{
+    /// Direct3D 11 기반 렌더 디바이스 구현체입니다.
+    /// - IRenderDevice 인터페이스를 구현합니다.
+    class D3D11RenderDevice final : public IRenderDevice
+    {
+    public:
+        D3D11RenderDevice() = default;
+        ~D3D11RenderDevice() override = default;
+
+        bool Initialize(HWND window, std::uint32_t width, std::uint32_t height) override;
+        void Resize(std::uint32_t width, std::uint32_t height) override;
+        void BeginFrame(const float clearColor[4]) override;
+        void EndFrame() override;
+
+    private:
+        using ComPtr = Microsoft::WRL::ComPtr<IUnknown>;
+
+        // 내부에서 사용할 실제 타입별 ComPtr 별칭
+        Microsoft::WRL::ComPtr<ID3D11Device>           m_device;
+        Microsoft::WRL::ComPtr<ID3D11DeviceContext>    m_immediateContext;
+        Microsoft::WRL::ComPtr<IDXGISwapChain>         m_swapChain;
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_renderTargetView;
+
+        std::uint32_t m_width  = 0;
+        std::uint32_t m_height = 0;
+
+        /// 백버퍼로부터 렌더 타깃 뷰를 생성합니다.
+        bool CreateRenderTarget();
+
+        /// 현재 렌더 타깃 기준으로 뷰포트를 설정합니다.
+        void SetupViewport();
+    };
+}
+
+
