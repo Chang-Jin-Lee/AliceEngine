@@ -33,7 +33,34 @@ namespace Alice
             return false;
         }
 
-        // World, 기타 시스템 초기화는 여기서 추가 가능
+        // 4) Forward 렌더 시스템 초기화
+        m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*m_renderDevice);
+        if (!m_forwardRenderSystem->Initialize())
+        {
+            return false;
+        }
+
+        // 5) World에 렌더링할 간단한 큐브 엔티티 생성
+        m_cubeEntity = m_world.CreateEntity();
+        {
+            auto& transform = m_world.AddTransform(m_cubeEntity);
+            transform.position[0] = 0.0f;
+            transform.position[1] = 0.0f;
+            transform.position[2] = 0.0f;
+
+            transform.scale[0] = 1.0f;
+            transform.scale[1] = 1.0f;
+            transform.scale[2] = 1.0f;
+        }
+
+        // 6) 카메라 설정
+        const float aspect = static_cast<float>(m_width) / static_cast<float>(m_height);
+        m_camera.SetLookAt(
+            DirectX::XMFLOAT3(0.0f, 2.0f, -5.0f),
+            DirectX::XMFLOAT3(0.0f, 0.0f,  0.0f),
+            DirectX::XMFLOAT3(0.0f, 1.0f,  0.0f)
+        );
+        m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 100.0f);
 
         return true;
     }
@@ -92,7 +119,7 @@ namespace Alice
 
     void Engine::Render()
     {
-        if (!m_renderDevice)
+        if (!m_renderDevice || !m_forwardRenderSystem)
         {
             return;
         }
@@ -102,7 +129,11 @@ namespace Alice
 
         m_renderDevice->BeginFrame(clearColor);
 
-        // TODO: 여기에서 World, 렌더 시스템을 통해 실제 3D 씬 렌더링
+        // 간단한 Forward 렌더링 (Blinn-Phong 사용: true)
+        if (m_cubeEntity != InvalidEntityId)
+        {
+            m_forwardRenderSystem->Render(m_world, m_camera, m_cubeEntity, /*useBlinn*/ true);
+        }
 
         m_renderDevice->EndFrame();
     }
@@ -171,6 +202,11 @@ namespace Alice
         if (m_renderDevice)
         {
             m_renderDevice->Resize(width, height);
+
+            const float aspect = (height != 0)
+                ? static_cast<float>(width) / static_cast<float>(height)
+                : 1.0f;
+            m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 100.0f);
         }
     }
 
