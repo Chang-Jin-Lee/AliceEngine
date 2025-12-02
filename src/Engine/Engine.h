@@ -6,7 +6,10 @@
 #include <memory>
 
 #include "Core/World.h"
-#include "Core/Input.h"
+#include "Core/InputSystem.h"
+#include "Core/TimeSystem.h"
+#include "Core/ResourceManager.h"
+#include "Core/Scene.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
@@ -37,7 +40,7 @@ namespace Alice
         static LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
         /// 한 프레임의 업데이트(게임 로직)를 수행합니다.
-        void Update(float deltaTime);
+        void Update();
 
         /// 한 프레임의 렌더링을 수행합니다.
         void Render();
@@ -64,11 +67,12 @@ namespace Alice
 
         bool m_isRunning = false;
 
-        World  m_world;
-        Camera m_camera;
-        Input  m_input;
-
-        EntityId m_cubeEntity { InvalidEntityId };
+        World          m_world;
+        Camera         m_camera;
+        InputSystem    m_inputSystem;
+        GameTimer      m_timer;
+        ResourceManager m_resourceManager;
+        std::unique_ptr<SceneManager> m_sceneManager;
 
         ShadingMode m_shadingMode { ShadingMode::BlinnPhong };
         bool        m_useFillLight { false };

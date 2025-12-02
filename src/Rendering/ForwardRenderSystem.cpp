@@ -1,6 +1,8 @@
 #include "Rendering/ForwardRenderSystem.h"
 
 #include <d3dcompiler.h>
+// 텍스처 로더 (vcpkg의 DirectXTK 사용)
+#include <DirectXTK/WICTextureLoader.h>
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
@@ -23,6 +25,7 @@ struct VSInput
 {
     float3 Position : POSITION;
     float3 Normal   : NORMAL;
+    float2 TexCoord : TEXCOORD0;
 };
 
 struct VSOutput
@@ -30,6 +33,7 @@ struct VSOutput
     float4 Position : SV_POSITION;
     float3 WorldPos : TEXCOORD0;
     float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
 };
 
 VSOutput main(VSInput input)
@@ -42,12 +46,18 @@ VSOutput main(VSInput input)
 
     output.WorldPos = worldPos.xyz;
     output.Normal   = mul(float4(input.Normal, 0.0f), gWorld).xyz;
+    output.TexCoord = input.TexCoord;
 
     return output;
 }
 )";
 
         const char* g_PhongPixelShaderSource = R"(
+Texture2D gDiffuseMap  : register(t0);
+Texture2D gNormalMap   : register(t1);
+Texture2D gSpecularMap : register(t2);
+SamplerState gSampler  : register(s0);
+
 cbuffer CBLighting : register(b1)
 {
     // Key Light
@@ -79,11 +89,15 @@ struct PSInput
     float4 Position : SV_POSITION;
     float3 WorldPos : TEXCOORD0;
     float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
 };
 
 float4 main(PSInput input) : SV_TARGET
 {
-    float3 N = normalize(input.Normal);
+    // 노말맵에서 노멀을 가져와 [-1,1] 범위로 변환 후 정규화합니다.
+    float3 normalTex = gNormalMap.Sample(gSampler, input.TexCoord).xyz * 2.0f - 1.0f;
+    float3 N = normalize(normalTex);
+
     float3 V = normalize(gCameraPos - input.WorldPos);
 
     float3 totalDiffuse  = float3(0.0f, 0.0f, 0.0f);
@@ -145,12 +159,16 @@ float4 main(PSInput input) : SV_TARGET
         }
     }
 
+    // 텍스처 샘플링
+    float3 albedo    = gDiffuseMap.Sample(gSampler,  input.TexCoord).rgb;
+    float3 specColor = gSpecularMap.Sample(gSampler, input.TexCoord).rgb;
+
     float3 ambient = 0.1f * gKeyLightColor;
 
     float3 finalColor =
-        ambient * gMaterialDiffuse.rgb +
-        totalDiffuse * gMaterialDiffuse.rgb +
-        totalSpecular * gMaterialSpecular.rgb;
+        ambient * albedo +
+        totalDiffuse * albedo +
+        totalSpecular * specColor;
 
     return float4(finalColor, 1.0f);
 }
@@ -186,50 +204,60 @@ float4 main(PSInput input) : SV_TARGET
             return false;
         }
 
+        if (!CreateTextures())
+        {
+            return false;
+        }
+
+        if (!CreateSamplerState())
+        {
+            return false;
+        }
+
         return true;
     }
 
     bool ForwardRenderSystem::CreateCubeGeometry()
     {
         // 단순 단위 큐브 정점/인덱스 데이터
-        // (각 면에 대한 법선을 명시해서 조명 계산이 자연스럽도록)
+        // (각 면에 대한 법선과 텍스처 좌표를 명시해서 조명/텍스처링이 자연스럽도록)
         SimpleVertex vertices[] =
         {
             // Front (+Z)
-            { XMFLOAT3(-1.0f, -1.0f,  1.0f), XMFLOAT3(0.0f,  0.0f,  1.0f) },
-            { XMFLOAT3(-1.0f,  1.0f,  1.0f), XMFLOAT3(0.0f,  0.0f,  1.0f) },
-            { XMFLOAT3( 1.0f,  1.0f,  1.0f), XMFLOAT3(0.0f,  0.0f,  1.0f) },
-            { XMFLOAT3( 1.0f, -1.0f,  1.0f), XMFLOAT3(0.0f,  0.0f,  1.0f) },
+            { XMFLOAT3(-1.0f, -1.0f,  1.0f), XMFLOAT3(0.0f,  0.0f,  1.0f), XMFLOAT2(0.0f, 1.0f) },
+            { XMFLOAT3(-1.0f,  1.0f,  1.0f), XMFLOAT3(0.0f,  0.0f,  1.0f), XMFLOAT2(0.0f, 0.0f) },
+            { XMFLOAT3( 1.0f,  1.0f,  1.0f), XMFLOAT3(0.0f,  0.0f,  1.0f), XMFLOAT2(1.0f, 0.0f) },
+            { XMFLOAT3( 1.0f, -1.0f,  1.0f), XMFLOAT3(0.0f,  0.0f,  1.0f), XMFLOAT2(1.0f, 1.0f) },
 
             // Back (-Z)
-            { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f,  0.0f, -1.0f) },
-            { XMFLOAT3( 1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f,  0.0f, -1.0f) },
-            { XMFLOAT3( 1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f,  0.0f, -1.0f) },
-            { XMFLOAT3(-1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f,  0.0f, -1.0f) },
+            { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f,  0.0f, -1.0f), XMFLOAT2(1.0f, 1.0f) },
+            { XMFLOAT3( 1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f,  0.0f, -1.0f), XMFLOAT2(0.0f, 1.0f) },
+            { XMFLOAT3( 1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f,  0.0f, -1.0f), XMFLOAT2(0.0f, 0.0f) },
+            { XMFLOAT3(-1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f,  0.0f, -1.0f), XMFLOAT2(1.0f, 0.0f) },
 
             // Top (+Y)
-            { XMFLOAT3(-1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f,  1.0f,  0.0f) },
-            { XMFLOAT3( 1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f,  1.0f,  0.0f) },
-            { XMFLOAT3( 1.0f,  1.0f,  1.0f), XMFLOAT3(0.0f,  1.0f,  0.0f) },
-            { XMFLOAT3(-1.0f,  1.0f,  1.0f), XMFLOAT3(0.0f,  1.0f,  0.0f) },
+            { XMFLOAT3(-1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f,  1.0f,  0.0f), XMFLOAT2(0.0f, 1.0f) },
+            { XMFLOAT3( 1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f,  1.0f,  0.0f), XMFLOAT2(1.0f, 1.0f) },
+            { XMFLOAT3( 1.0f,  1.0f,  1.0f), XMFLOAT3(0.0f,  1.0f,  0.0f), XMFLOAT2(1.0f, 0.0f) },
+            { XMFLOAT3(-1.0f,  1.0f,  1.0f), XMFLOAT3(0.0f,  1.0f,  0.0f), XMFLOAT2(0.0f, 0.0f) },
 
             // Bottom (-Y)
-            { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f,  0.0f) },
-            { XMFLOAT3(-1.0f, -1.0f,  1.0f), XMFLOAT3(0.0f, -1.0f,  0.0f) },
-            { XMFLOAT3( 1.0f, -1.0f,  1.0f), XMFLOAT3(0.0f, -1.0f,  0.0f) },
-            { XMFLOAT3( 1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f,  0.0f) },
+            { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f,  0.0f), XMFLOAT2(0.0f, 1.0f) },
+            { XMFLOAT3(-1.0f, -1.0f,  1.0f), XMFLOAT3(0.0f, -1.0f,  0.0f), XMFLOAT2(0.0f, 0.0f) },
+            { XMFLOAT3( 1.0f, -1.0f,  1.0f), XMFLOAT3(0.0f, -1.0f,  0.0f), XMFLOAT2(1.0f, 0.0f) },
+            { XMFLOAT3( 1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f,  0.0f), XMFLOAT2(1.0f, 1.0f) },
 
             // Left (-X)
-            { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(-1.0f,  0.0f,  0.0f) },
-            { XMFLOAT3(-1.0f,  1.0f, -1.0f), XMFLOAT3(-1.0f,  0.0f,  0.0f) },
-            { XMFLOAT3(-1.0f,  1.0f,  1.0f), XMFLOAT3(-1.0f,  0.0f,  0.0f) },
-            { XMFLOAT3(-1.0f, -1.0f,  1.0f), XMFLOAT3(-1.0f,  0.0f,  0.0f) },
+            { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(-1.0f,  0.0f,  0.0f), XMFLOAT2(1.0f, 1.0f) },
+            { XMFLOAT3(-1.0f,  1.0f, -1.0f), XMFLOAT3(-1.0f,  0.0f,  0.0f), XMFLOAT2(1.0f, 0.0f) },
+            { XMFLOAT3(-1.0f,  1.0f,  1.0f), XMFLOAT3(-1.0f,  0.0f,  0.0f), XMFLOAT2(0.0f, 0.0f) },
+            { XMFLOAT3(-1.0f, -1.0f,  1.0f), XMFLOAT3(-1.0f,  0.0f,  0.0f), XMFLOAT2(0.0f, 1.0f) },
 
             // Right (+X)
-            { XMFLOAT3( 1.0f, -1.0f, -1.0f), XMFLOAT3(1.0f,  0.0f,  0.0f) },
-            { XMFLOAT3( 1.0f, -1.0f,  1.0f), XMFLOAT3(1.0f,  0.0f,  0.0f) },
-            { XMFLOAT3( 1.0f,  1.0f,  1.0f), XMFLOAT3(1.0f,  0.0f,  0.0f) },
-            { XMFLOAT3( 1.0f,  1.0f, -1.0f), XMFLOAT3(1.0f,  0.0f,  0.0f) },
+            { XMFLOAT3( 1.0f, -1.0f, -1.0f), XMFLOAT3(1.0f,  0.0f,  0.0f), XMFLOAT2(0.0f, 1.0f) },
+            { XMFLOAT3( 1.0f, -1.0f,  1.0f), XMFLOAT3(1.0f,  0.0f,  0.0f), XMFLOAT2(0.0f, 0.0f) },
+            { XMFLOAT3( 1.0f,  1.0f,  1.0f), XMFLOAT3(1.0f,  0.0f,  0.0f), XMFLOAT2(1.0f, 0.0f) },
+            { XMFLOAT3( 1.0f,  1.0f, -1.0f), XMFLOAT3(1.0f,  0.0f,  0.0f), XMFLOAT2(1.0f, 1.0f) },
         };
 
         uint16_t indices[] =
@@ -339,7 +367,8 @@ float4 main(PSInput input) : SV_TARGET
         D3D11_INPUT_ELEMENT_DESC layoutDesc[] =
         {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,                            D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(XMFLOAT3),             D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(XMFLOAT3),             D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, sizeof(XMFLOAT3) * 2,         D3D11_INPUT_PER_VERTEX_DATA, 0 }
         };
 
         hr = m_device->CreateInputLayout(
@@ -368,6 +397,57 @@ float4 main(PSInput input) : SV_TARGET
 
         cbDesc.ByteWidth = sizeof(CBLighting);
         hr = m_device->CreateBuffer(&cbDesc, nullptr, m_cbLighting.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        return true;
+    }
+
+    bool ForwardRenderSystem::CreateTextures()
+    {
+        // 실행 파일 기준으로 Resource/Image 폴더의 브릭 텍스처를 읽어옵니다.
+        const wchar_t* diffusePath  = L"../Resource/Image/Bricks059_1K-JPG_Color.jpg";
+        const wchar_t* normalPath   = L"../Resource/Image/Bricks059_1K-JPG_NormalDX.jpg";
+        const wchar_t* specularPath = L"../Resource/Image/Bricks059_Specular.png";
+
+        HRESULT hr = DirectX::CreateWICTextureFromFile(
+            m_device.Get(),
+            diffusePath,
+            nullptr,
+            m_diffuseSRV.ReleaseAndGetAddressOf()
+        );
+        if (FAILED(hr)) return false;
+
+        hr = DirectX::CreateWICTextureFromFile(
+            m_device.Get(),
+            normalPath,
+            nullptr,
+            m_normalSRV.ReleaseAndGetAddressOf()
+        );
+        if (FAILED(hr)) return false;
+
+        hr = DirectX::CreateWICTextureFromFile(
+            m_device.Get(),
+            specularPath,
+            nullptr,
+            m_specularSRV.ReleaseAndGetAddressOf()
+        );
+        if (FAILED(hr)) return false;
+
+        return true;
+    }
+
+    bool ForwardRenderSystem::CreateSamplerState()
+    {
+        D3D11_SAMPLER_DESC samplerDesc = {};
+        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+        samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+        samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+        samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+        samplerDesc.MinLOD = 0;
+        samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+        HRESULT hr = m_device->CreateSamplerState(&samplerDesc, m_samplerState.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return false;
 
         return true;
@@ -458,9 +538,9 @@ float4 main(PSInput input) : SV_TARGET
 
     XMMATRIX ForwardRenderSystem::BuildWorldMatrix(const TransformComponent& transform) const
     {
-        XMVECTOR scale = XMVectorSet(transform.scale[0], transform.scale[1], transform.scale[2], 0.0f);
-        XMVECTOR rotation = XMVectorSet(transform.rotation[0], transform.rotation[1], transform.rotation[2], 0.0f);
-        XMVECTOR translation = XMVectorSet(transform.position[0], transform.position[1], transform.position[2], 0.0f);
+        XMVECTOR scale = XMLoadFloat3(&transform.scale);
+        XMVECTOR rotation = XMLoadFloat3(&transform.rotation);
+        XMVECTOR translation = XMLoadFloat3(&transform.position);
 
         XMMATRIX S = XMMatrixScalingFromVector(scale);
         XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(rotation);
@@ -493,13 +573,24 @@ float4 main(PSInput input) : SV_TARGET
         m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
         m_context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
 
-        // 2) 상수 버퍼 업데이트
+        // 2) 상수 버퍼 / 텍스처 바인딩
         XMMATRIX worldM = BuildWorldMatrix(*transform);
         XMMATRIX viewM  = camera.GetViewMatrix();
         XMMATRIX projM  = camera.GetProjectionMatrix();
 
         UpdatePerObjectCB(worldM, viewM, projM);
         UpdateLightingCB(camera, shadingMode, enableFillLight);
+
+        // 브릭 텍스처, 노말맵, 스페큘러 맵과 샘플러를 픽셀 셰이더에 바인딩합니다.
+        ID3D11ShaderResourceView* srvs[] =
+        {
+            m_diffuseSRV.Get(),
+            m_normalSRV.Get(),
+            m_specularSRV.Get()
+        };
+        m_context->PSSetShaderResources(0, 3, srvs);
+        ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
+        m_context->PSSetSamplers(0, 1, samplers);
 
         // 3) 드로우 콜
         m_context->DrawIndexed(m_indexCount, 0, 0);
