@@ -7,13 +7,13 @@
 #include <wrl/client.h>
 #include <d3d11.h>
 
-#include "Rendering/IRenderDevice.h"
+#include "Rendering/D3D11/ID3D11RenderDevice.h"
 
 namespace Alice
 {
     /// Direct3D 11 기반 렌더 디바이스 구현체입니다.
-    /// - IRenderDevice 인터페이스를 구현합니다.
-    class D3D11RenderDevice final : public IRenderDevice
+    /// - ID3D11RenderDevice 인터페이스를 구현합니다.
+    class D3D11RenderDevice final : public ID3D11RenderDevice
     {
     public:
         D3D11RenderDevice() = default;
@@ -23,6 +23,9 @@ namespace Alice
         void Resize(std::uint32_t width, std::uint32_t height) override;
         void BeginFrame(const float clearColor[4]) override;
         void EndFrame() override;
+
+        ID3D11Device* GetDevice() override { return m_device.Get(); }
+        ID3D11DeviceContext* GetImmediateContext() override { return m_immediateContext.Get(); }
 
     private:
         using ComPtr = Microsoft::WRL::ComPtr<IUnknown>;
