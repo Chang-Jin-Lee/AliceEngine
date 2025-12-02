@@ -24,7 +24,9 @@ add_executable(AliceRenderer
     ${ALICE_SRC_DIR}/Core/World.cpp
 
     # ·»´õ¸µ °èÃþ
+    ${ALICE_SRC_DIR}/Rendering/Camera.cpp
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.cpp
+    ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
 )
 
 target_include_directories(AliceRenderer
@@ -48,6 +50,7 @@ target_link_libraries(AliceRenderer
         d3d11
         dxgi
         dxguid
+        d3dcompiler
 )
 
 

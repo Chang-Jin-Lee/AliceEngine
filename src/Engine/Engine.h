@@ -6,7 +6,9 @@
 #include <memory>
 
 #include "Core/World.h"
-#include "Rendering/IRenderDevice.h"
+#include "Rendering/Camera.h"
+#include "Rendering/D3D11/ID3D11RenderDevice.h"
+#include "Rendering/ForwardRenderSystem.h"
 
 namespace Alice
 {
@@ -54,9 +56,13 @@ namespace Alice
 
         bool m_isRunning = false;
 
-        World m_world;
+        World  m_world;
+        Camera m_camera;
 
-        std::unique_ptr<IRenderDevice> m_renderDevice;
+        EntityId m_cubeEntity { InvalidEntityId };
+
+        std::unique_ptr<ID3D11RenderDevice> m_renderDevice;
+        std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
     };
 }
 
