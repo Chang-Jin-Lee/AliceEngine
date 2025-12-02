@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "Core/World.h"
+#include "Core/Input.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
@@ -48,6 +49,13 @@ namespace Alice
         void OnResize(std::uint32_t width, std::uint32_t height);
 
     private:
+        enum class ShadingMode
+        {
+            Lambert   = 0,
+            Phong     = 1,
+            BlinnPhong = 2
+        };
+
         HINSTANCE m_hInstance = nullptr;
         HWND      m_hWnd      = nullptr;
 
@@ -58,8 +66,20 @@ namespace Alice
 
         World  m_world;
         Camera m_camera;
+        Input  m_input;
 
         EntityId m_cubeEntity { InvalidEntityId };
+
+        ShadingMode m_shadingMode { ShadingMode::BlinnPhong };
+        bool        m_useFillLight { false };
+
+        // 카메라 이동/회전을 위한 내부 상태 값들
+        DirectX::XMFLOAT3 m_cameraPosition { 0.0f, 2.0f, -5.0f };
+        float             m_cameraYawRadians   = 0.0f;  // Yaw (좌우 회전)
+        float             m_cameraPitchRadians = 0.0f;  // Pitch (상하 회전)
+
+        float             m_cameraMoveSpeed       = 3.0f;     // 초당 이동 속도
+        float             m_cameraMouseSensitivity = 0.0025f; // 마우스 감도 (라디안/픽셀)
 
         std::unique_ptr<ID3D11RenderDevice> m_renderDevice;
         std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
