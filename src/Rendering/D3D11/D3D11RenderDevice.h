@@ -35,12 +35,19 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11DeviceContext>    m_immediateContext;
         Microsoft::WRL::ComPtr<IDXGISwapChain>         m_swapChain;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_renderTargetView;
+        Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_depthStencil;
+        Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_depthStencilView;
+        Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_depthStencilState;
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>  m_rasterizerState;
 
         std::uint32_t m_width  = 0;
         std::uint32_t m_height = 0;
 
         /// 백버퍼로부터 렌더 타깃 뷰를 생성합니다.
         bool CreateRenderTarget();
+
+        /// 깊이/스텐실 버퍼와 뷰를 생성합니다.
+        bool CreateDepthStencil(std::uint32_t width, std::uint32_t height);
 
         /// 현재 렌더 타깃 기준으로 뷰포트를 설정합니다.
         void SetupViewport();

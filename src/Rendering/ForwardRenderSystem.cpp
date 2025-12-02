@@ -7,7 +7,7 @@ using Microsoft::WRL::ComPtr;
 
 namespace Alice
 {
-    // 간단한 Phong / Blinn-Phong 셰이더 코드
+    // 간단한 Lambert / Phong / Blinn-Phong 셰이더 코드
     // (D3D11 튜토리얼의 기본 조명 코드를 참고한 단순 버전)
     namespace
     {
@@ -50,16 +50,28 @@ VSOutput main(VSInput input)
         const char* g_PhongPixelShaderSource = R"(
 cbuffer CBLighting : register(b1)
 {
-    float3 gLightDir;
-    float  pad0;
+    // Key Light
+    float3 gKeyLightDir;
+    float  gKeyLightPad0;
 
-    float3 gLightColor;
-    float  pad1;
+    float3 gKeyLightColor;
+    float  gKeyLightIntensity;
+
+    // Fill Light
+    float3 gFillLightDir;
+    float  gFillLightPad0;
+
+    float3 gFillLightColor;
+    float  gFillLightIntensity;
 
     float3 gCameraPos;
-    float  gSpecularPower;
+    float  gPad1;
 
-    float4 gOptions; // x: useBlinn(1.0 = Blinn, 0.0 = Phong)
+    float4 gMaterialDiffuse;   // rgb: diffuse color
+    float4 gMaterialSpecular;  // rgb: specular color, a: shininess
+
+    int    gShadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong
+    int3   gPad2;
 };
 
 struct PSInput
@@ -72,36 +84,74 @@ struct PSInput
 float4 main(PSInput input) : SV_TARGET
 {
     float3 N = normalize(input.Normal);
-    float3 L = normalize(-gLightDir); // LightDir는 "빛이 오는 방향" 반대 방향으로 사용
     float3 V = normalize(gCameraPos - input.WorldPos);
 
-    // Lambert Diffuse
-    float NdotL = max(dot(N, L), 0.0f);
-    float3 diffuse = NdotL * gLightColor;
+    float3 totalDiffuse  = float3(0.0f, 0.0f, 0.0f);
+    float3 totalSpecular = float3(0.0f, 0.0f, 0.0f);
 
-    // Phong / Blinn-Phong Specular
-    float specularTerm = 0.0f;
-    if (NdotL > 0.0f)
+    // Key Light
     {
-        if (gOptions.x > 0.5f) // Blinn
+        float3 L = normalize(-gKeyLightDir);
+        float  NdotL = max(dot(N, L), 0.0f);
+        float3 lightColor = gKeyLightColor * gKeyLightIntensity;
+
+        totalDiffuse += NdotL * lightColor;
+
+        if (gShadingMode != 0 && NdotL > 0.0f)
         {
-            float3 H = normalize(L + V);
-            float NdotH = max(dot(N, H), 0.0f);
-            specularTerm = pow(NdotH, gSpecularPower);
-        }
-        else // Phong
-        {
-            float3 R = reflect(-L, N);
-            float RdotV = max(dot(R, V), 0.0f);
-            specularTerm = pow(RdotV, gSpecularPower);
+            float specularTerm = 0.0f;
+            if (gShadingMode == 2) // Blinn-Phong
+            {
+                float3 H = normalize(L + V);
+                float NdotH = max(dot(N, H), 0.0f);
+                specularTerm = pow(NdotH, gMaterialSpecular.a);
+            }
+            else // Phong
+            {
+                float3 R = reflect(-L, N);
+                float RdotV = max(dot(R, V), 0.0f);
+                specularTerm = pow(RdotV, gMaterialSpecular.a);
+            }
+
+            totalSpecular += specularTerm * lightColor;
         }
     }
 
-    float3 specular = specularTerm * gLightColor;
+    // Fill Light (옵션)
+    {
+        float3 L = normalize(-gFillLightDir);
+        float  NdotL = max(dot(N, L), 0.0f);
+        float3 lightColor = gFillLightColor * gFillLightIntensity;
 
-    float3 ambient = 0.1f * gLightColor;
+        totalDiffuse += NdotL * lightColor;
 
-    float3 finalColor = ambient + diffuse + specular;
+        if (gShadingMode != 0 && NdotL > 0.0f)
+        {
+            float specularTerm = 0.0f;
+            if (gShadingMode == 2) // Blinn-Phong
+            {
+                float3 H = normalize(L + V);
+                float NdotH = max(dot(N, H), 0.0f);
+                specularTerm = pow(NdotH, gMaterialSpecular.a);
+            }
+            else // Phong
+            {
+                float3 R = reflect(-L, N);
+                float RdotV = max(dot(R, V), 0.0f);
+                specularTerm = pow(RdotV, gMaterialSpecular.a);
+            }
+
+            totalSpecular += specularTerm * lightColor;
+        }
+    }
+
+    float3 ambient = 0.1f * gKeyLightColor;
+
+    float3 finalColor =
+        ambient * gMaterialDiffuse.rgb +
+        totalDiffuse * gMaterialDiffuse.rgb +
+        totalSpecular * gMaterialSpecular.rgb;
+
     return float4(finalColor, 1.0f);
 }
 )";
@@ -210,10 +260,7 @@ float4 main(PSInput input) : SV_TARGET
         vbData.pSysMem = vertices;
 
         HRESULT hr = m_device->CreateBuffer(&vbDesc, &vbData, m_vertexBuffer.ReleaseAndGetAddressOf());
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         // 인덱스 버퍼 생성
         D3D11_BUFFER_DESC ibDesc = {};
@@ -225,10 +272,7 @@ float4 main(PSInput input) : SV_TARGET
         ibData.pSysMem = indices;
 
         hr = m_device->CreateBuffer(&ibDesc, &ibData, m_indexBuffer.ReleaseAndGetAddressOf());
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         return true;
     }
@@ -254,10 +298,7 @@ float4 main(PSInput input) : SV_TARGET
             errorBlob.GetAddressOf()
         );
 
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         // Pixel Shader 컴파일
         errorBlob.Reset();
@@ -275,10 +316,7 @@ float4 main(PSInput input) : SV_TARGET
             errorBlob.GetAddressOf()
         );
 
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         // 실제 셰이더 객체 생성
         hr = m_device->CreateVertexShader(
@@ -287,10 +325,7 @@ float4 main(PSInput input) : SV_TARGET
             nullptr,
             m_vertexShader.ReleaseAndGetAddressOf()
         );
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         hr = m_device->CreatePixelShader(
             psBlob->GetBufferPointer(),
@@ -298,10 +333,7 @@ float4 main(PSInput input) : SV_TARGET
             nullptr,
             m_pixelShader.ReleaseAndGetAddressOf()
         );
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         // 입력 레이아웃 생성 (POSITION, NORMAL)
         D3D11_INPUT_ELEMENT_DESC layoutDesc[] =
@@ -318,10 +350,7 @@ float4 main(PSInput input) : SV_TARGET
             m_inputLayout.ReleaseAndGetAddressOf()
         );
 
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         return true;
     }
@@ -335,17 +364,11 @@ float4 main(PSInput input) : SV_TARGET
 
         cbDesc.ByteWidth = sizeof(CBPerObject);
         HRESULT hr = m_device->CreateBuffer(&cbDesc, nullptr, m_cbPerObject.ReleaseAndGetAddressOf());
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         cbDesc.ByteWidth = sizeof(CBLighting);
         hr = m_device->CreateBuffer(&cbDesc, nullptr, m_cbLighting.ReleaseAndGetAddressOf());
-        if (FAILED(hr))
-        {
-            return false;
-        }
+        if (FAILED(hr)) return false;
 
         return true;
     }
@@ -364,18 +387,70 @@ float4 main(PSInput input) : SV_TARGET
         m_context->VSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
     }
 
-    void ForwardRenderSystem::UpdateLightingCB(const Camera& camera, bool useBlinn)
+    void ForwardRenderSystem::UpdateLightingCB(const Camera& camera,
+                                               int shadingMode,
+                                               bool enableFillLight)
     {
         CBLighting data = {};
 
-        // 단순 방향광: 대각선 방향에서 비추는 빛
-        data.lightDirection = XMFLOAT3(0.5f, -1.0f, 0.5f);
-        data.lightColor     = XMFLOAT3(1.0f, 1.0f, 1.0f);
+        // Key Light 방향은 파라미터에서 받아와 정규화합니다.
+        {
+            XMVECTOR dir = XMVectorSet(
+                m_lightingParameters.keyDirection.x,
+                m_lightingParameters.keyDirection.y,
+                m_lightingParameters.keyDirection.z,
+                0.0f);
 
+            if (XMVector3Equal(dir, XMVectorZero()))
+                dir = XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f);
+
+            dir = XMVector3Normalize(dir);
+            XMStoreFloat3(&data.keyLight.direction, dir);
+        }
+        data.keyLight.color     = m_lightingParameters.diffuseColor;
+        data.keyLight.intensity = m_lightingParameters.keyIntensity;
+
+        // Fill Light: 반대편에서 살짝 채워주는 부드러운 광원
+        if (enableFillLight)
+        {
+            XMVECTOR dir = XMVectorSet(
+                m_lightingParameters.fillDirection.x,
+                m_lightingParameters.fillDirection.y,
+                m_lightingParameters.fillDirection.z,
+                0.0f);
+
+            if (XMVector3Equal(dir, XMVectorZero()))
+                dir = XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f);
+
+            dir = XMVector3Normalize(dir);
+            XMStoreFloat3(&data.fillLight.direction, dir);
+
+            data.fillLight.color     = m_lightingParameters.diffuseColor;
+            data.fillLight.intensity = m_lightingParameters.fillIntensity;
+        }
+        else
+        {
+            data.fillLight.direction = XMFLOAT3(0.0f, -1.0f, 0.0f);
+            data.fillLight.color     = XMFLOAT3(0.0f, 0.0f, 0.0f);
+            data.fillLight.intensity = 0.0f;
+        }
+
+        // 카메라 및 재질 정보
         data.cameraPosition = camera.GetPosition();
-        data.specularPower  = 32.0f;
 
-        data.options = XMFLOAT4(useBlinn ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+        data.materialDiffuse  = XMFLOAT4(
+            m_lightingParameters.diffuseColor.x,
+            m_lightingParameters.diffuseColor.y,
+            m_lightingParameters.diffuseColor.z,
+            1.0f);
+
+        data.materialSpecular = XMFLOAT4(
+            m_lightingParameters.specularColor.x,
+            m_lightingParameters.specularColor.y,
+            m_lightingParameters.specularColor.z,
+            m_lightingParameters.shininess); // a: shininess
+
+        data.shadingMode = shadingMode;
 
         m_context->UpdateSubresource(m_cbLighting.Get(), 0, nullptr, &data, 0, 0);
         m_context->PSSetConstantBuffers(1, 1, m_cbLighting.GetAddressOf());
@@ -397,18 +472,14 @@ float4 main(PSInput input) : SV_TARGET
     void ForwardRenderSystem::Render(const World& world,
                                      const Camera& camera,
                                      EntityId entity,
-                                     bool useBlinn)
+                                     int shadingMode,
+                                     bool enableFillLight)
     {
         if (!m_vertexBuffer || !m_indexBuffer || !m_vertexShader || !m_pixelShader)
-        {
             return;
-        }
 
         const TransformComponent* transform = world.GetTransform(entity);
-        if (!transform)
-        {
-            return;
-        }
+        if (!transform) return;
 
         // 1) 파이프라인 상태 설정
         UINT stride = sizeof(SimpleVertex);
@@ -428,7 +499,7 @@ float4 main(PSInput input) : SV_TARGET
         XMMATRIX projM  = camera.GetProjectionMatrix();
 
         UpdatePerObjectCB(worldM, viewM, projM);
-        UpdateLightingCB(camera, useBlinn);
+        UpdateLightingCB(camera, shadingMode, enableFillLight);
 
         // 3) 드로우 콜
         m_context->DrawIndexed(m_indexCount, 0, 0);

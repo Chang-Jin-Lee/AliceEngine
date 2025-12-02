@@ -4,6 +4,12 @@
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 
+// ImGui
+#include "imgui.h"
+#include "imgui_impl_win32.h"
+#include "imgui_impl_dx11.h"
+#include <imgui_impl_win32.cpp>
+
 namespace Alice
 {
     namespace
@@ -13,7 +19,17 @@ namespace Alice
     }
 
     Engine::Engine() = default;
-    Engine::~Engine() = default;
+
+    Engine::~Engine()
+    {
+        // ImGui 리소스를 정리합니다.
+        if (ImGui::GetCurrentContext() != nullptr)
+        {
+            ImGui_ImplDX11_Shutdown();
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+        }
+    }
 
     bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
     {
@@ -21,26 +37,32 @@ namespace Alice
         m_hInstance = hInstance;
 
         // 2) 윈도우 생성
-        if (!CreateMainWindow(nCmdShow))
-        {
-            return false;
-        }
+        if (!CreateMainWindow(nCmdShow)) return false;
 
         // 3) 렌더 디바이스 생성(D3D11 구현체 사용)
         m_renderDevice = std::make_unique<D3D11RenderDevice>();
         if (!m_renderDevice->Initialize(m_hWnd, m_width, m_height))
-        {
             return false;
+
+        // 4) ImGui 초기화
+        {
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            ImGui::StyleColorsDark();
+
+            auto* d3dDevice   = m_renderDevice->GetDevice();
+            auto* d3dContext  = m_renderDevice->GetImmediateContext();
+
+            ImGui_ImplWin32_Init(m_hWnd);
+            ImGui_ImplDX11_Init(d3dDevice, d3dContext);
         }
 
-        // 4) Forward 렌더 시스템 초기화
+        // 5) Forward 렌더 시스템 초기화
         m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*m_renderDevice);
         if (!m_forwardRenderSystem->Initialize())
-        {
             return false;
-        }
 
-        // 5) World에 렌더링할 간단한 큐브 엔티티 생성
+        // 6) World에 렌더링할 간단한 큐브 엔티티 생성
         m_cubeEntity = m_world.CreateEntity();
         {
             auto& transform = m_world.AddTransform(m_cubeEntity);
@@ -53,13 +75,11 @@ namespace Alice
             transform.scale[2] = 1.0f;
         }
 
-        // 6) 카메라 설정
+        // 7) 카메라 설정
         const float aspect = static_cast<float>(m_width) / static_cast<float>(m_height);
-        m_camera.SetLookAt(
-            DirectX::XMFLOAT3(0.0f, 2.0f, -5.0f),
-            DirectX::XMFLOAT3(0.0f, 0.0f,  0.0f),
-            DirectX::XMFLOAT3(0.0f, 1.0f,  0.0f)
-        );
+        m_cameraPosition = DirectX::XMFLOAT3(0.0f, 2.0f, -5.0f);
+        DirectX::XMFLOAT3 target(0.0f, 0.0f, 0.0f);
+        m_camera.SetLookAt(m_cameraPosition, target, DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f));
         m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 100.0f);
 
         return true;
@@ -77,6 +97,9 @@ namespace Alice
         // 기본 게임 루프
         while (m_isRunning)
         {
+            // 프레임 시작 시 입력 델타 초기화
+            m_input.NewFrame();
+
             // 1) 윈도우 메시지 처리
             while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
             {
@@ -90,10 +113,7 @@ namespace Alice
                 DispatchMessage(&msg);
             }
 
-            if (!m_isRunning)
-            {
-                break;
-            }
+            if (!m_isRunning) break;
 
             // 2) 델타 타임 계산
             auto currentTime = clock::now();
@@ -112,28 +132,144 @@ namespace Alice
         return static_cast<int>(msg.wParam);
     }
 
-    void Engine::Update(float /*deltaTime*/)
+    void Engine::Update(float deltaTime)
     {
-        // ECS 시스템 및 게임 로직 업데이트는 추후 World, System을 통해 구현 예정
+        using namespace DirectX;
+
+        // 1) 카메라 이동 (WASD + Q/E) - 오른쪽 마우스 버튼을 누르고 있을 때만 동작
+        const bool canControlCamera = m_input.IsMouseDown(1); // 1: Right Button
+
+        XMVECTOR moveDir = XMVectorZero();
+
+        if (canControlCamera)
+        {
+            if (m_input.IsKeyDown('W'))
+            {
+                moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+            }
+            if (m_input.IsKeyDown('S'))
+            {
+                moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f));
+            }
+            if (m_input.IsKeyDown('D'))
+            {
+                moveDir = XMVectorAdd(moveDir, XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
+            }
+            if (m_input.IsKeyDown('A'))
+            {
+                moveDir = XMVectorAdd(moveDir, XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f));
+            }
+            // E: 위로, Q: 아래로 이동
+            if (m_input.IsKeyDown('E'))
+            {
+                moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+            }
+            if (m_input.IsKeyDown('Q'))
+            {
+                moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f));
+            }
+
+            if (!XMVector3Equal(moveDir, XMVectorZero()))
+            {
+                // 카메라의 현재 회전에 맞춰 이동 벡터를 회전
+                XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(m_cameraPitchRadians, m_cameraYawRadians, 0.0f);
+                XMVECTOR worldMoveDir = XMVector3TransformNormal(moveDir, rotMatrix);
+                worldMoveDir = XMVector3Normalize(worldMoveDir);
+
+                XMVECTOR pos = XMLoadFloat3(&m_cameraPosition);
+                pos = XMVectorAdd(pos, XMVectorScale(worldMoveDir, m_cameraMoveSpeed * deltaTime));
+                XMStoreFloat3(&m_cameraPosition, pos);
+            }
+
+            // 2) 마우스 이동으로 카메라 회전 (우클릭 상태에서만)
+            POINT mouseDelta = m_input.GetMouseDelta();
+            m_cameraYawRadians   += static_cast<float>(mouseDelta.x) * m_cameraMouseSensitivity;
+            // 마우스를 아래로 내리면 화면도 아래를 보도록 Y축 회전을 반대로 적용합니다.
+            m_cameraPitchRadians += static_cast<float>(mouseDelta.y) * m_cameraMouseSensitivity;
+        }
+
+        // 피치 각도는 -89 ~ 89도 사이로 제한
+        const float pitchLimit = XMConvertToRadians(89.0f);
+        if (m_cameraPitchRadians > pitchLimit)  m_cameraPitchRadians = pitchLimit;
+        if (m_cameraPitchRadians < -pitchLimit) m_cameraPitchRadians = -pitchLimit;
+
+        // 3) 카메라 LookAt 갱신
+        XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(m_cameraPitchRadians, m_cameraYawRadians, 0.0f);
+        XMVECTOR forward = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), rotMatrix);
+
+        XMVECTOR pos = XMLoadFloat3(&m_cameraPosition);
+        XMVECTOR target = XMVectorAdd(pos, forward);
+
+        XMFLOAT3 targetFloat3;
+        XMStoreFloat3(&targetFloat3, target);
+
+        m_camera.SetLookAt(m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
     }
 
     void Engine::Render()
     {
         if (!m_renderDevice || !m_forwardRenderSystem)
-        {
             return;
-        }
 
         // 화면 클리어 색상 (짙은 파란색 계열)
         const float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
 
         m_renderDevice->BeginFrame(clearColor);
 
-        // 간단한 Forward 렌더링 (Blinn-Phong 사용: true)
+        // ImGui 프레임 시작
+        ImGui_ImplDX11_NewFrame();
+        ImGui_ImplWin32_NewFrame();
+        ImGui::NewFrame();
+
+        // 간단한 설정 UI
+        if (ImGui::Begin("AliceRenderer Settings"))
+        {
+            // 쉐이딩 모드 선택
+            int mode = static_cast<int>(m_shadingMode);
+            if (ImGui::RadioButton("Lambert", mode == 0))   mode = 0;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Phong", mode == 1))     mode = 1;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Blinn-Phong", mode == 2)) mode = 2;
+            m_shadingMode = static_cast<ShadingMode>(mode);
+
+            // Fill Light 토글
+            ImGui::Checkbox("Enable Fill Light", &m_useFillLight);
+
+            // 조명 파라미터
+            auto& lighting = m_forwardRenderSystem->GetLightingParameters();
+            ImGui::SliderFloat("Key Intensity",  &lighting.keyIntensity,  0.0f, 3.0f);
+            ImGui::SliderFloat("Fill Intensity", &lighting.fillIntensity, 0.0f, 3.0f);
+            ImGui::SliderFloat("Shininess",      &lighting.shininess,     2.0f, 128.0f);
+
+            ImGui::ColorEdit3("Diffuse Color",  &lighting.diffuseColor.x);
+            ImGui::ColorEdit3("Specular Color", &lighting.specularColor.x);
+
+            // 광원 방향 (단순 -1~1 슬라이더, 내부에서 정규화)
+            ImGui::SliderFloat3("Key Direction",  &lighting.keyDirection.x,  -1.0f, 1.0f);
+            ImGui::SliderFloat3("Fill Direction", &lighting.fillDirection.x, -1.0f, 1.0f);
+
+            // 카메라 파라미터
+            ImGui::SliderFloat("Move Speed",        &m_cameraMoveSpeed,        0.5f, 20.0f);
+            ImGui::SliderFloat("Mouse Sensitivity", &m_cameraMouseSensitivity, 0.0005f, 0.01f);
+        }
+        ImGui::End();
+
+        // 간단한 Forward 렌더링
         if (m_cubeEntity != InvalidEntityId)
         {
-            m_forwardRenderSystem->Render(m_world, m_camera, m_cubeEntity, /*useBlinn*/ true);
+            const int shadingModeValue = static_cast<int>(m_shadingMode);
+            m_forwardRenderSystem->Render(
+                m_world,
+                m_camera,
+                m_cubeEntity,
+                shadingModeValue,
+                m_useFillLight);
         }
+
+        // ImGui 렌더링
+        ImGui::Render();
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
         m_renderDevice->EndFrame();
     }
@@ -155,10 +291,7 @@ namespace Alice
         wc.lpszClassName = kWindowClassName;
         wc.hIconSm       = LoadIcon(nullptr, IDI_APPLICATION);
 
-        if (!RegisterClassExW(&wc))
-        {
-            return false;
-        }
+        if (!RegisterClassExW(&wc)) return false;
 
         // 2) 윈도우 크기를 클라이언트 기준으로 맞추기 위해 조정
         RECT windowRect = { 0, 0, static_cast<LONG>(m_width), static_cast<LONG>(m_height) };
@@ -183,10 +316,7 @@ namespace Alice
             this
         );
 
-        if (!m_hWnd)
-        {
-            return false;
-        }
+        if (!m_hWnd) return false;
 
         ShowWindow(m_hWnd, nCmdShow);
         UpdateWindow(m_hWnd);
@@ -221,6 +351,55 @@ namespace Alice
             OnResize(newWidth, newHeight);
             return 0;
         }
+        case WM_KEYDOWN:
+        {
+            m_input.OnKeyDown(static_cast<std::uint32_t>(wParam));
+
+            // 1,2,3 키로 쉐이딩 모드 토글
+            switch (wParam)
+            {
+            case '1':
+                m_shadingMode = ShadingMode::Lambert;
+                break;
+            case '2':
+                m_shadingMode = ShadingMode::Phong;
+                break;
+            case '3':
+                m_shadingMode = ShadingMode::BlinnPhong;
+                break;
+            case 'L':
+            case 'l':
+                m_useFillLight = !m_useFillLight;
+                break;
+            default:
+                break;
+            }
+            return 0;
+        }
+        case WM_KEYUP:
+        {
+            m_input.OnKeyUp(static_cast<std::uint32_t>(wParam));
+            return 0;
+        }
+        case WM_MOUSEMOVE:
+        {
+            const int x = GET_X_LPARAM(lParam);
+            const int y = GET_Y_LPARAM(lParam);
+            m_input.OnMouseMove(x, y);
+            return 0;
+        }
+        case WM_LBUTTONDOWN:
+            m_input.OnMouseDown(0);
+            return 0;
+        case WM_LBUTTONUP:
+            m_input.OnMouseUp(0);
+            return 0;
+        case WM_RBUTTONDOWN:
+            m_input.OnMouseDown(1);
+            return 0;
+        case WM_RBUTTONUP:
+            m_input.OnMouseUp(1);
+            return 0;
         case WM_DESTROY:
             m_isRunning = false;
             PostQuitMessage(0);
@@ -234,6 +413,10 @@ namespace Alice
 
     LRESULT CALLBACK Engine::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        // ImGui가 먼저 Win32 메시지를 처리할 수 있도록 전달합니다.
+        if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
+            return true;
+
         // 1) WM_NCCREATE 단계에서 Engine 인스턴스 포인터를 HWND에 저장
         if (message == WM_NCCREATE)
         {
@@ -244,10 +427,7 @@ namespace Alice
 
         // 2) 저장된 Engine 포인터를 가져와서 멤버 함수로 위임
         auto engine = reinterpret_cast<Engine*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
-        if (engine)
-        {
-            return engine->HandleMessage(hWnd, message, wParam, lParam);
-        }
+        if (engine) return engine->HandleMessage(hWnd, message, wParam, lParam);
 
         // 3) 엔진 포인터가 없으면 기본 처리
         return DefWindowProcW(hWnd, message, wParam, lParam);

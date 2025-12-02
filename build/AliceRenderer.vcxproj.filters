@@ -10,7 +10,16 @@
     <ClCompile Include="D:\Github\AliceRenderer\src\Core\World.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\Github\AliceRenderer\src\Core\Input.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Github\AliceRenderer\src\Rendering\Camera.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\Github\AliceRenderer\src\Rendering\D3D11\D3D11RenderDevice.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Github\AliceRenderer\src\Rendering\ForwardRenderSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

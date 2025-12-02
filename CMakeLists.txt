@@ -22,6 +22,7 @@ add_executable(AliceRenderer
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
+    ${ALICE_SRC_DIR}/Core/Input.cpp
 
     # 렌더링 계층
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
@@ -44,13 +45,22 @@ set_target_properties(AliceRenderer PROPERTIES
     WIN32_EXECUTABLE YES
 )
 
-# DirectX 11 / DXGI 라이브러리 링크
+# ImGui (DirectX11-With-Windows-SDK 레포의 ImGui 모듈을 재사용)
+add_subdirectory(../DirectX11-With-Windows-SDK/ImGui ${CMAKE_BINARY_DIR}/ImGui)
+
+target_include_directories(AliceRenderer
+    PRIVATE
+        ../DirectX11-With-Windows-SDK/ImGui
+)
+
+# DirectX 11 / DXGI / ImGui 라이브러리 링크
 target_link_libraries(AliceRenderer
     PRIVATE
         d3d11
         dxgi
         dxguid
         d3dcompiler
+        ImGui
 )
 
 

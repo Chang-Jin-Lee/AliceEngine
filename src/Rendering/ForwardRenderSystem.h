@@ -28,14 +28,16 @@ namespace Alice
         bool Initialize();
 
         /// 단일 엔티티(예: 큐브)를 렌더링합니다.
-        /// \param world   ECS 월드 (Transform 정보 조회)
-        /// \param camera  카메라 (뷰/투영 행렬 및 카메라 위치)
-        /// \param entity  렌더링할 엔티티 ID (Transform 필수)
-        /// \param useBlinn true면 Blinn-Phong, false면 Phong
+        /// \param world        ECS 월드 (Transform 정보 조회)
+        /// \param camera       카메라 (뷰/투영 행렬 및 카메라 위치)
+        /// \param entity       렌더링할 엔티티 ID (Transform 필수)
+        /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong
+        /// \param enableFillLight 보조광 사용 여부
         void Render(const World& world,
                     const Camera& camera,
                     EntityId entity,
-                    bool useBlinn);
+                    int shadingMode,
+                    bool enableFillLight);
 
     private:
         struct SimpleVertex
@@ -51,19 +53,46 @@ namespace Alice
             DirectX::XMMATRIX projection;
         };
 
+        /// 단순 Directional Light 2개와 재질 파라미터를 담는 구조체입니다.
+        struct LightData
+        {
+            DirectX::XMFLOAT3 direction;
+            float             pad0;
+
+            DirectX::XMFLOAT3 color;
+            float             intensity;
+        };
+
         struct CBLighting
         {
-            DirectX::XMFLOAT3 lightDirection;
-            float             padding0; // 16바이트 정렬
-
-            DirectX::XMFLOAT3 lightColor;
-            float             padding1;
+            LightData         keyLight;
+            LightData         fillLight;
 
             DirectX::XMFLOAT3 cameraPosition;
-            float             specularPower;
+            float             pad1;
 
-            // x: useBlinn(1.0 = Blinn, 0.0 = Phong)
-            DirectX::XMFLOAT4 options;
+            DirectX::XMFLOAT4 materialDiffuse;   // rgb: 색상, a: 사용 안 함
+            DirectX::XMFLOAT4 materialSpecular;  // rgb: 색상, a: shininess
+
+            int               shadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong
+            int               pad2[3];           // 16바이트 정렬
+        };
+
+        /// 조명/재질 파라미터를 외부에서 쉽게 조절할 수 있도록 모아둔 구조체입니다.
+        struct LightingParameters
+        {
+            // 재질 색상/하이라이트
+            DirectX::XMFLOAT3 diffuseColor  { 0.7f, 0.7f, 0.9f };
+            DirectX::XMFLOAT3 specularColor { 1.0f, 1.0f, 1.0f };
+            float             shininess     { 32.0f };
+
+            // 광원 세기
+            float             keyIntensity  { 1.0f };
+            float             fillIntensity { 0.5f };
+
+            // 광원 방향 (월드 기준)
+            DirectX::XMFLOAT3 keyDirection  {  0.5f, -1.0f,  0.5f };
+            DirectX::XMFLOAT3 fillDirection { -0.5f, -0.5f, -0.2f };
         };
 
     private:
@@ -75,7 +104,9 @@ namespace Alice
                                const DirectX::XMMATRIX& view,
                                const DirectX::XMMATRIX& projection);
 
-        void UpdateLightingCB(const Camera& camera, bool useBlinn);
+        void UpdateLightingCB(const Camera& camera,
+                              int shadingMode,
+                              bool enableFillLight);
 
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
 
@@ -95,6 +126,14 @@ namespace Alice
 
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbLighting;
+
+        LightingParameters                              m_lightingParameters;
+
+    public:
+        /// 현재 조명 파라미터(색상, 강도, Shininess 등)를 반환합니다.
+        /// ImGui 등에서 이 값을 직접 수정해도 됩니다.
+        LightingParameters& GetLightingParameters() { return m_lightingParameters; }
+        const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
     };
 }
 
