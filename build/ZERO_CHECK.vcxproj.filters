@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\Github\AliceRenderer\build\CMakeFiles\96af8c6c0a3ef83b469ddb525bc4c42e\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D3523A94-1763-3753-80AD-3DFCBA24C8F3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
