@@ -59,6 +59,10 @@ namespace Alice
         /// Transform 컴포넌트의 읽기 전용 포인터를 가져옵니다.
         const TransformComponent* GetTransform(EntityId id) const;
 
+        /// 현재 등록된 Transform 컴포넌트 목록을 읽기 전용으로 반환합니다.
+        /// - 에디터 하이러키 뷰에서 엔티티를 나열할 때 사용합니다.
+        const std::unordered_map<EntityId, TransformComponent>& GetTransforms() const { return m_transforms; }
+
     private:
         EntityId m_nextEntityId { 1 };
 

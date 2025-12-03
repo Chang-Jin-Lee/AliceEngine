@@ -13,6 +13,8 @@
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
+#include "Editor/ViewportPicker.h"
+#include "Editor/EditorCore.h"
 
 namespace Alice
 {
@@ -66,6 +68,8 @@ namespace Alice
         std::uint32_t m_height = 720;
 
         bool m_isRunning = false;
+        bool m_isPlaying = false;            // 재생 / 일시정지 상태
+        EntityId m_selectedEntity { InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
 
         World          m_world;
         Camera         m_camera;
@@ -73,6 +77,9 @@ namespace Alice
         GameTimer      m_timer;
         ResourceManager m_resourceManager;
         std::unique_ptr<SceneManager> m_sceneManager;
+
+        ViewportPicker m_viewportPicker;
+        EditorCore     m_editorCore;
 
         ShadingMode m_shadingMode { ShadingMode::BlinnPhong };
         bool        m_useFillLight { false };

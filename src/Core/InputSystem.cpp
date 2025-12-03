@@ -26,8 +26,7 @@ namespace Alice
         m_mouseDelta.x = 0;
         m_mouseDelta.y = 0;
 
-        if (!m_keyboard || !m_mouse)
-            return;
+        if (!m_keyboard || !m_mouse) return;
 
         // DirectXTK 입력 상태 갱신
         m_mouseState = m_mouse->GetState();

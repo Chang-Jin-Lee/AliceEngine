@@ -21,10 +21,7 @@ namespace Alice
         QueryPerformanceFrequency(reinterpret_cast<LARGE_INTEGER*>(&countsPerSec));
         mSecondsPerCount = 1.0 / static_cast<double>(countsPerSec);
 
-        if (m_Instance == nullptr)
-        {
-            m_Instance = this;
-        }
+        if (m_Instance == nullptr) m_Instance = this;
     }
 
     float GameTimer::TotalTime() const
@@ -101,11 +98,9 @@ namespace Alice
         mPrevTime = mCurrTime;
 
         // Force nonnegative.
-        if (mDeltaTime < 0.0)
-        {
-            mDeltaTime = 0.0;
-        }
+        if (mDeltaTime < 0.0) mDeltaTime = 0.0;
     }
 }
+
 
 

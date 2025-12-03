@@ -5,6 +5,8 @@
 // DirectX 11 전방 선언 (헤더 의존성 최소화)
 struct ID3D11Device;
 struct ID3D11DeviceContext;
+struct ID3D11RenderTargetView;
+struct ID3D11DepthStencilView;
 
 namespace Alice
 {
@@ -19,6 +21,13 @@ namespace Alice
 
         /// 내부 D3D11 디바이스 컨텍스트 포인터를 반환합니다.
         virtual ID3D11DeviceContext* GetImmediateContext() = 0;
+
+        /// 기본 백버퍼 렌더 타깃 뷰를 반환합니다.
+        /// - 렌더 타깃을 임시로 다른 텍스처로 바꿨다가, 다시 기본 백버퍼로 복원할 때 사용합니다.
+        virtual ID3D11RenderTargetView* GetBackBufferRTV() = 0;
+
+        /// 기본 깊이 스텐실 뷰를 반환합니다.
+        virtual ID3D11DepthStencilView* GetBackBufferDSV() = 0;
     };
 }
 
