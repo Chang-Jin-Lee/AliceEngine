@@ -26,6 +26,8 @@ namespace Alice
 
         ID3D11Device* GetDevice() override { return m_device.Get(); }
         ID3D11DeviceContext* GetImmediateContext() override { return m_immediateContext.Get(); }
+        ID3D11RenderTargetView* GetBackBufferRTV() override { return m_renderTargetView.Get(); }
+        ID3D11DepthStencilView* GetBackBufferDSV() override { return m_depthStencilView.Get(); }
 
     private:
         using ComPtr = Microsoft::WRL::ComPtr<IUnknown>;

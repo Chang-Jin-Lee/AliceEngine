@@ -25,7 +25,10 @@ namespace Alice
         ~ForwardRenderSystem() = default;
 
         /// 셰이더, 버퍼 등 렌더링에 필요한 리소스를 생성합니다.
-        bool Initialize();
+        bool Initialize(std::uint32_t width, std::uint32_t height);
+
+        /// 뷰포트 크기가 변경되면 렌더 타깃 텍스처도 함께 리사이즈합니다.
+        void Resize(std::uint32_t width, std::uint32_t height);
 
         /// 단일 엔티티(예: 큐브)를 렌더링합니다.
         /// \param world        ECS 월드 (Transform 정보 조회)
@@ -138,11 +141,30 @@ namespace Alice
 
         LightingParameters                              m_lightingParameters;
 
+        // ==== 게임 뷰포트 렌더 타깃 (Scene Color) ====
+        Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneColorTex;
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView>  m_sceneRTV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneSRV;
+
+        // ==== 게임 뷰포트용 깊이/스텐실 ====
+        Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
+        Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_sceneDSV;
+
+        std::uint32_t                                   m_sceneWidth  = 0;
+        std::uint32_t                                   m_sceneHeight = 0;
+
+        bool CreateSceneRenderTarget(std::uint32_t width, std::uint32_t height);
+
     public:
         /// 현재 조명 파라미터(색상, 강도, Shininess 등)를 반환합니다.
         /// ImGui 등에서 이 값을 직접 수정해도 됩니다.
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }
         const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
+
+        /// Game 창에서 사용할 씬 컬러 텍스처 SRV
+        ID3D11ShaderResourceView* GetSceneColorSRV() const { return m_sceneSRV.Get(); }
+        std::uint32_t GetSceneWidth()  const { return m_sceneWidth; }
+        std::uint32_t GetSceneHeight() const { return m_sceneHeight; }
     };
 }
 

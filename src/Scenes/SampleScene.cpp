@@ -29,12 +29,10 @@ namespace Alice
 
     void SampleScene::Update(World& world, ResourceManager& /*resources*/, float deltaTime)
     {
-        if (m_cubeEntity == InvalidEntityId)
-            return;
+        if (m_cubeEntity == InvalidEntityId) return;
 
         auto* transform = world.GetTransform(m_cubeEntity);
-        if (!transform)
-            return;
+        if (!transform) return;
 
         // 시간에 따라 Y축 회전
         transform->rotation.y += m_rotationSpeed * deltaTime;
@@ -43,5 +41,6 @@ namespace Alice
     // 이 씬을 리플렉션/팩토리 시스템에 등록합니다.
     REGISTER_SCENE(SampleScene);
 }
+
 
 

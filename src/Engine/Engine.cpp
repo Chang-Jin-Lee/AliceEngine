@@ -4,11 +4,18 @@
 
 // ImGui
 #include "imgui.h"
+#include "imgui_internal.h"   // DockBuilder API 사용
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
 // Win32 메시지 헬퍼 (GET_X/Y_LPARAM)
 #include <Windowsx.h>
+
+// 표준 라이브러리
+#include <filesystem>
+#include <cfloat>      // FLT_MAX
+#include <algorithm>   // std::max
+#include <memory>
 
 // 문자열 변환 / ImGui 래퍼
 #include "Core/StringUtils.h"
@@ -28,13 +35,7 @@ namespace Alice
 
     Engine::~Engine()
     {
-        // ImGui 리소스를 정리합니다.
-        if (ImGui::GetCurrentContext() != nullptr)
-        {
-            ImGui_ImplDX11_Shutdown();
-            ImGui_ImplWin32_Shutdown();
-            ImGui::DestroyContext();
-        }
+        m_editorCore.Shutdown();
     }
 
     bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
@@ -53,46 +54,13 @@ namespace Alice
         if (!m_renderDevice->Initialize(m_hWnd, m_width, m_height))
             return false;
 
-        // 5) ImGui 초기화
-        {
-            IMGUI_CHECKVERSION();
-            ImGui::CreateContext();
-            ImGui::StyleColorsDark();
-
-            auto& io = ImGui::GetIO();
-
-            // 폰트 아틀라스를 모두 지우고, 한글/일본어를 포함한 폰트를 기본 폰트로 사용합니다.
-            io.Fonts->Clear();
-
-            // 한글 폰트 (NotoSansKR-Regular.ttf)를 기본 폰트로 설정
-            ImFontConfig baseConfig;
-            baseConfig.MergeMode = false;
-            io.FontDefault = io.Fonts->AddFontFromFileTTF(
-                "../Resource/Fonts/NotoSansKR-Regular.ttf",
-                18.0f,
-                &baseConfig,
-                io.Fonts->GetGlyphRangesKorean());
-
-            // 일본어 폰트 (meiryo.ttc)를 기본 폰트에 머지
-            ImFontConfig jpConfig;
-            jpConfig.MergeMode = true;
-            jpConfig.PixelSnapH = true;
-            io.Fonts->AddFontFromFileTTF(
-                "../Resource/Fonts/meiryo.ttc",
-                18.0f,
-                &jpConfig,
-                io.Fonts->GetGlyphRangesJapanese());
-
-            auto* d3dDevice  = m_renderDevice->GetDevice();
-            auto* d3dContext = m_renderDevice->GetImmediateContext();
-
-            ImGui_ImplWin32_Init(m_hWnd);
-            ImGui_ImplDX11_Init(d3dDevice, d3dContext);
-        }
+        // 5) ImGui / Editor 코어 초기화
+        if (!m_editorCore.Initialize(m_hWnd, *m_renderDevice))
+            return false;
 
         // 6) Forward 렌더 시스템 초기화
         m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*m_renderDevice);
-        if (!m_forwardRenderSystem->Initialize())
+        if (!m_forwardRenderSystem->Initialize(m_width, m_height))
             return false;
 
         // 7) 카메라 설정
@@ -222,7 +190,8 @@ namespace Alice
         m_camera.SetLookAt(m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
 
         // 4) 현재 씬 업데이트 (트랜스폼 등)
-        if (m_sceneManager)
+        //    - 에디터에서 Play 버튼이 눌렸을 때만 게임 로직이 진행되도록 합니다.
+        if (m_sceneManager && m_isPlaying)
         {
             m_sceneManager->Update(m_timer.DeltaTime());
         }
@@ -238,56 +207,26 @@ namespace Alice
 
         m_renderDevice->BeginFrame(clearColor);
 
-        // ImGui 프레임 시작
-        ImGui_ImplDX11_NewFrame();
-        ImGui_ImplWin32_NewFrame();
-        ImGui::NewFrame();
+        // ImGui 프레임 시작 (EditorCore 에 위임)
+        m_editorCore.BeginFrame();
 
-        // 간단한 설정 UI
-        if (ImGui::Begin("AliceRenderer Settings"))
-        {
-            // 쉐이딩 모드 선택
-            int mode = static_cast<int>(m_shadingMode);
-            if (ImGui::RadioButton("Lambert", mode == 0))   mode = 0;
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Phong", mode == 1))     mode = 1;
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Blinn-Phong", mode == 2)) mode = 2;
-            m_shadingMode = static_cast<ShadingMode>(mode);
-
-            // Fill Light(보조광) 토글
-            Alice::ImGuiCheckbox(L"Fill Light (보조광)", &m_useFillLight);
-
-            // 조명 파라미터 (주광/보조광)
-            auto& lighting = m_forwardRenderSystem->GetLightingParameters();
-            Alice::ImGuiSliderFloat(L"Key Intensity (주광)",
-                                    &lighting.keyIntensity,
-                                    0.0f,
-                                    3.0f);
-            Alice::ImGuiSliderFloat(L"Fill Intensity (보조광)",
-                                    &lighting.fillIntensity,
-                                    0.0f,
-                                    3.0f);
-            ImGui::SliderFloat("Shininess",      &lighting.shininess,     2.0f, 128.0f);
-
-            ImGui::ColorEdit3("Diffuse Color",  &lighting.diffuseColor.x);
-            ImGui::ColorEdit3("Specular Color", &lighting.specularColor.x);
-
-            // 광원 방향 (단순 -1~1 슬라이더, 내부에서 정규화)
-            Alice::ImGuiSliderFloat3(L"Key Direction (주광)",
-                                     &lighting.keyDirection.x,
-                                     -1.0f,
-                                     1.0f);
-            Alice::ImGuiSliderFloat3(L"Fill Direction (보조광)",
-                                     &lighting.fillDirection.x,
-                                     -1.0f,
-                                     1.0f);
-
-            // 카메라 파라미터
-            ImGui::SliderFloat("Move Speed",        &m_cameraMoveSpeed,        0.5f, 20.0f);
-            ImGui::SliderFloat("Mouse Sensitivity", &m_cameraMouseSensitivity, 0.0005f, 0.01f);
-        }
-        ImGui::End();
+        // 에디터 스타일 UI (도킹, 하이러키, 인스펙터, 프로젝트 뷰 등)
+        const float dt  = m_timer.DeltaTime();
+        const float fps = (dt > 0.0f) ? (1.0f / dt) : 0.0f;
+        int shadingModeValue = static_cast<int>(m_shadingMode);
+        m_editorCore.DrawEditorUI(
+            m_world,
+            m_camera,
+            *m_forwardRenderSystem,
+            m_sceneManager.get(),
+            dt,
+            fps,
+            m_isPlaying,
+            shadingModeValue,
+            m_useFillLight,
+            m_selectedEntity,
+            m_viewportPicker);
+        m_shadingMode = static_cast<ShadingMode>(shadingModeValue);
 
         // 간단한 Forward 렌더링
         EntityId renderEntity = InvalidEntityId;
@@ -308,8 +247,7 @@ namespace Alice
         }
 
         // ImGui 렌더링
-        ImGui::Render();
-        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        m_editorCore.RenderDrawData();
 
         m_renderDevice->EndFrame();
     }
@@ -324,12 +262,30 @@ namespace Alice
         wc.cbClsExtra    = 0;
         wc.cbWndExtra    = 0;
         wc.hInstance     = m_hInstance;
-        wc.hIcon         = LoadIcon(nullptr, IDI_APPLICATION);
+        // 엔진 전용 아이콘을 로드합니다. (실패하면 기본 아이콘을 사용)
+        HICON hIconBig = static_cast<HICON>(LoadImageW(
+            nullptr,
+            L"../Resource/Icon/Alice.ico",
+            IMAGE_ICON,
+            32,
+            32,
+            LR_LOADFROMFILE));
+        if (!hIconBig) hIconBig = LoadIcon(nullptr, IDI_APPLICATION);
+        HICON hIconSmall = static_cast<HICON>(LoadImageW(
+            nullptr,
+            L"../Resource/Icon/Alice.ico",
+            IMAGE_ICON,
+            16,
+            16,
+            LR_LOADFROMFILE));
+        if (!hIconSmall) hIconSmall = LoadIcon(nullptr, IDI_APPLICATION);
+
+        wc.hIcon         = hIconBig;
         wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
         wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
         wc.lpszMenuName  = nullptr;
         wc.lpszClassName = kWindowClassName;
-        wc.hIconSm       = LoadIcon(nullptr, IDI_APPLICATION);
+        wc.hIconSm       = hIconSmall;
 
         if (!RegisterClassExW(&wc)) return false;
 
@@ -377,6 +333,11 @@ namespace Alice
                 ? static_cast<float>(width) / static_cast<float>(height)
                 : 1.0f;
             m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 100.0f);
+        }
+
+        if (m_forwardRenderSystem)
+        {
+            m_forwardRenderSystem->Resize(width, height);
         }
     }
 

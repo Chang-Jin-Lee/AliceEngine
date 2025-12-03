@@ -182,37 +182,89 @@ float4 main(PSInput input) : SV_TARGET
         m_context = m_renderDevice.GetImmediateContext();
     }
 
-    bool ForwardRenderSystem::Initialize()
+    bool ForwardRenderSystem::Initialize(std::uint32_t width, std::uint32_t height)
     {
-        if (!m_device || !m_context)
-        {
-            return false;
-        }
+        if (!m_device || !m_context) return false;
+        if (!CreateSceneRenderTarget(width, height)) return false;
+        if (!CreateCubeGeometry()) return false;
+        if (!CreateShadersAndInputLayout()) return false;
+        if (!CreateConstantBuffers()) return false;
+        if (!CreateTextures())  return false;
+        if (!CreateSamplerState()) return false;
+        return true;
+    }
 
-        if (!CreateCubeGeometry())
-        {
-            return false;
-        }
+    void ForwardRenderSystem::Resize(std::uint32_t width, std::uint32_t height)
+    {
+        if (!m_device) return;
+        if (width == 0 || height == 0) return;
+        // 기존 리소스 해제 후 새로 생성
+        m_sceneColorTex.Reset();
+        m_sceneRTV.Reset();
+        m_sceneSRV.Reset();
+        m_sceneDepthTex.Reset();
+        m_sceneDSV.Reset();
 
-        if (!CreateShadersAndInputLayout())
-        {
-            return false;
-        }
+        CreateSceneRenderTarget(width, height);
+    }
 
-        if (!CreateConstantBuffers())
-        {
-            return false;
-        }
+    bool ForwardRenderSystem::CreateSceneRenderTarget(std::uint32_t width, std::uint32_t height)
+    {
+        m_sceneWidth  = width;
+        m_sceneHeight = height;
 
-        if (!CreateTextures())
-        {
-            return false;
-        }
+        if (width == 0 || height == 0) return false;
 
-        if (!CreateSamplerState())
-        {
-            return false;
-        }
+        // 색 텍스처 (RTV + SRV)
+        D3D11_TEXTURE2D_DESC colorDesc = {};
+        colorDesc.Width              = width;
+        colorDesc.Height             = height;
+        colorDesc.MipLevels          = 1;
+        colorDesc.ArraySize          = 1;
+        colorDesc.Format             = DXGI_FORMAT_R8G8B8A8_UNORM;
+        colorDesc.SampleDesc.Count   = 1;
+        colorDesc.Usage              = D3D11_USAGE_DEFAULT;
+        colorDesc.BindFlags          = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+        HRESULT hr = m_device->CreateTexture2D(&colorDesc, nullptr, m_sceneColorTex.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        hr = m_device->CreateRenderTargetView(
+            m_sceneColorTex.Get(),
+            nullptr,
+            m_sceneRTV.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        hr = m_device->CreateShaderResourceView(
+            m_sceneColorTex.Get(),
+            nullptr,
+            m_sceneSRV.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        // 깊이/스텐실 텍스처 + 뷰
+        D3D11_TEXTURE2D_DESC depthDesc = {};
+        depthDesc.Width              = width;
+        depthDesc.Height             = height;
+        depthDesc.MipLevels          = 1;
+        depthDesc.ArraySize          = 1;
+        depthDesc.Format             = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        depthDesc.SampleDesc.Count   = 1;
+        depthDesc.Usage              = D3D11_USAGE_DEFAULT;
+        depthDesc.BindFlags          = D3D11_BIND_DEPTH_STENCIL;
+
+        hr = m_device->CreateTexture2D(&depthDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+        dsvDesc.Format             = depthDesc.Format;
+        dsvDesc.ViewDimension      = D3D11_DSV_DIMENSION_TEXTURE2D;
+        dsvDesc.Texture2D.MipSlice = 0;
+
+        hr = m_device->CreateDepthStencilView(
+            m_sceneDepthTex.Get(),
+            &dsvDesc,
+            m_sceneDSV.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
 
         return true;
     }
@@ -561,7 +613,22 @@ float4 main(PSInput input) : SV_TARGET
         const TransformComponent* transform = world.GetTransform(entity);
         if (!transform) return;
 
-        // 1) 파이프라인 상태 설정
+        // 씬 렌더 타깃이 없다면 아무 것도 하지 않습니다.
+        if (!m_sceneRTV || !m_sceneDSV)
+            return;
+
+        // 0) 현재 백버퍼 렌더 타깃을 저장해 두었다가, 렌더 후에 복원합니다.
+        ID3D11RenderTargetView* backBufferRTV = m_renderDevice.GetBackBufferRTV();
+        ID3D11DepthStencilView* backBufferDSV = m_renderDevice.GetBackBufferDSV();
+
+        // 1) 게임 뷰포트 렌더 타깃으로 전환하고, 색/깊이를 클리어합니다.
+        const float sceneClearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
+        ID3D11RenderTargetView* rtvs[] = { m_sceneRTV.Get() };
+        m_context->OMSetRenderTargets(1, rtvs, m_sceneDSV.Get());
+        m_context->ClearRenderTargetView(m_sceneRTV.Get(), sceneClearColor);
+        m_context->ClearDepthStencilView(m_sceneDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+
+        // 2) 파이프라인 상태 설정
         UINT stride = sizeof(SimpleVertex);
         UINT offset = 0;
         ID3D11Buffer* vb = m_vertexBuffer.Get();
@@ -573,7 +640,7 @@ float4 main(PSInput input) : SV_TARGET
         m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
         m_context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
 
-        // 2) 상수 버퍼 / 텍스처 바인딩
+        // 3) 상수 버퍼 / 텍스처 바인딩
         XMMATRIX worldM = BuildWorldMatrix(*transform);
         XMMATRIX viewM  = camera.GetViewMatrix();
         XMMATRIX projM  = camera.GetProjectionMatrix();
@@ -592,8 +659,15 @@ float4 main(PSInput input) : SV_TARGET
         ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
         m_context->PSSetSamplers(0, 1, samplers);
 
-        // 3) 드로우 콜
+        // 4) 드로우 콜
         m_context->DrawIndexed(m_indexCount, 0, 0);
+
+        // 5) ImGui 렌더링을 위해 기본 백버퍼 렌더 타깃으로 복원합니다.
+        if (backBufferRTV)
+        {
+            ID3D11RenderTargetView* bbRtvs[] = { backBufferRTV };
+            m_context->OMSetRenderTargets(1, bbRtvs, backBufferDSV);
+        }
     }
 }
 
