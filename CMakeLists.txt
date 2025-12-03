@@ -13,13 +13,14 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 # ===== 엔진 라이브러리 (Engine/Core/Rendering) =====
-add_library(AliceEngine STATIC
+set(ALICE_ENGINE_SOURCES
     # 엔진 계층
     ${ALICE_SRC_DIR}/Engine/Engine.cpp
+    ${ALICE_SRC_DIR}/Editor/ViewportPicker.cpp
+    ${ALICE_SRC_DIR}/Editor/EditorCore.cpp
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
-    ${ALICE_SRC_DIR}/Core/StringUtils.h
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
     ${ALICE_SRC_DIR}/Core/TimeSystem.cpp
@@ -31,8 +32,42 @@ add_library(AliceEngine STATIC
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
 )
 
+set(ALICE_ENGINE_HEADERS
+    # 엔진 계층
+    ${ALICE_SRC_DIR}/Engine/Engine.h
+    ${ALICE_SRC_DIR}/Editor/ViewportPicker.h
+    ${ALICE_SRC_DIR}/Editor/EditorCore.h
+
+    # 코어(ECS 스타일)
+    ${ALICE_SRC_DIR}/Core/World.h
+    ${ALICE_SRC_DIR}/Core/Component.h
+    ${ALICE_SRC_DIR}/Core/Entity.h
+    ${ALICE_SRC_DIR}/Core/System.h
+    ${ALICE_SRC_DIR}/Core/StringUtils.h
+    ${ALICE_SRC_DIR}/Core/ResourceManager.h
+    ${ALICE_SRC_DIR}/Core/Scene.h
+    ${ALICE_SRC_DIR}/Core/TimeSystem.h
+    ${ALICE_SRC_DIR}/Core/InputSystem.h
+    ${ALICE_SRC_DIR}/Core/ImGuiEx.h
+    ${ALICE_SRC_DIR}/Core/Input.h
+
+    # 렌더링 계층
+    ${ALICE_SRC_DIR}/Rendering/Camera.h
+    ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.h
+    ${ALICE_SRC_DIR}/Rendering/IRenderDevice.h
+    ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.h
+    ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
+)
+
+add_library(AliceEngine STATIC
+    ${ALICE_ENGINE_SOURCES}
+    ${ALICE_ENGINE_HEADERS}
+)
+
+source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_ENGINE_SOURCES} ${ALICE_ENGINE_HEADERS})
+
 # ===== 콘텐츠/게임 실행 파일 (Sandbox + Scenes) =====
-add_executable(AliceRenderer
+set(ALICE_APP_SOURCES
     # 샌드박스(엔트리 포인트)
     ${ALICE_SRC_DIR}/Sandbox/Main.cpp
 
@@ -40,14 +75,57 @@ add_executable(AliceRenderer
     ${ALICE_SRC_DIR}/Scenes/SampleScene.cpp
 )
 
+set(ALICE_APP_HEADERS
+    ${ALICE_SRC_DIR}/Scenes/SampleScene.h
+)
+
+add_executable(AliceRenderer
+    ${ALICE_APP_SOURCES}
+    ${ALICE_APP_HEADERS}
+)
+
+source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_APP_SOURCES} ${ALICE_APP_HEADERS})
+
+# ThirdParty ImGui (docking 브랜치) 경로
+set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
+
 target_include_directories(AliceEngine
     PRIVATE
         ${ALICE_SRC_DIR}
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
 )
 
 target_include_directories(AliceRenderer
     PRIVATE
         ${ALICE_SRC_DIR}
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+)
+
+# ImGui 정적 라이브러리 (Win32 + DX11 백엔드 포함)
+add_library(imgui STATIC
+    ${IMGUI_DIR}/imconfig.h
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui.h
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_internal.h
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/imstb_rectpack.h
+    ${IMGUI_DIR}/imstb_textedit.h
+    ${IMGUI_DIR}/imstb_truetype.h
+    ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_win32.h
+    ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_dx11.h
+)
+
+target_include_directories(imgui
+    PUBLIC
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
 )
 
 if(MSVC)
@@ -96,18 +174,17 @@ set_target_properties(AliceRenderer PROPERTIES
     WIN32_EXECUTABLE YES
 )
 
-# DirectX 11 / DXGI / DirectXTK / DirectXTex / ImGui 링크 (vcpkg)
+# DirectX 11 / DXGI / DirectXTK / DirectXTex / ImGui 링크
 target_link_libraries(AliceRenderer
     PRIVATE
         AliceEngine
+        imgui
         d3d11
         dxgi
         dxguid
         d3dcompiler
         directxtk
         directxtex
-        $<$<CONFIG:Debug>:imguid>
-        $<$<NOT:$<CONFIG:Debug>>:imgui>
 )
 
 
