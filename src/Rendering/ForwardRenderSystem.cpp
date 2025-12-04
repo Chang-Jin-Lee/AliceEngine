@@ -3,6 +3,7 @@
 #include <d3dcompiler.h>
 // 텍스처 로더 (vcpkg의 DirectXTK 사용)
 #include <DirectXTK/WICTextureLoader.h>
+#include <DirectXTK/DDSTextureLoader.h>
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
@@ -19,6 +20,7 @@ cbuffer CBPerObject : register(b0)
     float4x4 gWorld;
     float4x4 gView;
     float4x4 gProj;
+    float4   gMaterialColor; // per-object 머티리얼 색상
 };
 
 struct VSInput
@@ -57,6 +59,15 @@ Texture2D gDiffuseMap  : register(t0);
 Texture2D gNormalMap   : register(t1);
 Texture2D gSpecularMap : register(t2);
 SamplerState gSampler  : register(s0);
+
+// VS 와 동일한 CBPerObject 레이아웃 (materialColor 포함)
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+};
 
 cbuffer CBLighting : register(b1)
 {
@@ -162,9 +173,9 @@ float4 main(PSInput input) : SV_TARGET
         }
     }
 
-    // 텍스처 샘플링
-    float3 albedo    = gDiffuseMap.Sample(gSampler,  input.TexCoord).rgb;
-    float3 specColor = gSpecularMap.Sample(gSampler, input.TexCoord).rgb;
+    // 머티리얼 베이스 컬러 (텍스처 대신 단색 머티리얼 사용)
+    float3 albedo    = gMaterialColor.rgb;
+    float3 specColor = float3(1.0f, 1.0f, 1.0f);
 
     float3 ambient = 0.1f * gKeyLightColor;
 
@@ -174,6 +185,59 @@ float4 main(PSInput input) : SV_TARGET
         totalSpecular * specColor;
 
     return float4(finalColor, 1.0f);
+}
+)";
+
+        // 스카이박스 전용 셰이더 (단순 큐브 맵 샘플링)
+        const char* g_SkyboxVertexShaderSource = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+};
+
+struct VSInput
+{
+    float3 Position : POSITION;
+    float3 Normal   : NORMAL;
+    float2 TexCoord : TEXCOORD0;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 Direction : TEXCOORD0;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+
+    float4 worldPos = mul(float4(input.Position, 1.0f), gWorld);
+    float4 viewPos  = mul(worldPos, gView);
+    output.Position = mul(viewPos, gProj);
+
+    // 방향 벡터는 위치를 그대로 사용 (정규화는 PS에서 수행)
+    output.Direction = input.Position;
+    return output;
+}
+)";
+
+        const char* g_SkyboxPixelShaderSource = R"(
+TextureCube gSkybox : register(t3);
+SamplerState gSampler : register(s0);
+
+struct PSInput
+{
+    float4 Position : SV_POSITION;
+    float3 Direction : TEXCOORD0;
+};
+
+float4 main(PSInput input) : SV_TARGET
+{
+    float3 dir = normalize(input.Direction);
+    return gSkybox.Sample(gSampler, dir);
 }
 )";
     }
@@ -195,6 +259,7 @@ float4 main(PSInput input) : SV_TARGET
         if (!CreateTextures())  return false;
         if (!CreateSamplerState()) return false;
         if (!CreateRasterizerStates()) return false;
+        if (!CreateSkyboxResources()) return false;
         return true;
     }
 
@@ -268,6 +333,100 @@ float4 main(PSInput input) : SV_TARGET
             m_sceneDepthTex.Get(),
             &dsvDesc,
             m_sceneDSV.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        return true;
+    }
+
+    bool ForwardRenderSystem::CreateSkyboxResources()
+    {
+        // 스카이박스 큐브 맵 텍스처 로드 (OasisSunset.dds)
+        const wchar_t* skyboxPath = L"../Resource/Skybox/OasisSunset.dds";
+        HRESULT hr = DirectX::CreateDDSTextureFromFile(
+            m_device.Get(),
+            skyboxPath,
+            nullptr,
+            m_skyboxSRV.ReleaseAndGetAddressOf());
+
+        if (FAILED(hr))
+        {
+            // 스카이박스는 선택 사항이므로, 로드 실패 시 비활성화만 하고 계속 진행합니다.
+            m_skyboxEnabled = false;
+            return true;
+        }
+
+        // 스카이박스용 셰이더 컴파일
+        ComPtr<ID3DBlob> vsBlob;
+        ComPtr<ID3DBlob> psBlob;
+        ComPtr<ID3DBlob> errorBlob;
+
+        hr = D3DCompile(
+            g_SkyboxVertexShaderSource,
+            strlen(g_SkyboxVertexShaderSource),
+            nullptr,
+            nullptr,
+            nullptr,
+            "main",
+            "vs_5_0",
+            0,
+            0,
+            vsBlob.GetAddressOf(),
+            errorBlob.GetAddressOf()
+        );
+        if (FAILED(hr))
+            return false;
+
+        errorBlob.Reset();
+        hr = D3DCompile(
+            g_SkyboxPixelShaderSource,
+            strlen(g_SkyboxPixelShaderSource),
+            nullptr,
+            nullptr,
+            nullptr,
+            "main",
+            "ps_5_0",
+            0,
+            0,
+            psBlob.GetAddressOf(),
+            errorBlob.GetAddressOf()
+        );
+        if (FAILED(hr))
+            return false;
+
+        hr = m_device->CreateVertexShader(
+            vsBlob->GetBufferPointer(),
+            vsBlob->GetBufferSize(),
+            nullptr,
+            m_skyboxVS.ReleaseAndGetAddressOf()
+        );
+        if (FAILED(hr)) return false;
+
+        hr = m_device->CreatePixelShader(
+            psBlob->GetBufferPointer(),
+            psBlob->GetBufferSize(),
+            nullptr,
+            m_skyboxPS.ReleaseAndGetAddressOf()
+        );
+        if (FAILED(hr)) return false;
+
+        // 스카이박스용 DepthStencilState (깊이 테스트는 하되, depth write 는 비활성화)
+        D3D11_DEPTH_STENCIL_DESC dsDesc = {};
+        dsDesc.DepthEnable    = TRUE;
+        dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+        dsDesc.DepthFunc      = D3D11_COMPARISON_LESS_EQUAL;
+        dsDesc.StencilEnable  = FALSE;
+
+        hr = m_device->CreateDepthStencilState(&dsDesc, m_skyboxDepthState.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        // 스카이박스를 안쪽에서 보기 위해 전면 컬링을 사용
+        D3D11_RASTERIZER_DESC rsDesc = {};
+        rsDesc.FillMode              = D3D11_FILL_SOLID;
+        rsDesc.CullMode              = D3D11_CULL_FRONT;
+        rsDesc.FrontCounterClockwise = FALSE;
+        rsDesc.DepthClipEnable       = TRUE;
+
+        hr = m_device->CreateRasterizerState(&rsDesc, m_skyboxRasterizerState.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return false;
 
         return true;
@@ -532,16 +691,19 @@ float4 main(PSInput input) : SV_TARGET
 
     void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
                                                 const XMMATRIX& view,
-                                                const XMMATRIX& projection)
+                                                const XMMATRIX& projection,
+                                                const XMFLOAT4& materialColor)
     {
         CBPerObject data = {};
         // HLSL에서 row-major로 사용할 수 있도록 전치 행렬 사용
         data.world      = XMMatrixTranspose(world);
         data.view       = XMMatrixTranspose(view);
         data.projection = XMMatrixTranspose(projection);
+        data.materialColor = materialColor;
 
         m_context->UpdateSubresource(m_cbPerObject.Get(), 0, nullptr, &data, 0, 0);
         m_context->VSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
+        m_context->PSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
     }
 
     void ForwardRenderSystem::UpdateLightingCB(const Camera& camera,
@@ -613,6 +775,53 @@ float4 main(PSInput input) : SV_TARGET
         m_context->PSSetConstantBuffers(1, 1, m_cbLighting.GetAddressOf());
     }
 
+    void ForwardRenderSystem::RenderSkybox(const Camera& camera,
+                                           const XMMATRIX& view,
+                                           const XMMATRIX& projection)
+    {
+        if (!m_skyboxEnabled || !m_skyboxSRV || !m_skyboxVS || !m_skyboxPS)
+            return;
+
+        // 입력 어셈블러 설정은 기존 큐브 지오메트리를 재사용합니다.
+        UINT stride = sizeof(SimpleVertex);
+        UINT offset = 0;
+        ID3D11Buffer* vb = m_vertexBuffer.Get();
+        m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        m_context->IASetIndexBuffer(m_indexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+        m_context->IASetInputLayout(m_inputLayout.Get());
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+        // 카메라를 원점에 두기 위해 View 행렬의 이동 성분을 제거합니다.
+        XMMATRIX viewNoTrans = view;
+        viewNoTrans.r[3] = XMVectorSet(0.0f, 0.0f, 0.0f, XMVectorGetW(view.r[3]));
+
+        XMMATRIX world = XMMatrixIdentity();
+        XMFLOAT4 whiteColor = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+        UpdatePerObjectCB(world, viewNoTrans, projection, whiteColor);
+
+        // 스카이박스 전용 상태 설정
+        if (m_skyboxDepthState)
+            m_context->OMSetDepthStencilState(m_skyboxDepthState.Get(), 0);
+        if (m_skyboxRasterizerState)
+            m_context->RSSetState(m_skyboxRasterizerState.Get());
+
+        ID3D11ShaderResourceView* skyboxSrv = m_skyboxSRV.Get();
+        m_context->PSSetShaderResources(3, 1, &skyboxSrv);
+
+        // 샘플러는 기존 것 재사용
+        ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
+        m_context->PSSetSamplers(0, 1, samplers);
+
+        m_context->VSSetShader(m_skyboxVS.Get(), nullptr, 0);
+        m_context->PSSetShader(m_skyboxPS.Get(), nullptr, 0);
+
+        m_context->DrawIndexed(m_indexCount, 0, 0);
+
+        // 기본 깊이 스텐실 상태로 복원 (nullptr = 디폴트)
+        m_context->OMSetDepthStencilState(nullptr, 0);
+        // 래스터라이저 상태는 Render 본문에서 다시 설정합니다.
+    }
+
     XMMATRIX ForwardRenderSystem::BuildWorldMatrix(const TransformComponent& transform) const
     {
         XMVECTOR scale = XMLoadFloat3(&transform.scale);
@@ -635,10 +844,6 @@ float4 main(PSInput input) : SV_TARGET
         if (!m_vertexBuffer || !m_indexBuffer || !m_vertexShader || !m_pixelShader)
             return;
 
-        const auto& transforms = world.GetTransforms();
-        if (transforms.empty())
-            return;
-
         if (!m_sceneRTV || !m_sceneDSV)
             return;
 
@@ -651,6 +856,17 @@ float4 main(PSInput input) : SV_TARGET
         m_context->ClearRenderTargetView(m_sceneRTV.Get(), sceneClearColor);
         m_context->ClearDepthStencilView(m_sceneDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
+        XMMATRIX viewM  = camera.GetViewMatrix();
+        XMMATRIX projM  = camera.GetProjectionMatrix();
+        UpdateLightingCB(camera, shadingMode, enableFillLight);
+
+        // 스카이박스 렌더링 (옵션)
+        if (m_skyboxEnabled)
+        {
+            RenderSkybox(camera, viewM, projM);
+        }
+
+        // 이후 일반 오브젝트 렌더링을 위한 상태 설정
         UINT stride = sizeof(SimpleVertex);
         UINT offset = 0;
         ID3D11Buffer* vb = m_vertexBuffer.Get();
@@ -662,10 +878,6 @@ float4 main(PSInput input) : SV_TARGET
         m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
         m_context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
 
-        XMMATRIX viewM  = camera.GetViewMatrix();
-        XMMATRIX projM  = camera.GetProjectionMatrix();
-        UpdateLightingCB(camera, shadingMode, enableFillLight);
-
         ID3D11ShaderResourceView* srvs[] =
         {
             m_diffuseSRV.Get(),
@@ -676,11 +888,19 @@ float4 main(PSInput input) : SV_TARGET
         ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
         m_context->PSSetSamplers(0, 1, samplers);
 
+        const auto& transforms = world.GetTransforms();
         for (const auto& [id, transform] : transforms)
         {
             (void)id;
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
+
+            // 기본 회색 머티리얼 (유니티 기본 큐브 느낌)
+            XMFLOAT4 materialColor = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
+            if (const MaterialComponent* mat = world.GetMaterial(id))
+            {
+                materialColor = XMFLOAT4(mat->color.x, mat->color.y, mat->color.z, 1.0f);
+            }
 
             // 월드 행렬 determinant 가 음수면(축이 한 번 이상 반전됨) 와인딩이 뒤집힌다.
             // 이 경우 전/후면 컬링 기준을 반대로 적용해서 뒷면 컬링이 항상 올바르게 되도록 한다.
@@ -699,7 +919,7 @@ float4 main(PSInput input) : SV_TARGET
                 }
             }
 
-            UpdatePerObjectCB(worldM, viewM, projM);
+            UpdatePerObjectCB(worldM, viewM, projM, materialColor);
             m_context->DrawIndexed(m_indexCount, 0, 0);
         }
 

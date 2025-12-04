@@ -12,10 +12,10 @@ namespace Alice
     void World::DestroyEntity(EntityId id)
     {
         if (id == InvalidEntityId) return;
-        
-        // 현재는 Transform 컴포넌트만 관리합니다.
+
         m_transforms.erase(id);
         m_scripts.erase(id);
+        m_materials.erase(id);
     }
 
     TransformComponent& World::AddTransform(EntityId id)
@@ -72,6 +72,37 @@ namespace Alice
     void World::RemoveScript(EntityId id)
     {
         m_scripts.erase(id);
+    }
+
+    MaterialComponent& World::AddMaterial(EntityId id,
+                                          const DirectX::XMFLOAT3& color,
+                                          const std::string& assetPath)
+    {
+        MaterialComponent& mat = m_materials[id];
+        mat.color     = color;
+        mat.assetPath = assetPath;
+        return mat;
+    }
+
+    MaterialComponent* World::GetMaterial(EntityId id)
+    {
+        auto it = m_materials.find(id);
+        if (it == m_materials.end())
+            return nullptr;
+        return &it->second;
+    }
+
+    const MaterialComponent* World::GetMaterial(EntityId id) const
+    {
+        auto it = m_materials.find(id);
+        if (it == m_materials.end())
+            return nullptr;
+        return &it->second;
+    }
+
+    void World::RemoveMaterial(EntityId id)
+    {
+        m_materials.erase(id);
     }
 }
 

@@ -12,7 +12,7 @@ namespace Alice
 {
     /// 간단한 ECS 스타일의 월드(World) 구현입니다.
     /// - 엔티티 생성/삭제 책임
-    /// - Transform 컴포넌트 관리 책임
+    /// - Transform / Script / Material 컴포넌트 관리 책임
     ///   (필요 시 다른 컴포넌트 컨테이너를 추가 확장)
 
     struct TransformComponent
@@ -39,6 +39,15 @@ namespace Alice
             rotation = DirectX::XMFLOAT3(x, y, z);
             return *this;
         }
+    };
+
+    /// 머티리얼 컴포넌트
+    /// - 현재는 단순히 베이스 컬러만 가집니다.
+    /// - 추후 메탈릭/러프니스 등 파라미터를 확장할 수 있습니다.
+    struct MaterialComponent
+    {
+        DirectX::XMFLOAT3 color     { 0.7f, 0.7f, 0.7f };  // 베이스 색상 (albedo)
+        std::string       assetPath;                      // 선택된 머티리얼 에셋 경로 (옵션)
     };
 
     class World
@@ -82,11 +91,32 @@ namespace Alice
         /// Script 컴포넌트를 제거합니다.
         void RemoveScript(EntityId id);
 
+        // ==== Material 컴포넌트 관련 ====
+
+        /// 머티리얼 컴포넌트를 추가합니다.
+        /// \param id        대상 엔티티 ID
+        /// \param color     기본 베이스 컬러
+        /// \param assetPath 이 머티리얼이 참조하는 에셋 경로(선택 사항)
+        MaterialComponent& AddMaterial(EntityId id,
+                                       const DirectX::XMFLOAT3& color,
+                                       const std::string& assetPath = {});
+
+        /// 머티리얼 컴포넌트를 가져옵니다. (없으면 nullptr)
+        MaterialComponent* GetMaterial(EntityId id);
+        const MaterialComponent* GetMaterial(EntityId id) const;
+
+        /// 전체 머티리얼 컴포넌트 컨테이너 (렌더링/에디터에서 사용)
+        const std::unordered_map<EntityId, MaterialComponent>& GetMaterials() const { return m_materials; }
+
+        /// 머티리얼 컴포넌트를 제거합니다.
+        void RemoveMaterial(EntityId id);
+
     private:
         EntityId m_nextEntityId { 1 };
 
         std::unordered_map<EntityId, TransformComponent> m_transforms;
         std::unordered_map<EntityId, ScriptComponent>    m_scripts;
+        std::unordered_map<EntityId, MaterialComponent>  m_materials;
     };
 }
 

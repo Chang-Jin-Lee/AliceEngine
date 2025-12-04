@@ -1,0 +1,25 @@
+# AliceRenderer scene
+entity: 2
+position: 4.7 2.2 0
+rotation: 0 1.04 -0.62
+scale: 1 -1.2 1
+script: 
+material_color: 0 0.455599 1
+material_asset: 
+
+entity: 3
+position: -1.7 1.6 0
+rotation: -0.14 0 0
+scale: 0.5 -0.3 3.8
+script: 
+material_color: 0.671815 0.0337204 0.24067
+material_asset: 
+
+entity: 4
+position: 1.2 0 0
+rotation: 0 0 0
+scale: 1 1.9 1
+script: 
+material_color: 0 1 0.339768
+material_asset: 
+

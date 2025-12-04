@@ -42,7 +42,6 @@ namespace Alice
                 std::string value;
                 std::getline(iss, value);
 
-                // 공백 제거
                 auto trim = [](std::string& s)
                 {
                     const char* ws = " \t\r\n";
@@ -95,13 +94,15 @@ namespace Alice
                         EntityId entity,
                         const std::filesystem::path& path)
         {
-            if (entity == InvalidEntityId)
-                return false;
+            if (entity == InvalidEntityId) return false;
 
-            // Transform / Script 정보를 가져옵니다.
+            // Transform / Script 정보를 조회합니다.
             const TransformComponent* transform = world.GetTransform(entity);
             if (!transform)
+            {
+                // Transform 이 없는 엔티티는 프리팹으로 저장하지 않습니다.
                 return false;
+            }
 
             const ScriptComponent* script = world.GetScript(entity);
             std::string scriptName;
@@ -114,14 +115,14 @@ namespace Alice
             const auto parent = path.parent_path();
             if (!parent.empty() && !std::filesystem::exists(parent))
             {
-                std::filesystem::create_directories(parent);
+                std::error_code ec;
+                std::filesystem::create_directories(parent, ec);
             }
 
             std::ofstream ofs(path);
-            if (!ofs.is_open())
-                return false;
+            if (!ofs.is_open()) return false;
 
-            // name 은 파일 이름(확장자 제외)으로 저장합니다.
+            // name 은 파일 이름(확장자 제외)로 저장합니다.
             ofs << "name: " << path.stem().string() << "\n";
             ofs << "position: "
                 << transform->position.x << " "
@@ -136,6 +137,7 @@ namespace Alice
                 << transform->scale.y << " "
                 << transform->scale.z << "\n";
 
+            // 스크립트 이름 (없으면 빈 문자열)
             ofs << "script: " << scriptName << "\n";
 
             return true;

@@ -11,12 +11,27 @@
 
 #include <fstream>
 #include <Core/Prefab.h>
+#include <Core/Script.h>
+#include <Core/Material.h>
+#include <Core/SceneFile.h>
 #include <shellapi.h>
 
 using namespace DirectX;
 
 namespace Alice
 {
+    namespace
+    {
+        // 현재 씬이 수정되었는지 여부 (저장 필요 여부)
+        bool                     g_SceneDirty           = false;
+        bool                     g_HasCurrentScenePath  = false;
+        std::filesystem::path    g_CurrentScenePath;
+
+        // 다른 씬을 로드하기 위해 대기 중인 경로
+        bool                     g_RequestSceneLoad     = false;
+        std::filesystem::path    g_NextScenePath;
+    }
+
     EditorCore::~EditorCore()
     {
         Shutdown();
@@ -192,7 +207,11 @@ namespace Alice
                     auto& t = world.AddTransform(e);
                     t.SetPosition(0.0f, 0.0f, 0.0f)
                      .SetScale(1.0f, 1.0f, 1.0f);
+                    // 기본 회색 머티리얼을 함께 추가합니다.
+                    DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+                    world.AddMaterial(e, defaultColor);
                     selectedEntity = e;
+                    g_SceneDirty   = true;
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndPopup();
@@ -277,6 +296,7 @@ namespace Alice
                     {
                         selectedEntity = InvalidEntityId;
                     }
+                    g_SceneDirty = true;
                 }
             }
         }
@@ -301,6 +321,7 @@ namespace Alice
                     ImGui::DragFloat3("Position", &transform->position.x, 0.1f);
                     ImGui::DragFloat3("Rotation (rad)", &transform->rotation.x, 0.01f);
                     ImGui::DragFloat3("Scale", &transform->scale.x, 0.1f);
+                    g_SceneDirty = true;
                 }
                 else
                 {
@@ -356,6 +377,39 @@ namespace Alice
                     if (ImGui::Button("Remove Script"))
                     {
                         world.RemoveScript(selectedEntity);
+                    }
+                }
+
+                ImGui::Separator();
+
+                // Material 컴포넌트 섹션
+                ImGui::Text("Material");
+                if (MaterialComponent* mat = world.GetMaterial(selectedEntity))
+                {
+                    if (ImGui::ColorEdit3("Base Color", &mat->color.x))
+                    {
+                        g_SceneDirty = true;
+                    }
+
+                    if (!mat->assetPath.empty())
+                    {
+                        ImGui::Text("Asset: %s", mat->assetPath.c_str());
+                    }
+
+                    if (ImGui::Button("Remove Material"))
+                    {
+                        world.RemoveMaterial(selectedEntity);
+                        g_SceneDirty = true;
+                    }
+                }
+                else
+                {
+                    Alice::ImGuiText(L"머티리얼이 없습니다.");
+                    if (ImGui::Button("Add Default Material"))
+                    {
+                        DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+                        world.AddMaterial(selectedEntity, defaultColor);
+                        g_SceneDirty = true;
                     }
                 }
             }
@@ -488,6 +542,74 @@ namespace Alice
                                      1.0f);
         }
         ImGui::End();
+
+        // === 씬 변경사항 저장 확인 모달 ===
+        if (g_RequestSceneLoad)
+        {
+            // 현재 씬이 존재하고 변경사항이 있을 때만 확인 모달을 띄웁니다.
+            if (g_HasCurrentScenePath && g_SceneDirty)
+            {
+                ImGui::OpenPopup("SaveSceneBeforeLoad");
+            }
+            else
+            {
+                // 저장할 필요가 없으면 바로 로드
+                SceneFile::Load(world, g_NextScenePath);
+                selectedEntity       = InvalidEntityId;
+                g_CurrentScenePath   = g_NextScenePath;
+                g_HasCurrentScenePath = true;
+                g_SceneDirty         = false;
+            }
+            g_RequestSceneLoad = false;
+        }
+
+        if (ImGui::BeginPopupModal("SaveSceneBeforeLoad", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            Alice::ImGuiText(L"현재 씬의 변경 내용을 저장하시겠습니까?");
+            ImGui::Separator();
+
+            if (ImGui::Button("Save"))
+            {
+                std::filesystem::path savePath = g_CurrentScenePath;
+                if (savePath.empty())
+                {
+                    savePath = "../Assets/AutoSaved.scene";
+                }
+                SceneFile::Save(world, savePath);
+                g_CurrentScenePath    = savePath;
+                g_HasCurrentScenePath = true;
+                g_SceneDirty          = false;
+
+                SceneFile::Load(world, g_NextScenePath);
+                selectedEntity        = InvalidEntityId;
+                g_CurrentScenePath    = g_NextScenePath;
+                g_HasCurrentScenePath = true;
+                g_SceneDirty          = false;
+
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Don't Save"))
+            {
+                SceneFile::Load(world, g_NextScenePath);
+                selectedEntity        = InvalidEntityId;
+                g_CurrentScenePath    = g_NextScenePath;
+                g_HasCurrentScenePath = true;
+                g_SceneDirty          = false;
+
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+            {
+                // 아무것도 하지 않고 씬 로드를 취소합니다.
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
     }
 
     void EditorCore::DrawDirectoryNode(World& world,
@@ -501,6 +623,12 @@ namespace Alice
         const std::string label = path.filename().string();
 
         ImGuiTreeNodeFlags baseFlags = ImGuiTreeNodeFlags_SpanAvailWidth;
+
+        // 파일/폴더 이름 변경 상태를 관리하는 간단한 정적 상태입니다.
+        static bool                 s_renaming      = false;
+        static std::filesystem::path s_renamingPath;
+        static char                 s_renameBuffer[260] = {};
+        static bool                 s_renameFocus   = false;
 
         if (isDirectory)
         {
@@ -595,6 +723,41 @@ namespace Alice
                     }
                 }
 
+                if (ImGui::MenuItem("Create Material"))
+                {
+                    fs::path newPath = path / "NewMaterial.mat";
+                    int index = 1;
+                    while (fs::exists(newPath))
+                    {
+                        newPath = path / ("NewMaterial" + std::to_string(index) + ".mat");
+                        ++index;
+                    }
+
+                    std::ofstream ofs(newPath);
+                    if (ofs.is_open())
+                    {
+                        ofs << "name: " << newPath.stem().string() << "\n";
+                        ofs << "color: 0.7 0.7 0.7\n";
+                    }
+                }
+
+                if (ImGui::MenuItem("Create Scene"))
+                {
+                    fs::path newPath = path / "NewScene.scene";
+                    int index = 1;
+                    while (fs::exists(newPath))
+                    {
+                        newPath = path / ("NewScene" + std::to_string(index) + ".scene");
+                        ++index;
+                    }
+
+                    std::ofstream ofs(newPath);
+                    if (ofs.is_open())
+                    {
+                        ofs << "# AliceRenderer scene\n";
+                    }
+                }
+
                 // 디렉터리 삭제 (Assets 안에서만 사용)
                 if (ImGui::MenuItem("Delete Folder"))
                 {
@@ -616,89 +779,95 @@ namespace Alice
         }
         else
         {
-            ImGui::TreeNodeEx(label.c_str(),
-                              baseFlags | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen);
-
             const std::string ext = path.extension().string();
 
-            // 파일 노드를 더블클릭하면 OS 기본 에디터로 해당 파일을 엽니다.
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            const bool isRenamingThis = s_renaming && (s_renamingPath == path);
+
+            // 파일 이름 렌더링: 일반 텍스트 또는 인라인 입력 박스
+            ImGui::PushID(label.c_str());
+            if (isRenamingThis)
+            {
+                ImGui::SetNextItemWidth(-1.0f);
+                if (s_renameFocus)
+                {
+                    ImGui::SetKeyboardFocusHere();
+                    s_renameFocus = false;
+                }
+
+                bool enterPressed = ImGui::InputText(
+                    "##RenameFile",
+                    s_renameBuffer,
+                    sizeof(s_renameBuffer),
+                    ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
+
+                bool finished = enterPressed || ImGui::IsItemDeactivatedAfterEdit();
+                if (finished)
+                {
+                    if (std::strlen(s_renameBuffer) > 0)
+                    {
+                        fs::path newPath = path.parent_path() / s_renameBuffer;
+                        if (!fs::exists(newPath))
+                        {
+                            std::error_code ec;
+                            fs::rename(path, newPath, ec);
+                        }
+                    }
+                    s_renaming = false;
+                }
+            }
+            else
+            {
+                ImGui::TreeNodeEx(label.c_str(),
+                                  baseFlags | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen);
+            }
+            ImGui::PopID();
+
+            // 파일 노드를 더블클릭하면 파일 형식에 따라 동작합니다.
+            if (!isRenamingThis &&
+                ImGui::IsItemHovered() &&
+                ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
                 if (ext == ".h" || ext == ".hpp" || ext == ".cpp" || ext == ".cxx")
                 {
-                    // 실행 파일 기준 절대 경로로 변환 후 ShellExecute 로 연다.
                     fs::path absPath = fs::absolute(path);
                     std::wstring wpath = absPath.wstring();
                     ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                }
+                else if (ext == ".scene")
+                {
+                    // 씬 파일을 더블클릭하면, 필요한 경우 저장 여부를 물은 뒤 로드합니다.
+                    g_NextScenePath    = path;
+                    g_RequestSceneLoad = true;
                 }
             }
 
             // 파일 노드에 대한 우클릭 컨텍스트 메뉴 (열기/이름 바꾸기/삭제/프리팹 Instantiate 등)
             if (ImGui::BeginPopupContextItem())
             {
-                // C++ 스크립트/헤더 파일에 대한 기본 동작들 (열기/이름 바꾸기 등)
-                if (ext == ".h" || ext == ".hpp" || ext == ".cpp" || ext == ".cxx")
+                // 어떤 확장자든 기본 Open / Rename / Delete 는 제공한다.
+                if (ImGui::MenuItem("Open"))
                 {
-                    if (ImGui::MenuItem("Open"))
-                    {
-                        fs::path absPath = fs::absolute(path);
-                        std::wstring wpath = absPath.wstring();
-                        ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-                    }
+                    fs::path absPath = fs::absolute(path);
+                    std::wstring wpath = absPath.wstring();
+                    ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                }
 
-                    // 간단한 이름 바꾸기: 같은 폴더 안에서 파일명을 변경합니다.
-                    static char renameBuffer[260] = {};
-                    static bool renameActive = false;
+                if (ImGui::MenuItem("Rename..."))
+                {
+                    std::string fileName = path.filename().string();
+                    std::memset(s_renameBuffer, 0, sizeof(s_renameBuffer));
+                    std::strncpy(s_renameBuffer, fileName.c_str(), sizeof(s_renameBuffer) - 1);
+                    s_renaming      = true;
+                    s_renamingPath  = path;
+                    s_renameFocus   = true;
+                    // 바로 인라인 입력 박스를 보여주기 위해 팝업을 닫습니다.
+                    ImGui::CloseCurrentPopup();
+                }
 
-                    if (ImGui::MenuItem("Rename..."))
-                    {
-                        std::string fileName = path.filename().string();
-                        std::memset(renameBuffer, 0, sizeof(renameBuffer));
-                        std::strncpy(renameBuffer, fileName.c_str(), sizeof(renameBuffer) - 1);
-                        renameActive = true;
-                        ImGui::OpenPopup("RenameFilePopup");
-                    }
-
-                    if (ImGui::BeginPopup("RenameFilePopup"))
-                    {
-                        ImGui::InputText("New Name", renameBuffer, sizeof(renameBuffer));
-
-                        if (ImGui::Button("OK"))
-                        {
-                            if (std::strlen(renameBuffer) > 0)
-                            {
-                                fs::path newPath = path.parent_path() / renameBuffer;
-                                // 같은 이름의 파일이 이미 있지 않을 때만 변경
-                                if (!fs::exists(newPath))
-                                {
-                                    std::error_code ec;
-                                    fs::rename(path, newPath, ec);
-                                }
-                            }
-                            renameActive = false;
-                            ImGui::CloseCurrentPopup();
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::Button("Cancel"))
-                        {
-                            renameActive = false;
-                            ImGui::CloseCurrentPopup();
-                        }
-
-                        ImGui::EndPopup();
-                    }
-
-                    if (!renameActive)
-                    {
-                        // 다른 파일의 컨텍스트 메뉴에서 재사용될 수 있도록 버퍼를 초기화합니다.
-                        std::memset(renameBuffer, 0, sizeof(renameBuffer));
-                    }
-
-                    if (ImGui::MenuItem("Delete"))
-                    {
-                        std::error_code ec;
-                        fs::remove(path, ec);
-                    }
+                if (ImGui::MenuItem("Delete"))
+                {
+                    std::error_code ec;
+                    fs::remove(path, ec);
                 }
 
                 // 프리팹 파일에 대한 Instantiate 동작
@@ -710,7 +879,48 @@ namespace Alice
                         if (e != InvalidEntityId)
                         {
                             selectedEntity = e;
+                            g_SceneDirty   = true;
                         }
+                    }
+                }
+
+                // 머티리얼 파일에 대한 간단한 적용 기능
+                if (ext == ".mat")
+                {
+                    if (ImGui::MenuItem("Assign To Selected Entity") &&
+                        selectedEntity != InvalidEntityId &&
+                        world.GetTransform(selectedEntity))
+                    {
+                        MaterialComponent* mat = world.GetMaterial(selectedEntity);
+                        if (!mat)
+                        {
+                            DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+                            mat = &world.AddMaterial(selectedEntity, defaultColor);
+                        }
+
+                        if (mat)
+                        {
+                            MaterialFile::Load(path, *mat);
+                            mat->assetPath = path.string();
+                            g_SceneDirty   = true;
+                        }
+                    }
+                }
+
+                // 씬 파일 저장/로드
+                if (ext == ".scene")
+                {
+                    if (ImGui::MenuItem("Load Scene"))
+                    {
+                        g_NextScenePath      = path;
+                        g_RequestSceneLoad   = true;
+                    }
+                    if (ImGui::MenuItem("Save Current Scene"))
+                    {
+                        SceneFile::Save(world, path);
+                        g_CurrentScenePath    = path;
+                        g_HasCurrentScenePath = true;
+                        g_SceneDirty          = false;
                     }
                 }
 
