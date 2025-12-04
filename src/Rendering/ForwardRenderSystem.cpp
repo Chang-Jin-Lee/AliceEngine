@@ -94,9 +94,12 @@ struct PSInput
 
 float4 main(PSInput input) : SV_TARGET
 {
-    // 노말맵에서 노멀을 가져와 [-1,1] 범위로 변환 후 정규화합니다.
-    float3 normalTex = gNormalMap.Sample(gSampler, input.TexCoord).xyz * 2.0f - 1.0f;
-    float3 N = normalize(normalTex);
+    // 기본적으로 월드 공간 노멀(기하학 노멀)을 사용해서 방향성 조명이 잘 보이도록 합니다.
+    // 노말맵은 필요하면 이후에 섞어서 디테일을 추가할 수 있습니다.
+    float3 N = normalize(input.Normal);
+    // 예시) 노말맵을 살짝 섞고 싶다면 다음과 같이 사용할 수 있습니다.
+    //float3 normalTex = gNormalMap.Sample(gSampler, input.TexCoord).xyz * 2.0f - 1.0f;
+    //N = normalize(N + normalTex);
 
     float3 V = normalize(gCameraPos - input.WorldPos);
 
