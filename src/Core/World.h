@@ -1,10 +1,12 @@
 #pragma once
 
 #include <unordered_map>
+#include <string>
 
 #include <DirectXMath.h>
 
 #include "Core/Entity.h"
+#include "Core/Script.h"
 
 namespace Alice
 {
@@ -63,10 +65,28 @@ namespace Alice
         /// - 에디터 하이러키 뷰에서 엔티티를 나열할 때 사용합니다.
         const std::unordered_map<EntityId, TransformComponent>& GetTransforms() const { return m_transforms; }
 
+        // ==== Script 컴포넌트 관련 ====
+
+        /// Script 컴포넌트를 추가합니다.
+        /// \param id         대상 엔티티 ID
+        /// \param scriptName ScriptFactory 에 등록된 스크립트 이름
+        ScriptComponent& AddScript(EntityId id, const std::string& scriptName);
+
+        /// Script 컴포넌트를 가져옵니다. (없으면 nullptr)
+        ScriptComponent* GetScript(EntityId id);
+        const ScriptComponent* GetScript(EntityId id) const;
+
+        /// 전체 Script 컴포넌트 컨테이너 (ScriptSystem 이 사용)
+        const std::unordered_map<EntityId, ScriptComponent>& GetScripts() const { return m_scripts; }
+
+        /// Script 컴포넌트를 제거합니다.
+        void RemoveScript(EntityId id);
+
     private:
         EntityId m_nextEntityId { 1 };
 
         std::unordered_map<EntityId, TransformComponent> m_transforms;
+        std::unordered_map<EntityId, ScriptComponent>    m_scripts;
     };
 }
 

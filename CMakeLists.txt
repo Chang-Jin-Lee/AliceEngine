@@ -21,6 +21,8 @@ set(ALICE_ENGINE_SOURCES
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
+    ${ALICE_SRC_DIR}/Core/Script.cpp
+    ${ALICE_SRC_DIR}/Core/Prefab.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
     ${ALICE_SRC_DIR}/Core/TimeSystem.cpp
@@ -40,6 +42,8 @@ set(ALICE_ENGINE_HEADERS
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.h
+    ${ALICE_SRC_DIR}/Core/Script.h
+    ${ALICE_SRC_DIR}/Core/Prefab.h
     ${ALICE_SRC_DIR}/Core/Component.h
     ${ALICE_SRC_DIR}/Core/Entity.h
     ${ALICE_SRC_DIR}/Core/System.h
@@ -79,12 +83,28 @@ set(ALICE_APP_HEADERS
     ${ALICE_SRC_DIR}/Scenes/SampleScene.h
 )
 
+# === 엔진 데모/기본 실행 파일 (엔진 자체 테스트용) ===
 add_executable(AliceRenderer
     ${ALICE_APP_SOURCES}
     ${ALICE_APP_HEADERS}
 )
 
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_APP_SOURCES} ${ALICE_APP_HEADERS})
+
+# === 콘텐츠 개발용 실행 파일 (Assets 폴더의 스크립트 포함) ===
+# - Unity 의 게임 프로젝트에 해당하는 대상
+file(GLOB_RECURSE ALICE_ASSET_SCRIPTS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Assets/*.cpp"
+)
+
+add_executable(AliceGame
+    ${ALICE_APP_SOURCES}
+    ${ALICE_APP_HEADERS}
+    ${ALICE_ASSET_SCRIPTS}
+)
+
+source_group(TREE ${ALICE_SRC_DIR}   FILES ${ALICE_APP_SOURCES} ${ALICE_APP_HEADERS})
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${ALICE_ASSET_SCRIPTS})
 
 # ThirdParty ImGui (docking 브랜치) 경로
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
@@ -128,10 +148,18 @@ target_include_directories(imgui
         ${IMGUI_DIR}/backends
 )
 
+target_include_directories(AliceGame
+    PRIVATE
+        ${ALICE_SRC_DIR}
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+)
+
 if(MSVC)
     # 경고 레벨 및 비교적 엄격한 컴파일 옵션
     target_compile_options(AliceEngine   PRIVATE /W4 /permissive-)
     target_compile_options(AliceRenderer PRIVATE /W4 /permissive-)
+    target_compile_options(AliceGame     PRIVATE /W4 /permissive-)
 
     # ==== vcpkg + DirectXTK/DirectXTex 연동 ====
     # D3D11-AliceTutorial 의 Directory.Build.Props 와 동일한 개념을 CMake로 옮긴 것.
@@ -159,8 +187,22 @@ if(MSVC)
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
     )
 
+    target_include_directories(AliceGame
+        PRIVATE
+            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
+            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
+    )
+
     # vcpkg lib 경로 추가 (Debug/Release 를 분리해서 Props 와 동일하게 설정)
     target_link_directories(AliceRenderer
+        PRIVATE
+            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
+            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
+            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
+            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
+    )
+
+    target_link_directories(AliceGame
         PRIVATE
             "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
             "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
@@ -173,9 +215,24 @@ endif()
 set_target_properties(AliceRenderer PROPERTIES
     WIN32_EXECUTABLE YES
 )
+set_target_properties(AliceGame PROPERTIES
+    WIN32_EXECUTABLE YES
+)
 
 # DirectX 11 / DXGI / DirectXTK / DirectXTex / ImGui 링크
 target_link_libraries(AliceRenderer
+    PRIVATE
+        AliceEngine
+        imgui
+        d3d11
+        dxgi
+        dxguid
+        d3dcompiler
+        directxtk
+        directxtex
+)
+
+target_link_libraries(AliceGame
     PRIVATE
         AliceEngine
         imgui
