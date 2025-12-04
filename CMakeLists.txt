@@ -23,6 +23,8 @@ set(ALICE_ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/World.cpp
     ${ALICE_SRC_DIR}/Core/Script.cpp
     ${ALICE_SRC_DIR}/Core/Prefab.cpp
+    ${ALICE_SRC_DIR}/Core/Material.cpp
+    ${ALICE_SRC_DIR}/Core/SceneFile.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
     ${ALICE_SRC_DIR}/Core/TimeSystem.cpp
@@ -44,6 +46,8 @@ set(ALICE_ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/World.h
     ${ALICE_SRC_DIR}/Core/Script.h
     ${ALICE_SRC_DIR}/Core/Prefab.h
+    ${ALICE_SRC_DIR}/Core/Material.h
+    ${ALICE_SRC_DIR}/Core/SceneFile.h
     ${ALICE_SRC_DIR}/Core/Component.h
     ${ALICE_SRC_DIR}/Core/Entity.h
     ${ALICE_SRC_DIR}/Core/System.h

@@ -9,6 +9,10 @@ namespace Alice
     void NewScript1::OnCreate(World& world, EntityId entity)
     {
         // 초기화 로직을 여기에 작성하세요.
+        if (auto* t = transform())
+        {
+            t->SetPosition(3, 0, 0);
+        }
     }
 
     void NewScript1::OnUpdate(World& world, EntityId entity, float deltaTime)

@@ -55,6 +55,7 @@ namespace Alice
             DirectX::XMMATRIX world;
             DirectX::XMMATRIX view;
             DirectX::XMMATRIX projection;
+            DirectX::XMFLOAT4 materialColor; // per-object 베이스 컬러
         };
 
         /// 단순 Directional Light 2개와 재질 파라미터를 담는 구조체입니다.
@@ -107,9 +108,16 @@ namespace Alice
         bool CreateSamplerState();
         bool CreateRasterizerStates();
 
+        bool CreateSkyboxResources();
+
+        void RenderSkybox(const Camera& camera,
+                          const DirectX::XMMATRIX& view,
+                          const DirectX::XMMATRIX& projection);
+
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
                                const DirectX::XMMATRIX& view,
-                               const DirectX::XMMATRIX& projection);
+                               const DirectX::XMMATRIX& projection,
+                               const DirectX::XMFLOAT4& materialColor);
 
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
@@ -145,6 +153,14 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerStateReversed;
 
         LightingParameters                              m_lightingParameters;
+
+        // ==== 스카이박스 리소스 ====
+        bool                                            m_skyboxEnabled { true };
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_skyboxSRV;
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>       m_skyboxVS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>        m_skyboxPS;
+        Microsoft::WRL::ComPtr<ID3D11DepthStencilState>  m_skyboxDepthState;
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_skyboxRasterizerState;
 
         // ==== 게임 뷰포트 렌더 타깃 (Scene Color) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneColorTex;

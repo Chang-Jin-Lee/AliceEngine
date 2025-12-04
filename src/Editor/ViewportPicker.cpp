@@ -12,37 +12,41 @@ namespace Alice
     {
         struct Ray
         {
-            XMFLOAT3 origin;
+            XMFLOAT3 origin;    // 시작점
             XMFLOAT3 direction; // 정규화된 방향 벡터
         };
 
-        bool IntersectRaySphere(const Ray& ray,
-                                const XMFLOAT3& center,
-                                float radius,
-                                float& outT)
+        // 로컬 공간에서의 레이 - AABB([-1,1]^3) 교차 테스트
+        bool IntersectRayAABB(const Ray& ray,
+                              const XMFLOAT3& min,
+                              const XMFLOAT3& max,
+                              float& outT)
         {
             XMVECTOR O = XMLoadFloat3(&ray.origin);
             XMVECTOR D = XMLoadFloat3(&ray.direction);
-            XMVECTOR C = XMLoadFloat3(&center);
 
-            XMVECTOR m = XMVectorSubtract(O, C);
+            XMVECTOR boxMin = XMLoadFloat3(&min);
+            XMVECTOR boxMax = XMLoadFloat3(&max);
 
-            float b = XMVectorGetX(XMVector3Dot(m, D));
-            float c = XMVectorGetX(XMVector3Dot(m, m)) - radius * radius;
+            // 슬랩(Slab) 방식
+            XMVECTOR invD = XMVectorReciprocal(D);
 
-            if (c > 0.0f && b > 0.0f)
+            XMVECTOR t1 = XMVectorMultiply(XMVectorSubtract(boxMin, O), invD);
+            XMVECTOR t2 = XMVectorMultiply(XMVectorSubtract(boxMax, O), invD);
+
+            XMVECTOR tMinVec = XMVectorMin(t1, t2);
+            XMVECTOR tMaxVec = XMVectorMax(t1, t2);
+
+            float tMin = (std::max)((std::max)(XMVectorGetX(tMinVec), XMVectorGetY(tMinVec)),
+                                    XMVectorGetZ(tMinVec));
+            float tMax = (std::min)((std::min)(XMVectorGetX(tMaxVec), XMVectorGetY(tMaxVec)),
+                                    XMVectorGetZ(tMaxVec));
+
+            if (tMax < 0.0f || tMin > tMax)
                 return false;
 
-            float disc = b * b - c;
-            if (disc < 0.0f)
-                return false;
-
-            float t = -b - std::sqrt(disc);
-            if (t < 0.0f)
-                t = 0.0f;
-
-            outT = t;
-            return true;
+            outT = (tMin >= 0.0f) ? tMin : tMax;
+            return outT >= 0.0f;
         }
     }
 
@@ -57,7 +61,7 @@ namespace Alice
 
         XMMATRIX view       = camera.GetViewMatrix();
         XMMATRIX projection = camera.GetProjectionMatrix();
-        XMMATRIX viewProj   = XMMatrixMultiply(view, projection);
+        XMMATRIX viewProj    = XMMatrixMultiply(view, projection);
         XMMATRIX invViewProj = XMMatrixInverse(nullptr, viewProj);
 
         // 2) 클립 공간 → 월드 공간
@@ -67,35 +71,65 @@ namespace Alice
         nearPoint = XMVector3TransformCoord(nearPoint, invViewProj);
         farPoint  = XMVector3TransformCoord(farPoint,  invViewProj);
 
-        XMVECTOR dir = XMVector3Normalize(XMVectorSubtract(farPoint, nearPoint));
+        XMVECTOR dirWorld = XMVector3Normalize(XMVectorSubtract(farPoint, nearPoint));
 
-        Ray ray {};
-        XMStoreFloat3(&ray.origin,    nearPoint);
-        XMStoreFloat3(&ray.direction, dir);
+        // 레이의 시작점은 카메라 위치
+        XMFLOAT3 camPos = camera.GetPosition();
+        XMVECTOR originWorld = XMLoadFloat3(&camPos);
+
+        Ray rayWorld {};
+        XMStoreFloat3(&rayWorld.origin,    originWorld);
+        XMStoreFloat3(&rayWorld.direction, dirWorld);
 
         const auto& transforms = world.GetTransforms();
         if (transforms.empty())
             return InvalidEntityId;
 
-        float   nearestT   = FLT_MAX;
-        EntityId hitEntity = InvalidEntityId;
+        float   nearestDist = FLT_MAX;
+        EntityId hitEntity  = InvalidEntityId;
+
+        // 오브젝트별로: 월드 행렬의 역행렬을 사용해 레이를 로컬 공간으로 변환 후,
+        // 로컬 AABB([-1,1]^3)에 대한 교차를 검사합니다.
+        const XMFLOAT3 boxMin(-1.0f, -1.0f, -1.0f);
+        const XMFLOAT3 boxMax( 1.0f,  1.0f,  1.0f);
 
         for (const auto& [entityId, transform] : transforms)
         {
-            // 큐브의 바운딩 스피어 ([-1,1]^3 → 반지름 sqrt(3))
-            float maxScale = (std::max)(transform.scale.x,
-                                        (std::max)(transform.scale.y, transform.scale.z));
-            const float baseRadius = std::sqrt(3.0f);
-            const float radius     = baseRadius * maxScale;
+            // 월드 행렬 = S * R * T (렌더러와 동일한 방식)
+            XMVECTOR S = XMLoadFloat3(&transform.scale);
+            XMVECTOR R = XMLoadFloat3(&transform.rotation);
+            XMVECTOR T = XMLoadFloat3(&transform.position);
 
-            float tHit = 0.0f;
-            if (IntersectRaySphere(ray, transform.position, radius, tHit))
+            XMMATRIX worldM    = XMMatrixScalingFromVector(S)
+                               * XMMatrixRotationRollPitchYawFromVector(R)
+                               * XMMatrixTranslationFromVector(T);
+            XMMATRIX invWorldM = XMMatrixInverse(nullptr, worldM);
+
+            // 레이를 로컬 공간으로 변환
+            XMVECTOR originLocal = XMVector3TransformCoord(originWorld, invWorldM);
+            XMVECTOR endWorld    = XMVectorAdd(originWorld, XMVectorScale(dirWorld, 1000.0f));
+            XMVECTOR endLocal    = XMVector3TransformCoord(endWorld, invWorldM);
+            XMVECTOR dirLocal    = XMVector3Normalize(XMVectorSubtract(endLocal, originLocal));
+
+            Ray rayLocal {};
+            XMStoreFloat3(&rayLocal.origin,    originLocal);
+            XMStoreFloat3(&rayLocal.direction, dirLocal);
+
+            float tLocal = 0.0f;
+            if (!IntersectRayAABB(rayLocal, boxMin, boxMax, tLocal))
+                continue;
+
+            // 로컬 히트 포인트 → 월드 좌표
+            XMVECTOR hitLocal = XMVectorAdd(originLocal, XMVectorScale(dirLocal, tLocal));
+            XMVECTOR hitWorld = XMVector3TransformCoord(hitLocal, worldM);
+
+            // 카메라 기준 거리 계산
+            float dist = XMVectorGetX(XMVector3Length(XMVectorSubtract(hitWorld, originWorld)));
+
+            if (dist < nearestDist)
             {
-                if (tHit < nearestT)
-                {
-                    nearestT  = tHit;
-                    hitEntity = entityId;
-                }
+                nearestDist = dist;
+                hitEntity   = entityId;
             }
         }
 

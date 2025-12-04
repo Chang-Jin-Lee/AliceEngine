@@ -1,0 +1,9 @@
+# AliceRenderer scene
+entity: 7
+position: 0 1.1 0
+rotation: 0 3.68177 0.31
+scale: 1.04364 1.04364 1.04364
+script: NewScript
+material_color: 0.841699 0 1
+material_asset: 
+
