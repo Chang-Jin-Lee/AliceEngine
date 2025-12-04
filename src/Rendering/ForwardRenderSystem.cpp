@@ -191,6 +191,7 @@ float4 main(PSInput input) : SV_TARGET
         if (!CreateConstantBuffers()) return false;
         if (!CreateTextures())  return false;
         if (!CreateSamplerState()) return false;
+        if (!CreateRasterizerStates()) return false;
         return true;
     }
 
@@ -505,6 +506,27 @@ float4 main(PSInput input) : SV_TARGET
         return true;
     }
 
+    bool ForwardRenderSystem::CreateRasterizerStates()
+    {
+        // 기본: CCW를 앞면으로 간주, 뒷면 컬링
+        D3D11_RASTERIZER_DESC desc = {};
+        desc.FillMode              = D3D11_FILL_SOLID;
+        desc.CullMode              = D3D11_CULL_BACK;
+        desc.FrontCounterClockwise = FALSE;
+        desc.DepthClipEnable       = TRUE;
+
+        HRESULT hr = m_device->CreateRasterizerState(&desc, m_rasterizerState.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        // 음수 스케일(거울 반전)일 때는 정점의 와인딩이 뒤집히므로
+        // FrontCounterClockwise 를 TRUE 로 줘서 "반대 와인딩"을 앞면으로 간주한다.
+        desc.FrontCounterClockwise = TRUE;
+        hr = m_device->CreateRasterizerState(&desc, m_rasterizerStateReversed.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        return true;
+    }
+
     void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
                                                 const XMMATRIX& view,
                                                 const XMMATRIX& projection)
@@ -603,32 +625,29 @@ float4 main(PSInput input) : SV_TARGET
 
     void ForwardRenderSystem::Render(const World& world,
                                      const Camera& camera,
-                                     EntityId entity,
+                                     EntityId /*entity*/,
                                      int shadingMode,
                                      bool enableFillLight)
     {
         if (!m_vertexBuffer || !m_indexBuffer || !m_vertexShader || !m_pixelShader)
             return;
 
-        const TransformComponent* transform = world.GetTransform(entity);
-        if (!transform) return;
+        const auto& transforms = world.GetTransforms();
+        if (transforms.empty())
+            return;
 
-        // 씬 렌더 타깃이 없다면 아무 것도 하지 않습니다.
         if (!m_sceneRTV || !m_sceneDSV)
             return;
 
-        // 0) 현재 백버퍼 렌더 타깃을 저장해 두었다가, 렌더 후에 복원합니다.
         ID3D11RenderTargetView* backBufferRTV = m_renderDevice.GetBackBufferRTV();
         ID3D11DepthStencilView* backBufferDSV = m_renderDevice.GetBackBufferDSV();
 
-        // 1) 게임 뷰포트 렌더 타깃으로 전환하고, 색/깊이를 클리어합니다.
         const float sceneClearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
         ID3D11RenderTargetView* rtvs[] = { m_sceneRTV.Get() };
         m_context->OMSetRenderTargets(1, rtvs, m_sceneDSV.Get());
         m_context->ClearRenderTargetView(m_sceneRTV.Get(), sceneClearColor);
         m_context->ClearDepthStencilView(m_sceneDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-        // 2) 파이프라인 상태 설정
         UINT stride = sizeof(SimpleVertex);
         UINT offset = 0;
         ID3D11Buffer* vb = m_vertexBuffer.Get();
@@ -640,15 +659,10 @@ float4 main(PSInput input) : SV_TARGET
         m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
         m_context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
 
-        // 3) 상수 버퍼 / 텍스처 바인딩
-        XMMATRIX worldM = BuildWorldMatrix(*transform);
         XMMATRIX viewM  = camera.GetViewMatrix();
         XMMATRIX projM  = camera.GetProjectionMatrix();
-
-        UpdatePerObjectCB(worldM, viewM, projM);
         UpdateLightingCB(camera, shadingMode, enableFillLight);
 
-        // 브릭 텍스처, 노말맵, 스페큘러 맵과 샘플러를 픽셀 셰이더에 바인딩합니다.
         ID3D11ShaderResourceView* srvs[] =
         {
             m_diffuseSRV.Get(),
@@ -659,10 +673,33 @@ float4 main(PSInput input) : SV_TARGET
         ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
         m_context->PSSetSamplers(0, 1, samplers);
 
-        // 4) 드로우 콜
-        m_context->DrawIndexed(m_indexCount, 0, 0);
+        for (const auto& [id, transform] : transforms)
+        {
+            (void)id;
 
-        // 5) ImGui 렌더링을 위해 기본 백버퍼 렌더 타깃으로 복원합니다.
+            XMMATRIX worldM = BuildWorldMatrix(transform);
+
+            // 월드 행렬 determinant 가 음수면(축이 한 번 이상 반전됨) 와인딩이 뒤집힌다.
+            // 이 경우 전/후면 컬링 기준을 반대로 적용해서 뒷면 컬링이 항상 올바르게 되도록 한다.
+            // (현재 큐브의 인덱스/와인딩 정의에 맞추기 위해, determinant >= 0 일 때 "반전 컬링"을 사용한다)
+            {
+                const float det = XMVectorGetX(XMMatrixDeterminant(worldM));
+
+                // det >= 0 : 기본 와인딩, 하지만 현재 메쉬 정의상 이때 반전 컬링 상태를 쓰는 것이 맞다.
+                if (det >= 0.0f && m_rasterizerStateReversed)
+                {
+                    m_context->RSSetState(m_rasterizerStateReversed.Get());
+                }
+                else if (m_rasterizerState)
+                {
+                    m_context->RSSetState(m_rasterizerState.Get());
+                }
+            }
+
+            UpdatePerObjectCB(worldM, viewM, projM);
+            m_context->DrawIndexed(m_indexCount, 0, 0);
+        }
+
         if (backBufferRTV)
         {
             ID3D11RenderTargetView* bbRtvs[] = { backBufferRTV };

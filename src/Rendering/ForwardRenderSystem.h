@@ -92,7 +92,7 @@ namespace Alice
 
             // 광원 세기
             float             keyIntensity  { 1.0f };
-            float             fillIntensity { 0.5f };
+            float             fillIntensity { 1.0f };
 
             // 광원 방향 (월드 기준)
             DirectX::XMFLOAT3 keyDirection  {  0.5f, -1.0f,  0.5f };
@@ -105,6 +105,7 @@ namespace Alice
         bool CreateConstantBuffers();
         bool CreateTextures();
         bool CreateSamplerState();
+        bool CreateRasterizerStates();
 
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
                                const DirectX::XMMATRIX& view,
@@ -138,6 +139,10 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_normalSRV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_specularSRV;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerState;
+
+        // 음수 스케일(반전 스케일)을 위한 컬링 모드 제어용 래스터라이저 상태
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerState;
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerStateReversed;
 
         LightingParameters                              m_lightingParameters;
 
