@@ -157,6 +157,7 @@ namespace Alice
             ImGui::Text("AliceRenderer");
             ImGui::Separator();
 
+            // Play / Stop 토글 버튼
             if (!isPlaying)
             {
                 if (ImGui::Button("Play"))
@@ -170,6 +171,27 @@ namespace Alice
                 {
                     isPlaying = false;
                 }
+            }
+
+            ImGui::Separator();
+
+            // 오브젝트 생성 메뉴 버튼
+            if (ImGui::Button("Create"))
+            {
+                ImGui::OpenPopup("CreateObjectPopup");
+            }
+            if (ImGui::BeginPopup("CreateObjectPopup"))
+            {
+                if (ImGui::MenuItem("Cube"))
+                {
+                    EntityId e = world.CreateEntity();
+                    auto& t = world.AddTransform(e);
+                    t.SetPosition(0.0f, 0.0f, 0.0f)
+                     .SetScale(1.0f, 1.0f, 1.0f);
+                    selectedEntity = e;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
             }
 
             ImGui::Separator();
@@ -191,6 +213,8 @@ namespace Alice
             }
             else
             {
+                EntityId entityToDelete = InvalidEntityId;
+
                 for (const auto& [entityId, transform] : transforms)
                 {
                     (void)transform;
@@ -201,6 +225,26 @@ namespace Alice
                     if (ImGui::Selectable(label.c_str(), isSelected))
                     {
                         selectedEntity = entityId;
+                    }
+
+                    // 항목 우클릭 시 컨텍스트 메뉴 표시
+                    if (ImGui::BeginPopupContextItem())
+                    {
+                        if (ImGui::MenuItem("Delete"))
+                        {
+                            entityToDelete = entityId;
+                        }
+                        ImGui::EndPopup();
+                    }
+                }
+
+                // 루프가 끝난 뒤에 실제 삭제를 수행합니다. (반복 중 컨테이너 수정 방지)
+                if (entityToDelete != InvalidEntityId)
+                {
+                    world.DestroyEntity(entityToDelete);
+                    if (selectedEntity == entityToDelete)
+                    {
+                        selectedEntity = InvalidEntityId;
                     }
                 }
             }
