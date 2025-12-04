@@ -15,6 +15,7 @@ namespace Alice
         
         // 현재는 Transform 컴포넌트만 관리합니다.
         m_transforms.erase(id);
+        m_scripts.erase(id);
     }
 
     TransformComponent& World::AddTransform(EntityId id)
@@ -35,6 +36,42 @@ namespace Alice
         auto it = m_transforms.find(id);
         if (it == m_transforms.end()) return nullptr;
         return &it->second;
+    }
+
+    ScriptComponent& World::AddScript(EntityId id, const std::string& scriptName)
+    {
+        ScriptComponent& comp = m_scripts[id];
+        comp.scriptName = scriptName;
+        comp.instance   = ScriptFactory::Create(scriptName.c_str());
+
+        if (comp.instance)
+        {
+            // 스크립트 인스턴스에 World/Entity 컨텍스트를 먼저 설정한 뒤
+            // OnCreate 콜백을 호출합니다.
+            comp.instance->SetContext(this, id);
+            comp.instance->OnCreate(*this, id);
+        }
+
+        return comp;
+    }
+
+    ScriptComponent* World::GetScript(EntityId id)
+    {
+        auto it = m_scripts.find(id);
+        if (it == m_scripts.end()) return nullptr;
+        return &it->second;
+    }
+
+    const ScriptComponent* World::GetScript(EntityId id) const
+    {
+        auto it = m_scripts.find(id);
+        if (it == m_scripts.end()) return nullptr;
+        return &it->second;
+    }
+
+    void World::RemoveScript(EntityId id)
+    {
+        m_scripts.erase(id);
     }
 }
 

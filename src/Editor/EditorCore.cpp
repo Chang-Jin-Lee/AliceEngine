@@ -9,6 +9,10 @@
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
+#include <fstream>
+#include <Core/Prefab.h>
+#include <shellapi.h>
+
 using namespace DirectX;
 
 namespace Alice
@@ -234,6 +238,33 @@ namespace Alice
                         {
                             entityToDelete = entityId;
                         }
+
+                        // 현재 게임 오브젝트를 프리팹으로 저장하는 기능
+                        if (ImGui::MenuItem("Save as Prefab"))
+                        {
+                            // Assets/Prefabs 폴더 아래에 간단한 이름으로 저장합니다.
+                            namespace fs = std::filesystem;
+                            const fs::path prefabDir = "../Assets/Prefabs";
+                            if (!fs::exists(prefabDir))
+                            {
+                                fs::create_directories(prefabDir);
+                            }
+
+                            // Entity_<id>.prefab 형태의 기본 이름 사용
+                            std::string baseName = "Entity_" + std::to_string(static_cast<std::uint32_t>(entityId)) + ".prefab";
+                            fs::path prefabPath = prefabDir / baseName;
+
+                            int index = 1;
+                            while (fs::exists(prefabPath))
+                            {
+                                baseName = "Entity_" + std::to_string(static_cast<std::uint32_t>(entityId)) + "_" + std::to_string(index) + ".prefab";
+                                prefabPath = prefabDir / baseName;
+                                ++index;
+                            }
+
+                            Prefab::SaveToFile(world, entityId, prefabPath);
+                        }
+
                         ImGui::EndPopup();
                     }
                 }
@@ -263,17 +294,69 @@ namespace Alice
                 ImGui::Text("Entity %u", static_cast<std::uint32_t>(selectedEntity));
                 ImGui::Separator();
 
-                auto* transform = world.GetTransform(selectedEntity);
-                if (!transform)
-                {
-                    Alice::ImGuiText(L"Transform 컴포넌트가 없습니다.");
-                }
-                else
+                // Transform 편집
+                if (auto* transform = world.GetTransform(selectedEntity))
                 {
                     ImGui::Text("Transform");
                     ImGui::DragFloat3("Position", &transform->position.x, 0.1f);
                     ImGui::DragFloat3("Rotation (rad)", &transform->rotation.x, 0.01f);
                     ImGui::DragFloat3("Scale", &transform->scale.x, 0.1f);
+                }
+                else
+                {
+                    Alice::ImGuiText(L"Transform 컴포넌트가 없습니다.");
+                }
+
+                ImGui::Separator();
+
+                // Script 컴포넌트 섹션
+                ImGui::Text("Scripts");
+
+                ScriptComponent* script = world.GetScript(selectedEntity);
+                if (!script)
+                {
+                    Alice::ImGuiText(L"스크립트가 없습니다.");
+
+                    // 등록된 스크립트 목록에서 하나를 선택해 추가할 수 있게 합니다.
+                    std::vector<std::string> scriptNames = ScriptFactory::GetRegisteredScriptNames();
+                    if (!scriptNames.empty())
+                    {
+                        static int selectedIndex = 0;
+                        selectedIndex = std::clamp(selectedIndex, 0, static_cast<int>(scriptNames.size()) - 1);
+
+                        if (ImGui::BeginCombo("Add Script", scriptNames[selectedIndex].c_str()))
+                        {
+                            for (int i = 0; i < static_cast<int>(scriptNames.size()); ++i)
+                            {
+                                bool isSelected = (i == selectedIndex);
+                                if (ImGui::Selectable(scriptNames[i].c_str(), isSelected))
+                                {
+                                    selectedIndex = i;
+                                }
+                                if (isSelected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                            ImGui::EndCombo();
+                        }
+
+                        if (ImGui::Button("Attach Script") && !scriptNames.empty())
+                        {
+                            world.AddScript(selectedEntity, scriptNames[selectedIndex]);
+                        }
+                    }
+                    else
+                    {
+                        Alice::ImGuiText(L"등록된 스크립트 타입이 없습니다.");
+                    }
+                }
+                else
+                {
+                    ImGui::Text("Attached Script: %s", script->scriptName.c_str());
+
+                    if (ImGui::Button("Remove Script"))
+                    {
+                        world.RemoveScript(selectedEntity);
+                    }
                 }
             }
         }
@@ -282,11 +365,18 @@ namespace Alice
         // === Project ===
         if (ImGui::Begin("Project"))
         {
-            Alice::ImGuiText(L"Resource 폴더");
+            Alice::ImGuiText(L"Assets 폴더");
             ImGui::Separator();
 
-            const std::filesystem::path resourceRoot = "../Resource";
-            DrawDirectoryNode(resourceRoot);
+            // Unity 스타일로 프로젝트 루트 하위의 Assets 폴더를 기준으로 디렉터리를 보여줍니다.
+            const std::filesystem::path assetsRoot = "../Assets";
+            if (!std::filesystem::exists(assetsRoot))
+            {
+                // 폴더가 없다면 한 번만 생성해 둡니다.
+                std::filesystem::create_directories(assetsRoot);
+            }
+
+            DrawDirectoryNode(world, selectedEntity, assetsRoot);
         }
         ImGui::End();
 
@@ -400,7 +490,9 @@ namespace Alice
         ImGui::End();
     }
 
-    void EditorCore::DrawDirectoryNode(const std::filesystem::path& path)
+    void EditorCore::DrawDirectoryNode(World& world,
+                                       EntityId& selectedEntity,
+                                       const std::filesystem::path& path)
     {
         namespace fs = std::filesystem;
         if (!fs::exists(path)) return;
@@ -413,11 +505,111 @@ namespace Alice
         if (isDirectory)
         {
             const bool open = ImGui::TreeNodeEx(label.c_str(), baseFlags);
+
+            // 디렉터리 노드에 대한 우클릭 컨텍스트 메뉴 (스크립트/프리팹 생성 등)
+            if (ImGui::BeginPopupContextItem())
+            {
+                // Unity 스타일: C++ 스크립트(.h/.cpp)와 프리팹을 간단하게 생성합니다.
+                if (ImGui::MenuItem("Create C++ Script"))
+                {
+                    const std::string baseName = "NewScript";
+
+                    fs::path headerPath = path / (baseName + ".h");
+                    fs::path sourcePath = path / (baseName + ".cpp");
+
+                    int index = 1;
+                    while (fs::exists(headerPath) || fs::exists(sourcePath))
+                    {
+                        const std::string numbered = baseName + std::to_string(index);
+                        headerPath = path / (numbered + ".h");
+                        sourcePath = path / (numbered + ".cpp");
+                        ++index;
+                    }
+
+                    const std::string className = headerPath.stem().string();
+
+                    // 헤더 파일 템플릿 작성
+                    {
+                        std::ofstream hfs(headerPath);
+                        if (hfs.is_open())
+                        {
+                            hfs << "#pragma once\n\n";
+                            hfs << "#include \"Core/Script.h\"\n\n";
+                            hfs << "namespace Alice\n";
+                            hfs << "{\n";
+                            hfs << "    // 간단한 예제 스크립트입니다. 필요에 맞게 수정해서 사용하세요.\n";
+                            hfs << "    class " << className << " : public IScript\n";
+                            hfs << "    {\n";
+                            hfs << "    public:\n";
+                            hfs << "        const char* GetName() const override { return \"" << className << "\"; }\n\n";
+                            hfs << "        void OnCreate(World& world, EntityId entity) override;\n";
+                            hfs << "        void OnUpdate(World& world, EntityId entity, float deltaTime) override;\n";
+                            hfs << "    };\n";
+                            hfs << "}\n";
+                        }
+                    }
+
+                    // cpp 파일 템플릿 작성
+                    {
+                        std::ofstream cfs(sourcePath);
+                        if (cfs.is_open())
+                        {
+                            cfs << "#include \"" << headerPath.filename().string() << "\"\n";
+                            cfs << "#include \"Core/World.h\"\n\n";
+                            cfs << "namespace Alice\n";
+                            cfs << "{\n";
+                            cfs << "    // 이 스크립트를 리플렉션/팩토리 시스템에 등록합니다.\n";
+                            cfs << "    REGISTER_SCRIPT(" << className << ");\n\n";
+                            cfs << "    void " << className << "::OnCreate(World& world, EntityId entity)\n";
+                            cfs << "    {\n";
+                            cfs << "        // 초기화 로직을 여기에 작성하세요.\n";
+                            cfs << "    }\n\n";
+                            cfs << "    void " << className << "::OnUpdate(World& world, EntityId entity, float deltaTime)\n";
+                            cfs << "    {\n";
+                            cfs << "        // 매 프레임 호출되는 로직을 여기에 작성하세요.\n";
+                            cfs << "    }\n";
+                            cfs << "}\n";
+                        }
+                    }
+                }
+
+                if (ImGui::MenuItem("Create Prefab"))
+                {
+                    // 아주 단순한 기본 프리팹 파일 생성 (.prefab)
+                    fs::path newPath = path / "NewPrefab.prefab";
+                    int index = 1;
+                    while (fs::exists(newPath))
+                    {
+                        newPath = path / ("NewPrefab" + std::to_string(index) + ".prefab");
+                        ++index;
+                    }
+
+                    std::ofstream ofs(newPath);
+                    if (ofs.is_open())
+                    {
+                        ofs << "name: NewPrefab\n";
+                        ofs << "position: 0 0 0\n";
+                        ofs << "rotation: 0 0 0\n";
+                        ofs << "scale: 1 1 1\n";
+                        ofs << "script: \n";
+                    }
+                }
+
+                // 디렉터리 삭제 (Assets 안에서만 사용)
+                if (ImGui::MenuItem("Delete Folder"))
+                {
+                    std::error_code ec;
+                    fs::remove_all(path, ec);
+                }
+
+                ImGui::EndPopup();
+            }
+
             if (open)
             {
                 for (const auto& entry : fs::directory_iterator(path))
                 {
-                    DrawDirectoryNode(entry.path());
+                    DrawDirectoryNode(world, selectedEntity, entry.path());
                 }
                 ImGui::TreePop();
             }
@@ -426,6 +618,104 @@ namespace Alice
         {
             ImGui::TreeNodeEx(label.c_str(),
                               baseFlags | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen);
+
+            const std::string ext = path.extension().string();
+
+            // 파일 노드를 더블클릭하면 OS 기본 에디터로 해당 파일을 엽니다.
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                if (ext == ".h" || ext == ".hpp" || ext == ".cpp" || ext == ".cxx")
+                {
+                    // 실행 파일 기준 절대 경로로 변환 후 ShellExecute 로 연다.
+                    fs::path absPath = fs::absolute(path);
+                    std::wstring wpath = absPath.wstring();
+                    ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                }
+            }
+
+            // 파일 노드에 대한 우클릭 컨텍스트 메뉴 (열기/이름 바꾸기/삭제/프리팹 Instantiate 등)
+            if (ImGui::BeginPopupContextItem())
+            {
+                // C++ 스크립트/헤더 파일에 대한 기본 동작들 (열기/이름 바꾸기 등)
+                if (ext == ".h" || ext == ".hpp" || ext == ".cpp" || ext == ".cxx")
+                {
+                    if (ImGui::MenuItem("Open"))
+                    {
+                        fs::path absPath = fs::absolute(path);
+                        std::wstring wpath = absPath.wstring();
+                        ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                    }
+
+                    // 간단한 이름 바꾸기: 같은 폴더 안에서 파일명을 변경합니다.
+                    static char renameBuffer[260] = {};
+                    static bool renameActive = false;
+
+                    if (ImGui::MenuItem("Rename..."))
+                    {
+                        std::string fileName = path.filename().string();
+                        std::memset(renameBuffer, 0, sizeof(renameBuffer));
+                        std::strncpy(renameBuffer, fileName.c_str(), sizeof(renameBuffer) - 1);
+                        renameActive = true;
+                        ImGui::OpenPopup("RenameFilePopup");
+                    }
+
+                    if (ImGui::BeginPopup("RenameFilePopup"))
+                    {
+                        ImGui::InputText("New Name", renameBuffer, sizeof(renameBuffer));
+
+                        if (ImGui::Button("OK"))
+                        {
+                            if (std::strlen(renameBuffer) > 0)
+                            {
+                                fs::path newPath = path.parent_path() / renameBuffer;
+                                // 같은 이름의 파일이 이미 있지 않을 때만 변경
+                                if (!fs::exists(newPath))
+                                {
+                                    std::error_code ec;
+                                    fs::rename(path, newPath, ec);
+                                }
+                            }
+                            renameActive = false;
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Cancel"))
+                        {
+                            renameActive = false;
+                            ImGui::CloseCurrentPopup();
+                        }
+
+                        ImGui::EndPopup();
+                    }
+
+                    if (!renameActive)
+                    {
+                        // 다른 파일의 컨텍스트 메뉴에서 재사용될 수 있도록 버퍼를 초기화합니다.
+                        std::memset(renameBuffer, 0, sizeof(renameBuffer));
+                    }
+
+                    if (ImGui::MenuItem("Delete"))
+                    {
+                        std::error_code ec;
+                        fs::remove(path, ec);
+                    }
+                }
+
+                // 프리팹 파일에 대한 Instantiate 동작
+                if (ext == ".prefab")
+                {
+                    if (ImGui::MenuItem("Instantiate Prefab"))
+                    {
+                        EntityId e = Alice::Prefab::InstantiateFromFile(world, path);
+                        if (e != InvalidEntityId)
+                        {
+                            selectedEntity = e;
+                        }
+                    }
+                }
+
+                ImGui::EndPopup();
+            }
         }
     }
 }

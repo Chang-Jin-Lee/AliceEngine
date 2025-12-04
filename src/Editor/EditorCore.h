@@ -8,6 +8,7 @@
 #include "Core/Entity.h"
 #include "Core/World.h"
 #include "Core/Scene.h"
+#include "Core/Script.h"
 #include "Rendering/Camera.h"
 #include "Rendering/ForwardRenderSystem.h"
 #include "Editor/ViewportPicker.h"
@@ -51,7 +52,9 @@ namespace Alice
                           ViewportPicker& picker);
 
         /// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
-        void DrawDirectoryNode(const std::filesystem::path& path);
+        void DrawDirectoryNode(World& world,
+                               EntityId& selectedEntity,
+                               const std::filesystem::path& path);
 
     private:
         bool m_initialized = false;

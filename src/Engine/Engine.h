@@ -10,6 +10,7 @@
 #include "Core/TimeSystem.h"
 #include "Core/ResourceManager.h"
 #include "Core/Scene.h"
+#include "Core/Script.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
@@ -77,6 +78,8 @@ namespace Alice
         GameTimer      m_timer;
         ResourceManager m_resourceManager;
         std::unique_ptr<SceneManager> m_sceneManager;
+
+        ScriptSystem   m_scriptSystem;
 
         ViewportPicker m_viewportPicker;
         EditorCore     m_editorCore;

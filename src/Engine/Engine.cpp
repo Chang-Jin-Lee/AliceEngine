@@ -49,7 +49,7 @@ namespace Alice
         // 3) 입력 시스템 초기화 (DirectXTK Keyboard/Mouse)
         m_inputSystem.Initialize(m_hWnd);
 
-        // 4) 렌더 디바이스 생성(D3D11 구현체 사용)
+		// 4) 렌더 디바이스 생성(D3D11 구현체 사용)
         m_renderDevice = std::make_unique<D3D11RenderDevice>();
         if (!m_renderDevice->Initialize(m_hWnd, m_width, m_height))
             return false;
@@ -189,11 +189,17 @@ namespace Alice
 
         m_camera.SetLookAt(m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
 
-        // 4) 현재 씬 업데이트 (트랜스폼 등)
+        // 4) 현재 씬 및 스크립트 업데이트
         //    - 에디터에서 Play 버튼이 눌렸을 때만 게임 로직이 진행되도록 합니다.
-        if (m_sceneManager && m_isPlaying)
+        if (m_isPlaying)
         {
-            m_sceneManager->Update(m_timer.DeltaTime());
+            if (m_sceneManager)
+            {
+                m_sceneManager->Update(m_timer.DeltaTime());
+            }
+
+            // 엔티티에 붙어 있는 모든 ScriptComponent 를 갱신합니다.
+            m_scriptSystem.Update(m_world, m_timer.DeltaTime());
         }
     }
 
