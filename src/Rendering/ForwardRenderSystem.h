@@ -92,7 +92,7 @@ namespace Alice
 
             // 광원 세기
             float             keyIntensity  { 1.0f };
-            float             fillIntensity { 1.0f };
+            float             fillIntensity { 0.0f };
 
             // 광원 방향 (월드 기준)
             DirectX::XMFLOAT3 keyDirection  {  0.5f, -1.0f,  0.5f };
