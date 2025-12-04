@@ -64,8 +64,8 @@ namespace Alice
         HINSTANCE m_hInstance = nullptr;
         HWND      m_hWnd      = nullptr;
 
-        std::uint32_t m_width  = 1280;
-        std::uint32_t m_height = 720;
+        std::uint32_t m_width  = 1600;
+        std::uint32_t m_height = 900;
 
         bool m_isRunning = false;
         bool m_isPlaying = false;            // 재생 / 일시정지 상태
@@ -82,7 +82,7 @@ namespace Alice
         EditorCore     m_editorCore;
 
         ShadingMode m_shadingMode { ShadingMode::BlinnPhong };
-        bool        m_useFillLight { false };
+        bool        m_useFillLight { true };
 
         // 카메라 이동/회전을 위한 내부 상태 값들
         DirectX::XMFLOAT3 m_cameraPosition { 0.0f, 2.0f, -5.0f };
