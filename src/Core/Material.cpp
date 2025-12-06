@@ -1,5 +1,8 @@
 #include "Core/Material.h"
 
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
 #include <fstream>
 #include <sstream>
 
@@ -53,6 +56,26 @@ namespace Alice
                        >> outMaterial.color.y
                        >> outMaterial.color.z;
                 }
+                else if (key == "roughness")
+                {
+                    outMaterial.roughness = std::clamp(std::stof(value), 0.0f, 1.0f);
+                }
+                else if (key == "metalness")
+                {
+                    outMaterial.metalness = std::clamp(std::stof(value), 0.0f, 1.0f);
+                }
+                else if (key == "albedoTex")
+                {
+                    // 알베도 텍스처 경로 (그대로 문자열로 저장)
+                    outMaterial.albedoTexturePath = value;
+
+                    char buf[256] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[MaterialFile] Load: \"%s\" albedoTex=\"%s\"\n",
+                                  path.string().c_str(),
+                                  outMaterial.albedoTexturePath.c_str());
+                    OutputDebugStringA(buf);
+                }
             }
 
             return true;
@@ -76,6 +99,14 @@ namespace Alice
                 << material.color.x << " "
                 << material.color.y << " "
                 << material.color.z << "\n";
+
+            ofs << "roughness: " << material.roughness << "\n";
+            ofs << "metalness: " << material.metalness << "\n";
+
+            if (!material.albedoTexturePath.empty())
+            {
+                ofs << "albedoTex: " << material.albedoTexturePath << "\n";
+            }
 
             return true;
         }

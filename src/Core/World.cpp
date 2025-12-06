@@ -16,6 +16,7 @@ namespace Alice
         m_transforms.erase(id);
         m_scripts.erase(id);
         m_materials.erase(id);
+        m_skinnedMeshes.erase(id);
     }
 
     TransformComponent& World::AddTransform(EntityId id)
@@ -103,6 +104,34 @@ namespace Alice
     void World::RemoveMaterial(EntityId id)
     {
         m_materials.erase(id);
+    }
+
+    SkinnedMeshComponent& World::AddSkinnedMesh(EntityId id, const std::string& meshAssetPath)
+    {
+        SkinnedMeshComponent& comp = m_skinnedMeshes[id];
+        comp.meshAssetPath = meshAssetPath;
+        return comp;
+    }
+
+    SkinnedMeshComponent* World::GetSkinnedMesh(EntityId id)
+    {
+        auto it = m_skinnedMeshes.find(id);
+        if (it == m_skinnedMeshes.end())
+            return nullptr;
+        return &it->second;
+    }
+
+    const SkinnedMeshComponent* World::GetSkinnedMesh(EntityId id) const
+    {
+        auto it = m_skinnedMeshes.find(id);
+        if (it == m_skinnedMeshes.end())
+            return nullptr;
+        return &it->second;
+    }
+
+    void World::RemoveSkinnedMesh(EntityId id)
+    {
+        m_skinnedMeshes.erase(id);
     }
 }
 

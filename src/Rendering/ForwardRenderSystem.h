@@ -4,6 +4,8 @@
 #include <Windows.h>
 
 #include <cstdint>
+#include <vector>
+#include <string>
 #include <wrl/client.h>
 #include <d3d11.h>
 #include <DirectXMath.h>
@@ -12,9 +14,11 @@
 #include "Core/World.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
+#include "Rendering/SkinnedMeshRegistry.h"
 
 namespace Alice
 {
+    class ResourceManager;
     /// 간단한 Forward 렌더 시스템입니다.
     /// - 큐브 1개를 그려서 Phong / Blinn-Phong 라이트를 확인할 수 있습니다.
     /// - World의 TransformComponent를 읽어와 월드 행렬을 구성합니다.
@@ -30,17 +34,12 @@ namespace Alice
         /// 뷰포트 크기가 변경되면 렌더 타깃 텍스처도 함께 리사이즈합니다.
         void Resize(std::uint32_t width, std::uint32_t height);
 
-        /// 단일 엔티티(예: 큐브)를 렌더링합니다.
-        /// \param world        ECS 월드 (Transform 정보 조회)
-        /// \param camera       카메라 (뷰/투영 행렬 및 카메라 위치)
-        /// \param entity       렌더링할 엔티티 ID (Transform 필수)
-        /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong
-        /// \param enableFillLight 보조광 사용 여부
-        void Render(const World& world,
-                    const Camera& camera,
-                    EntityId entity,
-                    int shadingMode,
-                    bool enableFillLight);
+        /// 리소스 매니저를 주입합니다.
+        /// - 텍스처 등의 로딩/쿠킹에 사용됩니다.
+        void SetResourceManager(ResourceManager* resources) { m_resources = resources; }
+
+        /// 스키닝 메시 메타데이터(서브셋/스켈레톤)를 조회하기 위한 레지스트리를 주입합니다.
+        void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
 
     private:
         struct SimpleVertex
@@ -56,6 +55,11 @@ namespace Alice
             DirectX::XMMATRIX view;
             DirectX::XMMATRIX projection;
             DirectX::XMFLOAT4 materialColor; // per-object 베이스 컬러
+
+            float             roughness;     // 0~1
+            float             metalness;     // 0~1
+            int               useTexture;   // 0: 색만, 1: 디퓨즈 텍스처 사용
+            DirectX::XMFLOAT3 pad0;         // 16바이트 정렬
         };
 
         /// 단순 Directional Light 2개와 재질 파라미터를 담는 구조체입니다.
@@ -79,9 +83,58 @@ namespace Alice
             DirectX::XMFLOAT4 materialDiffuse;   // rgb: 색상, a: 사용 안 함
             DirectX::XMFLOAT4 materialSpecular;  // rgb: 색상, a: shininess
 
-            int               shadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong
+            int               shadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon
             int               pad2[3];           // 16바이트 정렬
+
+            DirectX::XMMATRIX lightViewProj;     // 섀도우 맵 계산용 라이트 뷰-프로젝션
         };
+
+        // 스키닝용 본 행렬 상수 버퍼
+        static constexpr std::uint32_t MaxBones = 64;
+        struct CBBones
+        {
+            DirectX::XMMATRIX bones[MaxBones];
+        };
+
+    public:
+        /// 스키닝 메시를 그리기 위한 매우 단순한 드로우 커맨드입니다.
+        struct SkinnedDrawCommand
+        {
+            ID3D11Buffer*     vertexBuffer { nullptr };
+            ID3D11Buffer*     indexBuffer  { nullptr };
+            UINT              stride       { 0 };
+            UINT              indexCount   { 0 };
+            UINT              startIndex   { 0 };
+            INT               baseVertex   { 0 };
+
+            DirectX::XMMATRIX world       { DirectX::XMMatrixIdentity() };
+            const DirectX::XMFLOAT4X4* bones { nullptr };
+            std::uint32_t     boneCount   { 0 };
+
+            DirectX::XMFLOAT3 color       { 0.7f, 0.7f, 0.7f };
+            float             roughness   { 0.5f };
+            float             metalness   { 0.0f };
+
+            // 선택적인 알베도 텍스처 경로 (.abtex 또는 원본 이미지 경로)
+            std::string       albedoTexturePath;
+            // 어떤 스키닝 메시(레지스트리 키)를 사용할지 나타내는 논리 키
+            std::string       meshKey;
+        };
+
+        /// 단일 엔티티(예: 큐브)와 스키닝 메시들을 함께 렌더링합니다.
+        /// \param world        ECS 월드 (Transform 정보 조회)
+        /// \param camera       카메라 (뷰/투영 행렬 및 카메라 위치)
+        /// \param entity       (현재는 사용하지 않지만, 향후 특정 엔티티만 선택 렌더링용으로 예약)
+        /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong
+        /// \param enableFillLight 보조광 사용 여부
+        /// \param skinnedCommands 스키닝 메시 드로우 커맨드 목록
+        void Render(const World& world,
+                    const Camera& camera,
+                    EntityId entity,
+                    int shadingMode,
+                    bool enableFillLight,
+                    const std::vector<SkinnedDrawCommand>& skinnedCommands);
+    private:
 
         /// 조명/재질 파라미터를 외부에서 쉽게 조절할 수 있도록 모아둔 구조체입니다.
         struct LightingParameters
@@ -109,6 +162,7 @@ namespace Alice
         bool CreateRasterizerStates();
 
         bool CreateSkyboxResources();
+        bool CreateSkinnedResources();
 
         void RenderSkybox(const Camera& camera,
                           const DirectX::XMMATRIX& view,
@@ -117,16 +171,27 @@ namespace Alice
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
                                const DirectX::XMMATRIX& view,
                                const DirectX::XMMATRIX& projection,
-                               const DirectX::XMFLOAT4& materialColor);
+                               const DirectX::XMFLOAT4& materialColor,
+                               const float& roughness,
+                               const float& metalness,
+                               const bool& useTexture);
 
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
-                              bool enableFillLight);
+                              bool enableFillLight,
+                              const DirectX::XMMATRIX& lightViewProj);
+
+        void UpdateBonesCB(const DirectX::XMFLOAT4X4* boneMatrices,
+                           std::uint32_t boneCount);
 
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
 
+        ID3D11ShaderResourceView* GetOrCreateTexture(const std::string& path);
+
     private:
         ID3D11RenderDevice& m_renderDevice;
+        ResourceManager*     m_resources { nullptr };
+        SkinnedMeshRegistry* m_skinnedRegistry { nullptr };
 
         Microsoft::WRL::ComPtr<ID3D11Device>           m_device;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext>    m_context;
@@ -152,6 +217,9 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerStateReversed;
 
+        // 머티리얼 전용 텍스처 캐시 (경로 -> SRV)
+        std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> m_textureCache;
+
         LightingParameters                              m_lightingParameters;
 
         // ==== 스카이박스 리소스 ====
@@ -176,7 +244,26 @@ namespace Alice
 
         bool CreateSceneRenderTarget(std::uint32_t width, std::uint32_t height);
 
+        // ==== 섀도우 맵 리소스 (단일 Directional Light) ====
+        Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_shadowTex;
+        Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_shadowDSV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_shadowSRV;
+        Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_shadowSampler;
+        D3D11_VIEWPORT                                  m_shadowViewport {};
+
+        bool CreateShadowMapResources();
+
+        // ==== 스키닝 전용 리소스 ====
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_skinnedVertexShader;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>       m_inputLayoutSkinned;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>            m_cbBones;
+
     public:
+        /// 스키닝 메시를 렌더링합니다.
+        /// - AliceGame 의 SkinnedMeshSystem 이 만들어 준 DrawCommand 리스트를 사용합니다.
+        void RenderSkinnedMeshes(const Camera& camera,
+            const std::vector<SkinnedDrawCommand>& commands);
+
         /// 현재 조명 파라미터(색상, 강도, Shininess 등)를 반환합니다.
         /// ImGui 등에서 이 값을 직접 수정해도 됩니다.
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }

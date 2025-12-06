@@ -11,11 +11,14 @@
 #include "Core/Script.h"
 #include "Rendering/Camera.h"
 #include "Rendering/ForwardRenderSystem.h"
+#include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
 
 namespace Alice
 {
     struct ID3D11RenderDevice;
+    class ResourceManager;
+    class SkinnedMeshRegistry;
 
     /// ImGui 컨텍스트 수명과 기본 에디터 유틸(도킹, 디렉터리 뷰, 에디터 패널 등)을 관리하는
     /// 간단한 코어 클래스입니다.
@@ -49,15 +52,24 @@ namespace Alice
                           int& shadingMode,
                           bool& useFillLight,
                           EntityId& selectedEntity,
-                          ViewportPicker& picker);
+                          ViewportPicker& picker,
+                          float& cameraMoveSpeed);
 
         /// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
         void DrawDirectoryNode(World& world,
                                EntityId& selectedEntity,
                                const std::filesystem::path& path);
 
+    public:
+        void SetResourceManager(ResourceManager* resources) { m_resources = resources; }
+        void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
+
     private:
-        bool m_initialized = false;
+        bool               m_initialized = false;
+        HWND               m_hwnd        = nullptr;
+        ID3D11RenderDevice* m_renderDevice = nullptr;
+        ResourceManager*    m_resources    = nullptr;
+        SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
     };
 }
 

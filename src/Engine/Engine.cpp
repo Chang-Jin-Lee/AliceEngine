@@ -1,6 +1,7 @@
 #include "Engine/Engine.h"
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
+#include "Rendering/DebugDrawSystem.h"
 
 // ImGui
 #include "imgui.h"
@@ -57,20 +58,33 @@ namespace Alice
         // 5) ImGui / Editor 코어 초기화
         if (!m_editorCore.Initialize(m_hWnd, *m_renderDevice))
             return false;
+        // ResourceManager 를 에디터에 주입 (FBX 임포트 등에서 사용)
+        m_editorCore.SetResourceManager(&m_resourceManager);
+        // SkinnedMeshRegistry 를 에디터에 주입 (FBX 임포트 시 GPU 메시 등록)
+        m_editorCore.SetSkinnedMeshRegistry(&m_skinnedMeshRegistry);
 
         // 6) Forward 렌더 시스템 초기화
         m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*m_renderDevice);
+        // 리소스 매니저를 렌더 시스템에 주입합니다 (텍스처 쿠킹/로딩 등에 사용).
+        m_forwardRenderSystem->SetResourceManager(&m_resourceManager);
+        // 스키닝 메시 레지스트리를 렌더 시스템에 주입 (서브셋/스켈레톤 메타데이터 조회용)
+        m_forwardRenderSystem->SetSkinnedMeshRegistry(&m_skinnedMeshRegistry);
         if (!m_forwardRenderSystem->Initialize(m_width, m_height))
             return false;
 
-        // 7) 카메라 설정
+        // 7) DebugDraw 시스템 초기화 (옵션 기능)
+        m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*m_renderDevice);
+        if (!m_debugDrawSystem->Initialize())
+            return false;
+
+        // 8) 카메라 설정
         const float aspect = static_cast<float>(m_width) / static_cast<float>(m_height);
         m_cameraPosition = DirectX::XMFLOAT3(0.0f, 2.0f, -5.0f);
         DirectX::XMFLOAT3 target(0.0f, 0.0f, 0.0f);
         m_camera.SetLookAt(m_cameraPosition, target, DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f));
-        m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 100.0f);
+        m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 5000.0f);
 
-        // 8) 씬 매니저 생성 및 기본 씬 로드
+        // 9) 씬 매니저 생성 및 기본 씬 로드
         m_resourceManager.Clear();
         m_sceneManager = std::make_unique<SceneManager>(m_world, m_resourceManager);
         m_sceneManager->SwitchTo("SampleScene");
@@ -231,25 +245,54 @@ namespace Alice
             shadingModeValue,
             m_useFillLight,
             m_selectedEntity,
-            m_viewportPicker);
+            m_viewportPicker,
+            m_cameraMoveSpeed);
         m_shadingMode = static_cast<ShadingMode>(shadingModeValue);
 
-        // 간단한 Forward 렌더링
+        // DebugDraw 라인 초기화 및 예제 축(axis) 추가
+        if (m_debugDrawSystem)
+        {
+            m_debugDrawSystem->Clear();
+
+            // 원점에서 XYZ 축을 그립니다.
+            // X: 빨강, Y: 초록, Z: 파랑
+            m_debugDrawSystem->AddLine(
+                DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
+                DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f),
+                DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f));
+            m_debugDrawSystem->AddLine(
+                DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
+                DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
+                DirectX::XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f));
+            m_debugDrawSystem->AddLine(
+                DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
+                DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f),
+                DirectX::XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f));
+        }
+
+        // 스키닝 메시 드로우 리스트를 먼저 구성합니다.
+        m_skinnedMeshSystem.BuildDrawList(m_world, m_skinnedDrawCommands);
+
+        // 간단한 Forward 렌더링 (큐브 + 스키닝 메시)
         EntityId renderEntity = InvalidEntityId;
         if (m_sceneManager)
         {
             renderEntity = m_sceneManager->GetPrimaryRenderableEntity();
         }
 
-        if (renderEntity != InvalidEntityId)
+        const int shadingModeValue2 = static_cast<int>(m_shadingMode);
+        m_forwardRenderSystem->Render(
+            m_world,
+            m_camera,
+            renderEntity,
+            shadingModeValue2,
+            m_useFillLight,
+            m_skinnedDrawCommands);
+
+        // DebugDraw 렌더링 (Forward 렌더 이후, 같은 카메라 기준)
+        if (m_debugDrawSystem)
         {
-            const int shadingModeValue = static_cast<int>(m_shadingMode);
-            m_forwardRenderSystem->Render(
-                m_world,
-                m_camera,
-                renderEntity,
-                shadingModeValue,
-                m_useFillLight);
+            m_debugDrawSystem->Render(m_camera);
         }
 
         // ImGui 렌더링

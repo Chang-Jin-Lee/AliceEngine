@@ -1,7 +1,9 @@
 #include "Editor/EditorCore.h"
 
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
+#include "Rendering/SkinnedMeshRegistry.h"
 #include "Core/ImGuiEx.h"
+#include "Game/FbxImporter.h"
 
 // ImGui
 #include "imgui.h"
@@ -15,6 +17,11 @@
 #include <Core/Material.h>
 #include <Core/SceneFile.h>
 #include <shellapi.h>
+#include <commdlg.h>
+#include <Game/FbxAsset.h>
+
+// 텍스처 로딩용 DirectXTK
+#include <DirectXTK/WICTextureLoader.h>
 
 using namespace DirectX;
 
@@ -30,6 +37,11 @@ namespace Alice
         // 다른 씬을 로드하기 위해 대기 중인 경로
         bool                     g_RequestSceneLoad     = false;
         std::filesystem::path    g_NextScenePath;
+
+        // 단일 머티리얼 에셋 편집기 상태
+        bool                     g_MaterialEditorOpen   = false;
+        std::filesystem::path    g_MaterialEditorPath;
+        MaterialComponent        g_MaterialEditorData;
     }
 
     EditorCore::~EditorCore()
@@ -68,6 +80,9 @@ namespace Alice
             18.0f,
             &jpConfig,
             io.Fonts->GetGlyphRangesJapanese());
+
+        m_hwnd         = hwnd;
+        m_renderDevice = &renderDevice;
 
         auto* d3dDevice  = renderDevice.GetDevice();
         auto* d3dContext = renderDevice.GetImmediateContext();
@@ -123,7 +138,8 @@ namespace Alice
                                   int& shadingMode,
                                   bool& useFillLight,
                                   EntityId& selectedEntity,
-                                  ViewportPicker& picker)
+                                  ViewportPicker& picker,
+                                  float& cameraMoveSpeed)
     {
         // 메인 뷰포트 전체를 도킹 스페이스로 사용합니다.
         ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -215,6 +231,71 @@ namespace Alice
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndPopup();
+            }
+
+            ImGui::Separator();
+            // FBX 임포트 버튼
+            if (ImGui::Button("Load FBX"))
+            {
+                wchar_t fileBuffer[MAX_PATH] = {};
+                OPENFILENAMEW ofn{};
+                ofn.lStructSize = sizeof(ofn);
+                ofn.hwndOwner   = m_hwnd;
+                ofn.lpstrFilter = L"FBX Files\0*.fbx\0All Files\0*.*\0";
+                ofn.lpstrFile   = fileBuffer;
+                ofn.nMaxFile    = MAX_PATH;
+                ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+                if (GetOpenFileNameW(&ofn))
+                {
+                    if (m_resources && m_renderDevice)
+                    {
+                        std::filesystem::path fbxPath = fileBuffer;
+
+                        // 간단한 FBX 임포트 옵션
+                        FbxImportOptions opt{};
+                        FbxImporter importer(*m_resources, m_skinnedRegistry);
+
+                        auto* d3dDevice = m_renderDevice->GetDevice();
+                        FbxImportResult result = importer.Import(d3dDevice, fbxPath, opt);
+
+                        // 1) 인스턴스 에셋(.fbxasset)이 생성되었으면, 프로젝트 뷰에서 활용할 수 있습니다.
+                        // 2) 월드에 기본 인스턴스 하나를 바로 생성해 줍니다. (언리얼의 "씬에 배치" 느낌)
+                        if (!result.meshAssetPath.empty())
+                        {
+                            EntityId e = world.CreateEntity();
+                            TransformComponent& t = world.AddTransform(e);
+                            t.position = { 0.0f, 0.0f, 0.0f };
+                            t.scale    = { 1.0f, 1.0f, 1.0f };
+                            t.rotation = { 0.0f, 0.0f, 0.0f };
+
+                            // 스키닝 메시 컴포넌트 등록
+                            SkinnedMeshComponent& skinned = world.AddSkinnedMesh(e, result.meshAssetPath);
+
+                            // (임시) 본 행렬이 아직 없으므로, 1개짜리 항등 행렬 팔레트를 사용합니다.
+                            //  - 나중에 FbxModel/FbxAnimation 연동 시 실제 본 팔레트로 교체됩니다.
+                            static DirectX::XMFLOAT4X4 s_identityBone =
+                                DirectX::XMFLOAT4X4(1,0,0,0,
+                                                    0,1,0,0,
+                                                    0,0,1,0,
+                                                    0,0,0,1);
+                            skinned.boneMatrices = &s_identityBone;
+                            skinned.boneCount    = 1;
+
+                            // 첫 번째 머티리얼이 있으면 기본 머티리얼로 할당
+                            if (!result.materialAssetPaths.empty())
+                            {
+                                DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+                                MaterialComponent& mat = world.AddMaterial(e, defaultColor);
+                                mat.assetPath = result.materialAssetPaths.front();
+                                MaterialFile::Load(mat.assetPath, mat);
+                            }
+
+                            selectedEntity = e;
+                            g_SceneDirty   = true;
+                        }
+                    }
+                }
             }
 
             ImGui::Separator();
@@ -386,20 +467,240 @@ namespace Alice
                 ImGui::Text("Material");
                 if (MaterialComponent* mat = world.GetMaterial(selectedEntity))
                 {
-                    if (ImGui::ColorEdit3("Base Color", &mat->color.x))
+                    const bool hasAsset = !mat->assetPath.empty();
+                    if (hasAsset)
                     {
+                        ImGui::Text("Asset: %s", mat->assetPath.c_str());
+                    }
+
+                    bool changed = false;
+
+                    // 인스턴스 또는 에셋 색 편집
+                    changed |= ImGui::ColorEdit3("Base Color", &mat->color.x);
+
+                    // PBR 파라미터 (0~1 범위)
+                    changed |= ImGui::SliderFloat("Roughness", &mat->roughness, 0.0f, 1.0f);
+                    changed |= ImGui::SliderFloat("Metalness", &mat->metalness, 0.0f, 1.0f);
+
+                    // 알베도 텍스처 경로 표시 & 선택
+                    ImGui::Separator();
+                    ImGui::Text("Albedo Texture");
+                    if (!mat->albedoTexturePath.empty())
+                    {
+                        ImGui::TextWrapped("%s", mat->albedoTexturePath.c_str());
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("None");
+                    }
+                    if (ImGui::Button("Browse Texture..."))
+                    {
+                        // 간단한 파일 열기 대화상자 (이미지 선택)
+                        wchar_t fileBuffer[MAX_PATH] = {};
+                        OPENFILENAMEW ofn{};
+                        ofn.lStructSize = sizeof(ofn);
+                        ofn.hwndOwner   = m_hwnd;
+                        ofn.lpstrFilter = L"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds\0All Files\0*.*\0";
+                        ofn.lpstrFile   = fileBuffer;
+                        ofn.nMaxFile    = MAX_PATH;
+                        ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+                        if (GetOpenFileNameW(&ofn))
+                        {
+                            std::filesystem::path src = fileBuffer;
+                            // 아주 단순하게: 원본 이미지를 그대로 경로로 사용합니다.
+                            // (필요하다면 ResourceManager 를 통해 .abtex 로 쿠킹하는 것으로 확장 가능)
+                            mat->albedoTexturePath = src.string();
+                            changed = true;
+
+                            char buf[256] = {};
+                            std::snprintf(buf, sizeof(buf),
+                                          "[Editor] Material albedo set from Inspector: \"%s\"\n",
+                                          mat->albedoTexturePath.c_str());
+                            OutputDebugStringA(buf);
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        if (hasAsset)
+                        {
+                            // 1) 에셋 파일 저장
+                            MaterialFile::Save(mat->assetPath, *mat);
+
+                            // 2) 같은 에셋을 참조하는 모든 엔티티의 머티리얼을 갱신
+                            const std::string targetPath = mat->assetPath;
+                            const auto& allMats = world.GetMaterials();
+                            for (const auto& [id, matConst] : allMats)
+                            {
+                                (void)matConst;
+                                MaterialComponent* other = world.GetMaterial(id);
+                                if (!other) continue;
+                                if (other->assetPath == targetPath)
+                                {
+                                    other->color             = mat->color;
+                                    other->roughness         = mat->roughness;
+                                    other->metalness         = mat->metalness;
+                                    other->albedoTexturePath = mat->albedoTexturePath;
+                                }
+                            }
+                        }
+
                         g_SceneDirty = true;
                     }
 
-                    if (!mat->assetPath.empty())
+                    // Assets 폴더에서 커스텀 머티리얼 선택
+                    if (ImGui::Button("Assign From Asset..."))
                     {
-                        ImGui::Text("Asset: %s", mat->assetPath.c_str());
+                        ImGui::OpenPopup("SelectMaterialAssetPopup");
+                    }
+
+                    if (ImGui::BeginPopup("SelectMaterialAssetPopup"))
+                    {
+                        namespace fs = std::filesystem;
+                        const fs::path assetsRoot = "../Assets";
+
+                        if (fs::exists(assetsRoot))
+                        {
+                            for (const auto& entry : fs::recursive_directory_iterator(assetsRoot))
+                            {
+                                if (!entry.is_regular_file())
+                                    continue;
+
+                                if (entry.path().extension() != ".mat")
+                                    continue;
+
+                                const std::string name = entry.path().filename().string();
+                                if (ImGui::Selectable(name.c_str()))
+                                {
+                                    if (MaterialFile::Load(entry.path(), *mat))
+                                    {
+                                        mat->assetPath = entry.path().string();
+                                        g_SceneDirty   = true;
+                                    }
+                                    ImGui::CloseCurrentPopup();
+                                }
+                            }
+                        }
+                        ImGui::EndPopup();
                     }
 
                     if (ImGui::Button("Remove Material"))
                     {
                         world.RemoveMaterial(selectedEntity);
                         g_SceneDirty = true;
+                    }
+                }
+
+                // Skinned Mesh / Bone 정보 + 서브메시 텍스처
+                if (SkinnedMeshComponent* skinned = world.GetSkinnedMesh(selectedEntity))
+                {
+                    ImGui::Separator();
+                    ImGui::Text("Skinned Mesh");
+                    ImGui::Text("Mesh Key: %s", skinned->meshAssetPath.c_str());
+
+                    std::shared_ptr<SkinnedMeshGPU> mesh;
+                    if (m_skinnedRegistry)
+                    {
+                        mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+                    }
+
+                    // 본 트리 정보
+                    if (mesh && !mesh->skeletonText.empty())
+                    {
+                        static bool s_showBoneDetails = true;
+                        ImGui::Checkbox("Show Bone Details", &s_showBoneDetails);
+                        if (s_showBoneDetails)
+                        {
+                            ImGui::BeginChild("BoneCard", ImVec2(0, 160), true, ImGuiWindowFlags_HorizontalScrollbar);
+                            ImGui::TextUnformatted(mesh->skeletonText.c_str());
+                            ImGui::EndChild();
+                        }
+                    }
+
+                    // 서브메시별 텍스처 선택
+                    if (mesh && !mesh->subsets.empty())
+                    {
+                        ImGui::Separator();
+                        ImGui::Text("Submesh Textures");
+                        ImGui::Text("Submeshes: %zu", mesh->subsets.size());
+
+                        static int s_selectedSubset = 0;
+                        if (s_selectedSubset < 0) s_selectedSubset = 0;
+                        if (s_selectedSubset >= (int)mesh->subsets.size())
+                            s_selectedSubset = (int)mesh->subsets.size() - 1;
+
+                        // 간단히 인덱스로 선택
+                        ImGui::SliderInt("Subset Index", &s_selectedSubset, 0, (int)mesh->subsets.size() - 1);
+
+                        const FbxSubset& subset = mesh->subsets[(std::size_t)s_selectedSubset];
+                        ImGui::Text("Subset %d: start=%u, count=%u, materialIndex=%u",
+                                    s_selectedSubset,
+                                    subset.startIndex,
+                                    subset.indexCount,
+                                    subset.materialIndex);
+
+                        const std::size_t matIndex = (std::size_t)subset.materialIndex;
+                        if (matIndex < mesh->materialOverridePaths.size())
+                        {
+                            const std::string& texPath = mesh->materialOverridePaths[matIndex];
+                            ImGui::Text("Albedo Texture:");
+                            if (!texPath.empty())
+                            {
+                                ImGui::TextWrapped("%s", texPath.c_str());
+                            }
+                            else
+                            {
+                                ImGui::TextDisabled("FBX Original (no override)");
+                            }
+
+                            if (ImGui::Button("Browse Texture##Submesh"))
+                            {
+                                wchar_t fileBuffer[MAX_PATH] = {};
+                                OPENFILENAMEW ofn{};
+                                ofn.lStructSize = sizeof(ofn);
+                                ofn.hwndOwner   = m_hwnd;
+                                ofn.lpstrFilter = L"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds\0All Files\0*.*\0";
+                                ofn.lpstrFile   = fileBuffer;
+                                ofn.nMaxFile    = MAX_PATH;
+                                ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+                                if (GetOpenFileNameW(&ofn))
+                                {
+                                    std::filesystem::path src = fileBuffer;
+
+                                    // 새 텍스처를 GPU에 로드
+                                    Microsoft::WRL::ComPtr<ID3D11Resource> tex;
+                                    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
+                                    HRESULT hr = DirectX::CreateWICTextureFromFile(
+                                        m_renderDevice->GetDevice(),
+                                        src.c_str(),
+                                        tex.GetAddressOf(),
+                                        srv.GetAddressOf());
+
+                                    if (SUCCEEDED(hr) && srv)
+                                    {
+                                        if (matIndex < mesh->materialSRVs.size())
+                                        {
+                                            mesh->materialSRVs[matIndex] = srv;
+                                        }
+                                        if (matIndex < mesh->materialOverridePaths.size())
+                                        {
+                                            mesh->materialOverridePaths[matIndex] = src.string();
+                                        }
+
+                                        char buf[256] = {};
+                                        std::snprintf(buf, sizeof(buf),
+                                                      "[Editor] Submesh texture override: mesh=\"%s\" subset=%d matIndex=%zu path=\"%s\"\n",
+                                                      skinned->meshAssetPath.c_str(),
+                                                      s_selectedSubset,
+                                                      matIndex,
+                                                      mesh->materialOverridePaths[matIndex].c_str());
+                                        OutputDebugStringA(buf);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 else
@@ -503,6 +804,33 @@ namespace Alice
             XMFLOAT3 camPos = camera.GetPosition();
             ImGui::Text("Position : (%.2f, %.2f, %.2f)",
                         camPos.x, camPos.y, camPos.z);
+
+            ImGui::Separator();
+            Alice::ImGuiText(L"카메라 설정");
+
+            // FOV / near / far 는 Camera 내부 상태를 그대로 읽어와서 수정합니다.
+            float fovDeg = XMConvertToDegrees(camera.GetFovYRadians());
+            float nearPlane = camera.GetNearPlane();
+            float farPlane  = camera.GetFarPlane();
+
+            bool changed = false;
+            changed |= ImGui::SliderFloat("FOV (deg)", &fovDeg, 20.0f, 120.0f);
+            changed |= ImGui::DragFloat("Near Plane",  &nearPlane, 0.01f, 0.01f, 10.0f, "%.3f");
+            changed |= ImGui::DragFloat("Far Plane",   &farPlane,  1.0f,  10.0f, 5000.0f, "%.1f");
+
+            // 카메라 이동 속도 (엔진에서 사용하는 값)
+            ImGui::SliderFloat("Move Speed", &cameraMoveSpeed, 0.1f, 50.0f, "%.2f");
+
+            if (changed)
+            {
+                // 값이 바뀐 경우, 기존 종횡비를 유지한 채로 투영 행렬을 재설정합니다.
+                float fovRad  = XMConvertToRadians(fovDeg);
+                float aspect  = camera.GetAspectRatio();
+                // near/far 가 뒤집히지 않도록 간단히 보정
+                nearPlane = (std::max)(nearPlane, 0.01f);
+                farPlane  = (std::max)(farPlane,  nearPlane + 0.1f);
+                camera.SetPerspective(fovRad, aspect, nearPlane, farPlane);
+            }
         }
         ImGui::End();
 
@@ -515,6 +843,10 @@ namespace Alice
             if (ImGui::RadioButton("Phong", mode == 1))     mode = 1;
             ImGui::SameLine();
             if (ImGui::RadioButton("Blinn-Phong", mode == 2)) mode = 2;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Toon", mode == 3))      mode = 3;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("PBR", mode == 4))       mode = 4;
             shadingMode = mode;
 
             Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
@@ -542,6 +874,80 @@ namespace Alice
                                      1.0f);
         }
         ImGui::End();
+
+        // === Material Asset Editor (.mat 더블클릭 시) ===
+        if (g_MaterialEditorOpen)
+        {
+            if (ImGui::Begin("Material Asset Editor", &g_MaterialEditorOpen))
+            {
+                ImGui::Text("Asset: %s", g_MaterialEditorPath.string().c_str());
+                ImGui::Separator();
+
+                bool changed = false;
+                changed |= ImGui::ColorEdit3("Base Color", &g_MaterialEditorData.color.x);
+                changed |= ImGui::SliderFloat("Roughness", &g_MaterialEditorData.roughness, 0.0f, 1.0f);
+                changed |= ImGui::SliderFloat("Metalness", &g_MaterialEditorData.metalness, 0.0f, 1.0f);
+
+                ImGui::Separator();
+                ImGui::Text("Albedo Texture");
+                if (!g_MaterialEditorData.albedoTexturePath.empty())
+                {
+                    ImGui::TextWrapped("%s", g_MaterialEditorData.albedoTexturePath.c_str());
+                }
+                else
+                {
+                    ImGui::TextDisabled("None");
+                }
+                if (ImGui::Button("Browse Texture##Mat"))
+                {
+                    wchar_t fileBuffer[MAX_PATH] = {};
+                    OPENFILENAMEW ofn{};
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner   = m_hwnd;
+                    ofn.lpstrFilter = L"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds\0All Files\0*.*\0";
+                    ofn.lpstrFile   = fileBuffer;
+                    ofn.nMaxFile    = MAX_PATH;
+                    ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+                    if (GetOpenFileNameW(&ofn))
+                    {
+                        std::filesystem::path src = fileBuffer;
+                        g_MaterialEditorData.albedoTexturePath = src.string();
+                        changed = true;
+
+                        char buf[256] = {};
+                        std::snprintf(buf, sizeof(buf),
+                                      "[Editor] Material albedo set from MatEditor: \"%s\"\n",
+                                      g_MaterialEditorData.albedoTexturePath.c_str());
+                        OutputDebugStringA(buf);
+                    }
+                }
+
+                if (changed)
+                {
+                    // 1) 에셋 파일에 저장
+                    MaterialFile::Save(g_MaterialEditorPath, g_MaterialEditorData);
+
+                    // 2) 이 에셋을 참조하는 모든 엔티티의 MaterialComponent 를 갱신
+                    const std::string targetPath = g_MaterialEditorPath.string();
+                    const auto& allMats = world.GetMaterials();
+                    for (const auto& [id, matConst] : allMats)
+                    {
+                        MaterialComponent* mat = world.GetMaterial(id);
+                        if (!mat) continue;
+                        if (mat->assetPath == targetPath)
+                        {
+                            mat->color     = g_MaterialEditorData.color;
+                            mat->roughness = g_MaterialEditorData.roughness;
+                            mat->metalness = g_MaterialEditorData.metalness;
+                        }
+                    }
+
+                    g_SceneDirty = true;
+                }
+            }
+            ImGui::End();
+        }
 
         // === 씬 변경사항 저장 확인 모달 ===
         if (g_RequestSceneLoad)
@@ -619,8 +1025,8 @@ namespace Alice
         namespace fs = std::filesystem;
         if (!fs::exists(path)) return;
 
-        const bool isDirectory = fs::is_directory(path);
-        const std::string label = path.filename().string();
+        const bool        isDirectory = fs::is_directory(path);
+        const std::string label       = path.filename().string();
 
         ImGuiTreeNodeFlags baseFlags = ImGuiTreeNodeFlags_SpanAvailWidth;
 
@@ -630,13 +1036,83 @@ namespace Alice
         static char                 s_renameBuffer[260] = {};
         static bool                 s_renameFocus   = false;
 
+        // 공통 Rename 상태: 파일/폴더 모두 이 플래그를 사용합니다.
+        const bool isRenamingThis = s_renaming && (s_renamingPath == path);
+
         if (isDirectory)
         {
-            const bool open = ImGui::TreeNodeEx(label.c_str(), baseFlags);
+            bool open = false;
 
-            // 디렉터리 노드에 대한 우클릭 컨텍스트 메뉴 (스크립트/프리팹 생성 등)
+            // 폴더 이름 영역: 일반 텍스트 또는 인라인 입력 박스
+            ImGui::PushID(label.c_str());
+            if (isRenamingThis)
+            {
+                ImGui::SetNextItemWidth(-1.0f);
+                if (s_renameFocus)
+                {
+                    ImGui::SetKeyboardFocusHere();
+                    s_renameFocus = false;
+                }
+
+                bool enterPressed = ImGui::InputText(
+                    "##RenameFolder",
+                    s_renameBuffer,
+                    sizeof(s_renameBuffer),
+                    ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
+
+                bool finished = enterPressed || ImGui::IsItemDeactivatedAfterEdit();
+                if (finished)
+                {
+                    if (std::strlen(s_renameBuffer) > 0)
+                    {
+                        fs::path newPath = path.parent_path() / s_renameBuffer;
+                        if (!fs::exists(newPath))
+                        {
+                            std::error_code ec;
+                            fs::rename(path, newPath, ec);
+                        }
+                    }
+                    s_renaming = false;
+                }
+            }
+            else
+            {
+                open = ImGui::TreeNodeEx(label.c_str(), baseFlags);
+            }
+            ImGui::PopID();
+
+                // 디렉터리 노드에 대한 우클릭 컨텍스트 메뉴 (폴더/스크립트/프리팹 생성 등)
             if (ImGui::BeginPopupContextItem())
             {
+                    if (ImGui::MenuItem("Rename Folder..."))
+                    {
+                        std::string folderName = path.filename().string();
+                        std::memset(s_renameBuffer, 0, sizeof(s_renameBuffer));
+                        strncpy_s(s_renameBuffer,
+                                  sizeof(s_renameBuffer),
+                                  folderName.c_str(),
+                                  _TRUNCATE);
+                        s_renaming     = true;
+                        s_renamingPath = path;
+                        s_renameFocus  = true;
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    // 새 하위 폴더 생성
+                    if (ImGui::MenuItem("Create Folder"))
+                    {
+                        fs::path newPath = path / "NewFolder";
+                        int index = 1;
+                        while (fs::exists(newPath))
+                        {
+                            newPath = path / ("NewFolder" + std::to_string(index) + "");
+                            ++index;
+                        }
+
+                        std::error_code ec;
+                        fs::create_directories(newPath, ec);
+                    }
+
                 // Unity 스타일: C++ 스크립트(.h/.cpp)와 프리팹을 간단하게 생성합니다.
                 if (ImGui::MenuItem("Create C++ Script"))
                 {
@@ -738,6 +1214,8 @@ namespace Alice
                     {
                         ofs << "name: " << newPath.stem().string() << "\n";
                         ofs << "color: 0.7 0.7 0.7\n";
+                        ofs << "roughness: 0.5\n";
+                        ofs << "metalness: 0.0\n";
                     }
                 }
 
@@ -770,18 +1248,21 @@ namespace Alice
 
             if (open)
             {
-                for (const auto& entry : fs::directory_iterator(path))
+                // 이 노드가 그 사이에 삭제되었으면 순회를 건너뜁니다.
+                if (fs::exists(path) && fs::is_directory(path))
                 {
-                    DrawDirectoryNode(world, selectedEntity, entry.path());
+                    for (const auto& entry : fs::directory_iterator(path))
+                    {
+                        DrawDirectoryNode(world, selectedEntity, entry.path());
+                    }
                 }
+
                 ImGui::TreePop();
             }
         }
         else
         {
             const std::string ext = path.extension().string();
-
-            const bool isRenamingThis = s_renaming && (s_renamingPath == path);
 
             // 파일 이름 렌더링: 일반 텍스트 또는 인라인 입력 박스
             ImGui::PushID(label.c_str());
@@ -839,6 +1320,16 @@ namespace Alice
                     g_NextScenePath    = path;
                     g_RequestSceneLoad = true;
                 }
+                else if (ext == ".mat")
+                {
+                    // 머티리얼 에셋 전용 편집 창을 엽니다.
+                    g_MaterialEditorPath = path;
+                    g_MaterialEditorData = {};
+                    // 파일에서 값을 불러옵니다. 실패하면 기본 값으로 남겨둡니다.
+                    MaterialFile::Load(path, g_MaterialEditorData);
+                    g_MaterialEditorData.assetPath = path.string();
+                    g_MaterialEditorOpen = true;
+                }
             }
 
             // 파일 노드에 대한 우클릭 컨텍스트 메뉴 (열기/이름 바꾸기/삭제/프리팹 Instantiate 등)
@@ -856,7 +1347,10 @@ namespace Alice
                 {
                     std::string fileName = path.filename().string();
                     std::memset(s_renameBuffer, 0, sizeof(s_renameBuffer));
-                    std::strncpy(s_renameBuffer, fileName.c_str(), sizeof(s_renameBuffer) - 1);
+                    strncpy_s(s_renameBuffer,
+                              sizeof(s_renameBuffer),
+                              fileName.c_str(),
+                              _TRUNCATE);
                     s_renaming      = true;
                     s_renamingPath  = path;
                     s_renameFocus   = true;
@@ -921,6 +1415,84 @@ namespace Alice
                         g_CurrentScenePath    = path;
                         g_HasCurrentScenePath = true;
                         g_SceneDirty          = false;
+                    }
+                }
+
+                // FBX 인스턴스 에셋(.fbxasset)을 월드에 배치
+                if (ext == ".fbxasset")
+                {
+                    if (ImGui::MenuItem("Instantiate FBX"))
+                    {
+                        Alice::FbxInstanceAsset asset{};
+                        if (Alice::LoadFbxInstanceAsset(path, asset) && !asset.meshAssetPath.empty())
+                        {
+                            // 디버그 로깅: .fbxasset 로드 결과
+                            {
+                                char buf[512] = {};
+                                std::snprintf(buf, sizeof(buf),
+                                              "[Editor] Instantiate FBX: assetPath=\"%s\" sourceFbx=\"%s\" meshKey=\"%s\" mats=%zu\n",
+                                              path.u8string().c_str(),
+                                              asset.sourceFbx.c_str(),
+                                              asset.meshAssetPath.c_str(),
+                                              asset.materialAssetPaths.size());
+                                OutputDebugStringA(buf);
+                            }
+
+                            // 레지스트리에 GPU 메시가 없다면, 원본 FBX 를 다시 임포트해서 등록합니다.
+                            if (m_skinnedRegistry && m_resources && m_renderDevice)
+                            {
+                                if (!m_skinnedRegistry->Find(asset.meshAssetPath))
+                                {
+                                    FbxImportOptions opt{};
+                                    FbxImporter importer(*m_resources, m_skinnedRegistry);
+                                    auto* device = m_renderDevice->GetDevice();
+                                    // 원본 FBX 경로는 .fbxasset 안의 source_fbx 에 저장되어 있습니다.
+                                    std::filesystem::path srcFbxPath = asset.sourceFbx;
+                                    importer.Import(device, srcFbxPath, opt);
+
+                                    OutputDebugStringA("[Editor] Instantiate FBX: mesh was not in registry, re-imported FBX\n");
+                                }
+                                else
+                                {
+                                    OutputDebugStringA("[Editor] Instantiate FBX: mesh already in registry\n");
+                                }
+                            }
+
+                            EntityId e = world.CreateEntity();
+                            TransformComponent& t = world.AddTransform(e);
+                            t.position = { 0.0f, 0.0f, 0.0f };
+                            t.scale    = { 1.0f, 1.0f, 1.0f };
+                            t.rotation = { 0.0f, 0.0f, 0.0f };
+
+                            SkinnedMeshComponent& skinned = world.AddSkinnedMesh(e, asset.meshAssetPath);
+                            static DirectX::XMFLOAT4X4 s_identityBone =
+                                DirectX::XMFLOAT4X4(1,0,0,0,
+                                                    0,1,0,0,
+                                                    0,0,1,0,
+                                                    0,0,0,1);
+                            skinned.boneMatrices = &s_identityBone;
+                            skinned.boneCount    = 1;
+
+                            {
+                                char buf[256] = {};
+                                std::snprintf(buf, sizeof(buf),
+                                              "[Editor] Instantiate FBX: created entity=%u, boneCount=%u\n",
+                                              static_cast<unsigned>(e),
+                                              skinned.boneCount);
+                                OutputDebugStringA(buf);
+                            }
+
+                            if (!asset.materialAssetPaths.empty())
+                            {
+                                DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+                                MaterialComponent& mat = world.AddMaterial(e, defaultColor);
+                                mat.assetPath = asset.materialAssetPaths.front();
+                                MaterialFile::Load(mat.assetPath, mat);
+                            }
+
+                            selectedEntity = e;
+                            g_SceneDirty   = true;
+                        }
                     }
                 }
 
