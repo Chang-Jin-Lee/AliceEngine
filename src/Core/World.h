@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <string>
+#include <vector>
 
 #include <DirectXMath.h>
 
@@ -42,12 +43,25 @@ namespace Alice
     };
 
     /// 머티리얼 컴포넌트
-    /// - 현재는 단순히 베이스 컬러만 가집니다.
-    /// - 추후 메탈릭/러프니스 등 파라미터를 확장할 수 있습니다.
+    /// - 현재는 베이스 컬러 + 러프니스/메탈니스만 가집니다.
+    /// - 추후 더 많은 파라미터를 확장할 수 있습니다.
     struct MaterialComponent
     {
         DirectX::XMFLOAT3 color     { 0.7f, 0.7f, 0.7f };  // 베이스 색상 (albedo)
-        std::string       assetPath;                      // 선택된 머티리얼 에셋 경로 (옵션)
+        float             roughness { 0.5f };              // 0~1 러프니스 (PBR)
+        float             metalness { 0.0f };              // 0~1 메탈니스 (PBR)
+        std::string       assetPath;                       // 선택된 머티리얼 에셋 경로 (옵션)
+        std::string       albedoTexturePath;               // 알베도 텍스처 경로 (.abtex 또는 원본)
+    };
+
+    /// Skinned FBX 메시에 대한 최소 정보만 담는 컴포넌트입니다.
+    /// - 실제 FBX 파싱/애니메이션은 게임(샘플) 레벨에서 처리합니다.
+    /// - 엔진은 bone 행렬 배열과 본 개수만 사용합니다.
+    struct SkinnedMeshComponent
+    {
+        std::string meshAssetPath;                         // FBX/메시 에셋 경로
+        const DirectX::XMFLOAT4X4* boneMatrices { nullptr }; // 외부에서 관리하는 본 행렬 배열
+        std::uint32_t              boneCount    { 0 };       // 사용 중인 본 개수
     };
 
     class World
@@ -111,12 +125,28 @@ namespace Alice
         /// 머티리얼 컴포넌트를 제거합니다.
         void RemoveMaterial(EntityId id);
 
+        // ==== Skinned Mesh 컴포넌트 관련 ====
+
+        /// 스키닝 메시 컴포넌트를 추가합니다.
+        SkinnedMeshComponent& AddSkinnedMesh(EntityId id, const std::string& meshAssetPath);
+
+        /// 스키닝 메시 컴포넌트를 가져옵니다. (없으면 nullptr)
+        SkinnedMeshComponent* GetSkinnedMesh(EntityId id);
+        const SkinnedMeshComponent* GetSkinnedMesh(EntityId id) const;
+
+        /// 전체 스키닝 메시 컨테이너 (렌더링/에디터에서 사용)
+        const std::unordered_map<EntityId, SkinnedMeshComponent>& GetSkinnedMeshes() const { return m_skinnedMeshes; }
+
+        /// 스키닝 메시 컴포넌트를 제거합니다.
+        void RemoveSkinnedMesh(EntityId id);
+
     private:
         EntityId m_nextEntityId { 1 };
 
         std::unordered_map<EntityId, TransformComponent> m_transforms;
         std::unordered_map<EntityId, ScriptComponent>    m_scripts;
         std::unordered_map<EntityId, MaterialComponent>  m_materials;
+        std::unordered_map<EntityId, SkinnedMeshComponent> m_skinnedMeshes;
     };
 }
 

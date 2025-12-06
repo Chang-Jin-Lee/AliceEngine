@@ -31,6 +31,14 @@ namespace Alice
         /// 현재 카메라 위치를 반환합니다.
         const DirectX::XMFLOAT3& GetPosition() const { return m_position; }
 
+        /// 현재 FOV (라디안)를 반환합니다.
+        float GetFovYRadians() const { return m_fovYRadians; }
+        /// 현재 종횡비를 반환합니다.
+        float GetAspectRatio() const { return m_aspectRatio; }
+        /// 현재 near/far 평면을 반환합니다.
+        float GetNearPlane() const { return m_nearPlane; }
+        float GetFarPlane()  const { return m_farPlane; }
+
         /// 뷰 행렬을 반환합니다.
         DirectX::XMMATRIX GetViewMatrix() const;
 

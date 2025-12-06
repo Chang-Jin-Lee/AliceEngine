@@ -12,9 +12,5 @@ namespace Alice
 
         void OnCreate(World& world, EntityId entity) override;
         void OnUpdate(World& world, EntityId entity, float deltaTime) override;
-
-    private:
-        // 시간 누적 (회전/스케일 애니메이션 예시에 사용)
-        float m_elapsedTime = 0.0f;
     };
 }

@@ -29,11 +29,23 @@ set(ALICE_ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Scene.cpp
     ${ALICE_SRC_DIR}/Core/TimeSystem.cpp
     ${ALICE_SRC_DIR}/Core/InputSystem.cpp
+    ${ALICE_SRC_DIR}/Core/Singleton.cpp
+    ${ALICE_SRC_DIR}/Core/Helper.cpp
+    ${ALICE_SRC_DIR}/Core/Vertex.cpp
+
+    # FBX/3D 모델 로더 (D3D11-AliceTutorial Common/Mesh 기반)
+    ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
+    ${ALICE_SRC_DIR}/3Dmodel/FbxModel.cpp
+    ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.cpp
+    ${ALICE_SRC_DIR}/3Dmodel/FbxGeometry.cpp
+    ${ALICE_SRC_DIR}/3Dmodel/FbxAnimation.cpp
 
     # 렌더링 계층
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.cpp
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
+    ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
 )
 
 set(ALICE_ENGINE_HEADERS
@@ -58,13 +70,27 @@ set(ALICE_ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/InputSystem.h
     ${ALICE_SRC_DIR}/Core/ImGuiEx.h
     ${ALICE_SRC_DIR}/Core/Input.h
+    ${ALICE_SRC_DIR}/Core/Singleton.h
+    ${ALICE_SRC_DIR}/Core/Helper.h
+    ${ALICE_SRC_DIR}/Core/Vertex.h
+
+
+    # FBX/3D 모델 로더 헤더
+    ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
+    ${ALICE_SRC_DIR}/3Dmodel/FbxModel.h
+    ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.h
+    ${ALICE_SRC_DIR}/3Dmodel/FbxTypes.h
+    ${ALICE_SRC_DIR}/3Dmodel/FbxGeometry.h
+    ${ALICE_SRC_DIR}/3Dmodel/FbxAnimation.h
 
     # 렌더링 계층
     ${ALICE_SRC_DIR}/Rendering/Camera.h
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.h
+    ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/IRenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
+    ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
 )
 
 add_library(AliceEngine STATIC
@@ -81,10 +107,18 @@ set(ALICE_APP_SOURCES
 
     # 샘플 씬 (콘텐츠 계층)
     ${ALICE_SRC_DIR}/Scenes/SampleScene.cpp
+
+    # 게임 레벨 유틸리티 (FBX 임포터, 스키닝 시스템 등)
+    ${ALICE_SRC_DIR}/Game/FbxImporter.cpp
+    ${ALICE_SRC_DIR}/Game/FbxAsset.cpp
 )
 
 set(ALICE_APP_HEADERS
     ${ALICE_SRC_DIR}/Scenes/SampleScene.h
+
+    ${ALICE_SRC_DIR}/Game/FbxImporter.h
+    ${ALICE_SRC_DIR}/Game/FbxAsset.h
+    ${ALICE_SRC_DIR}/Game/SkinnedMeshSystem.h
 )
 
 # === 엔진 데모/기본 실행 파일 (엔진 자체 테스트용) ===
@@ -223,7 +257,7 @@ set_target_properties(AliceGame PROPERTIES
     WIN32_EXECUTABLE YES
 )
 
-# DirectX 11 / DXGI / DirectXTK / DirectXTex / ImGui 링크
+# DirectX 11 / DXGI / DirectXTK / DirectXTex / ImGui / Assimp 링크
 target_link_libraries(AliceRenderer
     PRIVATE
         AliceEngine
@@ -234,6 +268,8 @@ target_link_libraries(AliceRenderer
         d3dcompiler
         directxtk
         directxtex
+        $<$<CONFIG:Debug>:assimp-vc143-mtd>
+        $<$<CONFIG:Release>:assimp-vc143-mt>
 )
 
 target_link_libraries(AliceGame
@@ -246,6 +282,39 @@ target_link_libraries(AliceGame
         d3dcompiler
         directxtk
         directxtex
+        $<$<CONFIG:Debug>:assimp-vc143-mtd>
+        $<$<CONFIG:Release>:assimp-vc143-mt>
 )
+
+# === 3D Model 관련 DLL 들을 실행 파일 출력 폴더로 복사 ===
+set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
+
+foreach(target AliceRenderer AliceGame)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${THIRDPARTY_3DMODEL_DIR}/zlib1.dll"       "$<TARGET_FILE_DIR:${target}>/zlib1.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${THIRDPARTY_3DMODEL_DIR}/zlibd1.dll"      "$<TARGET_FILE_DIR:${target}>/zlibd1.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${THIRDPARTY_3DMODEL_DIR}/quazip.dll"      "$<TARGET_FILE_DIR:${target}>/quazip.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${THIRDPARTY_3DMODEL_DIR}/pugixml.dll"     "$<TARGET_FILE_DIR:${target}>/pugixml.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${THIRDPARTY_3DMODEL_DIR}/poly2tri.dll"    "$<TARGET_FILE_DIR:${target}>/poly2tri.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${THIRDPARTY_3DMODEL_DIR}/kubazip.dll"     "$<TARGET_FILE_DIR:${target}>/kubazip.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${THIRDPARTY_3DMODEL_DIR}/minizip.dll"     "$<TARGET_FILE_DIR:${target}>/minizip.dll"
+
+        # vcpkg 에서 설치된 Assimp DLL 도 함께 복사
+        # (Debug/Release 둘 다 존재한다고 가정하고 단순히 복사만 수행)
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/bin/assimp-vc143-mtd.dll"
+            "$<TARGET_FILE_DIR:${target}>/assimp-vc143-mtd.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/bin/assimp-vc143-mt.dll"
+            "$<TARGET_FILE_DIR:${target}>/assimp-vc143-mt.dll"
+    )
+endforeach()
 
 

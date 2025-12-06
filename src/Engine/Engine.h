@@ -14,8 +14,10 @@
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
+#include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
 #include "Editor/EditorCore.h"
+#include "Game/SkinnedMeshSystem.h"
 
 namespace Alice
 {
@@ -57,9 +59,11 @@ namespace Alice
     private:
         enum class ShadingMode
         {
-            Lambert   = 0,
-            Phong     = 1,
-            BlinnPhong = 2
+            Lambert    = 0,
+            Phong      = 1,
+            BlinnPhong = 2,
+            Toon       = 3,
+            PBR        = 4
         };
 
         HINSTANCE m_hInstance = nullptr;
@@ -92,11 +96,17 @@ namespace Alice
         float             m_cameraYawRadians   = 0.0f;  // Yaw (좌우 회전)
         float             m_cameraPitchRadians = 0.0f;  // Pitch (상하 회전)
 
-        float             m_cameraMoveSpeed       = 3.0f;     // 초당 이동 속도
+        float             m_cameraMoveSpeed       = 8.0f;     // 초당 이동 속도
         float             m_cameraMouseSensitivity = 0.0025f; // 마우스 감도 (라디안/픽셀)
 
-        std::unique_ptr<ID3D11RenderDevice> m_renderDevice;
+        std::unique_ptr<ID3D11RenderDevice>  m_renderDevice;
         std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
+        std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+
+        // Skinned FBX 메시 렌더링용 레지스트리/시스템
+        SkinnedMeshRegistry m_skinnedMeshRegistry;
+        SkinnedMeshSystem   m_skinnedMeshSystem { m_skinnedMeshRegistry };
+        std::vector<ForwardRenderSystem::SkinnedDrawCommand> m_skinnedDrawCommands;
     };
 }
 
