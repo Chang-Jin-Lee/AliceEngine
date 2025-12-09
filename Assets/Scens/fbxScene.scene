@@ -1,0 +1,53 @@
+# AliceRenderer scene
+entity: 53
+position: 0 0 0
+rotation: 0 0 0
+scale: 1 1 1
+script: 
+material_color: 1 1 1
+material_asset: ../Assets/Materials\Rapi_0.mat
+material_roughness: 0.5
+material_metalness: 0
+material_albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded0.abtex
+skinned_mesh: 
+skinned_instance: 
+
+entity: 54
+position: 9.1 -1.4 7.5
+rotation: 0 0 0
+scale: 0.06 0.06 0.06
+script: 
+material_color: 0.0540541 1 0
+material_asset: ../Assets\Materials\1.mat
+material_roughness: 0.829
+material_metalness: 0.075
+material_albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded0.abtex
+skinned_mesh: Rapi
+skinned_instance: ../Assets\Fbx\Rapi.fbxasset
+
+entity: 55
+position: -8.1 0 0
+rotation: 0 0 0
+scale: 0.05 0.05 0.05
+script: 
+material_color: 1 1 1
+material_asset: ../Assets\Materials\2.mat
+material_roughness: 0.5
+material_metalness: 0
+material_albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded0.abtex
+skinned_mesh: Rapi
+skinned_instance: ../Assets\Fbx\Rapi.fbxasset
+
+entity: 56
+position: 0 0 0
+rotation: 0 0 0
+scale: 0.04 0.04 0.04
+script: 
+material_color: 0.7 0.7 0.7
+material_asset: ../Assets/Materials\Rapi_0.mat
+material_roughness: 0.5
+material_metalness: 0
+material_albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded0.abtex
+skinned_mesh: Rapi
+skinned_instance: ../Assets\Fbx\Rapi.fbxasset
+
