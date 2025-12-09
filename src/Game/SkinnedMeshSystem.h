@@ -36,11 +36,23 @@ namespace Alice
                 return;
             }
 
+            {
+                char buf[128] = {};
+                std::snprintf(buf, sizeof(buf),
+                              "[SkinnedMeshSystem] BuildDrawList: skinnedComponents=%zu\n",
+                              skinnedMap.size());
+                OutputDebugStringA(buf);
+            }
+
             for (const auto& [entityId, comp] : skinnedMap)
             {
                 if (!comp.boneMatrices || comp.boneCount == 0)
                 {
-                    OutputDebugStringA("[SkinnedMeshSystem]  - skip: no bones\n");
+                    char buf[128] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[SkinnedMeshSystem]  - skip: entity=%u no bones\n",
+                                  static_cast<unsigned>(entityId));
+                    OutputDebugStringA(buf);
                     continue;
                 }
 
@@ -58,7 +70,11 @@ namespace Alice
                 const TransformComponent* t = world.GetTransform(entityId);
                 if (!t)
                 {
-                    OutputDebugStringA("[SkinnedMeshSystem]  - skip: no Transform\n");
+                    char buf[128] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[SkinnedMeshSystem]  - skip: entity=%u no Transform\n",
+                                  static_cast<unsigned>(entityId));
+                    OutputDebugStringA(buf);
                     continue;
                 }
 

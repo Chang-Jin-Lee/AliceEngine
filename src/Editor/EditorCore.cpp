@@ -271,6 +271,7 @@ namespace Alice
 
                             // 스키닝 메시 컴포넌트 등록
                             SkinnedMeshComponent& skinned = world.AddSkinnedMesh(e, result.meshAssetPath);
+                            skinned.instanceAssetPath     = result.instanceAssetPath;
 
                             // (임시) 본 행렬이 아직 없으므로, 1개짜리 항등 행렬 팔레트를 사용합니다.
                             //  - 나중에 FbxModel/FbxAnimation 연동 시 실제 본 팔레트로 교체됩니다.
@@ -618,11 +619,11 @@ namespace Alice
                         }
                     }
 
-                    // 서브메시별 텍스처 선택
+                    // 서브메시별 텍스처 / 머티리얼 슬롯 선택 (언리얼의 Element 리스트 느낌)
                     if (mesh && !mesh->subsets.empty())
                     {
                         ImGui::Separator();
-                        ImGui::Text("Submesh Textures");
+                        ImGui::Text("Submesh / Material Slots");
                         ImGui::Text("Submeshes: %zu", mesh->subsets.size());
 
                         static int s_selectedSubset = 0;
@@ -630,21 +631,35 @@ namespace Alice
                         if (s_selectedSubset >= (int)mesh->subsets.size())
                             s_selectedSubset = (int)mesh->subsets.size() - 1;
 
-                        // 간단히 인덱스로 선택
-                        ImGui::SliderInt("Subset Index", &s_selectedSubset, 0, (int)mesh->subsets.size() - 1);
+                        ImGui::BeginChild("SubmeshList", ImVec2(0, 120), true);
+                        for (int i = 0; i < (int)mesh->subsets.size(); ++i)
+                        {
+                            const FbxSubset& subset = mesh->subsets[(std::size_t)i];
+                            char label[128] = {};
+                            std::snprintf(label, sizeof(label), "Subset %d (Mat %u)", i, subset.materialIndex);
+
+                            const bool isSelected = (i == s_selectedSubset);
+                            if (ImGui::Selectable(label, isSelected))
+                            {
+                                s_selectedSubset = i;
+                            }
+                        }
+                        ImGui::EndChild();
 
                         const FbxSubset& subset = mesh->subsets[(std::size_t)s_selectedSubset];
-                        ImGui::Text("Subset %d: start=%u, count=%u, materialIndex=%u",
-                                    s_selectedSubset,
-                                    subset.startIndex,
-                                    subset.indexCount,
-                                    subset.materialIndex);
+                        ImGui::Separator();
+                        ImGui::Text("Selected Subset %d", s_selectedSubset);
+                        ImGui::Text("  startIndex : %u", subset.startIndex);
+                        ImGui::Text("  indexCount : %u", subset.indexCount);
+                        ImGui::Text("  materialIndex : %u", subset.materialIndex);
 
                         const std::size_t matIndex = (std::size_t)subset.materialIndex;
                         if (matIndex < mesh->materialOverridePaths.size())
                         {
+                            ImGui::Separator();
+                            ImGui::Text("Albedo Texture (Instance Override)");
+
                             const std::string& texPath = mesh->materialOverridePaths[matIndex];
-                            ImGui::Text("Albedo Texture:");
                             if (!texPath.empty())
                             {
                                 ImGui::TextWrapped("%s", texPath.c_str());
@@ -654,7 +669,7 @@ namespace Alice
                                 ImGui::TextDisabled("FBX Original (no override)");
                             }
 
-                            if (ImGui::Button("Browse Texture##Submesh"))
+                            if (ImGui::Button("Browse Texture for This Slot"))
                             {
                                 wchar_t fileBuffer[MAX_PATH] = {};
                                 OPENFILENAMEW ofn{};
@@ -669,7 +684,7 @@ namespace Alice
                                 {
                                     std::filesystem::path src = fileBuffer;
 
-                                    // 새 텍스처를 GPU에 로드
+                                    // 서브메시용 인스턴스 텍스처를 GPU 에 로드
                                     Microsoft::WRL::ComPtr<ID3D11Resource> tex;
                                     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
                                     HRESULT hr = DirectX::CreateWICTextureFromFile(
@@ -960,7 +975,15 @@ namespace Alice
             else
             {
                 // 저장할 필요가 없으면 바로 로드
+                {
+                    char buf[256] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[Editor] SceneFile::Load (no-save path): \"%s\"\n",
+                                  g_NextScenePath.u8string().c_str());
+                    OutputDebugStringA(buf);
+                }
                 SceneFile::Load(world, g_NextScenePath);
+                EnsureSkinnedMeshesRegistered(world);
                 selectedEntity       = InvalidEntityId;
                 g_CurrentScenePath   = g_NextScenePath;
                 g_HasCurrentScenePath = true;
@@ -981,12 +1004,27 @@ namespace Alice
                 {
                     savePath = "../Assets/AutoSaved.scene";
                 }
+                {
+                    char buf[256] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[Editor] SceneFile::Save: \"%s\"\n",
+                                  savePath.u8string().c_str());
+                    OutputDebugStringA(buf);
+                }
                 SceneFile::Save(world, savePath);
                 g_CurrentScenePath    = savePath;
                 g_HasCurrentScenePath = true;
                 g_SceneDirty          = false;
 
+                {
+                    char buf[256] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[Editor] SceneFile::Load (after save): \"%s\"\n",
+                                  g_NextScenePath.u8string().c_str());
+                    OutputDebugStringA(buf);
+                }
                 SceneFile::Load(world, g_NextScenePath);
+                EnsureSkinnedMeshesRegistered(world);
                 selectedEntity        = InvalidEntityId;
                 g_CurrentScenePath    = g_NextScenePath;
                 g_HasCurrentScenePath = true;
@@ -998,7 +1036,15 @@ namespace Alice
             ImGui::SameLine();
             if (ImGui::Button("Don't Save"))
             {
+                {
+                    char buf[256] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[Editor] SceneFile::Load (dont-save): \"%s\"\n",
+                                  g_NextScenePath.u8string().c_str());
+                    OutputDebugStringA(buf);
+                }
                 SceneFile::Load(world, g_NextScenePath);
+                EnsureSkinnedMeshesRegistered(world);
                 selectedEntity        = InvalidEntityId;
                 g_CurrentScenePath    = g_NextScenePath;
                 g_HasCurrentScenePath = true;
@@ -1465,6 +1511,7 @@ namespace Alice
                             t.rotation = { 0.0f, 0.0f, 0.0f };
 
                             SkinnedMeshComponent& skinned = world.AddSkinnedMesh(e, asset.meshAssetPath);
+                            skinned.instanceAssetPath     = path.string();
                             static DirectX::XMFLOAT4X4 s_identityBone =
                                 DirectX::XMFLOAT4X4(1,0,0,0,
                                                     0,1,0,0,
@@ -1498,6 +1545,76 @@ namespace Alice
 
                 ImGui::EndPopup();
             }
+        }
+    }
+
+    void EditorCore::EnsureSkinnedMeshesRegistered(World& world)
+    {
+        if (!m_skinnedRegistry || !m_resources || !m_renderDevice)
+            return;
+
+        const auto& skinnedMap = world.GetSkinnedMeshes();
+        if (skinnedMap.empty())
+            return;
+
+        auto* device = m_renderDevice->GetDevice();
+
+        for (const auto& [entityId, comp] : skinnedMap)
+        {
+            if (comp.meshAssetPath.empty())
+                continue;
+
+            if (m_skinnedRegistry->Find(comp.meshAssetPath))
+                continue; // 이미 등록됨
+
+            // .fbxasset 경로를 우선 사용, 없으면 관례적으로 Assets/Fbx/<mesh>.fbxasset 시도
+            std::filesystem::path fbxAssetPath;
+            if (!comp.instanceAssetPath.empty())
+            {
+                fbxAssetPath = comp.instanceAssetPath;
+            }
+            else
+            {
+                fbxAssetPath = std::filesystem::path("../Assets/Fbx")
+                             / (comp.meshAssetPath + ".fbxasset");
+            }
+
+            Alice::FbxInstanceAsset instance{};
+            if (!Alice::LoadFbxInstanceAsset(fbxAssetPath, instance))
+            {
+                char buf[256] = {};
+                std::snprintf(buf, sizeof(buf),
+                              "[Editor] EnsureSkinnedMeshesRegistered: failed to load .fbxasset \"%s\" for meshKey=\"%s\"\n",
+                              fbxAssetPath.u8string().c_str(),
+                              comp.meshAssetPath.c_str());
+                OutputDebugStringA(buf);
+                continue;
+            }
+
+            if (instance.sourceFbx.empty())
+            {
+                char buf[256] = {};
+                std::snprintf(buf, sizeof(buf),
+                              "[Editor] EnsureSkinnedMeshesRegistered: .fbxasset has empty source_fbx for \"%s\"\n",
+                              fbxAssetPath.u8string().c_str());
+                OutputDebugStringA(buf);
+                continue;
+            }
+
+            // 원본 FBX 를 다시 임포트해서 SkinnedMeshRegistry 에 등록
+            FbxImportOptions opt{};
+            FbxImporter importer(*m_resources, m_skinnedRegistry);
+
+            std::filesystem::path srcFbxPath = instance.sourceFbx;
+            FbxImportResult result = importer.Import(device, srcFbxPath, opt);
+
+            char buf[512] = {};
+            std::snprintf(buf, sizeof(buf),
+                          "[Editor] EnsureSkinnedMeshesRegistered: re-import FBX \"%s\" -> meshKey=\"%s\" result.mesh=\"%s\"\n",
+                          srcFbxPath.u8string().c_str(),
+                          comp.meshAssetPath.c_str(),
+                          result.meshAssetPath.c_str());
+            OutputDebugStringA(buf);
         }
     }
 }
