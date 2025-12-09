@@ -1368,23 +1368,18 @@ float4 main(PSInput input) : SV_TARGET
     {
         if (commands.empty())
         {
-            OutputDebugStringA("[ForwardRenderSystem] RenderSkinnedMeshes: commands empty\n");
+            ALICE_LOG_INFO("[ForwardRenderSystem] RenderSkinnedMeshes: commands empty");
             return;
         }
 
         if (!m_skinnedVertexShader || !m_pixelShader || !m_inputLayoutSkinned)
         {
-            OutputDebugStringA("[ForwardRenderSystem] RenderSkinnedMeshes: missing shaders/layout\n");
+            ALICE_LOG_ERRORF("[ForwardRenderSystem] RenderSkinnedMeshes: missing shaders/layout");
             return;
         }
 
-        {
-            char buf[128] = {};
-            std::snprintf(buf, sizeof(buf),
-                          "[ForwardRenderSystem] RenderSkinnedMeshes: commands=%zu\n",
-                          commands.size());
-            OutputDebugStringA(buf);
-        }
+        ALICE_LOG_INFO("[ForwardRenderSystem] RenderSkinnedMeshes: commands=%zu",
+                       commands.size());
 
         // 카메라 행렬
         XMMATRIX view = camera.GetViewMatrix();

@@ -57,6 +57,11 @@ namespace Alice
         /// 윈도우 크기 변경 시 호출됩니다.
         void OnResize(std::uint32_t width, std::uint32_t height);
 
+        /// 월드 안의 SkinnedMeshComponent 들에 대해,
+        /// SkinnedMeshRegistry 에 GPU 메시가 등록되어 있는지 확인하고,
+        /// 필요 시 FBX 를 다시 임포트해서 등록합니다.
+        void EnsureSkinnedMeshesRegisteredForWorld();
+
     private:
         enum class ShadingMode
         {
