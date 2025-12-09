@@ -1,4 +1,5 @@
 name: 1
-color: 0.934363 1 0
-roughness: 0.829
+color: 0.0772201 1 0
+roughness: 0.643
 metalness: 0.075
+albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded0.abtex

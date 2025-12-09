@@ -1,4 +1,4 @@
-source_fbx=D:\Github\AliceRenderer\Resource\fbx\Rapi2\Rapi.fbx
+source_fbx=D:\Github\AliceRenderer\Resource\fbx\Rapi\Rapi.fbx
 mesh=Rapi
 mat=../Assets/Materials\Rapi_0.mat
 mat=../Assets/Materials\Rapi_1.mat
