@@ -65,6 +65,12 @@ namespace Alice
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
 
     private:
+        /// 씬을 로드한 뒤, World 에 존재하는 SkinnedMeshComponent 들이
+        /// SkinnedMeshRegistry 에도 등록되어 있는지 확인하고,
+        /// 누락된 경우 .fbxasset / FBX 원본을 통해 간단히 재-임포트합니다.
+        void EnsureSkinnedMeshesRegistered(World& world);
+
+    private:
         bool               m_initialized = false;
         HWND               m_hwnd        = nullptr;
         ID3D11RenderDevice* m_renderDevice = nullptr;

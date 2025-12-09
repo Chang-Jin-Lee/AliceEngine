@@ -59,7 +59,8 @@ namespace Alice
     /// - 엔진은 bone 행렬 배열과 본 개수만 사용합니다.
     struct SkinnedMeshComponent
     {
-        std::string meshAssetPath;                         // FBX/메시 에셋 경로
+        std::string meshAssetPath;                         // FBX/메시 에셋 경로 (SkinnedMeshRegistry 키)
+        std::string instanceAssetPath;                     // .fbxasset 인스턴스 에셋 경로 (씬/프로젝트 저장용)
         const DirectX::XMFLOAT4X4* boneMatrices { nullptr }; // 외부에서 관리하는 본 행렬 배열
         std::uint32_t              boneCount    { 0 };       // 사용 중인 본 개수
     };

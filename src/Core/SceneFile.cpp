@@ -3,6 +3,9 @@
 #include <fstream>
 #include <sstream>
 
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
 #include "Core/World.h"
 #include "Core/Script.h"
 
@@ -22,6 +25,14 @@ namespace Alice
             }
             s = s.substr(b, e - b + 1);
         }
+
+        // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
+        // 1개짜리 항등 본 팔레트입니다. (정적인 메시처럼 렌더링되도록 함)
+        static DirectX::XMFLOAT4X4 g_IdentityBone(
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1);
     }
 
     namespace SceneFile
@@ -44,8 +55,9 @@ namespace Alice
             const auto& transforms = world.GetTransforms();
             for (const auto& [id, transform] : transforms)
             {
-                const ScriptComponent* script = world.GetScript(id);
-                const MaterialComponent* mat  = world.GetMaterial(id);
+                const ScriptComponent*     script = world.GetScript(id);
+                const MaterialComponent*   mat    = world.GetMaterial(id);
+                const SkinnedMeshComponent* skinned = world.GetSkinnedMesh(id);
 
                 ofs << "entity: " << static_cast<std::uint32_t>(id) << "\n";
                 ofs << "position: "
@@ -78,6 +90,33 @@ namespace Alice
                 ofs << "material_asset: ";
                 if (mat && !mat->assetPath.empty())
                     ofs << mat->assetPath;
+                ofs << "\n";
+
+                // 추가 머티리얼 파라미터 (선택 사항)
+                ofs << "material_roughness: ";
+                if (mat)
+                    ofs << mat->roughness;
+                ofs << "\n";
+
+                ofs << "material_metalness: ";
+                if (mat)
+                    ofs << mat->metalness;
+                ofs << "\n";
+
+                ofs << "material_albedoTex: ";
+                if (mat && !mat->albedoTexturePath.empty())
+                    ofs << mat->albedoTexturePath;
+                ofs << "\n";
+
+                // SkinnedMesh 정보 (FBX 인스턴스)
+                ofs << "skinned_mesh: ";
+                if (skinned && !skinned->meshAssetPath.empty())
+                    ofs << skinned->meshAssetPath;
+                ofs << "\n";
+
+                ofs << "skinned_instance: ";
+                if (skinned && !skinned->instanceAssetPath.empty())
+                    ofs << skinned->instanceAssetPath;
                 ofs << "\n";
 
                 ofs << "\n";
@@ -113,7 +152,12 @@ namespace Alice
             std::string       scriptName;
             DirectX::XMFLOAT3 materialColor { 0.7f, 0.7f, 0.7f };
             bool              hasMaterialColor = false;
+            float             materialRoughness = 0.5f;
+            float             materialMetalness = 0.0f;
+            std::string       materialAlbedoTex;
             std::string       materialAsset;
+            std::string       skinnedMeshAsset;
+            std::string       skinnedInstanceAsset;
             bool              hasAnyField      = false;
 
             auto commitEntity = [&]()
@@ -136,7 +180,21 @@ namespace Alice
                 {
                     DirectX::XMFLOAT3 col = hasMaterialColor ? materialColor
                                                              : DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
-                    world.AddMaterial(e, col, materialAsset);
+                    MaterialComponent& mat = world.AddMaterial(e, col, materialAsset);
+                    mat.roughness         = materialRoughness;
+                    mat.metalness         = materialMetalness;
+                    mat.albedoTexturePath = materialAlbedoTex;
+                }
+
+                if (!skinnedMeshAsset.empty())
+                {
+                    SkinnedMeshComponent& sm = world.AddSkinnedMesh(e, skinnedMeshAsset);
+                    sm.instanceAssetPath = skinnedInstanceAsset;
+
+                    // 아직 애니메이션 시스템과 연결되지 않았으므로
+                    // 간단히 1개짜리 항등 본 팔레트를 연결해 둡니다.
+                    sm.boneMatrices = &g_IdentityBone;
+                    sm.boneCount    = 1;
                 }
 
                 // 다음 엔티티를 위해 초기화
@@ -146,13 +204,27 @@ namespace Alice
                 scriptName.clear();
                 materialColor      = { 0.7f, 0.7f, 0.7f };
                 hasMaterialColor   = false;
+                materialRoughness  = 0.5f;
+                materialMetalness  = 0.0f;
+                materialAlbedoTex.clear();
                 materialAsset.clear();
+                skinnedMeshAsset.clear();
+                skinnedInstanceAsset.clear();
                 hasAnyField        = false;
             };
 
             std::string line;
             while (std::getline(ifs, line))
             {
+                // 원시 한 줄 로그 (필요 시 주석 해제)
+                // {
+                //     char dbg[256] = {};
+                //     std::snprintf(dbg, sizeof(dbg),
+                //                   "[SceneFile::Load] line=\"%s\"\n",
+                //                   line.c_str());
+                //     OutputDebugStringA(dbg);
+                // }
+
                 if (line.empty())
                 {
                     commitEntity();
@@ -214,6 +286,43 @@ namespace Alice
                     materialAsset = value;
                     hasAnyField   = true;
                 }
+                else if (key == "material_roughness")
+                {
+                    materialRoughness = std::clamp(std::stof(value), 0.0f, 1.0f);
+                    hasAnyField       = true;
+                }
+                else if (key == "material_metalness")
+                {
+                    materialMetalness = std::clamp(std::stof(value), 0.0f, 1.0f);
+                    hasAnyField       = true;
+                }
+                else if (key == "material_albedoTex")
+                {
+                    materialAlbedoTex = value;
+                    hasAnyField       = true;
+                }
+                else if (key == "skinned_mesh")
+                {
+                    skinnedMeshAsset = value;
+                    hasAnyField      = true;
+
+                    char buf[256] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[SceneFile::Load] skinned_mesh=\"%s\"\n",
+                                  skinnedMeshAsset.c_str());
+                    OutputDebugStringA(buf);
+                }
+                else if (key == "skinned_instance")
+                {
+                    skinnedInstanceAsset = value;
+                    hasAnyField          = true;
+
+                    char buf[256] = {};
+                    std::snprintf(buf, sizeof(buf),
+                                  "[SceneFile::Load] skinned_instance=\"%s\"\n",
+                                  skinnedInstanceAsset.c_str());
+                    OutputDebugStringA(buf);
+                }
             }
 
             // 마지막 엔티티 커밋
@@ -223,5 +332,3 @@ namespace Alice
         }
     }
 }
-
-
