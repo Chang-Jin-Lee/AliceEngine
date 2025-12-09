@@ -29,6 +29,7 @@ set(ALICE_ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Scene.cpp
     ${ALICE_SRC_DIR}/Core/TimeSystem.cpp
     ${ALICE_SRC_DIR}/Core/InputSystem.cpp
+    ${ALICE_SRC_DIR}/Core/Logger.cpp
     ${ALICE_SRC_DIR}/Core/Singleton.cpp
     ${ALICE_SRC_DIR}/Core/Helper.cpp
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
@@ -59,6 +60,7 @@ set(ALICE_ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Script.h
     ${ALICE_SRC_DIR}/Core/Prefab.h
     ${ALICE_SRC_DIR}/Core/Material.h
+    ${ALICE_SRC_DIR}/Core/Logger.h
     ${ALICE_SRC_DIR}/Core/SceneFile.h
     ${ALICE_SRC_DIR}/Core/Component.h
     ${ALICE_SRC_DIR}/Core/Entity.h

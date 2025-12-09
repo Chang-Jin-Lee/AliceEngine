@@ -4,6 +4,7 @@
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Core/ImGuiEx.h"
 #include "Game/FbxImporter.h"
+#include "Core/Logger.h"
 
 // ImGui
 #include "imgui.h"
@@ -33,6 +34,9 @@ namespace Alice
         bool                     g_SceneDirty           = false;
         bool                     g_HasCurrentScenePath  = false;
         std::filesystem::path    g_CurrentScenePath;
+
+        // 간단한 게임 빌드 UI 상태
+        bool                     g_ShowBuildGameWindow  = false;
 
         // 다른 씬을 로드하기 위해 대기 중인 경로
         bool                     g_RequestSceneLoad     = false;
@@ -300,9 +304,149 @@ namespace Alice
             }
 
             ImGui::Separator();
+
+            // 게임 빌드 버튼 (간단한 1차 버전)
+            if (ImGui::Button("Build"))
+            {
+                g_ShowBuildGameWindow = true;
+            }
+
+            ImGui::Separator();
             ImGui::Text("DeltaTime: %.3f  FPS: %.1f", deltaTime, fps);
 
             ImGui::EndMainMenuBar();
+        }
+
+        // === Build Game 창 (씬 선택 + 간단한 해상도 옵션) ===
+        if (g_ShowBuildGameWindow)
+        {
+            if (ImGui::Begin("Build Game", &g_ShowBuildGameWindow))
+            {
+                namespace fs = std::filesystem;
+
+                static int   s_Width  = 1280;
+                static int   s_Height = 720;
+                static bool  s_ScanScenesOnce = true;
+                static std::vector<fs::path> s_ScenePaths;
+                static std::vector<bool>     s_SceneSelected;
+
+                ImGui::Text("Output Resolution");
+                ImGui::InputInt("Width",  &s_Width);
+                ImGui::InputInt("Height", &s_Height);
+                if (s_Width < 320)  s_Width  = 320;
+                if (s_Height < 240) s_Height = 240;
+
+                ImGui::Separator();
+                ImGui::Text("Scenes to Build");
+
+                if (s_ScanScenesOnce)
+                {
+                    s_ScanScenesOnce = false;
+                    s_ScenePaths.clear();
+                    s_SceneSelected.clear();
+
+                    const fs::path assetsRoot = "../Assets";
+                    if (fs::exists(assetsRoot))
+                    {
+                        for (const auto& entry : fs::recursive_directory_iterator(assetsRoot))
+                        {
+                            if (!entry.is_regular_file())
+                                continue;
+                            if (entry.path().extension() != ".scene")
+                                continue;
+
+                            s_ScenePaths.push_back(entry.path());
+                            s_SceneSelected.push_back(true);
+                        }
+                    }
+                }
+
+                if (s_ScenePaths.empty())
+                {
+                    ImGui::TextDisabled("No .scene files found under Assets.");
+                }
+                else
+                {
+                    for (std::size_t i = 0; i < s_ScenePaths.size(); ++i)
+                    {
+                        bool selected = s_SceneSelected[i];
+                        ImGui::Checkbox(s_ScenePaths[i].filename().string().c_str(), &selected);
+                        s_SceneSelected[i] = selected;
+                    }
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::Button("Build Game"))
+                {
+                    // 1) 빌드 설정 파일 저장 (간단한 텍스트 포맷)
+                    wchar_t exePathW[MAX_PATH] = {};
+                    GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+                    fs::path exePath = exePathW;
+                    fs::path exeDir  = exePath.parent_path();
+                    fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+
+                    fs::path buildDir = projectRoot / "Build";
+                    std::error_code fec;
+                    fs::create_directories(buildDir, fec);
+
+                    fs::path cfgPath = buildDir / "BuildSettings.txt";
+                    std::ofstream ofs(cfgPath);
+                    if (ofs.is_open())
+                    {
+                        ofs << "# AliceRenderer build settings\n";
+                        ofs << "width: "  << s_Width  << "\n";
+                        ofs << "height: " << s_Height << "\n";
+                        ofs << "scenes:\n";
+                        for (std::size_t i = 0; i < s_ScenePaths.size(); ++i)
+                        {
+                            if (!s_SceneSelected[i])
+                                continue;
+                            ofs << "  - " << s_ScenePaths[i].string() << "\n";
+                        }
+                    }
+
+                    ALICE_LOG_INFO("BuildSettings saved to \"%s\"", cfgPath.string().c_str());
+
+                    // 2) 간단히 CMake를 호출해 AliceGame(Release)을 빌드합니다.
+                    std::wstring cmd = L"cmake --build build --config Release";
+
+                    STARTUPINFOW        si{};
+                    PROCESS_INFORMATION pi{};
+                    si.cb = sizeof(si);
+                    si.dwFlags = STARTF_USESHOWWINDOW;
+                    si.wShowWindow = SW_HIDE;
+
+                    BOOL ok = CreateProcessW(
+                        nullptr,
+                        cmd.data(),
+                        nullptr,
+                        nullptr,
+                        FALSE,
+                        0,
+                        nullptr,
+                        projectRoot.wstring().c_str(),
+                        &si,
+                        &pi);
+
+                    if (ok)
+                    {
+                        WaitForSingleObject(pi.hProcess, INFINITE);
+
+                        DWORD exitCode = 0;
+                        GetExitCodeProcess(pi.hProcess, &exitCode);
+                        CloseHandle(pi.hProcess);
+                        CloseHandle(pi.hThread);
+
+                        ALICE_LOG_INFO("CMake build finished with exitCode=%lu", static_cast<unsigned long>(exitCode));
+                    }
+                    else
+                    {
+                        ALICE_LOG_ERRORF("Failed to start CMake build process.");
+                    }
+                }
+            }
+            ImGui::End();
         }
 
         // === Hierarchy ===
