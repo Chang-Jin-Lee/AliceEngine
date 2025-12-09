@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <Core/ResourceManager.h>
+#include <Core/Logger.h>
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
@@ -442,17 +443,65 @@ float4 main(PSInput input) : SV_TARGET
 
     bool ForwardRenderSystem::Initialize(std::uint32_t width, std::uint32_t height)
     {
-        if (!m_device || !m_context) return false;
-        if (!CreateSceneRenderTarget(width, height)) return false;
-        if (!CreateShadowMapResources()) return false;
-        if (!CreateCubeGeometry()) return false;
-        if (!CreateShadersAndInputLayout()) return false;
-        if (!CreateSkinnedResources()) return false;
-        if (!CreateConstantBuffers()) return false;
-        if (!CreateTextures())  return false;
-        if (!CreateSamplerState()) return false;
-        if (!CreateRasterizerStates()) return false;
-        if (!CreateSkyboxResources()) return false;
+        ALICE_LOG_INFO("ForwardRenderSystem::Initialize: begin (width=%u, height=%u)", width, height);
+
+        if (!m_device || !m_context)
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: invalid device/context.");
+            return false;
+        }
+        if (!CreateSceneRenderTarget(width, height))
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateSceneRenderTarget failed.");
+            return false;
+        }
+        if (!CreateShadowMapResources())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateShadowMapResources failed.");
+            return false;
+        }
+        if (!CreateCubeGeometry())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateCubeGeometry failed.");
+            return false;
+        }
+        if (!CreateShadersAndInputLayout())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateShadersAndInputLayout failed.");
+            return false;
+        }
+        if (!CreateSkinnedResources())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateSkinnedResources failed.");
+            return false;
+        }
+        if (!CreateConstantBuffers())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateConstantBuffers failed.");
+            return false;
+        }
+        if (!CreateTextures())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateTextures failed.");
+            return false;
+        }
+        if (!CreateSamplerState())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateSamplerState failed.");
+            return false;
+        }
+        if (!CreateRasterizerStates())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateRasterizerStates failed.");
+            return false;
+        }
+        if (!CreateSkyboxResources())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateSkyboxResources failed.");
+            return false;
+        }
+
+        ALICE_LOG_INFO("ForwardRenderSystem::Initialize: success.");
         return true;
     }
 
@@ -957,14 +1006,14 @@ float4 main(PSInput input) : SV_TARGET
     bool ForwardRenderSystem::CreateTextures()
     {
         // 실행 파일 기준으로 Resource/Image 폴더의 브릭 텍스처를 읽어옵니다.
-        // 동시에, 존재한다면 Cooked(암호화된) 텍스처(.abtex) 를 우선 사용합니다.
+        // 동시에, 존재한다면 Cooked(암호화된) 텍스처(.alice) 를 우선 사용합니다.
         const std::filesystem::path diffuseSrc  = "../Resource/Image/Bricks059_1K-JPG_Color.jpg";
         const std::filesystem::path normalSrc   = "../Resource/Image/Bricks059_1K-JPG_NormalDX.jpg";
         const std::filesystem::path specularSrc = "../Resource/Image/Bricks059_Specular.png";
 
-        const std::filesystem::path diffuseCooked  = "../Cooked/Image/Bricks059_1K-JPG_Color.abtex";
-        const std::filesystem::path normalCooked   = "../Cooked/Image/Bricks059_1K-JPG_NormalDX.abtex";
-        const std::filesystem::path specularCooked = "../Cooked/Image/Bricks059_Specular.abtex";
+        const std::filesystem::path diffuseCooked  = "../Cooked/Image/Bricks059_1K-JPG_Color.alice";
+        const std::filesystem::path normalCooked   = "../Cooked/Image/Bricks059_1K-JPG_NormalDX.alice";
+        const std::filesystem::path specularCooked = "../Cooked/Image/Bricks059_Specular.alice";
 
         auto loadTexture = [&](const std::filesystem::path& src,
                                const std::filesystem::path& cooked,
@@ -995,7 +1044,13 @@ float4 main(PSInput input) : SV_TARGET
                 nullptr,
                 outSrv.ReleaseAndGetAddressOf()
             );
-            if (FAILED(hr)) return false;
+            if (FAILED(hr))
+            {
+                // 개발용 브릭 텍스처는 필수 리소스가 아니므로 실패해도 엔진은 계속 동작하게 둡니다.
+                ALICE_LOG_WARN("ForwardRenderSystem::CreateTextures: failed to load source texture \"%s\".",
+                               src.string().c_str());
+                return false;
+            }
 
             // 3) ResourceManager 가 있으면, 한 번만 Cooked 파일을 생성해 둡니다.
             if (m_resources && !std::filesystem::exists(cooked))
@@ -1006,10 +1061,18 @@ float4 main(PSInput input) : SV_TARGET
             return true;
         };
 
-        if (!loadTexture(diffuseSrc,  diffuseCooked,  m_diffuseSRV))  return false;
-        if (!loadTexture(normalSrc,   normalCooked,   m_normalSRV))   return false;
-        if (!loadTexture(specularSrc, specularCooked, m_specularSRV)) return false;
+        bool ok = true;
+        if (!loadTexture(diffuseSrc,  diffuseCooked,  m_diffuseSRV))  ok = false;
+        if (!loadTexture(normalSrc,   normalCooked,   m_normalSRV))   ok = false;
+        if (!loadTexture(specularSrc, specularCooked, m_specularSRV)) ok = false;
 
+        if (!ok)
+        {
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateTextures: default brick textures not fully loaded; "
+                           "engine will use plain gray materials instead.");
+        }
+
+        // 기본 브릭 텍스처는 필수는 아니므로, 성공 여부와 상관없이 true 를 반환합니다.
         return true;
     }
 
@@ -1052,7 +1115,7 @@ float4 main(PSInput input) : SV_TARGET
     }
 
     // 경로 문자열을 기반으로 머티리얼 전용 텍스처 SRV 를 가져오거나 생성합니다.
-    // - .abtex 인 경우 ResourceManager 를 통해 복호화 후 메모리에서 로드합니다.
+    // - .alice / .abtex 인 경우 ResourceManager 를 통해 복호화 후 메모리에서 로드합니다.
     // - 그 외 경우는 파일에서 직접 로드합니다.
     ID3D11ShaderResourceView* ForwardRenderSystem::GetOrCreateTexture(const std::string& path)
     {
@@ -1082,11 +1145,13 @@ float4 main(PSInput input) : SV_TARGET
         HRESULT hr = E_FAIL;
 
         const std::string ext = p.extension().string();
-        const bool isAbtex = (_stricmp(ext.c_str(), ".abtex") == 0);
+        const bool isEncrypted =
+            (_stricmp(ext.c_str(), ".abtex") == 0) ||
+            (_stricmp(ext.c_str(), ".alice") == 0);
 
-        if (isAbtex && m_resources)
+        if (isEncrypted && m_resources)
         {
-            // 암호화된 .abtex 를 메모리로 읽어온 뒤 WIC 텍스처로 생성
+            // 암호화된 .alice / .abtex 를 메모리로 읽어온 뒤 WIC 텍스처로 생성
             std::vector<std::uint8_t> data;
             if (m_resources->LoadBinary(p, data, true) && !data.empty())
             {
@@ -1116,9 +1181,9 @@ float4 main(PSInput input) : SV_TARGET
         {
             char buf[256] = {};
             std::snprintf(buf, sizeof(buf),
-                          "[ForwardRenderSystem] Texture load FAILED: \"%s\" (isAbtex=%d)\n",
+                          "[ForwardRenderSystem] Texture load FAILED: \"%s\" (isEncrypted=%d)\n",
                           path.c_str(),
-                          isAbtex ? 1 : 0);
+                          isEncrypted ? 1 : 0);
             OutputDebugStringA(buf);
             return nullptr;
         }
@@ -1128,9 +1193,9 @@ float4 main(PSInput input) : SV_TARGET
         {
             char buf[256] = {};
             std::snprintf(buf, sizeof(buf),
-                          "[ForwardRenderSystem] Texture loaded: \"%s\" (isAbtex=%d)\n",
+                          "[ForwardRenderSystem] Texture loaded: \"%s\" (isEncrypted=%d)\n",
                           path.c_str(),
-                          isAbtex ? 1 : 0);
+                          isEncrypted ? 1 : 0);
             OutputDebugStringA(buf);
         }
 

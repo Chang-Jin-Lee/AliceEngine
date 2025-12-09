@@ -28,7 +28,8 @@ namespace Alice
     class Engine
     {
     public:
-        Engine();
+        /// \param editorMode true 이면 에디터(도킹 UI) 모드, false 이면 게임 전용 모드
+        Engine(bool editorMode = true);
         ~Engine();
 
         /// 엔진과 윈도우, 렌더 디바이스를 초기화합니다.
@@ -72,8 +73,9 @@ namespace Alice
         std::uint32_t m_width  = 1600;
         std::uint32_t m_height = 900;
 
-        bool m_isRunning = false;
-        bool m_isPlaying = false;            // 재생 / 일시정지 상태
+        bool m_isRunning    = false;
+        bool m_isPlaying    = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
+        bool m_editorMode   = true;             // true: 에디터, false: 게임 전용
         EntityId m_selectedEntity { InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
 
         World          m_world;

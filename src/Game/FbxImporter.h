@@ -45,7 +45,7 @@ namespace Alice
                              SkinnedMeshRegistry* meshRegistry = nullptr);
 
         /// FBX 파일을 임포트합니다.
-        /// - 현재는 텍스처/.fbm/.mat/.abtex 파이프라인을 완성한 상태입니다.
+        /// - 현재는 텍스처/.fbm/.mat/.alice 파이프라인을 완성한 상태입니다.
         /// - 이후 단계에서 FbxModel 을 사용해 메시/본/애니메이션을 연결합니다.
         FbxImportResult Import(ID3D11Device* device,
                                const std::filesystem::path& fbxPath,
