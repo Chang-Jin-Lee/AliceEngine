@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "Core/World.h"
+#include "Core/Logger.h"
 
 namespace Alice
 {
@@ -69,12 +70,9 @@ namespace Alice
                     // 알베도 텍스처 경로 (그대로 문자열로 저장)
                     outMaterial.albedoTexturePath = value;
 
-                    char buf[256] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[MaterialFile] Load: \"%s\" albedoTex=\"%s\"\n",
-                                  path.string().c_str(),
-                                  outMaterial.albedoTexturePath.c_str());
-                    OutputDebugStringA(buf);
+                    ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" albedoTex=\"%s\"",
+                                   path.string().c_str(),
+                                   outMaterial.albedoTexturePath.c_str());
                 }
             }
 
@@ -107,6 +105,13 @@ namespace Alice
             {
                 ofs << "albedoTex: " << material.albedoTexturePath << "\n";
             }
+
+            ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f tex=\"%s\"",
+                           path.string().c_str(),
+                           material.color.x, material.color.y, material.color.z,
+                           material.roughness,
+                           material.metalness,
+                           material.albedoTexturePath.c_str());
 
             return true;
         }
