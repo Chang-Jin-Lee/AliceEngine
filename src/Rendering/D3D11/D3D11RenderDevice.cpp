@@ -1,6 +1,7 @@
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 
 #include <cassert>
+#include "Core/Logger.h"
 
 namespace Alice
 {
@@ -48,13 +49,25 @@ namespace Alice
             nullptr, // 실제 생성된 feature level은 필요 없으므로 nullptr
             m_immediateContext.ReleaseAndGetAddressOf()
         );
-        if (FAILED(hr)) return false;
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: D3D11CreateDeviceAndSwapChain failed. hr=0x%08X", hr);
+            return false;
+        }
 
         // 4) 렌더 타깃 생성
-        if (!CreateRenderTarget()) return false;
+        if (!CreateRenderTarget())
+        {
+            ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: CreateRenderTarget failed.");
+            return false;
+        }
 
         // 5) 깊이/스텐실 버퍼 생성
-        if (!CreateDepthStencil(m_width, m_height)) return false;
+        if (!CreateDepthStencil(m_width, m_height))
+        {
+            ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: CreateDepthStencil failed.");
+            return false;
+        }
 
         // 6) 깊이 스텐실 상태 객체 생성 (한 번만 생성)
         D3D11_DEPTH_STENCIL_DESC dsDesc = {};
@@ -64,7 +77,11 @@ namespace Alice
         dsDesc.StencilEnable = FALSE;
 
         hr = m_device->CreateDepthStencilState(&dsDesc, m_depthStencilState.ReleaseAndGetAddressOf());
-        if (FAILED(hr)) return false;
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: CreateDepthStencilState failed. hr=0x%08X", hr);
+            return false;
+        }
 
         // 7) 래스터라이저 상태 생성
         //    - CCW를 앞면으로 간주 (우리 큐브 정점 데이터가 CCW 기준이기 때문)
@@ -76,7 +93,11 @@ namespace Alice
         rsDesc.DepthClipEnable = TRUE;
 
         hr = m_device->CreateRasterizerState(&rsDesc, m_rasterizerState.ReleaseAndGetAddressOf());
-        if (FAILED(hr)) return false;
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: CreateRasterizerState failed. hr=0x%08X", hr);
+            return false;
+        }
 
         // 8) 뷰포트 설정
         SetupViewport();

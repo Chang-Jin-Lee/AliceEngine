@@ -62,7 +62,14 @@ namespace Alice
         }
 
         if (fbxPath.empty() || !std::filesystem::exists(fbxPath))
+        {
+            char buf[256] = {};
+            std::snprintf(buf, sizeof(buf),
+                          "[FbxImporter] Import FAILED: file not found \"%s\"\n",
+                          fbxPath.u8string().c_str());
+            OutputDebugStringA(buf);
             return result;
+        }
 
         namespace fs = std::filesystem;
 
@@ -74,14 +81,22 @@ namespace Alice
         FbxModel model;
         if (!model.Load(device, absFbxPath.wstring()))
         {
-            OutputDebugStringA("[FbxImporter] FbxModel::Load FAILED\n");
+            char buf[256] = {};
+            std::snprintf(buf, sizeof(buf),
+                          "[FbxImporter] FbxModel::Load FAILED for \"%s\"\n",
+                          absFbxPath.u8string().c_str());
+            OutputDebugStringA(buf);
             return result;
         }
 
         const aiScene* scene = model.GetScenePtr();
         if (!scene)
         {
-            OutputDebugStringA("[FbxImporter] model.GetScenePtr() returned null\n");
+            char buf[256] = {};
+            std::snprintf(buf, sizeof(buf),
+                          "[FbxImporter] model.GetScenePtr() returned null for \"%s\"\n",
+                          absFbxPath.u8string().c_str());
+            OutputDebugStringA(buf);
             return result;
         }
 
@@ -238,14 +253,14 @@ namespace Alice
             extractTextureFromMaterial(mat, aiTextureType_DIFFUSE_ROUGHNESS, "Roughness");
         }
 
-        // 3) 추출/복사한 텍스처들에 대해 암호화된 .abtex 를 생성합니다.
-        //    - 예: ../Cooked/Textures/<fbxName>/<원본이름>.abtex
+        // 3) 추출/복사한 텍스처들에 대해 암호화된 .alice 를 생성합니다.
+        //    - 예: ../Cooked/Textures/<fbxName>/<원본이름>.alice
         std::vector<fs::path> cookedTextures;
         for (const auto& texPath : extractedTextures)
         {
             fs::path cooked = "../Cooked/Textures";
             cooked /= baseName;
-            cooked /= texPath.stem().string() + ".abtex";
+            cooked /= texPath.stem().string() + ".alice";
 
             m_resources.CookAndSave(texPath, cooked);
             cookedTextures.push_back(cooked);

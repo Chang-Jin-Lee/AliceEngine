@@ -3,6 +3,7 @@
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Core/ImGuiEx.h"
+#include "Core/ScriptHotReload.h"
 #include "Game/FbxImporter.h"
 #include "Core/Logger.h"
 
@@ -13,12 +14,15 @@
 #include "imgui_impl_dx11.h"
 
 #include <fstream>
+#include <atomic>
+#include <thread>
 #include <Core/Prefab.h>
 #include <Core/Script.h>
 #include <Core/Material.h>
 #include <Core/SceneFile.h>
 #include <shellapi.h>
 #include <commdlg.h>
+#include <ShlObj.h>   // 폴더 선택 다이얼로그 (SHBrowseForFolderW)
 #include <Game/FbxAsset.h>
 
 // 텍스처 로딩용 DirectXTK
@@ -37,6 +41,11 @@ namespace Alice
 
         // 간단한 게임 빌드 UI 상태
         bool                     g_ShowBuildGameWindow  = false;
+
+        // Build Game 진행 상황 (간단한 멀티스레드 + atomic 사용)
+        std::atomic<bool>        g_BuildInProgress { false };
+        std::atomic<float>       g_BuildProgress   { 0.0f };   // 0.0 ~ 1.0
+        std::atomic<long>        g_BuildExitCode   { -1 };     // -1: 아직 없음
 
         // 다른 씬을 로드하기 위해 대기 중인 경로
         bool                     g_RequestSceneLoad     = false;
@@ -238,6 +247,60 @@ namespace Alice
             }
 
             ImGui::Separator();
+
+            // 스크립트 핫 리로드 버튼 (C++ 스크립트 DLL 재빌드 + 재로드)
+            if (ImGui::Button("Reload Scripts"))
+            {
+                // 1) CMake 를 통해 AliceScripts (Debug) 타겟을 빌드합니다.
+                wchar_t exePathW[MAX_PATH] = {};
+                GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+                std::filesystem::path exePath = exePathW;
+                std::filesystem::path exeDir  = exePath.parent_path();
+                std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+
+                std::wstring cmd = L"cmake --build build --config Debug --target AliceScripts";
+
+                STARTUPINFOW        si{};
+                PROCESS_INFORMATION pi{};
+                si.cb = sizeof(si);
+                si.dwFlags = STARTF_USESHOWWINDOW;
+                si.wShowWindow = SW_HIDE;
+
+                BOOL ok = CreateProcessW(
+                    nullptr,
+                    cmd.data(),
+                    nullptr,
+                    nullptr,
+                    FALSE,
+                    0,
+                    nullptr,
+                    projectRoot.wstring().c_str(),
+                    &si,
+                    &pi);
+
+                if (ok)
+                {
+                    WaitForSingleObject(pi.hProcess, INFINITE);
+                    DWORD exitCode = 0;
+                    GetExitCodeProcess(pi.hProcess, &exitCode);
+                    CloseHandle(pi.hProcess);
+                    CloseHandle(pi.hThread);
+
+                    ALICE_LOG_INFO("Reload Scripts: CMake build finished with exitCode=%lu",
+                                   static_cast<unsigned long>(exitCode));
+
+                    if (exitCode == 0)
+                    {
+                        ScriptHotReload_Reload();
+                    }
+                }
+                else
+                {
+                    ALICE_LOG_ERRORF("Reload Scripts: failed to start CMake build process.");
+                }
+            }
+
+            ImGui::Separator();
             // FBX 임포트 버튼
             if (ImGui::Button("Load FBX"))
             {
@@ -329,6 +392,8 @@ namespace Alice
                 static bool  s_ScanScenesOnce = true;
                 static std::vector<fs::path> s_ScenePaths;
                 static std::vector<bool>     s_SceneSelected;
+                static int   s_DefaultScene  = -1;       // 기본으로 실행될 씬 인덱스
+                static char  s_ExportPath[260] = "../Build/Export"; // 배포용 출력 경로
 
                 ImGui::Text("Output Resolution");
                 ImGui::InputInt("Width",  &s_Width);
@@ -344,6 +409,7 @@ namespace Alice
                     s_ScanScenesOnce = false;
                     s_ScenePaths.clear();
                     s_SceneSelected.clear();
+                    s_DefaultScene = -1;
 
                     const fs::path assetsRoot = "../Assets";
                     if (fs::exists(assetsRoot))
@@ -372,77 +438,287 @@ namespace Alice
                         bool selected = s_SceneSelected[i];
                         ImGui::Checkbox(s_ScenePaths[i].filename().string().c_str(), &selected);
                         s_SceneSelected[i] = selected;
+
+                        ImGui::SameLine();
+                        bool isDefault = (static_cast<int>(i) == s_DefaultScene);
+                        std::string label = "Default##" + std::to_string(i);
+                        if (ImGui::RadioButton(label.c_str(), isDefault))
+                        {
+                            s_DefaultScene = static_cast<int>(i);
+                        }
                     }
                 }
 
                 ImGui::Separator();
 
-                if (ImGui::Button("Build Game"))
+                // 배포용 출력 경로 입력 + 폴더 선택 버튼
+                ImGui::Text("Export Path (relative to project root or absolute)");
+                ImGui::InputText("##ExportPath", s_ExportPath, IM_ARRAYSIZE(s_ExportPath));
+                ImGui::SameLine();
+                if (ImGui::Button("Browse..."))
                 {
-                    // 1) 빌드 설정 파일 저장 (간단한 텍스트 포맷)
-                    wchar_t exePathW[MAX_PATH] = {};
-                    GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
-                    fs::path exePath = exePathW;
-                    fs::path exeDir  = exePath.parent_path();
-                    fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+                    BROWSEINFOW bi{};
+                    bi.hwndOwner = m_hwnd;
+                    bi.lpszTitle = L"Select export folder";
+                    bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_USENEWUI;
 
-                    fs::path buildDir = projectRoot / "Build";
-                    std::error_code fec;
-                    fs::create_directories(buildDir, fec);
-
-                    fs::path cfgPath = buildDir / "BuildSettings.txt";
-                    std::ofstream ofs(cfgPath);
-                    if (ofs.is_open())
+                    PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
+                    if (pidl)
                     {
-                        ofs << "# AliceRenderer build settings\n";
-                        ofs << "width: "  << s_Width  << "\n";
-                        ofs << "height: " << s_Height << "\n";
-                        ofs << "scenes:\n";
-                        for (std::size_t i = 0; i < s_ScenePaths.size(); ++i)
+                        wchar_t folderW[MAX_PATH] = {};
+                        if (SHGetPathFromIDListW(pidl, folderW))
                         {
-                            if (!s_SceneSelected[i])
-                                continue;
-                            ofs << "  - " << s_ScenePaths[i].string() << "\n";
+                            std::filesystem::path p = folderW;
+                            std::string utf8 = p.string();
+                            // 선택한 경로를 그대로 ExportPath 로 사용 (필요하면 나중에 상대 경로로 변환 가능)
+                            strncpy_s(s_ExportPath, utf8.c_str(), _TRUNCATE);
                         }
+                        CoTaskMemFree(pidl);
                     }
+                }
 
-                    ALICE_LOG_INFO("BuildSettings saved to \"%s\"", cfgPath.string().c_str());
-
-                    // 2) 간단히 CMake를 호출해 AliceGame(Release)을 빌드합니다.
-                    std::wstring cmd = L"cmake --build build --config Release";
-
-                    STARTUPINFOW        si{};
-                    PROCESS_INFORMATION pi{};
-                    si.cb = sizeof(si);
-                    si.dwFlags = STARTF_USESHOWWINDOW;
-                    si.wShowWindow = SW_HIDE;
-
-                    BOOL ok = CreateProcessW(
-                        nullptr,
-                        cmd.data(),
-                        nullptr,
-                        nullptr,
-                        FALSE,
-                        0,
-                        nullptr,
-                        projectRoot.wstring().c_str(),
-                        &si,
-                        &pi);
-
-                    if (ok)
+                // 빌드 진행 상황 표시
+                if (g_BuildInProgress.load())
+                {
+                    ImGui::Text("Building AliceGame (Release)...");
+                    float p = g_BuildProgress.load();
+                    ImGui::ProgressBar(p, ImVec2(-1.0f, 0.0f));
+                }
+                else
+                {
+                    long exitCode = g_BuildExitCode.load();
+                    if (exitCode == 0)
                     {
-                        WaitForSingleObject(pi.hProcess, INFINITE);
-
-                        DWORD exitCode = 0;
-                        GetExitCodeProcess(pi.hProcess, &exitCode);
-                        CloseHandle(pi.hProcess);
-                        CloseHandle(pi.hThread);
-
-                        ALICE_LOG_INFO("CMake build finished with exitCode=%lu", static_cast<unsigned long>(exitCode));
+                        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Last build: Success");
                     }
-                    else
+                    else if (exitCode > 0)
                     {
-                        ALICE_LOG_ERRORF("Failed to start CMake build process.");
+                        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "Last build: Failed (code=%ld)", exitCode);
+                    }
+                }
+
+                if (!g_BuildInProgress.load())
+                {
+                    if (ImGui::Button("Build Game"))
+                    {
+                        // 1) 빌드 설정 파일 저장 (간단한 텍스트 포맷)
+                        wchar_t exePathW[MAX_PATH] = {};
+                        GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+                        fs::path exePath = exePathW;
+                        fs::path exeDir  = exePath.parent_path();
+                        fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+
+                        fs::path buildDir = projectRoot / "Build";
+                        std::error_code fec;
+                        fs::create_directories(buildDir, fec);
+
+                        fs::path cfgPath = buildDir / "BuildSettings.txt";
+                        {
+                            std::ofstream ofs(cfgPath);
+                            if (ofs.is_open())
+                            {
+                                ofs << "# AliceRenderer build settings\n";
+                                ofs << "width: "  << s_Width  << "\n";
+                                ofs << "height: " << s_Height << "\n";
+
+                                // 포함할 씬 목록
+                                ofs << "scenes:\n";
+                                std::vector<fs::path> includedScenes;
+                                for (std::size_t i = 0; i < s_ScenePaths.size(); ++i)
+                                {
+                                    if (i >= s_SceneSelected.size())
+                                        continue;
+                                    if (!s_SceneSelected[i])
+                                        continue;
+
+                                    ofs << "  - " << s_ScenePaths[i].string() << "\n";
+                                    includedScenes.push_back(s_ScenePaths[i]);
+                                }
+
+                                // 기본(default) 씬 선택
+                                fs::path defaultScenePath;
+                                if (s_DefaultScene >= 0 &&
+                                    static_cast<std::size_t>(s_DefaultScene) < s_ScenePaths.size() &&
+                                    s_DefaultScene < static_cast<int>(s_SceneSelected.size()) &&
+                                    s_SceneSelected[s_DefaultScene])
+                                {
+                                    defaultScenePath = s_ScenePaths[static_cast<std::size_t>(s_DefaultScene)];
+                                }
+                                else if (!includedScenes.empty())
+                                {
+                                    defaultScenePath = includedScenes.front();
+                                }
+
+                                if (!defaultScenePath.empty())
+                                {
+                                    ofs << "default: " << defaultScenePath.string() << "\n";
+                                }
+                            }
+                        }
+
+                        ALICE_LOG_INFO("BuildSettings saved to \"%s\"", cfgPath.string().c_str());
+
+                        // 2) 별도 스레드에서 CMake 빌드 + 리소스 복사 실행
+                        g_BuildInProgress.store(true);
+                        g_BuildProgress.store(0.0f);
+                        g_BuildExitCode.store(-1);
+
+                        // Export 경로 문자열은 스레드 시작 시점에 복사해 둡니다.
+                        std::string exportPathStr = s_ExportPath;
+
+                        std::thread([projectRoot, cfgPath, exportPathStr]()
+                        {
+                            // CMake 빌드 프로세스 시작
+                            std::wstring cmd = L"cmake --build build --config Release --target AlicePlayer";
+
+                            STARTUPINFOW        si{};
+                            PROCESS_INFORMATION pi{};
+                            si.cb = sizeof(si);
+                            si.dwFlags = STARTF_USESHOWWINDOW;
+                            si.wShowWindow = SW_HIDE;
+
+                            BOOL ok = CreateProcessW(
+                                nullptr,
+                                cmd.data(),
+                                nullptr,
+                                nullptr,
+                                FALSE,
+                                CREATE_NO_WINDOW,
+                                nullptr,
+                                projectRoot.wstring().c_str(),
+                                &si,
+                                &pi);
+
+                            if (!ok)
+                            {
+                                ALICE_LOG_ERRORF("Build Game: failed to start CMake process.");
+                                g_BuildInProgress.store(false);
+                                g_BuildProgress.store(0.0f);
+                                g_BuildExitCode.store(1);
+                                return;
+                            }
+
+                            // 프로세스가 끝날 때까지 기다리면서 간단한 진행률 애니메이션
+                            float p = 0.0f;
+                            for (;;)
+                            {
+                                DWORD wait = WaitForSingleObject(pi.hProcess, 50);
+                                if (wait == WAIT_TIMEOUT)
+                                {
+                                    p += 0.005f;
+                                    if (p > 0.9f) p = 0.9f;
+                                    g_BuildProgress.store(p);
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+
+                            DWORD exitCode = 0;
+                            GetExitCodeProcess(pi.hProcess, &exitCode);
+                            CloseHandle(pi.hProcess);
+                            CloseHandle(pi.hThread);
+
+                            ALICE_LOG_INFO("Build Game: CMake build finished with exitCode=%lu",
+                                           static_cast<unsigned long>(exitCode));
+
+                            if (exitCode == 0)
+                            {
+                                // 3) Release 실행 파일 폴더로 필요한 리소스 디렉터리 복사
+                                namespace fs2 = std::filesystem;
+                                fs2::path releaseBinDir = projectRoot / "build/bin/Release";
+                                fs2::path binParent     = releaseBinDir.parent_path(); // build/bin
+
+                                auto copyDirIfExists = [](const fs2::path& src, const fs2::path& dst)
+                                {
+                                    if (!fs2::exists(src)) return;
+                                    std::error_code ec;
+                                    fs2::create_directories(dst, ec);
+                                    fs2::copy(src, dst,
+                                              fs2::copy_options::recursive | fs2::copy_options::overwrite_existing,
+                                              ec);
+                                };
+
+                                copyDirIfExists(projectRoot / "Assets",   binParent / "Assets");
+                                copyDirIfExists(projectRoot / "Resource", binParent / "Resource");
+                                copyDirIfExists(projectRoot / "Cooked",   binParent / "Cooked");
+
+                                // BuildSettings 도 Release 폴더에 복사
+                                std::error_code ec;
+                                fs2::copy_file(cfgPath, releaseBinDir / "BuildSettings.txt",
+                                               fs2::copy_options::overwrite_existing, ec);
+
+                                ALICE_LOG_INFO("Build Game: copied Assets/Resource/Cooked to \"%s\"",
+                                               binParent.string().c_str());
+
+                                // 4) 사용자가 지정한 Export 폴더로 배포용 파일 복사
+                                fs2::path exportRoot = exportPathStr;
+                                if (!exportRoot.is_absolute())
+                                {
+                                    exportRoot = projectRoot / exportRoot;
+                                }
+
+                                std::error_code ec2;
+                                fs2::create_directories(exportRoot, ec2);
+
+                                // 실행 파일 복사
+                                fs2::copy_file(releaseBinDir / "AlicePlayer.exe",
+                                               exportRoot / "AlicePlayer.exe",
+                                               fs2::copy_options::overwrite_existing,
+                                               ec2);
+
+                                // 필요한 DLL 들 복사 (assimp, AliceScripts 등)
+                                if (fs2::exists(releaseBinDir))
+                                {
+                                    for (const auto& entry : fs2::directory_iterator(releaseBinDir))
+                                    {
+                                        if (!entry.is_regular_file())
+                                            continue;
+
+                                        if (entry.path().extension() == ".dll")
+                                        {
+                                            std::error_code ecDll;
+                                            fs2::copy_file(entry.path(),
+                                                           exportRoot / entry.path().filename(),
+                                                           fs2::copy_options::overwrite_existing,
+                                                           ecDll);
+                                        }
+                                    }
+                                }
+
+                                // 리소스 디렉터리 복사
+                                copyDirIfExists(binParent / "Assets",   exportRoot / "Assets");
+                                copyDirIfExists(binParent / "Resource", exportRoot / "Resource");
+                                copyDirIfExists(binParent / "Cooked",   exportRoot / "Cooked");
+
+                                // 최종 빌드에는 원본 이미지(Resource/Image)는 포함하지 않습니다.
+                                fs2::path exportedImageDir = exportRoot / "Resource/Image";
+                                if (fs2::exists(exportedImageDir))
+                                {
+                                    std::error_code ecRemove;
+                                    fs2::remove_all(exportedImageDir, ecRemove);
+                                }
+
+                                // BuildSettings 복사
+                                fs2::copy_file(releaseBinDir / "BuildSettings.txt",
+                                               exportRoot / "BuildSettings.txt",
+                                               fs2::copy_options::overwrite_existing,
+                                               ec2);
+
+                                ALICE_LOG_INFO("Build Game: exported player to \"%s\"",
+                                               exportRoot.string().c_str());
+
+                                g_BuildProgress.store(1.0f);
+                            }
+                            else
+                            {
+                                g_BuildProgress.store(1.0f);
+                            }
+
+                            g_BuildExitCode.store(static_cast<long>(exitCode));
+                            g_BuildInProgress.store(false);
+                        }).detach();
                     }
                 }
             }
@@ -566,6 +842,9 @@ namespace Alice
 
                     // 등록된 스크립트 목록에서 하나를 선택해 추가할 수 있게 합니다.
                     std::vector<std::string> scriptNames = ScriptFactory::GetRegisteredScriptNames();
+                    // 중복 이름이 있을 수 있으므로 정렬 + unique 로 정리합니다.
+                    std::sort(scriptNames.begin(), scriptNames.end());
+                    scriptNames.erase(std::unique(scriptNames.begin(), scriptNames.end()), scriptNames.end());
                     if (!scriptNames.empty())
                     {
                         static int selectedIndex = 0;

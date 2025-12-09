@@ -22,6 +22,7 @@ set(ALICE_ENGINE_SOURCES
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
     ${ALICE_SRC_DIR}/Core/Script.cpp
+    ${ALICE_SRC_DIR}/Core/ScriptHotReload.cpp
     ${ALICE_SRC_DIR}/Core/Prefab.cpp
     ${ALICE_SRC_DIR}/Core/Material.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
@@ -58,6 +59,7 @@ set(ALICE_ENGINE_HEADERS
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.h
     ${ALICE_SRC_DIR}/Core/Script.h
+    ${ALICE_SRC_DIR}/Core/ScriptHotReload.h
     ${ALICE_SRC_DIR}/Core/Prefab.h
     ${ALICE_SRC_DIR}/Core/Material.h
     ${ALICE_SRC_DIR}/Core/Logger.h
@@ -103,10 +105,8 @@ add_library(AliceEngine STATIC
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_ENGINE_SOURCES} ${ALICE_ENGINE_HEADERS})
 
 # ===== 콘텐츠/게임 실행 파일 (Sandbox + Scenes) =====
-set(ALICE_APP_SOURCES
-    # 샌드박스(엔트리 포인트)
-    ${ALICE_SRC_DIR}/Sandbox/Main.cpp
-
+# 공통 게임 코드(엔트리 포인트 제외)
+set(ALICE_APP_COMMON_SOURCES
     # 샘플 씬 (콘텐츠 계층)
     ${ALICE_SRC_DIR}/Scenes/SampleScene.cpp
 
@@ -123,13 +123,22 @@ set(ALICE_APP_HEADERS
     ${ALICE_SRC_DIR}/Game/SkinnedMeshSystem.h
 )
 
-# === 엔진 데모/기본 실행 파일 (엔진 자체 테스트용) ===
+set(ALICE_EDITOR_MAIN
+    ${ALICE_SRC_DIR}/Sandbox/Main.cpp
+)
+
+set(ALICE_PLAYER_MAIN
+    ${ALICE_SRC_DIR}/Sandbox/GameMain.cpp
+)
+
+# === 엔진 데모/기본 실행 파일 (엔진 자체 테스트용, 에디터 모드) ===
 add_executable(AliceRenderer
-    ${ALICE_APP_SOURCES}
+    ${ALICE_EDITOR_MAIN}
+    ${ALICE_APP_COMMON_SOURCES}
     ${ALICE_APP_HEADERS}
 )
 
-source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_APP_SOURCES} ${ALICE_APP_HEADERS})
+source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_EDITOR_MAIN} ${ALICE_PLAYER_MAIN} ${ALICE_APP_COMMON_SOURCES} ${ALICE_APP_HEADERS})
 
 # === 콘텐츠 개발용 실행 파일 (Assets 폴더의 스크립트 포함) ===
 # - Unity 의 게임 프로젝트에 해당하는 대상
@@ -137,13 +146,58 @@ file(GLOB_RECURSE ALICE_ASSET_SCRIPTS
     "${CMAKE_CURRENT_SOURCE_DIR}/Assets/*.cpp"
 )
 
-add_executable(AliceGame
-    ${ALICE_APP_SOURCES}
-    ${ALICE_APP_HEADERS}
-    ${ALICE_ASSET_SCRIPTS}
+# 동적 스크립트 DLL (라이브 코딩용)
+file(GLOB_RECURSE ALICE_SCRIPT_DLL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/Assets/Scripts/*.cpp"
+    "${ALICE_SRC_DIR}/Core/Script.cpp"
 )
 
-source_group(TREE ${ALICE_SRC_DIR}   FILES ${ALICE_APP_SOURCES} ${ALICE_APP_HEADERS})
+add_library(AliceScripts SHARED
+    ${ALICE_SCRIPT_DLL_SOURCES}
+)
+
+target_include_directories(AliceScripts
+    PRIVATE
+        ${ALICE_SRC_DIR}
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+)
+
+target_link_libraries(AliceScripts
+    PRIVATE
+        AliceEngine
+)
+
+add_executable(AliceGame
+    ${ALICE_EDITOR_MAIN}
+    ${ALICE_APP_COMMON_SOURCES}
+    ${ALICE_APP_HEADERS}
+)
+
+add_executable(AlicePlayer
+    ${ALICE_PLAYER_MAIN}
+    ${ALICE_APP_COMMON_SOURCES}
+    ${ALICE_APP_HEADERS}
+)
+
+target_include_directories(AlicePlayer
+    PRIVATE
+        ${ALICE_SRC_DIR}
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+        "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
+        "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
+)
+
+target_link_directories(AlicePlayer
+    PRIVATE
+        "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
+        "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
+        "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
+        "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
+)
+
+source_group(TREE ${ALICE_SRC_DIR}   FILES ${ALICE_EDITOR_MAIN} ${ALICE_PLAYER_MAIN} ${ALICE_APP_COMMON_SOURCES} ${ALICE_APP_HEADERS})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${ALICE_ASSET_SCRIPTS})
 
 # ThirdParty ImGui (docking 브랜치) 경로
@@ -233,6 +287,12 @@ if(MSVC)
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
     )
 
+    target_include_directories(AlicePlayer
+        PRIVATE
+            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
+            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
+    )
+
     # vcpkg lib 경로 추가 (Debug/Release 를 분리해서 Props 와 동일하게 설정)
     target_link_directories(AliceRenderer
         PRIVATE
@@ -249,6 +309,13 @@ if(MSVC)
             "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
             "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
     )
+    target_link_directories(AlicePlayer
+        PRIVATE
+            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
+            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
+            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
+            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
+    )
 endif()
 
 # Win32 하위 시스템으로 빌드 (콘솔 창 숨김)
@@ -256,6 +323,9 @@ set_target_properties(AliceRenderer PROPERTIES
     WIN32_EXECUTABLE YES
 )
 set_target_properties(AliceGame PROPERTIES
+    WIN32_EXECUTABLE YES
+)
+set_target_properties(AlicePlayer PROPERTIES
     WIN32_EXECUTABLE YES
 )
 
@@ -288,10 +358,24 @@ target_link_libraries(AliceGame
         $<$<CONFIG:Release>:assimp-vc143-mt>
 )
 
+target_link_libraries(AlicePlayer
+    PRIVATE
+        AliceEngine
+        imgui
+        d3d11
+        dxgi
+        dxguid
+        d3dcompiler
+        directxtk
+        directxtex
+        $<$<CONFIG:Debug>:assimp-vc143-mtd>
+        $<$<CONFIG:Release>:assimp-vc143-mt>
+)
+
 # === 3D Model 관련 DLL 들을 실행 파일 출력 폴더로 복사 ===
 set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 
-foreach(target AliceRenderer AliceGame)
+foreach(target AliceRenderer AliceGame AlicePlayer)
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${THIRDPARTY_3DMODEL_DIR}/zlib1.dll"       "$<TARGET_FILE_DIR:${target}>/zlib1.dll"
