@@ -2,4 +2,4 @@ name: Rapi_1
 color: 0.7 0.7 0.7
 roughness: 0.5
 metalness: 0
-albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded1.abtex
+albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded1.alice
