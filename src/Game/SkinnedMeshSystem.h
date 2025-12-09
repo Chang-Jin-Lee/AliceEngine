@@ -2,10 +2,8 @@
 
 #include <vector>
 
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-
 #include "Core/World.h"
+#include "Core/Logger.h"
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 
@@ -37,44 +35,32 @@ namespace Alice
             }
 
             {
-                char buf[128] = {};
-                std::snprintf(buf, sizeof(buf),
-                              "[SkinnedMeshSystem] BuildDrawList: skinnedComponents=%zu\n",
-                              skinnedMap.size());
-                OutputDebugStringA(buf);
+                ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: skinnedComponents=%zu",
+                               skinnedMap.size());
             }
 
             for (const auto& [entityId, comp] : skinnedMap)
             {
                 if (!comp.boneMatrices || comp.boneCount == 0)
                 {
-                    char buf[128] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[SkinnedMeshSystem]  - skip: entity=%u no bones\n",
-                                  static_cast<unsigned>(entityId));
-                    OutputDebugStringA(buf);
+                    ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no bones",
+                                   static_cast<unsigned>(entityId));
                     continue;
                 }
 
                 auto mesh = m_registry.Find(comp.meshAssetPath);
                 if (!mesh)
                 {
-                    char buf[256] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[SkinnedMeshSystem]  - skip: mesh not found for key=\"%s\"\n",
-                                  comp.meshAssetPath.c_str());
-                    OutputDebugStringA(buf);
+                    ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: mesh not found for key=\"%s\"",
+                                   comp.meshAssetPath.c_str());
                     continue;
                 }
 
                 const TransformComponent* t = world.GetTransform(entityId);
                 if (!t)
                 {
-                    char buf[128] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[SkinnedMeshSystem]  - skip: entity=%u no Transform\n",
-                                  static_cast<unsigned>(entityId));
-                    OutputDebugStringA(buf);
+                    ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no Transform",
+                                   static_cast<unsigned>(entityId));
                     continue;
                 }
 
@@ -106,13 +92,10 @@ namespace Alice
 
                     if (!mat->albedoTexturePath.empty())
                     {
-                        char buf[256] = {};
-                        std::snprintf(buf, sizeof(buf),
-                                      "[SkinnedMeshSystem] entity=%u mesh=\"%s\" albedoTex=\"%s\"\n",
-                                      static_cast<unsigned>(entityId),
-                                      comp.meshAssetPath.c_str(),
-                                      mat->albedoTexturePath.c_str());
-                        OutputDebugStringA(buf);
+                        ALICE_LOG_INFO("[SkinnedMeshSystem] entity=%u mesh=\"%s\" albedoTex=\"%s\"",
+                                       static_cast<unsigned>(entityId),
+                                       comp.meshAssetPath.c_str(),
+                                       mat->albedoTexturePath.c_str());
                     }
                 }
 
@@ -122,11 +105,8 @@ namespace Alice
             if (!outCommands.empty())
             {
                 // 실제로 드로우 커맨드가 생겼을 때만 1회 로그를 남깁니다.
-                char buf[256] = {};
-                std::snprintf(buf, sizeof(buf),
-                              "[SkinnedMeshSystem] BuildDrawList: commands=%zu\n",
-                              outCommands.size());
-                OutputDebugStringA(buf);
+                ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: commands=%zu",
+                               outCommands.size());
             }
         }
 

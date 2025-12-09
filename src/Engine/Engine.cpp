@@ -26,6 +26,8 @@
 #include "Core/ScriptHotReload.h"
 #include "Core/SceneFile.h"
 #include "Core/Logger.h"
+#include "Game/FbxImporter.h"
+#include "Game/FbxAsset.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -255,6 +257,17 @@ namespace Alice
             }
         }
 
+        // 월드 안의 SkinnedMeshComponent 들에 대응하는 GPU 메시들이
+        // SkinnedMeshRegistry 에 모두 등록되어 있는지 확인합니다.
+        EnsureSkinnedMeshesRegisteredForWorld();
+
+        const auto& transforms   = m_world.GetTransforms();
+        const auto& skinnedMeshes = m_world.GetSkinnedMeshes();
+        const auto& scripts      = m_world.GetScripts();
+        const auto& materials    = m_world.GetMaterials();
+        ALICE_LOG_INFO("Engine::Initialize: world summary: transforms=%zu, skinnedMeshes=%zu, scripts=%zu, materials=%zu",
+                       transforms.size(), skinnedMeshes.size(), scripts.size(), materials.size());
+
         ALICE_LOG_INFO("Engine::Initialize: success.");
         return true;
     }
@@ -474,6 +487,70 @@ namespace Alice
         }
 
         m_renderDevice->EndFrame();
+    }
+
+    void Engine::EnsureSkinnedMeshesRegisteredForWorld()
+    {
+        if (!m_renderDevice)
+            return;
+
+        auto* device = m_renderDevice->GetDevice();
+        if (!device)
+            return;
+
+        const auto& skinnedMap = m_world.GetSkinnedMeshes();
+        if (skinnedMap.empty())
+        {
+            ALICE_LOG_INFO("Engine::EnsureSkinnedMeshesRegisteredForWorld: no SkinnedMeshComponents in world.");
+            return;
+        }
+
+        for (const auto& [entityId, comp] : skinnedMap)
+        {
+            if (comp.meshAssetPath.empty())
+                continue;
+
+            if (m_skinnedMeshRegistry.Find(comp.meshAssetPath))
+                continue; // 이미 등록됨
+
+            std::filesystem::path fbxAssetPath;
+            if (!comp.instanceAssetPath.empty())
+            {
+                fbxAssetPath = comp.instanceAssetPath;
+            }
+            else
+            {
+                fbxAssetPath = std::filesystem::path("../Assets/Fbx")
+                             / (comp.meshAssetPath + ".fbxasset");
+            }
+
+            Alice::FbxInstanceAsset instance{};
+            if (!Alice::LoadFbxInstanceAsset(fbxAssetPath, instance))
+            {
+                ALICE_LOG_WARN("Engine::EnsureSkinnedMeshesRegisteredForWorld: failed to load .fbxasset \"%s\" for meshKey=\"%s\"",
+                               fbxAssetPath.string().c_str(),
+                               comp.meshAssetPath.c_str());
+                continue;
+            }
+
+            if (instance.sourceFbx.empty())
+            {
+                ALICE_LOG_WARN("Engine::EnsureSkinnedMeshesRegisteredForWorld: .fbxasset has empty source_fbx for \"%s\"",
+                               fbxAssetPath.string().c_str());
+                continue;
+            }
+
+            FbxImportOptions opt{};
+            FbxImporter importer(m_resourceManager, &m_skinnedMeshRegistry);
+
+            std::filesystem::path srcFbxPath = instance.sourceFbx;
+            FbxImportResult result = importer.Import(device, srcFbxPath, opt);
+
+            ALICE_LOG_INFO("Engine::EnsureSkinnedMeshesRegisteredForWorld: re-import FBX \"%s\" -> meshKey=\"%s\" result.mesh=\"%s\"",
+                           srcFbxPath.string().c_str(),
+                           comp.meshAssetPath.c_str(),
+                           result.meshAssetPath.c_str());
+        }
     }
 
     bool Engine::CreateMainWindow(int nCmdShow)
