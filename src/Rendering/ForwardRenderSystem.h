@@ -273,6 +273,8 @@ namespace Alice
         ID3D11ShaderResourceView* GetSceneColorSRV() const { return m_sceneSRV.Get(); }
         std::uint32_t GetSceneWidth()  const { return m_sceneWidth; }
         std::uint32_t GetSceneHeight() const { return m_sceneHeight; }
+
+		ID3D11ShaderResourceView* GetSceneSRV() const { return m_sceneSRV.Get(); }
     };
 }
 

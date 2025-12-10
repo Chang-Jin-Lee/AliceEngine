@@ -521,7 +521,7 @@ namespace Alice
                                 ofs << "width: "  << s_Width  << "\n";
                                 ofs << "height: " << s_Height << "\n";
 
-                                // 포함할 씬 목록
+                                // 포함할 씬 목록 (프로젝트 루트 기준 상대 경로로 저장)
                                 ofs << "scenes:\n";
                                 std::vector<fs::path> includedScenes;
                                 for (std::size_t i = 0; i < s_ScenePaths.size(); ++i)
@@ -531,7 +531,10 @@ namespace Alice
                                     if (!s_SceneSelected[i])
                                         continue;
 
-                                    ofs << "  - " << s_ScenePaths[i].string() << "\n";
+                                    // 프로젝트 루트 기준 상대 경로로 변환
+                                    fs::path absScene = fs::absolute(s_ScenePaths[i]);
+                                    fs::path relScene = fs::relative(absScene, projectRoot);
+                                    ofs << "  - " << relScene.string() << "\n";
                                     includedScenes.push_back(s_ScenePaths[i]);
                                 }
 
@@ -551,7 +554,10 @@ namespace Alice
 
                                 if (!defaultScenePath.empty())
                                 {
-                                    ofs << "default: " << defaultScenePath.string() << "\n";
+                                    // 프로젝트 루트 기준 상대 경로로 변환
+                                    fs::path absDefault = fs::absolute(defaultScenePath);
+                                    fs::path relDefault = fs::relative(absDefault, projectRoot);
+                                    ofs << "default: " << relDefault.string() << "\n";
                                 }
                             }
                         }

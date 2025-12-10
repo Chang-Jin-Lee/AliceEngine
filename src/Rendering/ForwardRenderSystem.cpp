@@ -79,7 +79,8 @@ cbuffer CBPerObject : register(b0)
 
     float    gRoughness;
     float    gMetalness;
-    float2   gPad0;
+    int      gUseTexture;
+    float3   gPad0;
 };
 
 cbuffer CBBones : register(b2)

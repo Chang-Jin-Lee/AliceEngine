@@ -127,16 +127,42 @@ namespace Alice
             const std::string& scenePathStr = defaultScene;
             fs::path scenePath = scenePathStr;
 
-            // 상대 경로는 exeDir 기준으로 해석됩니다.
+            // 상대 경로는 exeDir 기준으로 해석
             if (!scenePath.is_absolute())
             {
-                scenePath = scenePath; // "../Assets/..." 형태를 그대로 사용
+                // 1) exeDir 기준으로 시도
+                fs::path candidate = exeDir / scenePath;
+                if (fs::exists(candidate))
+                {
+                    scenePath = candidate;
+                }
+                else
+                {
+                    // 2) exeDir 상위(프로젝트 루트) 기준으로도 시도
+                    fs::path projectRoot = exeDir.parent_path().parent_path().parent_path();
+                    candidate = projectRoot / scenePath;
+                    if (fs::exists(candidate))
+                    {
+                        scenePath = candidate;
+                    }
+                    else
+                    {
+                        // 그래도 없으면 exeDir 기준 상대 경로로 둠
+                        scenePath = exeDir / scenePath;
+                    }
+                }
             }
 
             ALICE_LOG_INFO("LoadStartupSceneFromBuildSettings: loading scene \"%s\"",
                            scenePath.string().c_str());
 
-            return SceneFile::Load(world, scenePath);
+            bool ok = SceneFile::Load(world, scenePath);
+            if (!ok)
+            {
+                ALICE_LOG_ERRORF("LoadStartupSceneFromBuildSettings: SceneFile::Load failed for \"%s\"",
+                                 scenePath.string().c_str());
+            }
+            return ok;
         }
     }
 
@@ -473,6 +499,26 @@ namespace Alice
             shadingModeValue2,
             m_useFillLight,
             m_skinnedDrawCommands);
+
+		{
+			auto* ctx = m_renderDevice->GetImmediateContext();
+
+			auto* backBufferRTV = m_renderDevice->GetBackBufferRTV();
+
+			// SRV/RTV 에서 리소스 꺼내기
+			Microsoft::WRL::ComPtr<ID3D11Resource> src;
+			Microsoft::WRL::ComPtr<ID3D11Resource> dst;
+
+			// src: ForwardRenderSystem 의 컬러 텍스처
+			auto* sceneSRV = m_forwardRenderSystem->GetSceneSRV();
+			sceneSRV->GetResource(src.GetAddressOf());
+
+			// dst: 백버퍼 텍스처
+			backBufferRTV->GetResource(dst.GetAddressOf());
+
+			// 실제 복사
+			ctx->CopyResource(dst.Get(), src.Get());
+		}
 
         // DebugDraw 렌더링 (Forward 렌더 이후, 같은 카메라 기준)
         if (m_debugDrawSystem)
