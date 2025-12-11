@@ -258,7 +258,17 @@ namespace Alice
                 std::filesystem::path exeDir  = exePath.parent_path();
                 std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
 
-                std::wstring cmd = L"cmake --build build --config Debug --target AliceScripts";
+				//std::wstring cmd = L"cmake --build build --config Debug --target AliceScripts";
+					// 현재 엔진 바이너리의 빌드 타입에 따라 Debug / Release 선택
+#ifdef _DEBUG
+				constexpr const wchar_t* kConfig = L"Debug";
+#else
+				constexpr const wchar_t* kConfig = L"Release";
+#endif
+
+				std::wstring cmd = L"cmake --build build --config ";
+				cmd += kConfig;
+				cmd += L" --target AliceScripts";
 
                 STARTUPINFOW        si{};
                 PROCESS_INFORMATION pi{};
@@ -521,31 +531,33 @@ namespace Alice
                                 ofs << "width: "  << s_Width  << "\n";
                                 ofs << "height: " << s_Height << "\n";
 
-                                // 포함할 씬 목록 (프로젝트 루트 기준 상대 경로로 저장)
+                                // 포함할 씬 목록
                                 ofs << "scenes:\n";
                                 std::vector<fs::path> includedScenes;
+                                includedScenes.reserve(s_ScenePaths.size());
                                 for (std::size_t i = 0; i < s_ScenePaths.size(); ++i)
                                 {
-                                    if (i >= s_SceneSelected.size())
-                                        continue;
-                                    if (!s_SceneSelected[i])
-                                        continue;
+                                    if (i >= s_SceneSelected.size()) continue;
+                                    if (!s_SceneSelected[i]) continue;
 
-                                    // 프로젝트 루트 기준 상대 경로로 변환
-                                    fs::path absScene = fs::absolute(s_ScenePaths[i]);
-                                    fs::path relScene = fs::relative(absScene, projectRoot);
-                                    ofs << "  - " << relScene.string() << "\n";
-                                    includedScenes.push_back(s_ScenePaths[i]);
+                                    //ofs << "  - " << s_ScenePaths[i].string() << "\n";
+									fs::path relScene = fs::relative(s_ScenePaths[i], projectRoot);  // 프로젝트 루트 기준으로 상대 경로 (예: "Assets/Stage1/Stage1.scene")
+									ofs << "  - " << relScene.string() << "\n";
+
+                                    includedScenes.push_back(relScene);
                                 }
 
                                 // 기본(default) 씬 선택
                                 fs::path defaultScenePath;
-                                if (s_DefaultScene >= 0 &&
-                                    static_cast<std::size_t>(s_DefaultScene) < s_ScenePaths.size() &&
-                                    s_DefaultScene < static_cast<int>(s_SceneSelected.size()) &&
-                                    s_SceneSelected[s_DefaultScene])
+								bool validIndex =
+									s_DefaultScene >= 0 &&
+									static_cast<size_t>(s_DefaultScene) < s_ScenePaths.size() &&
+									s_DefaultScene < static_cast<int>(s_SceneSelected.size()) &&
+									s_SceneSelected[s_DefaultScene];
+
+                                if (validIndex)
                                 {
-                                    defaultScenePath = s_ScenePaths[static_cast<std::size_t>(s_DefaultScene)];
+                                    defaultScenePath = fs::relative(s_ScenePaths[s_DefaultScene], projectRoot); // 상대 경로로 가져오자. ../Assts를 Assets로 바꾸는 것
                                 }
                                 else if (!includedScenes.empty())
                                 {
@@ -554,10 +566,7 @@ namespace Alice
 
                                 if (!defaultScenePath.empty())
                                 {
-                                    // 프로젝트 루트 기준 상대 경로로 변환
-                                    fs::path absDefault = fs::absolute(defaultScenePath);
-                                    fs::path relDefault = fs::relative(absDefault, projectRoot);
-                                    ofs << "default: " << relDefault.string() << "\n";
+                                    ofs << "default: " << defaultScenePath.string() << "\n";
                                 }
                             }
                         }
@@ -874,6 +883,7 @@ namespace Alice
                         if (ImGui::Button("Attach Script") && !scriptNames.empty())
                         {
                             world.AddScript(selectedEntity, scriptNames[selectedIndex]);
+                            SaveScene(world);
                         }
                     }
                     else
@@ -1428,37 +1438,9 @@ namespace Alice
 
             if (ImGui::Button("Save"))
             {
-                std::filesystem::path savePath = g_CurrentScenePath;
-                if (savePath.empty())
-                {
-                    savePath = "../Assets/AutoSaved.scene";
-                }
-                {
-                    char buf[256] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[Editor] SceneFile::Save: \"%s\"\n",
-                                  savePath.u8string().c_str());
-                    OutputDebugStringA(buf);
-                }
-                SceneFile::Save(world, savePath);
-                g_CurrentScenePath    = savePath;
-                g_HasCurrentScenePath = true;
-                g_SceneDirty          = false;
-
-                {
-                    char buf[256] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[Editor] SceneFile::Load (after save): \"%s\"\n",
-                                  g_NextScenePath.u8string().c_str());
-                    OutputDebugStringA(buf);
-                }
-                SceneFile::Load(world, g_NextScenePath);
-                EnsureSkinnedMeshesRegistered(world);
-                selectedEntity        = InvalidEntityId;
-                g_CurrentScenePath    = g_NextScenePath;
-                g_HasCurrentScenePath = true;
-                g_SceneDirty          = false;
-
+                SaveScene(world);
+                LoadScene(world);
+                selectedEntity = InvalidEntityId;
                 ImGui::CloseCurrentPopup();
             }
 
@@ -2045,6 +2027,42 @@ namespace Alice
                           result.meshAssetPath.c_str());
             OutputDebugStringA(buf);
         }
+    }
+    void EditorCore::SaveScene(World& world)
+    {
+		std::filesystem::path savePath = g_CurrentScenePath;
+		if (savePath.empty())
+		{
+			savePath = "../Assets/AutoSaved.scene";
+		}
+		{
+			char buf[256] = {};
+			std::snprintf(buf, sizeof(buf),
+				"[Editor] SceneFile::Save: \"%s\"\n",
+				savePath.u8string().c_str());
+			OutputDebugStringA(buf);
+		}
+		SceneFile::Save(world, savePath);
+		g_CurrentScenePath = savePath;
+		g_HasCurrentScenePath = true;
+		g_SceneDirty = false;
+
+    }
+    void EditorCore::LoadScene(World& world)
+    {
+		{
+			char buf[256] = {};
+			std::snprintf(buf, sizeof(buf),
+				"[Editor] SceneFile::Load (after save): \"%s\"\n",
+				g_NextScenePath.u8string().c_str());
+			OutputDebugStringA(buf);
+		}
+		SceneFile::Load(world, g_NextScenePath);
+		EnsureSkinnedMeshesRegistered(world);
+		g_CurrentScenePath = g_NextScenePath;
+		g_HasCurrentScenePath = true;
+		g_SceneDirty = false;
+
     }
 }
 
