@@ -1,48 +1,48 @@
 # AliceRenderer scene
-entity: 42
+entity: 26
 position: 0.2 4.2 0
-rotation: 0 4.04924 0
-scale: 1.24256 1.24256 1.24256
-script: NewScript
-material_color: 0.818532 0 1
+rotation: 0 9.63102 0
+scale: 1.94361 1.94361 1.94361
+script: RotateAndScale
+material_color: 0.211863 0.80695 0.731128
 material_asset: ../Assets\Materials\1.mat
-material_roughness: 0.829
+material_roughness: 0.643
 material_metalness: 0.075
 material_albedoTex: 
 skinned_mesh: 
 skinned_instance: 
 
-entity: 43
+entity: 27
 position: 3.9 0 0
 rotation: 0 0 0
 scale: 1 1 1
 script: 
-material_color: 0.818532 0 1
+material_color: 0.211863 0.80695 0.731128
 material_asset: ../Assets\Materials\1.mat
-material_roughness: 0.829
+material_roughness: 0.643
 material_metalness: 0.075
 material_albedoTex: 
 skinned_mesh: 
 skinned_instance: 
 
-entity: 44
+entity: 28
 position: -4 0 0
-rotation: 0 0 0
-scale: 1 1 1
+rotation: 0 0.630088 0
+scale: 1.23804 1.23804 1.23804
 script: 
-material_color: 0.818532 0 1
+material_color: 0.211863 0.80695 0.731128
 material_asset: ../Assets\Materials\1.mat
-material_roughness: 0.829
+material_roughness: 0.643
 material_metalness: 0.075
 material_albedoTex: 
 skinned_mesh: 
 skinned_instance: 
 
-entity: 45
+entity: 29
 position: 5.9 2.8 0.1
-rotation: 0 0 0
-scale: 1 1 1
-script: 
+rotation: 0 1.59983 0
+scale: 1.34677 1.34677 1.34677
+script: RotateAndScale
 material_color: 0.7 0.7 0.7
 material_asset: 
 material_roughness: 0.5

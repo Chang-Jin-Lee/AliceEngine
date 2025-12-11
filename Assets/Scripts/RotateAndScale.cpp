@@ -2,6 +2,7 @@
 #include "Core/World.h"
 
 #include <cmath> // std::sin
+#include <Core/Logger.h>
 
 namespace Alice
 {
@@ -10,8 +11,9 @@ namespace Alice
 
     void RotateAndScale::OnCreate(World& world, EntityId entity)
     {
+        ALICE_LOG_INFO("OnCreate RotateAndScale");
         // 이 엔티티에 Transform 이 없으면 하나 추가합니다.
-        if (auto* t = world.GetTransform(entity); !t)
+        if (auto* t = world.GetTransform(entity); t)
         {
             t = &world.AddTransform(entity);
             // 기준 스케일(x)을 기억해 두고, 시간이 흐르면서 이 값을 중심으로 진동시킵니다.
@@ -26,10 +28,11 @@ namespace Alice
 
     void RotateAndScale::OnUpdate(World& world, EntityId entity, float deltaTime)
     {
+        ALICE_LOG_INFO("RotateAndScale::OnUpdate");
         // 경과 시간 누적
         m_timeSeconds += deltaTime;
 
-        if (auto* t = world.GetTransform(entity); !t)
+        if (auto* t = world.GetTransform(entity); t)
         {
             // (1) Y 축으로 초당 약 1라디안씩 회전
             t->rotation.y += 1.0f * deltaTime;
