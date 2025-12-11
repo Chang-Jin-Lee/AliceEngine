@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "Core/Entity.h"
+#include "Logger.h"
 
 namespace Alice
 {
@@ -34,6 +35,7 @@ namespace Alice
         /// 매 프레임 호출되는 업데이트 함수입니다.
         virtual void OnUpdate(World& world, EntityId entity, float deltaTime)
         {
+            ALICE_LOG_INFO("Test in ScriptSystem::Update");
             (void)world;
             (void)entity;
             (void)deltaTime;

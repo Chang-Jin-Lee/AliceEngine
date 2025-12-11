@@ -69,6 +69,8 @@ namespace Alice
         /// SkinnedMeshRegistry 에도 등록되어 있는지 확인하고,
         /// 누락된 경우 .fbxasset / FBX 원본을 통해 간단히 재-임포트합니다.
         void EnsureSkinnedMeshesRegistered(World& world);
+        void SaveScene(World& );
+        void LoadScene(World& );
 
     private:
         bool               m_initialized = false;
