@@ -1,8 +1,8 @@
 # AliceRenderer scene
 entity: 2
-position: 5.6 0 0
-rotation: 0 10.4606 0
-scale: 1.40113 1.40113 1.40113
+position: 14.7 0 0
+rotation: 0 52.3759 0
+scale: 2.51489 2.51489 2.51489
 script: RotateAndScale
 material_color: 0.96139 0.144765 0.144765
 material_asset: 
@@ -13,9 +13,9 @@ skinned_mesh:
 skinned_instance: 
 
 entity: 3
-position: -5.8 0 0
-rotation: 0 0 0
-scale: 1 1 1
+position: 4.071 -0.276 10.673
+rotation: 0 0.914907 0
+scale: 1.24166 1.24166 1.24166
 script: 
 material_color: 0.7 0.7 0.7
 material_asset: 
@@ -26,9 +26,9 @@ skinned_mesh:
 skinned_instance: 
 
 entity: 4
-position: -2.3 2 0
-rotation: 0 9.24107 0
-scale: 1.07148 1.07148 1.07148
+position: -3.2 2 0
+rotation: 0 51.1563 0
+scale: 1.92319 1.92319 1.92319
 script: RotateAndScale
 material_color: 0.100177 0.810811 0
 material_asset: 

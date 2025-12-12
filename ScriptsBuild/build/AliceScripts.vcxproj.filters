@@ -10,21 +10,6 @@
     <ClCompile Include="D:\Github\AliceRenderer\Assets\Scripts\NewScript2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="D:\Github\AliceRenderer\Assets\Scripts\NewScript3.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="D:\Github\AliceRenderer\Assets\Scripts\NewScript4.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="D:\Github\AliceRenderer\Assets\Scripts\NewScript5.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="D:\Github\AliceRenderer\Assets\Scripts\NewScript6.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="D:\Github\AliceRenderer\Assets\Scripts\NewScript7.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="D:\Github\AliceRenderer\Assets\Scripts\RotateAndScale.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
