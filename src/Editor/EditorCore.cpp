@@ -747,7 +747,11 @@ namespace Alice
                             {
                                 // 3) Release 실행 파일 폴더로 필요한 리소스 디렉터리 복사
                                 namespace fs2 = std::filesystem;
+#ifdef _DEBUG
+                                fs2::path releaseBinDir = projectRoot / "build/bin/Debug";
+#else
                                 fs2::path releaseBinDir = projectRoot / "build/bin/Release";
+#endif
                                 fs2::path binParent     = releaseBinDir.parent_path(); // build/bin
 
                                 auto copyDirIfExists = [](const fs2::path& src, const fs2::path& dst)
@@ -1872,9 +1876,17 @@ namespace Alice
             {
                 if (ext == ".h" || ext == ".hpp" || ext == ".cpp" || ext == ".cxx")
                 {
-                    fs::path absPath = fs::absolute(path);
-                    std::wstring wpath = absPath.wstring();
-                    ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                    //fs::path absPath = fs::absolute(path);
+					//std::wstring wpath = absPath.wstring();
+                    //ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+					wchar_t exePathW[MAX_PATH] = {};
+					GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+                    std::filesystem::path exePath = exePathW;
+					std::filesystem::path exeDir = exePath.parent_path();
+					std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+					std::filesystem::path scriptsSolutionRoot = projectRoot / "ScriptsBuild" / "build" / "AliceUserScripts.sln";
+                    ALICE_LOG_INFO("[Editor] Opening script solution: \"%s\"\n", scriptsSolutionRoot.u8string().c_str());
+					ShellExecuteW(nullptr, L"open", scriptsSolutionRoot.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 }
                 else if (ext == ".scene")
                 {

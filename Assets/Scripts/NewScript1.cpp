@@ -14,5 +14,13 @@ namespace Alice
     void NewScript1::OnUpdate(World& world, EntityId entity, float deltaTime)
     {
         // 매 프레임 호출되는 로직을 여기에 작성하세요.
+		auto* tr = world.GetTransform(entity);
+		if (tr)
+		{
+            int speed = 10;
+            tr->SetPosition(tr->position.x + speed * deltaTime,
+                tr->position.y,
+                tr->position.z + speed * deltaTime);
+		}
     }
 }

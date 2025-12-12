@@ -5,7 +5,7 @@
 
 // ImGui
 #include "imgui.h"
-#include "imgui_internal.h"   // DockBuilder API ���
+#include "imgui_internal.h"   // DockBuilder API ���?
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
@@ -35,11 +35,11 @@ namespace Alice
 {
     namespace
     {
-        // ������ Ŭ���� �̸��� ���� ����� �����մϴ�.
+        // ������ Ŭ���� �̸��� ���� �����? �����մϴ�.
         constexpr wchar_t kWindowClassName[] = L"AliceRendererWindowClass";
 
-        // BuildSettings.txt ���� ���� ��(.scene ����)�� �о�� World �� �ε��մϴ�.
-        // - scenes ������ "index: path" �������� ����Ǿ� �ִٰ� �����մϴ�.
+        // BuildSettings.txt ���� ���� ��(.scene ����)�� �о��? World �� �ε��մϴ�.
+        // - scenes ������ "index: path" �������� ����Ǿ�? �ִٰ� �����մϴ�.
         bool LoadStartupSceneFromBuildSettings(World& world, const std::filesystem::path& exeDir)
         {
             namespace fs = std::filesystem;
@@ -81,7 +81,7 @@ namespace Alice
                 if (line.empty() || line[0] == '#')
                     continue;
 
-                // default: ���� ��� �־ ó��
+                // default: ���� ���? �־ ó��
                 if (line.rfind("default:", 0) == 0)
                 {
                     std::string path = line.substr(std::strlen("default:"));
@@ -102,7 +102,7 @@ namespace Alice
                     continue;
                 }
 
-                // "- path" ������ �� ���
+                // "- path" ������ �� ���?
                 if (!line.empty() && line[0] == '-')
                 {
                     std::string path = line.substr(1);
@@ -127,7 +127,7 @@ namespace Alice
             const std::string& scenePathStr = defaultScene;
             fs::path scenePath = scenePathStr;
 
-            // ��� ��δ� exeDir �������� �ؼ�
+            // ���? ��δ�? exeDir �������� �ؼ�
             if (!scenePath.is_absolute())
             {
                 // 1) exeDir �������� �õ�
@@ -147,7 +147,7 @@ namespace Alice
                     }
                     else
                     {
-                        // �׷��� ������ exeDir ���� ��� ��η� ��
+                        // �׷��� ������ exeDir ���� ���? ��η�? ��
                         scenePath = exeDir / scenePath;
                     }
                 }
@@ -195,7 +195,7 @@ namespace Alice
         m_inputSystem.Initialize(m_hWnd);
         ALICE_LOG_INFO("Engine::Initialize: InputSystem initialized.");
 
-        // 4) ���� ����̽� ����(D3D11 ����ü ���)
+        // 4) ���� ����̽�? ����(D3D11 ����ü ���?)
         m_renderDevice = std::make_unique<D3D11RenderDevice>();
         if (!m_renderDevice->Initialize(m_hWnd, m_width, m_height))
         {
@@ -204,7 +204,7 @@ namespace Alice
         }
         ALICE_LOG_INFO("Engine::Initialize: D3D11RenderDevice initialized.");
 
-        // 5) ImGui / Editor �ھ� �ʱ�ȭ (������ ��忡����)
+        // 5) ImGui / Editor �ھ� �ʱ�ȭ (������ ��忡����?)
         if (m_editorMode)
         {
             if (!m_editorCore.Initialize(m_hWnd, *m_renderDevice))
@@ -212,18 +212,18 @@ namespace Alice
                 ALICE_LOG_ERRORF("Engine::Initialize: EditorCore::Initialize failed.");
                 return false;
             }
-            // ResourceManager �� �����Ϳ� ���� (FBX ����Ʈ ��� ���)
+            // ResourceManager �� �����Ϳ� ���� (FBX ����Ʈ ��� ���?)
             m_editorCore.SetResourceManager(&m_resourceManager);
-            // SkinnedMeshRegistry �� �����Ϳ� ���� (FBX ����Ʈ �� GPU �޽� ���)
+            // SkinnedMeshRegistry �� �����Ϳ� ���� (FBX ����Ʈ �� GPU �޽� ���?)
             m_editorCore.SetSkinnedMeshRegistry(&m_skinnedMeshRegistry);
             ALICE_LOG_INFO("Engine::Initialize: EditorCore initialized.");
         }
 
         // 6) Forward ���� �ý��� �ʱ�ȭ
         m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*m_renderDevice);
-        // ���ҽ� �Ŵ����� ���� �ý��ۿ� �����մϴ� (�ؽ�ó ��ŷ/�ε� � ���).
+        // ���ҽ� �Ŵ����� ���� �ý��ۿ� �����մϴ� (�ؽ�ó ��ŷ/�ε� � ���?).
         m_forwardRenderSystem->SetResourceManager(&m_resourceManager);
-        // ��Ű�� �޽� ������Ʈ���� ���� �ý��ۿ� ���� (�����/���̷��� ��Ÿ������ ��ȸ��)
+        // ��Ű�� �޽� ������Ʈ���� ���� �ý��ۿ� ���� (�����?/���̷��� ��Ÿ������ ��ȸ��)
         m_forwardRenderSystem->SetSkinnedMeshRegistry(&m_skinnedMeshRegistry);
         if (!m_forwardRenderSystem->Initialize(m_width, m_height))
         {
@@ -232,7 +232,7 @@ namespace Alice
         }
         ALICE_LOG_INFO("Engine::Initialize: ForwardRenderSystem initialized.");
 
-        // 7) DebugDraw �ý��� �ʱ�ȭ (�ɼ� ���)
+        // 7) DebugDraw �ý��� �ʱ�ȭ (�ɼ� ���?)
         m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*m_renderDevice);
         if (!m_debugDrawSystem->Initialize())
         {
@@ -257,7 +257,7 @@ namespace Alice
         m_sceneManager = std::make_unique<SceneManager>(m_world, m_resourceManager);
         ALICE_LOG_INFO("Engine::Initialize: SceneManager created.");
 
-        // ������ ���: �ڵ� ��� SampleScene �� �⺻���� ���
+        // ������ ���?: �ڵ� ���? SampleScene �� �⺻���� ���?
         if (m_editorMode)
         {
             m_sceneManager->SwitchTo("SampleScene");
@@ -265,7 +265,7 @@ namespace Alice
         }
         else
         {
-            // ���� ���: BuildSettings.txt �� ���ǵ� 0�� �ε��� ��(.scene)�� �켱 �ε�
+            // ���� ���?: BuildSettings.txt �� ���ǵ� 0�� �ε��� ��(.scene)�� �켱 �ε�
             wchar_t exePathW[MAX_PATH] = {};
             GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
             std::filesystem::path exePath = exePathW;
@@ -273,7 +273,7 @@ namespace Alice
 
             if (!LoadStartupSceneFromBuildSettings(m_world, exeDir))
             {
-                // ���� �� ������ �������� SampleScene �� ���
+                // ���� �� ������ �������� SampleScene �� ���?
                 m_sceneManager->SwitchTo("SampleScene");
                 ALICE_LOG_WARN("Engine::Initialize: failed to load startup scene from BuildSettings, fallback to SampleScene.");
             }
@@ -284,7 +284,7 @@ namespace Alice
         }
 
         // ���� ���� SkinnedMeshComponent �鿡 �����ϴ� GPU �޽õ���
-        // SkinnedMeshRegistry �� ��� ��ϵǾ� �ִ��� Ȯ���մϴ�.
+        // SkinnedMeshRegistry �� ���? ��ϵǾ�? �ִ��� Ȯ���մϴ�.
         EnsureSkinnedMeshesRegisteredForWorld();
 
         const auto& transforms   = m_world.GetTransforms();
@@ -388,7 +388,7 @@ namespace Alice
             // 2) ���콺 �̵����� ī�޶� ȸ�� (��Ŭ�� ���¿�����)
             POINT mouseDelta = m_inputSystem.GetMouseDelta();
             m_cameraYawRadians   += static_cast<float>(mouseDelta.x) * m_cameraMouseSensitivity;
-            // ���콺�� �Ʒ��� ������ ȭ�鵵 �Ʒ��� ������ Y�� ȸ���� �ݴ�� �����մϴ�.
+            // ���콺�� �Ʒ��� ������ ȭ�鵵 �Ʒ��� ������ Y�� ȸ���� �ݴ��? �����մϴ�.
             m_cameraPitchRadians += static_cast<float>(mouseDelta.y) * m_cameraMouseSensitivity;
         }
 
@@ -410,8 +410,8 @@ namespace Alice
         m_camera.SetLookAt(m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
 
         // 4) ���� �� �� ��ũ��Ʈ ������Ʈ
-        //    - ������ ���: Play ��ư�� ������ ���� ����
-        //    - ���� ���� ���: �׻� ����
+        //    - ������ ���?: Play ��ư�� ������ ���� ����
+        //    - ���� ���� ���?: �׻� ����
         const bool play = m_editorMode ? m_isPlaying : true;
         if (play)
         {
@@ -420,7 +420,7 @@ namespace Alice
                 m_sceneManager->Update(m_timer.DeltaTime());
             }
 
-            // ��ƼƼ�� �پ� �ִ� ��� ScriptComponent �� �����մϴ�.
+            // ��ƼƼ�� �پ� �ִ� ���? ScriptComponent �� �����մϴ�.
             m_scriptSystem.Update(m_world, m_timer.DeltaTime());
         }
     }
@@ -435,7 +435,7 @@ namespace Alice
 
         m_renderDevice->BeginFrame(clearColor);
 
-        // ������ ��忡���� ImGui/��ŷ UI + ����� ���� �׸��ϴ�.
+        // ������ ��忡����? ImGui/��ŷ UI + �����? ���� �׸��ϴ�.
         if (m_editorMode)
         {
             // ImGui ������ ���� (EditorCore �� ����)
@@ -481,7 +481,7 @@ namespace Alice
             }
         }
 
-        // ��Ű�� �޽� ��ο� ����Ʈ�� ���� �����մϴ�.
+        // ��Ű�� �޽� ��ο�? ����Ʈ�� ���� �����մϴ�.
         m_skinnedMeshSystem.BuildDrawList(m_world, m_skinnedDrawCommands);
 
         // ������ Forward ������ (ť�� + ��Ű�� �޽�)
@@ -513,7 +513,7 @@ namespace Alice
 			auto* sceneSRV = m_forwardRenderSystem->GetSceneSRV();
 			sceneSRV->GetResource(src.GetAddressOf());
 
-			// dst: ����� �ؽ�ó
+			// dst: �����? �ؽ�ó
 			backBufferRTV->GetResource(dst.GetAddressOf());
 
 			// ���� ����
@@ -526,7 +526,7 @@ namespace Alice
             m_debugDrawSystem->Render(m_camera);
         }
 
-        // ImGui ������ (������ ��忡����)
+        // ImGui ������ (������ ��忡����?)
         if (m_editorMode)
         {
             m_editorCore.RenderDrawData();
@@ -557,7 +557,7 @@ namespace Alice
                 continue;
 
             if (m_skinnedMeshRegistry.Find(comp.meshAssetPath))
-                continue; // �̹� ��ϵ�
+                continue; // �̹� ��ϵ�?
 
             std::filesystem::path fbxAssetPath;
             if (!comp.instanceAssetPath.empty())
@@ -601,7 +601,7 @@ namespace Alice
 
     bool Engine::CreateMainWindow(int nCmdShow)
     {
-        // 1) ������ Ŭ���� ���
+        // 1) ������ Ŭ���� ���?
         WNDCLASSEXW wc = {};
         wc.cbSize        = sizeof(WNDCLASSEXW);
         wc.style         = CS_HREDRAW | CS_VREDRAW;
@@ -609,7 +609,7 @@ namespace Alice
         wc.cbClsExtra    = 0;
         wc.cbWndExtra    = 0;
         wc.hInstance     = m_hInstance;
-        // ���� ���� �������� �ε��մϴ�. (�����ϸ� �⺻ �������� ���)
+        // ���� ���� �������� �ε��մϴ�. (�����ϸ� �⺻ �������� ���?)
         HICON hIconBig = static_cast<HICON>(LoadImageW(
             nullptr,
             L"../Resource/Icon/Alice.ico",
@@ -757,7 +757,7 @@ namespace Alice
             SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(engine));
         }
 
-        // 2) ����� Engine �����͸� �����ͼ� ��� �Լ��� ����
+        // 2) �����? Engine �����͸� �����ͼ� ���? �Լ��� ����
         auto engine = reinterpret_cast<Engine*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
         if (engine) return engine->HandleMessage(hWnd, message, wParam, lParam);
 

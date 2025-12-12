@@ -1,5 +1,5 @@
 # AliceRenderer scene
-entity: 14
+entity: 13
 position: 3.5 0 0
 rotation: 0 0 0
 scale: 1 1 1
@@ -12,11 +12,11 @@ material_albedoTex:
 skinned_mesh: 
 skinned_instance: 
 
-entity: 15
+entity: 14
 position: -4 0 0
 rotation: 0 0 0
 scale: 0.06 0.06 0.06
-script: 
+script: RotateAndScale
 material_color: 1 1 1
 material_asset: ../Assets/Materials\Rapi_0.mat
 material_roughness: 0.5
@@ -25,7 +25,7 @@ material_albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded0.abtex
 skinned_mesh: Rapi
 skinned_instance: ../Assets\Fbx\Rapi.fbxasset
 
-entity: 16
+entity: 15
 position: 8.2 0 0
 rotation: 0 0 0
 scale: 0.06 0.06 0.06
