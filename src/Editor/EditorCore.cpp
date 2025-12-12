@@ -34,6 +34,165 @@ namespace Alice
 {
     namespace
     {
+        /// 에디터 Reload Scripts 버튼에서 호출하는 헬퍼입니다.
+        /// - ScriptsBuild CMake 프로젝트를 configure/build 해서 AliceScripts.dll 을 만들고
+        ///   현재 실행 중인 exe 옆으로 복사한 뒤 ScriptHotReload_Reload 를 호출합니다.
+        void ReloadScripts_FromButton()
+        {
+            using namespace std::filesystem;
+
+            // 1) 실행 파일 위치 기준으로 프로젝트 루트 / ScriptsBuild 경로 계산
+            wchar_t exePathW[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+            path exePath = exePathW;
+            path exeDir  = exePath.parent_path();
+            path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+            path scriptsRoot = projectRoot / "ScriptsBuild";
+            path scriptsBuildDir = scriptsRoot / "build";
+
+            if (!exists(scriptsRoot / "CMakeLists.txt"))
+            {
+                ALICE_LOG_ERRORF("Reload Scripts: ScriptsBuild/CMakeLists.txt not found. path=\"%s\"",
+                                 (scriptsRoot / "CMakeLists.txt").string().c_str());
+                return;
+            }
+
+#ifdef _DEBUG
+            constexpr const wchar_t* kConfig = L"Debug";
+#else
+            constexpr const wchar_t* kConfig = L"Release";
+#endif
+
+            // 2) 매번 ScriptsBuild 를 cmake -S . -B build 로 갱신해서
+            //    새로 추가된 C++ 스크립트 파일들도 CMake 타겟에 포함되도록 합니다.
+            {
+                std::wstring cmdConfig = L"cmake -S . -B build";
+
+                STARTUPINFOW        si{};
+                PROCESS_INFORMATION pi{};
+                si.cb = sizeof(si);
+                si.dwFlags = STARTF_USESHOWWINDOW;
+                si.wShowWindow = SW_HIDE;
+
+                BOOL okCfg = CreateProcessW(
+                    nullptr,
+                    cmdConfig.data(),
+                    nullptr,
+                    nullptr,
+                    FALSE,
+                    0,
+                    nullptr,
+                    scriptsRoot.wstring().c_str(),
+                    &si,
+                    &pi);
+
+                if (!okCfg)
+                {
+                    ALICE_LOG_ERRORF("Reload Scripts: failed to start CMake configure process for ScriptsBuild.");
+                    return;
+                }
+
+                WaitForSingleObject(pi.hProcess, INFINITE);
+                DWORD exitCodeCfg = 0;
+                GetExitCodeProcess(pi.hProcess, &exitCodeCfg);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+
+                ALICE_LOG_INFO("Reload Scripts: CMake configure finished with exitCode=%lu",
+                               static_cast<unsigned long>(exitCodeCfg));
+
+                if (exitCodeCfg != 0)
+                {
+                    ALICE_LOG_ERRORF("Reload Scripts: CMake configure failed for ScriptsBuild (exitCode=%lu).",
+                                     static_cast<unsigned long>(exitCodeCfg));
+                    return;
+                }
+            }
+
+            // 3) ScriptsBuild 프로젝트에서 AliceScripts 타겟만 빌드
+            std::wstring cmdBuild = L"cmake --build build --config ";
+            cmdBuild += kConfig;
+            cmdBuild += L" --target AliceScripts";
+
+            {
+                STARTUPINFOW        si{};
+                PROCESS_INFORMATION pi{};
+                si.cb = sizeof(si);
+                si.dwFlags = STARTF_USESHOWWINDOW;
+                si.wShowWindow = SW_HIDE;
+
+                BOOL okBuild = CreateProcessW(
+                    nullptr,
+                    cmdBuild.data(),
+                    nullptr,
+                    nullptr,
+                    FALSE,
+                    0,
+                    nullptr,
+                    scriptsRoot.wstring().c_str(),
+                    &si,
+                    &pi);
+
+                if (!okBuild)
+                {
+                    ALICE_LOG_ERRORF("Reload Scripts: failed to start CMake build process for ScriptsBuild.");
+                    return;
+                }
+
+                WaitForSingleObject(pi.hProcess, INFINITE);
+                DWORD exitCode = 0;
+                GetExitCodeProcess(pi.hProcess, &exitCode);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+
+                ALICE_LOG_INFO("Reload Scripts: CMake build finished with exitCode=%lu",
+                               static_cast<unsigned long>(exitCode));
+
+                if (exitCode != 0)
+                {
+                    ALICE_LOG_ERRORF("Reload Scripts: CMake build failed for ScriptsBuild (exitCode=%lu).",
+                                     static_cast<unsigned long>(exitCode));
+                    return;
+                }
+            }
+
+            // 4) ScriptsBuild/build/<Config>/AliceScripts.dll 을 실행 파일 옆으로 복사
+            path builtDll = scriptsBuildDir / path(kConfig) / "AliceScripts.dll";
+            if (!exists(builtDll))
+            {
+                ALICE_LOG_ERRORF("Reload Scripts: built DLL not found: \"%s\"",
+                                 builtDll.string().c_str());
+                return;
+            }
+
+            // 새 DLL 이 정상 빌드된 것이 확인되었으므로, 이제서야 기존 DLL 을 언로드합니다.
+            ScriptHotReload_Unload();
+
+            path targetDll = exeDir / "AliceScripts.dll";
+            std::error_code ecCopy;
+            copy_file(builtDll, targetDll,
+                      copy_options::overwrite_existing,
+                      ecCopy);
+            if (ecCopy)
+            {
+                ALICE_LOG_ERRORF("Reload Scripts: failed to copy DLL from \"%s\" to \"%s\" (%s)",
+                                 builtDll.string().c_str(),
+                                 targetDll.string().c_str(),
+                                 ecCopy.message().c_str());
+                return;
+            }
+
+            ALICE_LOG_INFO("Reload Scripts: copied \"%s\" -> \"%s\"",
+                           builtDll.string().c_str(),
+                           targetDll.string().c_str());
+
+            // 6) 새 DLL 로드
+            ScriptHotReload_Reload();
+        }
+    }
+
+    namespace
+    {
         // 현재 씬이 수정되었는지 여부 (저장 필요 여부)
         bool                     g_SceneDirty           = false;
         bool                     g_HasCurrentScenePath  = false;
@@ -251,73 +410,9 @@ namespace Alice
             // 스크립트 핫 리로드 버튼 (C++ 스크립트 DLL 재빌드 + 재로드)
             if (ImGui::Button("Reload Scripts"))
             {
-
-                // 1) CMake 를 통해 AliceScripts (Debug) 타겟을 빌드합니다.
-                wchar_t exePathW[MAX_PATH] = {};
-                GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
-                std::filesystem::path exePath = exePathW;
-                std::filesystem::path exeDir  = exePath.parent_path();
-                std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
-
-				//std::wstring cmd = L"cmake --build build --config Debug --target AliceScripts";
-					// 현재 엔진 바이너리의 빌드 타입에 따라 Debug / Release 선택
-#ifdef _DEBUG
-				constexpr const wchar_t* kConfig = L"Debug";
-#else
-				constexpr const wchar_t* kConfig = L"Release";
-#endif
-
-
-                // 스크립트를 언리로드
-                ScriptHotReload_Unload();
-
-				std::wstring cmd = L"cmake --build build --config ";
-				cmd += kConfig;
-				cmd += L" --target AliceScripts";
-
-                STARTUPINFOW        si{};
-                PROCESS_INFORMATION pi{};
-                si.cb = sizeof(si);
-                si.dwFlags = STARTF_USESHOWWINDOW;
-                si.wShowWindow = SW_HIDE;
-
-                BOOL ok = CreateProcessW(
-                    nullptr,
-                    cmd.data(),
-                    nullptr,
-                    nullptr,
-                    FALSE,
-                    0,
-                    nullptr,
-                    projectRoot.wstring().c_str(),
-                    &si,
-                    &pi);
-
-                if (ok)
-                {
-                    WaitForSingleObject(pi.hProcess, INFINITE);
-                    DWORD exitCode = 0;
-                    GetExitCodeProcess(pi.hProcess, &exitCode);
-                    CloseHandle(pi.hProcess);
-                    CloseHandle(pi.hThread);
-
-                    ALICE_LOG_INFO("Reload Scripts: CMake build finished with exitCode=%lu",
-                                   static_cast<unsigned long>(exitCode));
-
-                    if (exitCode == 0)
-                    {
-                        ALICE_LOG_ERRORF("Reload Scripts: Sucess to start CMake build process.");
-                        ScriptHotReload_Reload();
-                    }
-                    else
-                    {
-                        ALICE_LOG_ERRORF("Reload Scripts: failed to start CMake build process. in exitCode == 0");
-                    }
-                }
-                else
-                {
-                    ALICE_LOG_ERRORF("Reload Scripts: failed to start CMake build process.");
-                }
+                // ImGui Begin/End 짝을 깨지 않기 위해,
+                // 실제 빌드/복사/리로드 로직은 별도 헬퍼 함수에서 처리합니다.
+                ReloadScripts_FromButton();
             }
 
             ImGui::Separator();
