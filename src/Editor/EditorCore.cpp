@@ -251,6 +251,7 @@ namespace Alice
             // 스크립트 핫 리로드 버튼 (C++ 스크립트 DLL 재빌드 + 재로드)
             if (ImGui::Button("Reload Scripts"))
             {
+
                 // 1) CMake 를 통해 AliceScripts (Debug) 타겟을 빌드합니다.
                 wchar_t exePathW[MAX_PATH] = {};
                 GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
@@ -265,6 +266,10 @@ namespace Alice
 #else
 				constexpr const wchar_t* kConfig = L"Release";
 #endif
+
+
+                // 스크립트를 언리로드
+                ScriptHotReload_Unload();
 
 				std::wstring cmd = L"cmake --build build --config ";
 				cmd += kConfig;
@@ -301,7 +306,12 @@ namespace Alice
 
                     if (exitCode == 0)
                     {
+                        ALICE_LOG_ERRORF("Reload Scripts: Sucess to start CMake build process.");
                         ScriptHotReload_Reload();
+                    }
+                    else
+                    {
+                        ALICE_LOG_ERRORF("Reload Scripts: failed to start CMake build process. in exitCode == 0");
                     }
                 }
                 else

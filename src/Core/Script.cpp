@@ -87,7 +87,6 @@ namespace Alice
 
         for (const auto& [name, _] : registry)
         {
-            (void)_;
             result.push_back(name);
         }
 
