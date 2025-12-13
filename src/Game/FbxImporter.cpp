@@ -57,23 +57,56 @@ namespace Alice
             char buf[256] = {};
             std::snprintf(buf, sizeof(buf),
                           "[FbxImporter] Import start: path=\"%s\"\n",
-                          fbxPath.u8string().c_str());
+                          fbxPath.string().c_str());
             OutputDebugStringA(buf);
         }
 
-        if (fbxPath.empty() || !std::filesystem::exists(fbxPath))
+        // .alice 로 패킹된 경우에는 먼저 복호화해서 임시 .fbx 파일로 풀어 둔 뒤 기존 로더를 그대로 사용합니다.
+        namespace fs = std::filesystem;
+        fs::path importPath = fbxPath;
+        fs::path tempDecryptedPath;
+
+        if (_stricmp(fbxPath.extension().string().c_str(), ".alice") == 0)
+        {
+            std::vector<std::uint8_t> data;
+            if (!m_resources.LoadBinary(fbxPath, data, true) || data.empty())
+            {
+                OutputDebugStringA("[FbxImporter] Import FAILED: failed to decrypt .alice\n");
+                return result;
+            }
+
+            std::error_code ec;
+            fs::path tempDir = fs::temp_directory_path(ec) / "AliceDecrypted";
+            fs::create_directories(tempDir, ec);
+
+            // 파일명 충돌을 피하기 위해 stem 기반으로 간단히 이름을 만듭니다.
+            fs::path name = fbxPath.stem();
+            tempDecryptedPath = tempDir / (name.string() + "_decrypted.fbx");
+
+            std::ofstream ofs(tempDecryptedPath, std::ios::binary);
+            if (!ofs.is_open())
+            {
+                OutputDebugStringA("[FbxImporter] Import FAILED: failed to open temp decrypted file\n");
+                return result;
+            }
+            ofs.write(reinterpret_cast<const char*>(data.data()),
+                      static_cast<std::streamsize>(data.size()));
+            ofs.close();
+
+            importPath = tempDecryptedPath;
+        }
+
+        if (importPath.empty() || !std::filesystem::exists(importPath))
         {
             char buf[256] = {};
             std::snprintf(buf, sizeof(buf),
                           "[FbxImporter] Import FAILED: file not found \"%s\"\n",
-                          fbxPath.u8string().c_str());
+                          importPath.string().c_str());
             OutputDebugStringA(buf);
             return result;
         }
 
-        namespace fs = std::filesystem;
-
-        const fs::path absFbxPath = fs::absolute(fbxPath);
+        const fs::path absFbxPath = fs::absolute(importPath);
         const fs::path fbxDir     = absFbxPath.parent_path();
         const std::string baseName = absFbxPath.stem().string();
 
@@ -84,7 +117,7 @@ namespace Alice
             char buf[256] = {};
             std::snprintf(buf, sizeof(buf),
                           "[FbxImporter] FbxModel::Load FAILED for \"%s\"\n",
-                          absFbxPath.u8string().c_str());
+                          absFbxPath.string().c_str());
             OutputDebugStringA(buf);
             return result;
         }
@@ -95,7 +128,7 @@ namespace Alice
             char buf[256] = {};
             std::snprintf(buf, sizeof(buf),
                           "[FbxImporter] model.GetScenePtr() returned null for \"%s\"\n",
-                          absFbxPath.u8string().c_str());
+                          absFbxPath.string().c_str());
             OutputDebugStringA(buf);
             return result;
         }
@@ -254,23 +287,24 @@ namespace Alice
         }
 
         // 3) 추출/복사한 텍스처들에 대해 암호화된 .alice 를 생성합니다.
-        //    - 예: ../Cooked/Textures/<fbxName>/<원본이름>.alice
+        //    - 예: Cooked/Textures/<fbxName>/<원본이름>.alice
         std::vector<fs::path> cookedTextures;
         for (const auto& texPath : extractedTextures)
         {
-            fs::path cooked = "../Cooked/Textures";
+            fs::path cooked = "Cooked/Textures";
             cooked /= baseName;
             cooked /= texPath.stem().string() + ".alice";
 
-            m_resources.CookAndSave(texPath, cooked);
-            cookedTextures.push_back(cooked);
+            const fs::path cookedAbs = m_resources.Resolve(cooked);
+            m_resources.CookAndSave(texPath, cookedAbs);
+            cookedTextures.push_back(cooked); // 논리 경로로 저장(게임/에디터 모두 Resolve로 해석)
         }
 
         // 4) 간단한 .mat 파일 생성
         //    - 현재는 추출된 텍스처 개수만큼 기본 머티리얼을 만들어 둡니다.
         for (std::size_t i = 0; i < cookedTextures.size(); ++i)
         {
-            fs::path matDir  = "../Assets/Materials";
+            fs::path matDir  = m_resources.Resolve("Assets/Materials");
             std::error_code ec;
             fs::create_directories(matDir, ec);
 
@@ -298,7 +332,7 @@ namespace Alice
         // 6) 에디터/World 에서 사용할 인스턴스 에셋(.fbxasset)을 생성합니다.
         //    - 언리얼의 SkeletalMesh 에셋 비슷한 개념으로, FBX 원본과 머티리얼을 묶어 둡니다.
         {
-            fs::path fbxAssetDir = "../Assets/Fbx";
+            fs::path fbxAssetDir = m_resources.Resolve("Assets/Fbx");
             std::error_code ec;
             fs::create_directories(fbxAssetDir, ec);
 
@@ -307,7 +341,20 @@ namespace Alice
             std::ofstream ofs(fbxAssetPath);
             if (ofs.is_open())
             {
-                ofs << "source_fbx=" << absFbxPath.string() << "\n";
+                // 가능한 경우, 프로젝트 루트 기준의 논리 경로로 저장합니다(배포 빌드에서도 동작하게).
+                // absFbxPath 가 Assets 아래에 있으면 "Assets/..." 형태로 저장됩니다.
+                std::string sourceLogical = absFbxPath.string();
+                {
+                    const fs::path assetsAbs = m_resources.Resolve("Assets");
+                    std::error_code ecRel;
+                    const fs::path rel = fs::relative(absFbxPath, assetsAbs, ecRel);
+                    if (!ecRel && !rel.empty() && rel.native().find(L"..") == std::wstring::npos)
+                    {
+                        sourceLogical = (fs::path("Assets") / rel).generic_string();
+                    }
+                }
+
+                ofs << "source_fbx=" << sourceLogical << "\n";
                 ofs << "mesh=" << result.meshAssetPath << "\n";
                 for (const auto& matPath : result.materialAssetPaths)
                 {

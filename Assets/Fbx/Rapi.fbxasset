@@ -1,7 +1,7 @@
 source_fbx=D:\Github\AliceRenderer\Resource\fbx\Rapi\Rapi.fbx
 mesh=Rapi
-mat=../Assets/Materials\Rapi_0.mat
-mat=../Assets/Materials\Rapi_1.mat
-mat=../Assets/Materials\Rapi_2.mat
-mat=../Assets/Materials\Rapi_3.mat
-mat=../Assets/Materials\Rapi_4.mat
+mat=D:\Github\AliceRenderer\Assets\Materials\Rapi_0.mat
+mat=D:\Github\AliceRenderer\Assets\Materials\Rapi_1.mat
+mat=D:\Github\AliceRenderer\Assets\Materials\Rapi_2.mat
+mat=D:\Github\AliceRenderer\Assets\Materials\Rapi_3.mat
+mat=D:\Github\AliceRenderer\Assets\Materials\Rapi_4.mat

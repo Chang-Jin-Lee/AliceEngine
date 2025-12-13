@@ -112,10 +112,8 @@ namespace Alice
     void ScriptSystem::Update(World& world, float deltaTime)
     {
         const auto& scripts = world.GetScripts();
-		ALICE_LOG_INFO("Test out ScriptSystem::Update");
         for (const auto& [entityId, scriptComp] : scripts)
         {
-            ALICE_LOG_INFO("Test in ScriptSystem::Update");
             if (!scriptComp.instance)
                 continue;
 
