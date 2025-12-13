@@ -1,4 +1,4 @@
-#include "Engine/Engine.h"
+﻿#include "Engine/Engine.h"
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
@@ -602,8 +602,14 @@ namespace Alice
 			FbxImportOptions opt{};
 			FbxImporter importer(m_resourceManager, &m_skinnedMeshRegistry);
 
-			// source_fbx 는 "Assets/..." 같은 논리 경로일 수 있으므로 Resolve 로 변환합니다.
-			std::filesystem::path srcFbxPath = m_resourceManager.Resolve(instance.sourceFbx);
+			// 배포(gameMode)에서는 source_fbx(논리 "Resource/...")를 Resolve하면
+			// Cooked/Chunks/.../c0000.alice(청크 물리경로)로 바뀌어 FbxModel::Load(파일로드)가 실패합니다.
+			// 따라서:
+			// - editorMode: 파일 기반 로드를 위해 Resolve 사용
+			// - gameMode  : 논리 경로 그대로 넘기고, ResourceManager가 Cooked/Chunks에서 로드/복호화하도록 함
+			std::filesystem::path srcFbxPath =
+				m_editorMode ? m_resourceManager.Resolve(instance.sourceFbx)
+				             : std::filesystem::path(instance.sourceFbx);
 			FbxImportResult result = importer.Import(device, srcFbxPath, opt);
 
 			ALICE_LOG_INFO("Engine::EnsureSkinnedMeshesRegisteredForWorld: re-import FBX \"%s\" -> meshKey=\"%s\" result.mesh=\"%s\"",

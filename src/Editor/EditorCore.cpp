@@ -913,11 +913,13 @@ namespace Alice
                             {
                                 // 3) Release 실행 파일 폴더(= exe 옆)로 필요한 디렉터리 배치
                                 namespace fs2 = std::filesystem;
-#ifdef _DEBUG
-                                fs2::path releaseBinDir = projectRoot / "build/bin/Debug";
-#else
+//#ifdef _DEBUG
+//                                fs2::path releaseBinDir = projectRoot / "build/bin/Debug";
+//#else
+//                                fs2::path releaseBinDir = projectRoot / "build/bin/Release";
+//#endif
                                 fs2::path releaseBinDir = projectRoot / "build/bin/Release";
-#endif
+
                                 // 이제는 exe 와 같은 폴더에 Assets/Cooked 가 존재하도록 합니다.
                                 // (기존처럼 build/bin 에 복사하고 ../ 로 접근하는 방식은 제거)
 
