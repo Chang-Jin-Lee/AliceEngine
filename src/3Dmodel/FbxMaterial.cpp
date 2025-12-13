@@ -15,11 +15,13 @@ using Microsoft::WRL::ComPtr;
 struct FbxMaterialLoader::Impl
 {
 	std::vector<ID3D11ShaderResourceView*> baseColorSRVs;
+	std::vector<ID3D11ShaderResourceView*> normalSRVs;
 	std::vector<ID3D11ShaderResourceView*> metallicSRVs;
 	std::vector<ID3D11ShaderResourceView*> roughnessSRVs;
 	std::unordered_map<std::wstring, ID3D11ShaderResourceView*> cache;
 	ID3D11ShaderResourceView* white = nullptr; // 기본 색상 / roughness 기본값(1)
 	ID3D11ShaderResourceView* black = nullptr; // metallic 기본값(0)
+	ID3D11ShaderResourceView* flatNormal = nullptr; // normal 기본값(0.5,0.5,1)
 };
 
 FbxMaterialLoader::FbxMaterialLoader() : m_(new Impl) {}
@@ -28,9 +30,11 @@ FbxMaterialLoader::~FbxMaterialLoader() { Clear(); delete m_; }
 void FbxMaterialLoader::Clear()
 {
 	for (auto* p : m_->baseColorSRVs) SAFE_RELEASE(p);
+	for (auto* p : m_->normalSRVs) SAFE_RELEASE(p);
 	for (auto* p : m_->metallicSRVs) SAFE_RELEASE(p);
 	for (auto* p : m_->roughnessSRVs) SAFE_RELEASE(p);
 	m_->baseColorSRVs.clear();
+	m_->normalSRVs.clear();
 	m_->metallicSRVs.clear();
 	m_->roughnessSRVs.clear();
 
@@ -39,14 +43,21 @@ void FbxMaterialLoader::Clear()
 
 	SAFE_RELEASE(m_->white);
 	SAFE_RELEASE(m_->black);
+	SAFE_RELEASE(m_->flatNormal);
 	m_->white = nullptr;
 	m_->black = nullptr;
+	m_->flatNormal = nullptr;
 }
 
 const std::vector<ID3D11ShaderResourceView*>& FbxMaterialLoader::GetMaterialSRVs() const
 {
 	// 기존 코드 호환: diffuse/baseColor 맵
 	return m_->baseColorSRVs;
+}
+
+const std::vector<ID3D11ShaderResourceView*>& FbxMaterialLoader::GetNormalSRVs() const
+{
+	return m_->normalSRVs;
 }
 
 const std::vector<ID3D11ShaderResourceView*>& FbxMaterialLoader::GetMetallicSRVs() const
@@ -324,9 +335,13 @@ bool FbxMaterialLoader::Load(ID3D11Device* device, const aiScene* scene, const s
 	// 1x1 화이트/블랙 텍스처 생성 (폴백 및 기본값)
 	CreateSolidColorSRV(device, 0xFFFFFFFF, &m_->white);   // RGBA(1,1,1,1)
 	CreateSolidColorSRV(device, 0x000000FF, &m_->black);   // RGBA(0,0,0,1)
+	// 1x1 flat normal (R,G,B,A)=(0.5,0.5,1,1) => (128,128,255,255)
+	// CreateSolidColorSRV는 little-endian에서 0xAABBGGRR 형태로 들어갑니다.
+	CreateSolidColorSRV(device, 0xFFFF8080, &m_->flatNormal);
 
 	const size_t matCount = scene->mNumMaterials;
 	m_->baseColorSRVs.assign(matCount, nullptr);
+	m_->normalSRVs.assign(matCount, nullptr);
 	m_->metallicSRVs.assign(matCount, nullptr);
 	m_->roughnessSRVs.assign(matCount, nullptr);
 
@@ -341,6 +356,14 @@ bool FbxMaterialLoader::Load(ID3D11Device* device, const aiScene* scene, const s
 			baseDir,
 			m_->cache,
 			m_->white);
+
+		// Normal map
+		m_->normalSRVs[m] = LoadTextureFromMaterial(
+			device, scene, mat,
+			aiTextureType_NORMALS,
+			baseDir,
+			m_->cache,
+			m_->flatNormal);
 
 		// Metallic / Roughness (Assimp PBR 텍스처 타입 사용)
 		m_->metallicSRVs[m] = LoadTextureFromMaterial(

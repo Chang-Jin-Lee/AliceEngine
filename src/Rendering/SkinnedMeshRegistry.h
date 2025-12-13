@@ -28,6 +28,7 @@ namespace Alice
         // === FBX 서브셋/머티리얼 ===
         std::vector<FbxSubset> subsets; // 인덱스 범위 + 머티리얼 인덱스
         std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> materialSRVs; // FBX 기본 디퓨즈 텍스처
+        std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> normalSRVs;   // FBX 노말맵 텍스처(선택)
         std::vector<std::string> materialOverridePaths; // 에디터에서 교체한 텍스처 경로 (선택 사항)
 
         // === FBX 스켈레톤 ===
