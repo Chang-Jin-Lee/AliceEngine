@@ -27,6 +27,14 @@ public:
 	~FbxModel();
 
 	bool Load(ID3D11Device* device, const std::wstring& pathW);
+	// Cooked/Chunks 에서 복호화된 FBX 바이트를 임시파일 없이 바로 로드합니다.
+	// - virtualNameUtf8: 확장자 힌트(예: "Rapi.fbx") 용
+	// - baseDirW: 외부 텍스처 상대 경로 해석용(없으면 L"")
+	bool LoadFromMemory(ID3D11Device* device,
+	                    const void* data,
+	                    size_t size,
+	                    const std::string& virtualNameUtf8,
+	                    const std::wstring& baseDirW);
 	void Release();
 
 	// Mesh
@@ -38,6 +46,7 @@ public:
 	UINT GetVertexOffset() const { return 0; }
 	const std::vector<FbxSubset>& GetSubsets() const;
 	const std::vector<ID3D11ShaderResourceView*>& GetMaterialSRVs() const;      // BaseColor / Diffuse
+	const std::vector<ID3D11ShaderResourceView*>& GetNormalSRVs() const;        // Normal map
 	const std::vector<ID3D11ShaderResourceView*>& GetMetallicSRVs() const;      // PBR Metallic
 	const std::vector<ID3D11ShaderResourceView*>& GetRoughnessSRVs() const;     // PBR Roughness
 

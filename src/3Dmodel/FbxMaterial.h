@@ -20,6 +20,8 @@ public:
 
 	// Legacy diffuse/baseColor map list (index == aiMaterial index)
 	const std::vector<ID3D11ShaderResourceView*>& GetMaterialSRVs() const;
+	// Normal map list (index == aiMaterial index)
+	const std::vector<ID3D11ShaderResourceView*>& GetNormalSRVs() const;
 	// PBR 확장을 위한 metallic / roughness 텍스처 슬롯 (index == aiMaterial index)
 	const std::vector<ID3D11ShaderResourceView*>& GetMetallicSRVs() const;
 	const std::vector<ID3D11ShaderResourceView*>& GetRoughnessSRVs() const;

@@ -30,7 +30,7 @@ cbuffer CBPerObject : register(b0)
     float    gRoughness;
     float    gMetalness;
     int      gUseTexture;
-    float3   gPad0;
+    int      gEnableNormalMap;
 };
 
 struct VSInput
@@ -46,6 +46,8 @@ struct VSOutput
     float3 WorldPos : TEXCOORD0;
     float3 Normal   : TEXCOORD1;
     float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
 };
 
 VSOutput main(VSInput input)
@@ -57,7 +59,15 @@ VSOutput main(VSInput input)
     output.Position = mul(viewPos, gProj);
 
     output.WorldPos = worldPos.xyz;
-    output.Normal   = mul(float4(input.Normal, 0.0f), gWorld).xyz;
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
+    output.Normal = N;
+    // 정적 지오메트리(큐브 등)는 탄젠트/바이탄젠트가 없으므로
+    // 노말에서 임의의 직교 기저를 만들어 노말맵(TBN) 계산이 가능하게 합니다.
+    float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
+    float3 T = normalize(cross(up, N));
+    float3 B = normalize(cross(N, T));
+    output.TangentW = T;
+    output.BitanW = B;
     output.TexCoord = input.TexCoord;
 
     return output;
@@ -80,7 +90,7 @@ cbuffer CBPerObject : register(b0)
     float    gRoughness;
     float    gMetalness;
     int      gUseTexture;
-    float3   gPad0;
+    int      gEnableNormalMap;
 };
 
 cbuffer CBBones : register(b2)
@@ -92,6 +102,8 @@ struct VSInput
 {
     float3 Position     : POSITION;
     float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
     uint4  BoneIndices  : BLENDINDICES;
     float4 BoneWeights  : BLENDWEIGHT;
     float2 TexCoord     : TEXCOORD0;
@@ -103,6 +115,8 @@ struct VSOutput
     float3 WorldPos : TEXCOORD0;
     float3 Normal   : TEXCOORD1;
     float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
 };
 
 VSOutput main(VSInput input)
@@ -118,6 +132,8 @@ VSOutput main(VSInput input)
 
     output.WorldPos = worldPos.xyz;
     output.Normal   = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
+    output.TangentW = normalize(mul(float4(input.Tangent, 0.0f), gWorld).xyz);
+    output.BitanW   = normalize(mul(float4(input.Binormal, 0.0f), gWorld).xyz);
     output.TexCoord = input.TexCoord;
 
     return output;
@@ -145,7 +161,7 @@ cbuffer CBPerObject : register(b0)
     float    gRoughness;
     float    gMetalness;
     int      gUseTexture;
-    float3   gPad0;
+    int      gEnableNormalMap;
 };
 
 cbuffer CBLighting : register(b1)
@@ -184,16 +200,26 @@ struct PSInput
     float3 WorldPos : TEXCOORD0;
     float3 Normal   : TEXCOORD1;
     float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
 };
 
 float4 main(PSInput input) : SV_TARGET
 {
-    // 기본적으로 월드 공간 노멀(기하학 노멀)을 사용해서 방향성 조명이 잘 보이도록 합니다.
-    // 노말맵은 필요하면 이후에 섞어서 디테일을 추가할 수 있습니다.
     float3 N = normalize(input.Normal);
-    // 예시) 노말맵을 살짝 섞고 싶다면 다음과 같이 사용할 수 있습니다.
-    //float3 normalTex = gNormalMap.Sample(gSampler, input.TexCoord).xyz * 2.0f - 1.0f;
-    //N = normalize(N + normalTex);
+    if (gEnableNormalMap != 0)
+    {
+        // D3D11-AliceTutorial/31_IBL/31_BasicPS.hlsl 의 방식으로 TBN 기반 노말맵 적용
+        float3 T = normalize(input.TangentW);
+        float3 B = normalize(input.BitanW);
+        float handed = dot(cross(T, B), N);
+        if (handed < 0.0f) B = -B;
+        float3x3 TBN = float3x3(T, B, N);
+        float3 N_ts = gNormalMap.Sample(gSampler, input.TexCoord).xyz * 2.0f - 1.0f;
+        N_ts.y = -N_ts.y; // 그린 채널 반전 보정
+        N_ts = normalize(N_ts);
+        N = normalize(mul(N_ts, TBN));
+    }
 
     float3 V = normalize(gCameraPos - input.WorldPos);
 
@@ -970,12 +996,13 @@ float4 main(PSInput input) : SV_TARGET
         //   boneIdx[4] (ushort4) : 72
         //   boneWeight(float4)   : 80
         //
-        // HLSL VSInput 은 POSITION / NORMAL / TEXCOORD0 / BLENDINDICES / BLENDWEIGHT 만 사용하므로
-        // 필요한 시맨틱만 정확한 오프셋으로 매핑합니다.
+        // 노말맵(TBN)을 위해 TANGENT/BINORMAL 시맨틱도 매핑합니다.
         D3D11_INPUT_ELEMENT_DESC skinnedDesc[] =
         {
             { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,  0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -1057,6 +1084,37 @@ float4 main(PSInput input) : SV_TARGET
         {
             ALICE_LOG_WARN("ForwardRenderSystem::CreateTextures: default brick textures not fully loaded; "
                            "engine will use plain gray materials instead.");
+        }
+
+        // 노말맵 기본값(Flat normal)을 생성합니다.
+        // - 노말맵이 없는 머티리얼이 "벽돌 노말"을 공유해버리는 문제를 막기 위함입니다.
+        // - (0.5, 0.5, 1.0, 1.0) = (128,128,255,255)
+        {
+            D3D11_TEXTURE2D_DESC td{};
+            td.Width = 1;
+            td.Height = 1;
+            td.MipLevels = 1;
+            td.ArraySize = 1;
+            td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            td.SampleDesc.Count = 1;
+            td.Usage = D3D11_USAGE_IMMUTABLE;
+            td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+            const std::uint8_t rgba[4] = { 128, 128, 255, 255 };
+            D3D11_SUBRESOURCE_DATA sd{};
+            sd.pSysMem = rgba;
+            sd.SysMemPitch = 4;
+
+            ComPtr<ID3D11Texture2D> tex;
+            if (SUCCEEDED(m_device->CreateTexture2D(&td, &sd, tex.GetAddressOf())))
+            {
+                D3D11_SHADER_RESOURCE_VIEW_DESC srvd{};
+                srvd.Format = td.Format;
+                srvd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                srvd.Texture2D.MipLevels = 1;
+                srvd.Texture2D.MostDetailedMip = 0;
+                m_device->CreateShaderResourceView(tex.Get(), &srvd, m_flatNormalSRV.ReleaseAndGetAddressOf());
+            }
         }
 
         // 기본 브릭 텍스처는 필수는 아니므로, 성공 여부와 상관없이 true 를 반환합니다.
@@ -1193,7 +1251,8 @@ float4 main(PSInput input) : SV_TARGET
                                                 const XMFLOAT4& materialColor,
                                                 const float& roughness,
                                                 const float& metalness,
-                                                const bool& useTexture)
+                                                const bool& useTexture,
+                                                const bool& enableNormalMap)
     {
         CBPerObject data = {};
         // HLSL에서 row-major로 사용할 수 있도록 전치 행렬 사용
@@ -1204,6 +1263,7 @@ float4 main(PSInput input) : SV_TARGET
         data.roughness     = roughness;
         data.metalness     = metalness;
         data.useTexture    = useTexture ? 1 : 0;
+        data.enableNormalMap = enableNormalMap ? 1 : 0;
 
         m_context->UpdateSubresource(m_cbPerObject.Get(), 0, nullptr, &data, 0, 0);
         m_context->VSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
@@ -1322,7 +1382,7 @@ float4 main(PSInput input) : SV_TARGET
         XMMATRIX world = XMMatrixIdentity();
         XMFLOAT4 whiteColor = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
         // 스카이박스에서는 PBR 파라미터/텍스처를 사용하지 않습니다.
-        UpdatePerObjectCB(world, viewNoTrans, projection, whiteColor, 1.0f, 0.0f, false);
+        UpdatePerObjectCB(world, viewNoTrans, projection, whiteColor, 1.0f, 0.0f, false, false);
 
         // 스카이박스 전용 상태 설정
         if (m_skyboxDepthState)
@@ -1401,9 +1461,13 @@ float4 main(PSInput input) : SV_TARGET
             // 머티리얼/PBR 파라미터 포함 per-object CB 업데이트
             XMFLOAT4 matColor(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
             // 스키닝 메시에서는 기본적으로 텍스처를 사용하는 것이 자연스럽습니다.
+            // 노말맵은 SRV(t1)가 유효할 때만 활성화합니다.
+            // (스키닝 메시의 경우, 머티리얼별 normalSRV가 없으면 flatNormal을 사용합니다)
+            const bool enableNormalMap = (m_flatNormalSRV != nullptr);
             UpdatePerObjectCB(cmd.world, view, proj, matColor,
                               cmd.roughness, cmd.metalness,
-                              true);
+                              true,
+                              enableNormalMap);
 
             // === FBX 서브셋 + 머티리얼 SRV 기반 드로우 ===
             if (!m_skinnedRegistry || cmd.meshKey.empty())
@@ -1421,7 +1485,7 @@ float4 main(PSInput input) : SV_TARGET
                 ID3D11ShaderResourceView* srvs[] =
                 {
                     diffuseSrv,
-                    m_normalSRV.Get(),
+                    m_flatNormalSRV ? m_flatNormalSRV.Get() : m_normalSRV.Get(),
                     m_specularSRV.Get()
                 };
                 m_context->PSSetShaderResources(0, 3, srvs);
@@ -1450,10 +1514,17 @@ float4 main(PSInput input) : SV_TARGET
                     diffuseSrv = mesh->materialSRVs[subset.materialIndex].Get();
                 }
 
+                ID3D11ShaderResourceView* normalSrv = m_flatNormalSRV ? m_flatNormalSRV.Get() : m_normalSRV.Get();
+                if (subset.materialIndex < mesh->normalSRVs.size() &&
+                    mesh->normalSRVs[subset.materialIndex])
+                {
+                    normalSrv = mesh->normalSRVs[subset.materialIndex].Get();
+                }
+
                 ID3D11ShaderResourceView* srvs[] =
                 {
                     diffuseSrv,
-                    m_normalSRV.Get(),
+                    normalSrv,
                     m_specularSRV.Get()
                 };
                 m_context->PSSetShaderResources(0, 3, srvs);
@@ -1554,7 +1625,7 @@ float4 main(PSInput input) : SV_TARGET
                 XMMATRIX worldM = BuildWorldMatrix(transform);
                 // 머티리얼 색은 섀도우 패스에선 사용되지 않습니다.
             XMFLOAT4 dummyColor(1.0f, 1.0f, 1.0f, 1.0f);
-            UpdatePerObjectCB(worldM, lightView, lightProj, dummyColor, 1.0f, 0.0f, false);
+            UpdatePerObjectCB(worldM, lightView, lightProj, dummyColor, 1.0f, 0.0f, false, false);
                 m_context->DrawIndexed(m_indexCount, 0, 0);
             }
         }
@@ -1664,7 +1735,8 @@ float4 main(PSInput input) : SV_TARGET
                 }
             }
 
-            UpdatePerObjectCB(worldM, viewM, projM, materialColor, roughness, metalness, useTexture);
+            const bool enableNormalMap = (m_normalSRV != nullptr) && useTexture;
+            UpdatePerObjectCB(worldM, viewM, projM, materialColor, roughness, metalness, useTexture, enableNormalMap);
             m_context->DrawIndexed(m_indexCount, 0, 0);
         }
 

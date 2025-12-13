@@ -952,14 +952,19 @@ namespace Alice
                                 }
 
                                 // (B) Resource 는 원본 폴더를 배포에 넣지 않고,
-                                //     암호화된 바이너리로 Cooked/<상대경로> 에 전부 패킹합니다.
-                                if (!CookAllIntoCookedRoot(projectRoot / "Resource", stageCooked))
+                                //     폴더구조를 숨긴 청크 파일들로 Cooked/Chunks 아래에 패킹합니다.
                                 {
-                                    ALICE_LOG_ERRORF("Build Game: failed to cook Resource -> Cooked (stage).");
-                                    g_BuildExitCode.store(5);
-                                    g_BuildInProgress.store(false);
-                                    return;
+                                    Alice::ResourceManager rm;
+                                    if (!rm.CookResourceToChunkStore(projectRoot / "Resource", stageCooked))
+                                    {
+                                        ALICE_LOG_ERRORF("Build Game: failed to cook Resource -> Cooked/Chunks (stage).");
+                                        g_BuildExitCode.store(5);
+                                        g_BuildInProgress.store(false);
+                                        return;
+                                    }
                                 }
+
+                                // 기존 방식(Resource→Cooked/<rel>.alice)은 제거되었습니다. Resource는 Cooked/Chunks로만 저장합니다.
 
                                 // BuildSettings 도 Release 폴더에 복사
                                 if (!CopyFileOver(cfgPath, releaseBinDir / "BuildSettings.txt"))
@@ -1127,7 +1132,21 @@ namespace Alice
                 {
                     ImGui::Text("Transform");
                     ImGui::DragFloat3("Position", &transform->position.x, 0.1f);
-                    ImGui::DragFloat3("Rotation (rad)", &transform->rotation.x, 0.01f);
+                    // 내부 저장은 라디안, UI는 도(deg)로 표시/편집합니다.
+                    // - 기존 "정수처럼 보인다" 문제(라디안 값이 작아 보이는 문제)를 해결
+                    DirectX::XMFLOAT3 rotDeg = {
+                        DirectX::XMConvertToDegrees(transform->rotation.x),
+                        DirectX::XMConvertToDegrees(transform->rotation.y),
+                        DirectX::XMConvertToDegrees(transform->rotation.z),
+                    };
+                    if (ImGui::DragFloat3("Rotation (deg)", &rotDeg.x, 1.0f))
+                    {
+                        transform->rotation = {
+                            DirectX::XMConvertToRadians(rotDeg.x),
+                            DirectX::XMConvertToRadians(rotDeg.y),
+                            DirectX::XMConvertToRadians(rotDeg.z),
+                        };
+                    }
                     ImGui::DragFloat3("Scale", &transform->scale.x, 0.1f);
                     g_SceneDirty = true;
                 }
@@ -1248,7 +1267,7 @@ namespace Alice
                             std::snprintf(buf, sizeof(buf),
                                           "[Editor] Material albedo set from Inspector: \"%s\"\n",
                                           mat->albedoTexturePath.c_str());
-                            OutputDebugStringA(buf);
+                            ALICE_LOG_INFO("%s", buf);
                         }
                     }
 
@@ -1443,7 +1462,7 @@ namespace Alice
                                                       s_selectedSubset,
                                                       matIndex,
                                                       mesh->materialOverridePaths[matIndex].c_str());
-                                        OutputDebugStringA(buf);
+                                        ALICE_LOG_INFO("%s", buf);
                                     }
                                 }
                             }
@@ -1668,7 +1687,7 @@ namespace Alice
                         std::snprintf(buf, sizeof(buf),
                                       "[Editor] Material albedo set from MatEditor: \"%s\"\n",
                                       g_MaterialEditorData.albedoTexturePath.c_str());
-                        OutputDebugStringA(buf);
+                        ALICE_LOG_INFO("%s", buf);
                     }
                 }
 
@@ -1714,7 +1733,7 @@ namespace Alice
                     std::snprintf(buf, sizeof(buf),
                                   "[Editor] SceneFile::Load (no-save path): \"%s\"\n",
                                   g_NextScenePath.string().c_str());
-                    OutputDebugStringA(buf);
+                    ALICE_LOG_INFO("%s", buf);
                 }
                 {
                     const std::filesystem::path loadAbs =
@@ -1751,7 +1770,7 @@ namespace Alice
                     std::snprintf(buf, sizeof(buf),
                                   "[Editor] SceneFile::Load (dont-save): \"%s\"\n",
                                   g_NextScenePath.string().c_str());
-                    OutputDebugStringA(buf);
+                    ALICE_LOG_INFO("%s", buf);
                 }
                 {
                     const std::filesystem::path loadAbs =
@@ -2203,7 +2222,7 @@ namespace Alice
                                               asset.sourceFbx.c_str(),
                                               asset.meshAssetPath.c_str(),
                                               asset.materialAssetPaths.size());
-                                OutputDebugStringA(buf);
+                                ALICE_LOG_INFO("%s", buf);
                             }
 
                             // 레지스트리에 GPU 메시가 없다면, 원본 FBX 를 다시 임포트해서 등록합니다.
@@ -2219,11 +2238,11 @@ namespace Alice
                                         (m_resources ? m_resources->Resolve(asset.sourceFbx) : std::filesystem::path(asset.sourceFbx));
                                     importer.Import(device, srcFbxPath, opt);
 
-                                    OutputDebugStringA("[Editor] Instantiate FBX: mesh was not in registry, re-imported FBX\n");
+                                    ALICE_LOG_INFO("[Editor] Instantiate FBX: mesh was not in registry, re-imported FBX");
                                 }
                                 else
                                 {
-                                    OutputDebugStringA("[Editor] Instantiate FBX: mesh already in registry\n");
+                                    ALICE_LOG_INFO("[Editor] Instantiate FBX: mesh already in registry");
                                 }
                             }
 
@@ -2249,7 +2268,7 @@ namespace Alice
                                               "[Editor] Instantiate FBX: created entity=%u, boneCount=%u\n",
                                               static_cast<unsigned>(e),
                                               skinned.boneCount);
-                                OutputDebugStringA(buf);
+                                ALICE_LOG_INFO("%s", buf);
                             }
 
                             if (!asset.materialAssetPaths.empty())
@@ -2311,7 +2330,7 @@ namespace Alice
                               "[Editor] EnsureSkinnedMeshesRegistered: failed to load .fbxasset \"%s\" for meshKey=\"%s\"\n",
                               fbxAssetAbs.string().c_str(),
                               comp.meshAssetPath.c_str());
-                OutputDebugStringA(buf);
+                ALICE_LOG_WARN("%s", buf);
                 continue;
             }
 
@@ -2321,7 +2340,7 @@ namespace Alice
                 std::snprintf(buf, sizeof(buf),
                               "[Editor] EnsureSkinnedMeshesRegistered: .fbxasset has empty source_fbx for \"%s\"\n",
                               fbxAssetPath.string().c_str());
-                OutputDebugStringA(buf);
+                ALICE_LOG_INFO("%s", buf);
                 continue;
             }
 
@@ -2338,7 +2357,7 @@ namespace Alice
                           srcFbxPath.string().c_str(),
                           comp.meshAssetPath.c_str(),
                           result.meshAssetPath.c_str());
-            OutputDebugStringA(buf);
+            ALICE_LOG_INFO("%s", buf);
         }
     }
     void EditorCore::SaveScene(World& world)
@@ -2353,7 +2372,7 @@ namespace Alice
 			std::snprintf(buf, sizeof(buf),
 				"[Editor] SceneFile::Save: \"%s\"\n",
 				savePath.string().c_str());
-			OutputDebugStringA(buf);
+			ALICE_LOG_INFO("%s", buf);
 		}
 		const std::filesystem::path saveAbs = (m_resources ? m_resources->Resolve(savePath) : savePath);
 		SceneFile::Save(world, saveAbs);
@@ -2369,7 +2388,7 @@ namespace Alice
 			std::snprintf(buf, sizeof(buf),
 				"[Editor] SceneFile::Load (after save): \"%s\"\n",
 				g_NextScenePath.string().c_str());
-			OutputDebugStringA(buf);
+			ALICE_LOG_INFO("%s", buf);
 		}
 		const std::filesystem::path loadAbs = (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
 		SceneFile::Load(world, loadAbs);

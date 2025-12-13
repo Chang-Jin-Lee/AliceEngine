@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <system_error>
+#include <cstdint>
+#include <cstring>
 #include "Core/Logger.h"
 
 namespace Alice
@@ -32,6 +34,70 @@ namespace Alice
         return p;
     }
 
+    std::filesystem::path ResourceManager::TryNormalizeAbsoluteResourceToLogical(const std::filesystem::path& p)
+    {
+        if (!p.is_absolute())
+            return p;
+
+        // absolute 경로 안에 ".../Resource/<rel>" 또는 "...\\Resource\\<rel>" 가 있으면
+        // "Resource/<rel>" 로 정규화합니다 (최종 빌드에서 경로 노출 최소화).
+        const std::string s = p.generic_string(); // '/' 로 통일
+        std::string lower = s;
+        for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        const std::string needle = "/resource/";
+        const auto pos = lower.find(needle);
+        if (pos == std::string::npos)
+            return p;
+
+        const std::string rel = s.substr(pos + needle.size());
+        if (rel.empty())
+            return std::filesystem::path("Resource");
+        return std::filesystem::path("Resource") / std::filesystem::path(rel);
+    }
+
+    std::uint64_t ResourceManager::Fnv1a64Bytes(const std::uint8_t* data, std::size_t size)
+    {
+        constexpr std::uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
+        constexpr std::uint64_t FNV_PRIME = 1099511628211ULL;
+        std::uint64_t hash = FNV_OFFSET_BASIS;
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            hash ^= static_cast<std::uint64_t>(data[i]);
+            hash *= FNV_PRIME;
+        }
+        return hash;
+    }
+
+    std::uint64_t ResourceManager::HashString64(std::string_view s)
+    {
+        return Fnv1a64Bytes(reinterpret_cast<const std::uint8_t*>(s.data()), s.size());
+    }
+
+    std::uint64_t ResourceManager::ComputeBufferHashSampled(const std::vector<std::uint8_t>& data)
+    {
+        // AssetManager 스타일: size + sample(first/last 4KB) 조합
+        constexpr std::size_t SAMPLE = 4096;
+        const std::uint64_t sizeHash = static_cast<std::uint64_t>(data.size());
+        if (data.empty())
+            return sizeHash;
+
+        std::vector<std::uint8_t> buf;
+        buf.reserve((std::min)(data.size(), SAMPLE) * 2);
+
+        const std::size_t head = (std::min)(SAMPLE, data.size());
+        buf.insert(buf.end(), data.begin(), data.begin() + head);
+        if (data.size() > SAMPLE)
+        {
+            const std::size_t tail = (std::min)(SAMPLE, data.size());
+            buf.insert(buf.end(), data.end() - tail, data.end());
+        }
+
+        const std::uint64_t sampleHash = Fnv1a64Bytes(buf.data(), buf.size());
+        std::uint64_t finalHash = sizeHash ^ (sampleHash << 1);
+        return finalHash;
+    }
+
     void ResourceManager::Configure(bool gameMode, const std::filesystem::path& exeDir)
     {
         m_gameMode = gameMode;
@@ -55,23 +121,24 @@ namespace Alice
             return {};
 
         if (logicalOrRelative.is_absolute())
-            return logicalOrRelative.lexically_normal();
+            return TryNormalizeAbsoluteResourceToLogical(logicalOrRelative).lexically_normal();
 
         std::filesystem::path p = NormalizeLegacyDotDot(logicalOrRelative);
+        p = TryNormalizeAbsoluteResourceToLogical(p);
         const std::string s = p.generic_string();
 
         // 논리 루트 3종을 지원합니다.
         if (StartsWith(s, "Assets/") || s == "Assets")
             return (m_rootDir / p).lexically_normal();
 
-        // gameMode에서는 Resource/... 를 직접 들고 있지 않으므로,
-        // Resource/<rel> 요청은 Cooked/<rel>.alice 로 매핑합니다.
+        // gameMode에서는 Resource/... 원본을 들고 있지 않으므로,
+        // Resource/<rel> 요청은 Cooked/Chunks/<hash>/c0000.alice 로 매핑합니다.
         if (StartsWith(s, "Resource/"))
         {
             if (m_gameMode)
             {
-                std::filesystem::path rest = s.substr(std::string_view("Resource/").size());
-                return (m_rootDir / ToAlicePath(std::filesystem::path("Cooked") / rest)).lexically_normal();
+                const std::string rest = s.substr(std::string_view("Resource/").size());
+                return Chunk0PathForResourceRel(rest);
             }
             return (m_rootDir / p).lexically_normal();
         }
@@ -122,39 +189,191 @@ namespace Alice
                                          std::vector<std::uint8_t>& outData) const
     {
         outData.clear();
-
-        // 1) gameMode에서는 Cooked(암호화)를 우선 시도합니다.
-        //    - 예: "Resource/Image/a.png" 요청 → "Cooked/Image/a.alice" 를 복호화 로드
-        if (m_gameMode)
+        if (auto sp = LoadSharedBinaryAuto(logicalPath))
         {
-            const std::filesystem::path normalized = NormalizeLegacyDotDot(logicalPath);
-            const std::string s = normalized.generic_string();
+            outData = *sp; // 호환 API: 복사
+            return true;
+        }
+        return false;
+    }
 
-            // Resource/... 는 Resolve 단계에서 Cooked/<rel>.alice 로 매핑됩니다.
-            const auto resolved = Resolve(normalized);
-            if (std::filesystem::exists(resolved))
-            {
-                return LoadBinary(resolved, outData, true);
-            }
+    std::shared_ptr<const std::vector<std::uint8_t>> ResourceManager::LoadSharedBinaryAuto(const std::filesystem::path& logicalPath) const
+    {
+        const std::filesystem::path normalized = TryNormalizeAbsoluteResourceToLogical(NormalizeLegacyDotDot(logicalPath));
+        const std::string logicalKey = normalized.generic_string();
 
-            // Cooked 직접 지정 또는 .alice 같은 암호화 확장자면 복호화 로드
-            const auto ext = resolved.extension().string();
-            if (StartsWith(resolved.generic_string(), (CookedDir().generic_string() + "/")))
+        // 0) logicalPath -> contentHash 캐시
+        {
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            if (auto it = m_pathToHash.find(logicalKey); it != m_pathToHash.end())
             {
-                // Cooked 아래는 기본적으로 암호화된 바이너리로 취급
-                return LoadBinary(resolved, outData, true);
+                const auto h = it->second;
+                if (auto it2 = m_blobCache.find(h); it2 != m_blobCache.end())
+                {
+                    if (auto sp = it2->second.lock())
+                        return sp;
+                }
             }
-            if (_stricmp(ext.c_str(), ".alice") == 0)
-            {
-                return LoadBinary(resolved, outData, true);
-            }
-
-            // 마지막: 원본 파일을 그냥 로드(디버그/개발 편의용)
-            return LoadBinary(resolved, outData, false);
         }
 
-        // 2) editorMode에서는 원본을 우선 로드 (복호화 없이)
-        return LoadBinary(Resolve(logicalPath), outData, false);
+        // 1) gameMode: Resource는 청크 스토어에서 로드
+        if (m_gameMode)
+        {
+            const std::string s = normalized.generic_string();
+            if (StartsWith(s, "Resource/"))
+            {
+                const std::string rel = s.substr(std::string_view("Resource/").size());
+                auto sp = LoadResourceChunksByRel(rel);
+                if (sp)
+                {
+                    const auto h = ComputeBufferHashSampled(*sp);
+                    std::lock_guard<std::mutex> lock(m_cacheMutex);
+                    m_blobCache[h] = sp;
+                    m_pathToHash[logicalKey] = h;
+                    return sp;
+                }
+                return nullptr;
+            }
+
+            // 그 외 Cooked 경로는 단일 .alice 파일(암호화)로 로드
+            const auto resolved = Resolve(normalized);
+            if (StartsWith(resolved.generic_string(), (CookedDir().generic_string() + "/")))
+            {
+                std::vector<std::uint8_t> data;
+                if (!LoadBinary(resolved, data, true))
+                    return nullptr;
+                auto sp = std::make_shared<std::vector<std::uint8_t>>(std::move(data));
+                const auto h = ComputeBufferHashSampled(*sp);
+                std::lock_guard<std::mutex> lock(m_cacheMutex);
+                m_blobCache[h] = sp;
+                m_pathToHash[logicalKey] = h;
+                return sp;
+            }
+
+            // 마지막 폴백: 그대로 파일 로드(개발 편의)
+            std::vector<std::uint8_t> data;
+            if (!LoadBinary(Resolve(normalized), data, false))
+                return nullptr;
+            auto sp = std::make_shared<std::vector<std::uint8_t>>(std::move(data));
+            const auto h = ComputeBufferHashSampled(*sp);
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_blobCache[h] = sp;
+            m_pathToHash[logicalKey] = h;
+            return sp;
+        }
+
+        // 2) editorMode: 원본 파일을 그대로 로드
+        std::vector<std::uint8_t> data;
+        if (!LoadBinary(Resolve(normalized), data, false))
+            return nullptr;
+        auto sp = std::make_shared<std::vector<std::uint8_t>>(std::move(data));
+        const auto h = ComputeBufferHashSampled(*sp);
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        m_blobCache[h] = sp;
+        m_pathToHash[logicalKey] = h;
+        return sp;
+    }
+
+    std::filesystem::path ResourceManager::Chunk0PathForResourceRel(std::string_view resourceRel) const
+    {
+        // fileId = rel 문자열 해시 (폴더구조 노출 방지용)
+        const std::uint64_t fileId = HashString64(resourceRel);
+
+        char hex[17] = {};
+        std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(fileId));
+        const std::string hexStr = hex;
+
+        const std::filesystem::path dir = CookedDir() / "Chunks" / hexStr.substr(0, 2) / hexStr;
+        return (dir / "c0000.alice").lexically_normal();
+    }
+
+    std::shared_ptr<const std::vector<std::uint8_t>> ResourceManager::LoadResourceChunksByRel(std::string_view resourceRel) const
+    {
+        namespace fs = std::filesystem;
+
+        struct ChunkHeader
+        {
+            char     magic[4];      // "ALIC"
+            std::uint32_t version;  // 1
+            std::uint64_t fileId;
+            std::uint32_t chunkIndex;
+            std::uint32_t chunkCount;
+            std::uint64_t originalSize;
+            std::uint32_t payloadSize;
+        };
+
+        const std::uint64_t fileId = HashString64(resourceRel);
+        fs::path c0 = Chunk0PathForResourceRel(resourceRel);
+        if (!fs::exists(c0))
+        {
+            ALICE_LOG_ERRORF("ResourceManager: missing chunk0 for Resource/%s -> \"%s\"",
+                             std::string(resourceRel).c_str(), c0.string().c_str());
+            return nullptr;
+        }
+
+        auto readChunk = [&](std::uint32_t idx, ChunkHeader& outHdr, std::vector<std::uint8_t>& outPayload) -> bool
+        {
+            char hex[17] = {};
+            std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(fileId));
+            const std::string hexStr = hex;
+            const fs::path dir = CookedDir() / "Chunks" / hexStr.substr(0, 2) / hexStr;
+
+            char name[32] = {};
+            std::snprintf(name, sizeof(name), "c%04u.alice", static_cast<unsigned>(idx));
+            const fs::path p = dir / name;
+
+            std::vector<std::uint8_t> raw;
+            if (!LoadBinary(p, raw, false)) // 파일 자체는 "헤더+암호화 payload" 이므로 raw는 그대로 읽음
+                return false;
+            if (raw.size() < sizeof(ChunkHeader))
+                return false;
+
+            std::memcpy(&outHdr, raw.data(), sizeof(ChunkHeader));
+            if (std::memcmp(outHdr.magic, "ALIC", 4) != 0 || outHdr.version != 1 || outHdr.fileId != fileId)
+                return false;
+
+            const std::size_t payloadOff = sizeof(ChunkHeader);
+            const std::size_t payloadSize = static_cast<std::size_t>(outHdr.payloadSize);
+            if (payloadOff + payloadSize > raw.size())
+                return false;
+
+            outPayload.assign(raw.begin() + payloadOff, raw.begin() + payloadOff + payloadSize);
+            // payload만 XOR 복호화
+            XorCrypt(outPayload);
+            return true;
+        };
+
+        ChunkHeader h0{};
+        std::vector<std::uint8_t> p0;
+        if (!readChunk(0, h0, p0))
+        {
+            ALICE_LOG_ERRORF("ResourceManager: failed to read/decrypt chunk0. \"%s\"", c0.string().c_str());
+            return nullptr;
+        }
+
+        ALICE_LOG_INFO("ResourceManager: chunked load Resource/%s -> chunks=%u size=%llu",
+                       std::string(resourceRel).c_str(),
+                       static_cast<unsigned>(h0.chunkCount),
+                       static_cast<unsigned long long>(h0.originalSize));
+
+        auto out = std::make_shared<std::vector<std::uint8_t>>();
+        out->reserve(static_cast<std::size_t>(h0.originalSize));
+        out->insert(out->end(), p0.begin(), p0.end());
+
+        for (std::uint32_t i = 1; i < h0.chunkCount; ++i)
+        {
+            ChunkHeader hi{};
+            std::vector<std::uint8_t> pi;
+            if (!readChunk(i, hi, pi))
+            {
+                ALICE_LOG_ERRORF("ResourceManager: failed to read/decrypt chunk%u for Resource/%s",
+                                 static_cast<unsigned>(i), std::string(resourceRel).c_str());
+                return nullptr;
+            }
+            out->insert(out->end(), pi.begin(), pi.end());
+        }
+
+        return out;
     }
 
     bool ResourceManager::CookAndSave(const std::filesystem::path& srcPath,
@@ -187,6 +406,31 @@ namespace Alice
                       static_cast<std::streamsize>(data.size()));
         }
 
+        return true;
+    }
+
+    bool ResourceManager::CookAndSaveBytes(const std::vector<std::uint8_t>& plainBytes,
+                                           const std::filesystem::path& cookedPath) const
+    {
+        std::error_code ec;
+        std::filesystem::create_directories(cookedPath.parent_path(), ec);
+
+        std::vector<std::uint8_t> data = plainBytes;
+        XorCrypt(data);
+
+        std::ofstream ofs(cookedPath, std::ios::binary);
+        if (!ofs.is_open())
+        {
+            ALICE_LOG_ERRORF("CookAndSaveBytes: failed to open output \"%s\"", cookedPath.string().c_str());
+            return false;
+        }
+
+        if (!data.empty())
+            ofs.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+
+        ALICE_LOG_INFO("CookAndSaveBytes: \"%s\" (bytes=%zu)",
+                       cookedPath.string().c_str(),
+                       data.size());
         return true;
     }
 
@@ -255,6 +499,109 @@ namespace Alice
 
         ALICE_LOG_INFO("ResourceManager::CookDirectoryRecursive: cooked %zu files. src=\"%s\" dst=\"%s\"",
                        cookedCount, srcDir.string().c_str(), dstDir.string().c_str());
+        return true;
+    }
+
+    bool ResourceManager::CookResourceToChunkStore(const std::filesystem::path& resourceDirAbs,
+                                                   const std::filesystem::path& cookedDirAbs,
+                                                   std::size_t chunkBytes) const
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        if (!fs::exists(resourceDirAbs, ec) || ec || !fs::is_directory(resourceDirAbs, ec) || ec)
+        {
+            ALICE_LOG_ERRORF("CookResourceToChunkStore: invalid resourceDir. \"%s\" (%s)",
+                             resourceDirAbs.string().c_str(), ec.message().c_str());
+            return false;
+        }
+        if (chunkBytes < 4096) chunkBytes = 4096;
+
+        struct ChunkHeader
+        {
+            char     magic[4];      // "ALIC"
+            std::uint32_t version;  // 1
+            std::uint64_t fileId;
+            std::uint32_t chunkIndex;
+            std::uint32_t chunkCount;
+            std::uint64_t originalSize;
+            std::uint32_t payloadSize;
+        };
+
+        std::size_t fileCount = 0;
+        for (fs::recursive_directory_iterator it(resourceDirAbs, ec), end; it != end; it.increment(ec))
+        {
+            if (ec) { ec.clear(); continue; }
+            if (!it->is_regular_file(ec) || ec) { ec.clear(); continue; }
+
+            const fs::path inPath = it->path();
+            fs::path rel = fs::relative(inPath, resourceDirAbs, ec);
+            if (ec) { ec.clear(); continue; }
+
+            const std::string relStr = rel.generic_string(); // fileId는 이 문자열로 결정
+            const std::uint64_t fileId = HashString64(relStr);
+
+            char hex[17] = {};
+            std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(fileId));
+            const std::string hexStr = hex;
+            const fs::path outDir = cookedDirAbs / "Chunks" / hexStr.substr(0, 2) / hexStr;
+            fs::create_directories(outDir, ec);
+            ec.clear();
+
+            // 파일 읽기
+            std::vector<std::uint8_t> data;
+            if (!LoadBinary(inPath, data, false))
+            {
+                ALICE_LOG_ERRORF("CookResourceToChunkStore: read failed. \"%s\"", inPath.string().c_str());
+                return false;
+            }
+
+            const std::uint64_t originalSize = static_cast<std::uint64_t>(data.size());
+            const std::uint32_t chunkCount = static_cast<std::uint32_t>((data.size() + chunkBytes - 1) / chunkBytes);
+            ALICE_LOG_INFO("CookResourceChunk: rel=\"%s\" fileId=%s size=%llu chunks=%u",
+                           relStr.c_str(),
+                           hexStr.c_str(),
+                           static_cast<unsigned long long>(originalSize),
+                           static_cast<unsigned>(chunkCount));
+
+            for (std::uint32_t i = 0; i < chunkCount; ++i)
+            {
+                const std::size_t off = static_cast<std::size_t>(i) * chunkBytes;
+                const std::size_t len = (std::min)(chunkBytes, data.size() - off);
+
+                std::vector<std::uint8_t> payload(data.begin() + off, data.begin() + off + len);
+                XorCrypt(payload);
+
+                ChunkHeader hdr{};
+                std::memcpy(hdr.magic, "ALIC", 4);
+                hdr.version = 1;
+                hdr.fileId = fileId;
+                hdr.chunkIndex = i;
+                hdr.chunkCount = chunkCount;
+                hdr.originalSize = originalSize;
+                hdr.payloadSize = static_cast<std::uint32_t>(payload.size());
+
+                char name[32] = {};
+                std::snprintf(name, sizeof(name), "c%04u.alice", static_cast<unsigned>(i));
+                const fs::path outPath = outDir / name;
+
+                std::ofstream ofs(outPath, std::ios::binary);
+                if (!ofs.is_open())
+                {
+                    ALICE_LOG_ERRORF("CookResourceToChunkStore: write open failed. \"%s\"", outPath.string().c_str());
+                    return false;
+                }
+                ofs.write(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
+                if (!payload.empty())
+                    ofs.write(reinterpret_cast<const char*>(payload.data()), static_cast<std::streamsize>(payload.size()));
+
+                ALICE_LOG_INFO("  ChunkOut: \"%s\" payload=%u", outPath.string().c_str(), hdr.payloadSize);
+            }
+
+            ++fileCount;
+        }
+
+        ALICE_LOG_INFO("CookResourceToChunkStore: cooked %zu files into \"%s/Chunks\"",
+                       fileCount, cookedDirAbs.string().c_str());
         return true;
     }
 

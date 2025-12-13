@@ -59,7 +59,7 @@ namespace Alice
             float             roughness;     // 0~1
             float             metalness;     // 0~1
             int               useTexture;   // 0: 색만, 1: 디퓨즈 텍스처 사용
-            DirectX::XMFLOAT3 pad0;         // 16바이트 정렬
+            int               enableNormalMap; // 0/1: 노말맵 사용
         };
 
         /// 단순 Directional Light 2개와 재질 파라미터를 담는 구조체입니다.
@@ -174,7 +174,8 @@ namespace Alice
                                const DirectX::XMFLOAT4& materialColor,
                                const float& roughness,
                                const float& metalness,
-                               const bool& useTexture);
+                               const bool& useTexture,
+                               const bool& enableNormalMap);
 
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
@@ -210,6 +211,7 @@ namespace Alice
         // 텍스처 / 샘플러
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_diffuseSRV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_normalSRV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_flatNormalSRV; // (0.5,0.5,1) 기본 노말맵
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_specularSRV;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerState;
 
