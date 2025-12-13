@@ -183,6 +183,16 @@ namespace Alice
 		// 1) 인스턴스 핸들 보관
 		m_hInstance = hInstance;
 
+		// ResourceManager: 경로 해석 기준을 "모드"로 단순하게 고정합니다.
+		// - editorMode(true)  : 프로젝트 루트 기준(= exeDir/../../..) Assets/Resource/Cooked
+		// - gameMode(false)   : exeDir 기준 Assets/Resource/Cooked
+		{
+			wchar_t exePathW[MAX_PATH] = {};
+			GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+			const std::filesystem::path exeDir = std::filesystem::path(exePathW).parent_path();
+			m_resourceManager.Configure(/*gameMode=*/!m_editorMode, exeDir);
+		}
+
 		// 2) 윈도우 생성
 		if (!CreateMainWindow(nCmdShow))
 		{
@@ -207,15 +217,16 @@ namespace Alice
 		// 5) ImGui / Editor 코어 초기화 (에디터 모드에서만)
 		if (m_editorMode)
 		{
+			// EditorCore::Initialize 단계에서도 폰트/아이콘 등 리소스 경로가 필요하므로,
+			// 리소스 포인터는 Initialize 이전에 주입합니다.
+			m_editorCore.SetResourceManager(&m_resourceManager);
+			m_editorCore.SetSkinnedMeshRegistry(&m_skinnedMeshRegistry);
+
 			if (!m_editorCore.Initialize(m_hWnd, *m_renderDevice))
 			{
 				ALICE_LOG_ERRORF("Engine::Initialize: EditorCore::Initialize failed.");
 				return false;
 			}
-			// ResourceManager 를 에디터에 주입 (FBX 임포트 등에서 사용)
-			m_editorCore.SetResourceManager(&m_resourceManager);
-			// SkinnedMeshRegistry 를 에디터에 주입 (FBX 임포트 시 GPU 메시 등록)
-			m_editorCore.SetSkinnedMeshRegistry(&m_skinnedMeshRegistry);
 			ALICE_LOG_INFO("Engine::Initialize: EditorCore initialized.");
 		}
 
@@ -566,15 +577,17 @@ namespace Alice
 			}
 			else
 			{
-				fbxAssetPath = std::filesystem::path("../Assets/Fbx")
+				// 논리 경로(Assets/...)만 저장/사용하고, 실제 파일 경로는 ResourceManager 가 해석합니다.
+				fbxAssetPath = std::filesystem::path("Assets/Fbx")
 					/ (comp.meshAssetPath + ".fbxasset");
 			}
 
 			Alice::FbxInstanceAsset instance{};
-			if (!Alice::LoadFbxInstanceAsset(fbxAssetPath, instance))
+			const std::filesystem::path fbxAssetAbs = m_resourceManager.Resolve(fbxAssetPath);
+			if (!Alice::LoadFbxInstanceAsset(fbxAssetAbs, instance))
 			{
 				ALICE_LOG_WARN("Engine::EnsureSkinnedMeshesRegisteredForWorld: failed to load .fbxasset \"%s\" for meshKey=\"%s\"",
-					fbxAssetPath.string().c_str(),
+					fbxAssetAbs.string().c_str(),
 					comp.meshAssetPath.c_str());
 				continue;
 			}
@@ -589,7 +602,8 @@ namespace Alice
 			FbxImportOptions opt{};
 			FbxImporter importer(m_resourceManager, &m_skinnedMeshRegistry);
 
-			std::filesystem::path srcFbxPath = instance.sourceFbx;
+			// source_fbx 는 "Assets/..." 같은 논리 경로일 수 있으므로 Resolve 로 변환합니다.
+			std::filesystem::path srcFbxPath = m_resourceManager.Resolve(instance.sourceFbx);
 			FbxImportResult result = importer.Import(device, srcFbxPath, opt);
 
 			ALICE_LOG_INFO("Engine::EnsureSkinnedMeshesRegisteredForWorld: re-import FBX \"%s\" -> meshKey=\"%s\" result.mesh=\"%s\"",
@@ -610,9 +624,10 @@ namespace Alice
 		wc.cbWndExtra = 0;
 		wc.hInstance = m_hInstance;
 		// 엔진 전용 아이콘을 로드합니다. (실패하면 기본 아이콘을 사용)
+		const std::filesystem::path iconAbs = m_resourceManager.Resolve("Resource/Icon/Alice.ico");
 		HICON hIconBig = static_cast<HICON>(LoadImageW(
 			nullptr,
-			L"../Resource/Icon/Alice.ico",
+			iconAbs.wstring().c_str(),
 			IMAGE_ICON,
 			32,
 			32,
@@ -620,7 +635,7 @@ namespace Alice
 		if (!hIconBig) hIconBig = LoadIcon(nullptr, IDI_APPLICATION);
 		HICON hIconSmall = static_cast<HICON>(LoadImageW(
 			nullptr,
-			L"../Resource/Icon/Alice.ico",
+			iconAbs.wstring().c_str(),
 			IMAGE_ICON,
 			16,
 			16,

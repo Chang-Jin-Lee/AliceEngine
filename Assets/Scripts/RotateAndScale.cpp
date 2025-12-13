@@ -11,7 +11,6 @@ namespace Alice
 
     void RotateAndScale::OnCreate(World& world, EntityId entity)
     {
-        ALICE_LOG_INFO("OnCreate RotateAndScale");
         // 이 엔티티에 Transform 이 없으면 하나 추가합니다.
         if (auto* t = world.GetTransform(entity); t)
         {
@@ -28,7 +27,6 @@ namespace Alice
 
     void RotateAndScale::OnUpdate(World& world, EntityId entity, float deltaTime)
     {
-        ALICE_LOG_INFO("RotateAndScale::OnUpdate");
         // 경과 시간 누적
         m_timeSeconds += deltaTime;
 

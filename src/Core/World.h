@@ -51,7 +51,7 @@ namespace Alice
         float             roughness { 0.5f };              // 0~1 러프니스 (PBR)
         float             metalness { 0.0f };              // 0~1 메탈니스 (PBR)
         std::string       assetPath;                       // 선택된 머티리얼 에셋 경로 (옵션)
-        std::string       albedoTexturePath;               // 알베도 텍스처 경로 (.abtex 또는 원본)
+        std::string       albedoTexturePath;               // 알베도 텍스처 경로 (.alice 또는 원본)
     };
 
     /// Skinned FBX 메시에 대한 최소 정보만 담는 컴포넌트입니다.

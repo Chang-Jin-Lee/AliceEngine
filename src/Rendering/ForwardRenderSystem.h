@@ -115,7 +115,7 @@ namespace Alice
             float             roughness   { 0.5f };
             float             metalness   { 0.0f };
 
-            // 선택적인 알베도 텍스처 경로 (.abtex 또는 원본 이미지 경로)
+            // 선택적인 알베도 텍스처 경로 (.alice 단일 포맷 또는 원본 이미지 경로)
             std::string       albedoTexturePath;
             // 어떤 스키닝 메시(레지스트리 키)를 사용할지 나타내는 논리 키
             std::string       meshKey;

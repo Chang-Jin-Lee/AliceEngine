@@ -1006,28 +1006,23 @@ float4 main(PSInput input) : SV_TARGET
 
     bool ForwardRenderSystem::CreateTextures()
     {
-        // 실행 파일 기준으로 Resource/Image 폴더의 브릭 텍스처를 읽어옵니다.
-        // 동시에, 존재한다면 Cooked(암호화된) 텍스처(.alice) 를 우선 사용합니다.
-        const std::filesystem::path diffuseSrc  = "../Resource/Image/Bricks059_1K-JPG_Color.jpg";
-        const std::filesystem::path normalSrc   = "../Resource/Image/Bricks059_1K-JPG_NormalDX.jpg";
-        const std::filesystem::path specularSrc = "../Resource/Image/Bricks059_Specular.png";
+        // 디폴트 브릭 텍스처는 "논리 경로"로만 취급합니다.
+        // - editorMode: Resource/Image/... 원본을 로드 (필요 시 Cooked 생성 가능)
+        // - gameMode  : Cooked/Resource/... 암호화 바이너리를 우선 복호화 로드
+        const std::filesystem::path diffuseLogical  = "Resource/Image/Bricks059_1K-JPG_Color.jpg";
+        const std::filesystem::path normalLogical   = "Resource/Image/Bricks059_1K-JPG_NormalDX.jpg";
+        const std::filesystem::path specularLogical = "Resource/Image/Bricks059_Specular.png";
 
-        const std::filesystem::path diffuseCooked  = "../Cooked/Image/Bricks059_1K-JPG_Color.alice";
-        const std::filesystem::path normalCooked   = "../Cooked/Image/Bricks059_1K-JPG_NormalDX.alice";
-        const std::filesystem::path specularCooked = "../Cooked/Image/Bricks059_Specular.alice";
-
-        auto loadTexture = [&](const std::filesystem::path& src,
-                               const std::filesystem::path& cooked,
+        auto loadTexture = [&](const std::filesystem::path& logical,
                                Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& outSrv) -> bool
         {
-            HRESULT hr = E_FAIL;
-
-            // 1) Cooked(암호화된) 파일이 있고 ResourceManager 가 있으면, 먼저 그것을 시도합니다.
-            if (m_resources && std::filesystem::exists(cooked))
+            // 1) ResourceManager 가 있으면 Cooked(암호화) 우선 로드까지 자동 처리합니다.
+            if (m_resources)
             {
-                if (std::vector<std::uint8_t> data; m_resources->LoadBinary(cooked, data, true) && !data.empty())
+                std::vector<std::uint8_t> data;
+                if (m_resources->LoadBinaryAuto(logical, data) && !data.empty())
                 {
-                    hr = DirectX::CreateWICTextureFromMemory(
+                    HRESULT hr = DirectX::CreateWICTextureFromMemory(
                         m_device.Get(),
                         data.data(),
                         static_cast<UINT>(data.size()),
@@ -1036,36 +1031,27 @@ float4 main(PSInput input) : SV_TARGET
                     if (SUCCEEDED(hr))
                         return true;
                 }
-            }
 
-            // 2) 원본 이미지에서 직접 로드
-            hr = DirectX::CreateWICTextureFromFile(
-                m_device.Get(),
-                src.c_str(),
-                nullptr,
-                outSrv.ReleaseAndGetAddressOf()
-            );
-            if (FAILED(hr))
-            {
-                // 개발용 브릭 텍스처는 필수 리소스가 아니므로 실패해도 엔진은 계속 동작하게 둡니다.
-                ALICE_LOG_WARN("ForwardRenderSystem::CreateTextures: failed to load source texture \"%s\".",
-                               src.string().c_str());
+                // gameMode에서 Cooked에 없고 원본도 없으면 경고만 찍고 넘어갑니다.
+                ALICE_LOG_WARN("ForwardRenderSystem::CreateTextures: failed to load texture \"%s\" via ResourceManager.",
+                               logical.string().c_str());
                 return false;
             }
 
-            // 3) ResourceManager 가 있으면, 한 번만 Cooked 파일을 생성해 둡니다.
-            if (m_resources && !std::filesystem::exists(cooked))
-            {
-                m_resources->CookAndSave(src, cooked);
-            }
-
-            return true;
+            // 2) (예외) ResourceManager 가 없으면 파일에서 직접 로드 시도
+            const auto p = std::filesystem::path(logical);
+            HRESULT hr = DirectX::CreateWICTextureFromFile(
+                m_device.Get(),
+                p.c_str(),
+                nullptr,
+                outSrv.ReleaseAndGetAddressOf());
+            return SUCCEEDED(hr);
         };
 
         bool ok = true;
-        if (!loadTexture(diffuseSrc,  diffuseCooked,  m_diffuseSRV))  ok = false;
-        if (!loadTexture(normalSrc,   normalCooked,   m_normalSRV))   ok = false;
-        if (!loadTexture(specularSrc, specularCooked, m_specularSRV)) ok = false;
+        if (!loadTexture(diffuseLogical,  m_diffuseSRV))  ok = false;
+        if (!loadTexture(normalLogical,   m_normalSRV))   ok = false;
+        if (!loadTexture(specularLogical, m_specularSRV)) ok = false;
 
         if (!ok)
         {
@@ -1116,7 +1102,7 @@ float4 main(PSInput input) : SV_TARGET
     }
 
     // 경로 문자열을 기반으로 머티리얼 전용 텍스처 SRV 를 가져오거나 생성합니다.
-    // - .alice / .abtex 인 경우 ResourceManager 를 통해 복호화 후 메모리에서 로드합니다.
+    // - .alice 인 경우 ResourceManager 를 통해 복호화 후 메모리에서 로드합니다.
     // - 그 외 경우는 파일에서 직접 로드합니다.
     ID3D11ShaderResourceView* ForwardRenderSystem::GetOrCreateTexture(const std::string& path)
     {
@@ -1132,29 +1118,27 @@ float4 main(PSInput input) : SV_TARGET
 
         namespace fs = std::filesystem;
         fs::path p(path);
-        if (!fs::exists(p))
+        // 모든 파일 접근은 ResourceManager 를 통해 "논리 경로"를 실제 경로로 해석합니다.
+        fs::path resolved = (m_resources) ? m_resources->Resolve(p) : p;
+        if (!fs::exists(resolved))
         {
-            char buf[256] = {};
-            std::snprintf(buf, sizeof(buf),
-                          "[ForwardRenderSystem] Texture file not found: \"%s\"\n",
-                          path.c_str());
-            OutputDebugStringA(buf);
+            ALICE_LOG_WARN("[ForwardRenderSystem] Texture file not found: \"%s\" (resolved=\"%s\")",
+                           path.c_str(),
+                           resolved.string().c_str());
             return nullptr;
         }
 
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
         HRESULT hr = E_FAIL;
 
-        const std::string ext = p.extension().string();
-        const bool isEncrypted =
-            (_stricmp(ext.c_str(), ".abtex") == 0) ||
-            (_stricmp(ext.c_str(), ".alice") == 0);
-
-        if (isEncrypted && m_resources)
+        // Cooked 안의 파일은 "확장자와 무관하게" 암호화된 바이너리일 수 있습니다.
+        // 따라서 ResourceManager 가 있으면, 먼저 LoadBinaryAuto(+복호화) → 메모리 로드를 시도하고,
+        // 실패하면 파일 로드로 폴백합니다.
+        bool loadedFromMemory = false;
+        if (m_resources)
         {
-            // 암호화된 .alice / .abtex 를 메모리로 읽어온 뒤 WIC 텍스처로 생성
             std::vector<std::uint8_t> data;
-            if (m_resources->LoadBinary(p, data, true) && !data.empty())
+            if (m_resources->LoadBinaryAuto(p, data) && !data.empty())
             {
                 hr = DirectX::CreateWICTextureFromMemory(
                     m_device.Get(),
@@ -1162,18 +1146,17 @@ float4 main(PSInput input) : SV_TARGET
                     static_cast<UINT>(data.size()),
                     nullptr,
                     srv.ReleaseAndGetAddressOf());
-            }
-            else
-            {
-                hr = E_FAIL;
+                if (SUCCEEDED(hr) && srv)
+                    loadedFromMemory = true;
             }
         }
-        else
+
+        if (FAILED(hr))
         {
             // 원본 이미지 파일에서 직접 로드 (png/jpg/tga 등)
             hr = DirectX::CreateWICTextureFromFile(
                 m_device.Get(),
-                p.c_str(),
+                resolved.c_str(),
                 nullptr,
                 srv.ReleaseAndGetAddressOf());
         }
@@ -1182,9 +1165,9 @@ float4 main(PSInput input) : SV_TARGET
         {
             char buf[256] = {};
             std::snprintf(buf, sizeof(buf),
-                          "[ForwardRenderSystem] Texture load FAILED: \"%s\" (isEncrypted=%d)\n",
+                          "[ForwardRenderSystem] Texture load FAILED: \"%s\" (resolved=\"%s\")\n",
                           path.c_str(),
-                          isEncrypted ? 1 : 0);
+                          resolved.string().c_str());
             OutputDebugStringA(buf);
             return nullptr;
         }
@@ -1194,9 +1177,10 @@ float4 main(PSInput input) : SV_TARGET
         {
             char buf[256] = {};
             std::snprintf(buf, sizeof(buf),
-                          "[ForwardRenderSystem] Texture loaded: \"%s\" (isEncrypted=%d)\n",
+                          "[ForwardRenderSystem] Texture loaded: \"%s\" (resolved=\"%s\", memory=%d)\n",
                           path.c_str(),
-                          isEncrypted ? 1 : 0);
+                          resolved.string().c_str(),
+                          loadedFromMemory ? 1 : 0);
             OutputDebugStringA(buf);
         }
 

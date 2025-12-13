@@ -4,6 +4,7 @@
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
+#include "Core/ResourceManager.h"
 #include "Game/FbxImporter.h"
 #include "Core/Logger.h"
 
@@ -34,6 +35,27 @@ namespace Alice
 {
     namespace
     {
+        struct ScopedHandle
+        {
+            HANDLE h = nullptr;
+            ScopedHandle() = default;
+            explicit ScopedHandle(HANDLE handle) : h(handle) {}
+            ScopedHandle(const ScopedHandle&) = delete;
+            ScopedHandle& operator=(const ScopedHandle&) = delete;
+            ScopedHandle(ScopedHandle&& other) noexcept : h(other.h) { other.h = nullptr; }
+            ScopedHandle& operator=(ScopedHandle&& other) noexcept
+            {
+                if (this != &other)
+                {
+                    if (h) CloseHandle(h);
+                    h = other.h;
+                    other.h = nullptr;
+                }
+                return *this;
+            }
+            ~ScopedHandle() { if (h) CloseHandle(h); }
+        };
+
         /// 에디터 Reload Scripts 버튼에서 호출하는 헬퍼입니다.
         /// - ScriptsBuild CMake 프로젝트를 configure/build 해서 AliceScripts.dll 을 만들고
         ///   현재 실행 중인 exe 옆으로 복사한 뒤 ScriptHotReload_Reload 를 호출합니다.
@@ -189,6 +211,141 @@ namespace Alice
             // 6) 새 DLL 로드
             ScriptHotReload_Reload();
         }
+
+        // 빌드/배포용 간단 파일 유틸 (에러는 로그로 남기고, 실패는 false 반환)
+        bool CopyDirTree(const std::filesystem::path& src, const std::filesystem::path& dst)
+        {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+            if (!fs::exists(src, ec) || ec) return true; // 없는 건 스킵
+            fs::create_directories(dst, ec);
+            if (ec)
+            {
+                ALICE_LOG_ERRORF("BuildGame: create_directories failed. dst=\"%s\" (%s)",
+                                 dst.string().c_str(), ec.message().c_str());
+                return false;
+            }
+            fs::copy(src, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+            if (ec)
+            {
+                ALICE_LOG_ERRORF("BuildGame: copy dir failed. \"%s\" -> \"%s\" (%s)",
+                                 src.string().c_str(), dst.string().c_str(), ec.message().c_str());
+                return false;
+            }
+            return true;
+        }
+
+        bool CopyFileOver(const std::filesystem::path& src, const std::filesystem::path& dst)
+        {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+            fs::create_directories(dst.parent_path(), ec);
+            ec.clear();
+            fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+            if (ec)
+            {
+                ALICE_LOG_ERRORF("BuildGame: copy file failed. \"%s\" -> \"%s\" (%s)",
+                                 src.string().c_str(), dst.string().c_str(), ec.message().c_str());
+                return false;
+            }
+            return true;
+        }
+
+        bool MakeCleanDir(const std::filesystem::path& dir)
+        {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+            if (fs::exists(dir, ec))
+            {
+                ec.clear();
+                fs::remove_all(dir, ec);
+            }
+            ec.clear();
+            fs::create_directories(dir, ec);
+            if (ec)
+            {
+                ALICE_LOG_ERRORF("BuildGame: create clean dir failed. \"%s\" (%s)",
+                                 dir.string().c_str(), ec.message().c_str());
+                return false;
+            }
+            return true;
+        }
+
+        // srcRoot의 모든 파일을 dstCookedRoot/<rel>.alice 로 "암호화 저장"합니다(폴더 구조 유지, 확장자는 .alice로 통일).
+        // - 이미 암호화된 .alice 는 그대로 복사합니다(중복 암호화 방지).
+        // - excludePrefixRel(예: "Resource/")로 시작하는 rel 경로는 스킵할 수 있습니다.
+        bool CookAllIntoCookedRoot(const std::filesystem::path& srcRoot,
+                                   const std::filesystem::path& dstCookedRoot,
+                                   const std::string& excludePrefixRel = {})
+        {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+            if (!fs::exists(srcRoot, ec) || ec) return true; // 없는 건 스킵
+            if (!fs::is_directory(srcRoot, ec) || ec) return true;
+
+            Alice::ResourceManager rm;
+
+            for (fs::recursive_directory_iterator it(srcRoot, ec), end; it != end; it.increment(ec))
+            {
+                if (ec) { ec.clear(); continue; }
+                if (!it->is_regular_file(ec) || ec) { ec.clear(); continue; }
+
+                const fs::path inPath = it->path();
+                fs::path rel = fs::relative(inPath, srcRoot, ec);
+                if (ec) { ec.clear(); continue; }
+
+                const std::string relStr = rel.generic_string();
+                if (!excludePrefixRel.empty() && relStr.rfind(excludePrefixRel, 0) == 0)
+                    continue;
+
+                fs::path outPath = dstCookedRoot / rel;
+                outPath.replace_extension(".alice"); // 확장자 통일
+                const std::string ext = inPath.extension().string();
+                const bool alreadyEncrypted = (_stricmp(ext.c_str(), ".alice") == 0);
+
+                if (alreadyEncrypted)
+                {
+                    // .alice → .alice 로 그대로 복사 (경로/파일명은 rel 기준으로 새로 배치)
+                    if (!CopyFileOver(inPath, outPath))
+                        return false;
+                }
+                else
+                {
+                    // 디버그: 어떤 파일이 어떤 경로로 cook 되는지 전부 로그로 남깁니다.
+                    ALICE_LOG_INFO("CookFile: in=\"%s\" -> out=\"%s\"",
+                                   inPath.string().c_str(),
+                                   outPath.string().c_str());
+                    if (!rm.CookAndSave(inPath, outPath))
+                    {
+                        ALICE_LOG_ERRORF("BuildGame: CookAndSave failed. in=\"%s\" out=\"%s\"",
+                                         inPath.string().c_str(), outPath.string().c_str());
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        void CopyAllDlls(const std::filesystem::path& fromDir, const std::filesystem::path& toDir)
+        {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+            if (!fs::exists(fromDir, ec) || ec) return;
+            fs::create_directories(toDir, ec);
+            ec.clear();
+
+            for (fs::directory_iterator it(fromDir, ec), end; it != end; it.increment(ec))
+            {
+                if (ec) { ec.clear(); continue; }
+                if (!it->is_regular_file(ec) || ec) { ec.clear(); continue; }
+                const fs::path p = it->path();
+                if (p.extension() == ".dll")
+                {
+                    CopyFileOver(p, toDir / p.filename());
+                }
+            }
+        }
     }
 
     namespace
@@ -238,8 +395,11 @@ namespace Alice
 
         ImFontConfig baseConfig{};
         baseConfig.MergeMode = false;
+        const std::string fontKr =
+            (m_resources ? m_resources->Resolve("Resource/Fonts/NotoSansKR-Regular.ttf").string()
+                         : std::string("Resource/Fonts/NotoSansKR-Regular.ttf"));
         io.FontDefault = io.Fonts->AddFontFromFileTTF(
-            "../Resource/Fonts/NotoSansKR-Regular.ttf",
+            fontKr.c_str(),
             18.0f,
             &baseConfig,
             io.Fonts->GetGlyphRangesKorean());
@@ -247,8 +407,11 @@ namespace Alice
         ImFontConfig jpConfig{};
         jpConfig.MergeMode = true;
         jpConfig.PixelSnapH = true;
+        const std::string fontJp =
+            (m_resources ? m_resources->Resolve("Resource/Fonts/meiryo.ttc").string()
+                         : std::string("Resource/Fonts/meiryo.ttc"));
         io.Fonts->AddFontFromFileTTF(
-            "../Resource/Fonts/meiryo.ttc",
+            fontJp.c_str(),
             18.0f,
             &jpConfig,
             io.Fonts->GetGlyphRangesJapanese());
@@ -526,7 +689,9 @@ namespace Alice
                     s_SceneSelected.clear();
                     s_DefaultScene = -1;
 
-                    const fs::path assetsRoot = "../Assets";
+                    const fs::path assetsRoot =
+                        (m_resources ? m_resources->Resolve("Assets")
+                                     : fs::path("Assets"));
                     if (fs::exists(assetsRoot))
                     {
                         for (const auto& entry : fs::recursive_directory_iterator(assetsRoot))
@@ -718,11 +883,14 @@ namespace Alice
                                 return;
                             }
 
+                            ScopedHandle hProcess(pi.hProcess);
+                            ScopedHandle hThread(pi.hThread);
+
                             // 프로세스가 끝날 때까지 기다리면서 간단한 진행률 애니메이션
                             float p = 0.0f;
                             for (;;)
                             {
-                                DWORD wait = WaitForSingleObject(pi.hProcess, 50);
+                                DWORD wait = WaitForSingleObject(hProcess.h, 50);
                                 if (wait == WAIT_TIMEOUT)
                                 {
                                     p += 0.005f;
@@ -736,45 +904,73 @@ namespace Alice
                             }
 
                             DWORD exitCode = 0;
-                            GetExitCodeProcess(pi.hProcess, &exitCode);
-                            CloseHandle(pi.hProcess);
-                            CloseHandle(pi.hThread);
+                            GetExitCodeProcess(hProcess.h, &exitCode);
 
                             ALICE_LOG_INFO("Build Game: CMake build finished with exitCode=%lu",
                                            static_cast<unsigned long>(exitCode));
 
                             if (exitCode == 0)
                             {
-                                // 3) Release 실행 파일 폴더로 필요한 리소스 디렉터리 복사
+                                // 3) Release 실행 파일 폴더(= exe 옆)로 필요한 디렉터리 배치
                                 namespace fs2 = std::filesystem;
 #ifdef _DEBUG
                                 fs2::path releaseBinDir = projectRoot / "build/bin/Debug";
 #else
                                 fs2::path releaseBinDir = projectRoot / "build/bin/Release";
 #endif
-                                fs2::path binParent     = releaseBinDir.parent_path(); // build/bin
+                                // 이제는 exe 와 같은 폴더에 Assets/Cooked 가 존재하도록 합니다.
+                                // (기존처럼 build/bin 에 복사하고 ../ 로 접근하는 방식은 제거)
 
-                                auto copyDirIfExists = [](const fs2::path& src, const fs2::path& dst)
+                                // Assets 는 그대로 복사
+                                if (!CopyDirTree(projectRoot / "Assets", releaseBinDir / "Assets"))
                                 {
-                                    if (!fs2::exists(src)) return;
-                                    std::error_code ec;
-                                    fs2::create_directories(dst, ec);
-                                    fs2::copy(src, dst,
-                                              fs2::copy_options::recursive | fs2::copy_options::overwrite_existing,
-                                              ec);
-                                };
+                                    g_BuildExitCode.store(2);
+                                    g_BuildInProgress.store(false);
+                                    return;
+                                }
 
-                                copyDirIfExists(projectRoot / "Assets",   binParent / "Assets");
-                                copyDirIfExists(projectRoot / "Resource", binParent / "Resource");
-                                copyDirIfExists(projectRoot / "Cooked",   binParent / "Cooked");
+                                // Cooked 는 "항상 새로 생성"합니다.
+                                // - 구버전 Cooked/Resource 같은 폴더가 절대 따라오지 않게 삭제 후 재생성
+                                // - Cooked 안의 모든 파일은 암호화된 바이너리여야 함(확장자 유지)
+                                const fs2::path stageCooked = releaseBinDir / "Cooked";
+                                if (!MakeCleanDir(stageCooked))
+                                {
+                                    g_BuildExitCode.store(3);
+                                    g_BuildInProgress.store(false);
+                                    return;
+                                }
+
+                                // (A) 기존 Cooked 산출물도 가져오되, 모든 파일을 암호화 상태로 보장합니다.
+                                //     - .alice 는 이미 암호화되어 있으므로 그대로 복사
+                                //     - 나머지는 암호화 저장
+                                //     - 그리고 "Cooked/Resource" 하위는 완전히 제외(재발 방지)
+                                if (!CookAllIntoCookedRoot(projectRoot / "Cooked", stageCooked, "Resource/"))
+                                {
+                                    g_BuildExitCode.store(4);
+                                    g_BuildInProgress.store(false);
+                                    return;
+                                }
+
+                                // (B) Resource 는 원본 폴더를 배포에 넣지 않고,
+                                //     암호화된 바이너리로 Cooked/<상대경로> 에 전부 패킹합니다.
+                                if (!CookAllIntoCookedRoot(projectRoot / "Resource", stageCooked))
+                                {
+                                    ALICE_LOG_ERRORF("Build Game: failed to cook Resource -> Cooked (stage).");
+                                    g_BuildExitCode.store(5);
+                                    g_BuildInProgress.store(false);
+                                    return;
+                                }
 
                                 // BuildSettings 도 Release 폴더에 복사
-                                std::error_code ec;
-                                fs2::copy_file(cfgPath, releaseBinDir / "BuildSettings.txt",
-                                               fs2::copy_options::overwrite_existing, ec);
+                                if (!CopyFileOver(cfgPath, releaseBinDir / "BuildSettings.txt"))
+                                {
+                                    g_BuildExitCode.store(6);
+                                    g_BuildInProgress.store(false);
+                                    return;
+                                }
 
-                                ALICE_LOG_INFO("Build Game: copied Assets/Resource/Cooked to \"%s\"",
-                                               binParent.string().c_str());
+                                ALICE_LOG_INFO("Build Game: staged content next to exe. dir=\"%s\"",
+                                               releaseBinDir.string().c_str());
 
                                 // 4) 사용자가 지정한 Export 폴더로 배포용 파일 복사
                                 fs2::path exportRoot = exportPathStr;
@@ -787,48 +983,32 @@ namespace Alice
                                 fs2::create_directories(exportRoot, ec2);
 
                                 // 실행 파일 복사
-                                fs2::copy_file(releaseBinDir / "AlicePlayer.exe",
-                                               exportRoot / "AlicePlayer.exe",
-                                               fs2::copy_options::overwrite_existing,
-                                               ec2);
-
-                                // 필요한 DLL 들 복사 (assimp, AliceScripts 등)
-                                if (fs2::exists(releaseBinDir))
+                                if (!CopyFileOver(releaseBinDir / "AlicePlayer.exe", exportRoot / "AlicePlayer.exe"))
                                 {
-                                    for (const auto& entry : fs2::directory_iterator(releaseBinDir))
-                                    {
-                                        if (!entry.is_regular_file())
-                                            continue;
-
-                                        if (entry.path().extension() == ".dll")
-                                        {
-                                            std::error_code ecDll;
-                                            fs2::copy_file(entry.path(),
-                                                           exportRoot / entry.path().filename(),
-                                                           fs2::copy_options::overwrite_existing,
-                                                           ecDll);
-                                        }
-                                    }
+                                    g_BuildExitCode.store(7);
+                                    g_BuildInProgress.store(false);
+                                    return;
                                 }
 
-                                // 리소스 디렉터리 복사
-                                copyDirIfExists(binParent / "Assets",   exportRoot / "Assets");
-                                copyDirIfExists(binParent / "Resource", exportRoot / "Resource");
-                                copyDirIfExists(binParent / "Cooked",   exportRoot / "Cooked");
+                                // 필요한 DLL 들 복사 (assimp, AliceScripts 등)
+                                CopyAllDlls(releaseBinDir, exportRoot);
 
-                                // 최종 빌드에는 원본 이미지(Resource/Image)는 포함하지 않습니다.
-                                fs2::path exportedImageDir = exportRoot / "Resource/Image";
-                                if (fs2::exists(exportedImageDir))
+                                // 배포용 폴더: exe 옆에 Assets/Cooked 를 두고, Resource 원본은 넣지 않습니다.
+                                if (!CopyDirTree(releaseBinDir / "Assets", exportRoot / "Assets") ||
+                                    !CopyDirTree(releaseBinDir / "Cooked", exportRoot / "Cooked"))
                                 {
-                                    std::error_code ecRemove;
-                                    fs2::remove_all(exportedImageDir, ecRemove);
+                                    g_BuildExitCode.store(8);
+                                    g_BuildInProgress.store(false);
+                                    return;
                                 }
 
                                 // BuildSettings 복사
-                                fs2::copy_file(releaseBinDir / "BuildSettings.txt",
-                                               exportRoot / "BuildSettings.txt",
-                                               fs2::copy_options::overwrite_existing,
-                                               ec2);
+                                if (!CopyFileOver(releaseBinDir / "BuildSettings.txt", exportRoot / "BuildSettings.txt"))
+                                {
+                                    g_BuildExitCode.store(9);
+                                    g_BuildInProgress.store(false);
+                                    return;
+                                }
 
                                 ALICE_LOG_INFO("Build Game: exported player to \"%s\"",
                                                exportRoot.string().c_str());
@@ -889,7 +1069,9 @@ namespace Alice
                         {
                             // Assets/Prefabs 폴더 아래에 간단한 이름으로 저장합니다.
                             namespace fs = std::filesystem;
-                            const fs::path prefabDir = "../Assets/Prefabs";
+                            const fs::path prefabDir =
+                                (m_resources ? m_resources->Resolve("Assets/Prefabs")
+                                             : fs::path("Assets/Prefabs"));
                             if (!fs::exists(prefabDir))
                             {
                                 fs::create_directories(prefabDir);
@@ -1058,7 +1240,7 @@ namespace Alice
                         {
                             std::filesystem::path src = fileBuffer;
                             // 아주 단순하게: 원본 이미지를 그대로 경로로 사용합니다.
-                            // (필요하다면 ResourceManager 를 통해 .abtex 로 쿠킹하는 것으로 확장 가능)
+                            // (최종 빌드에서는 BuildGame이 Resource를 Cooked/*.alice로 패킹하므로, gameMode에서는 ResourceManager가 자동으로 Cooked를 사용합니다)
                             mat->albedoTexturePath = src.string();
                             changed = true;
 
@@ -1107,7 +1289,9 @@ namespace Alice
                     if (ImGui::BeginPopup("SelectMaterialAssetPopup"))
                     {
                         namespace fs = std::filesystem;
-                        const fs::path assetsRoot = "../Assets";
+                        const fs::path assetsRoot =
+                            (m_resources ? m_resources->Resolve("Assets")
+                                         : fs::path("Assets"));
 
                         if (fs::exists(assetsRoot))
                         {
@@ -1286,8 +1470,10 @@ namespace Alice
             Alice::ImGuiText(L"Assets 폴더");
             ImGui::Separator();
 
-            // Unity 스타일로 프로젝트 루트 하위의 Assets 폴더를 기준으로 디렉터리를 보여줍니다.
-            const std::filesystem::path assetsRoot = "../Assets";
+            // Assets 폴더는 논리 경로로만 다루고, 실제 위치는 ResourceManager 가 해석합니다.
+            const std::filesystem::path assetsRoot =
+                (m_resources ? m_resources->Resolve("Assets")
+                             : std::filesystem::path("Assets"));
             if (!std::filesystem::exists(assetsRoot))
             {
                 // 폴더가 없다면 한 번만 생성해 둡니다.
@@ -1527,10 +1713,14 @@ namespace Alice
                     char buf[256] = {};
                     std::snprintf(buf, sizeof(buf),
                                   "[Editor] SceneFile::Load (no-save path): \"%s\"\n",
-                                  g_NextScenePath.u8string().c_str());
+                                  g_NextScenePath.string().c_str());
                     OutputDebugStringA(buf);
                 }
-                SceneFile::Load(world, g_NextScenePath);
+                {
+                    const std::filesystem::path loadAbs =
+                        (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+                    SceneFile::Load(world, loadAbs);
+                }
                 EnsureSkinnedMeshesRegistered(world);
                 selectedEntity       = InvalidEntityId;
                 g_CurrentScenePath   = g_NextScenePath;
@@ -1560,10 +1750,14 @@ namespace Alice
                     char buf[256] = {};
                     std::snprintf(buf, sizeof(buf),
                                   "[Editor] SceneFile::Load (dont-save): \"%s\"\n",
-                                  g_NextScenePath.u8string().c_str());
+                                  g_NextScenePath.string().c_str());
                     OutputDebugStringA(buf);
                 }
-                SceneFile::Load(world, g_NextScenePath);
+                {
+                    const std::filesystem::path loadAbs =
+                        (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+                    SceneFile::Load(world, loadAbs);
+                }
                 EnsureSkinnedMeshesRegistered(world);
                 selectedEntity        = InvalidEntityId;
                 g_CurrentScenePath    = g_NextScenePath;
@@ -1885,7 +2079,7 @@ namespace Alice
 					std::filesystem::path exeDir = exePath.parent_path();
 					std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
 					std::filesystem::path scriptsSolutionRoot = projectRoot / "ScriptsBuild" / "build" / "AliceUserScripts.sln";
-                    ALICE_LOG_INFO("[Editor] Opening script solution: \"%s\"\n", scriptsSolutionRoot.u8string().c_str());
+                    ALICE_LOG_INFO("[Editor] Opening script solution: \"%s\"", scriptsSolutionRoot.string().c_str());
 					ShellExecuteW(nullptr, L"open", scriptsSolutionRoot.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 }
                 else if (ext == ".scene")
@@ -2005,7 +2199,7 @@ namespace Alice
                                 char buf[512] = {};
                                 std::snprintf(buf, sizeof(buf),
                                               "[Editor] Instantiate FBX: assetPath=\"%s\" sourceFbx=\"%s\" meshKey=\"%s\" mats=%zu\n",
-                                              path.u8string().c_str(),
+                                              path.string().c_str(),
                                               asset.sourceFbx.c_str(),
                                               asset.meshAssetPath.c_str(),
                                               asset.materialAssetPaths.size());
@@ -2021,7 +2215,8 @@ namespace Alice
                                     FbxImporter importer(*m_resources, m_skinnedRegistry);
                                     auto* device = m_renderDevice->GetDevice();
                                     // 원본 FBX 경로는 .fbxasset 안의 source_fbx 에 저장되어 있습니다.
-                                    std::filesystem::path srcFbxPath = asset.sourceFbx;
+                                    std::filesystem::path srcFbxPath =
+                                        (m_resources ? m_resources->Resolve(asset.sourceFbx) : std::filesystem::path(asset.sourceFbx));
                                     importer.Import(device, srcFbxPath, opt);
 
                                     OutputDebugStringA("[Editor] Instantiate FBX: mesh was not in registry, re-imported FBX\n");
@@ -2103,17 +2298,18 @@ namespace Alice
             }
             else
             {
-                fbxAssetPath = std::filesystem::path("../Assets/Fbx")
+                fbxAssetPath = std::filesystem::path("Assets/Fbx")
                              / (comp.meshAssetPath + ".fbxasset");
             }
 
             Alice::FbxInstanceAsset instance{};
-            if (!Alice::LoadFbxInstanceAsset(fbxAssetPath, instance))
+            const std::filesystem::path fbxAssetAbs = m_resources->Resolve(fbxAssetPath);
+            if (!Alice::LoadFbxInstanceAsset(fbxAssetAbs, instance))
             {
                 char buf[256] = {};
                 std::snprintf(buf, sizeof(buf),
                               "[Editor] EnsureSkinnedMeshesRegistered: failed to load .fbxasset \"%s\" for meshKey=\"%s\"\n",
-                              fbxAssetPath.u8string().c_str(),
+                              fbxAssetAbs.string().c_str(),
                               comp.meshAssetPath.c_str());
                 OutputDebugStringA(buf);
                 continue;
@@ -2124,7 +2320,7 @@ namespace Alice
                 char buf[256] = {};
                 std::snprintf(buf, sizeof(buf),
                               "[Editor] EnsureSkinnedMeshesRegistered: .fbxasset has empty source_fbx for \"%s\"\n",
-                              fbxAssetPath.u8string().c_str());
+                              fbxAssetPath.string().c_str());
                 OutputDebugStringA(buf);
                 continue;
             }
@@ -2133,13 +2329,13 @@ namespace Alice
             FbxImportOptions opt{};
             FbxImporter importer(*m_resources, m_skinnedRegistry);
 
-            std::filesystem::path srcFbxPath = instance.sourceFbx;
+            std::filesystem::path srcFbxPath = m_resources->Resolve(instance.sourceFbx);
             FbxImportResult result = importer.Import(device, srcFbxPath, opt);
 
             char buf[512] = {};
             std::snprintf(buf, sizeof(buf),
                           "[Editor] EnsureSkinnedMeshesRegistered: re-import FBX \"%s\" -> meshKey=\"%s\" result.mesh=\"%s\"\n",
-                          srcFbxPath.u8string().c_str(),
+                          srcFbxPath.string().c_str(),
                           comp.meshAssetPath.c_str(),
                           result.meshAssetPath.c_str());
             OutputDebugStringA(buf);
@@ -2150,17 +2346,18 @@ namespace Alice
 		std::filesystem::path savePath = g_CurrentScenePath;
 		if (savePath.empty())
 		{
-			savePath = "../Assets/AutoSaved.scene";
+			savePath = "Assets/AutoSaved.scene";
 		}
 		{
 			char buf[256] = {};
 			std::snprintf(buf, sizeof(buf),
 				"[Editor] SceneFile::Save: \"%s\"\n",
-				savePath.u8string().c_str());
+				savePath.string().c_str());
 			OutputDebugStringA(buf);
 		}
-		SceneFile::Save(world, savePath);
-		g_CurrentScenePath = savePath;
+		const std::filesystem::path saveAbs = (m_resources ? m_resources->Resolve(savePath) : savePath);
+		SceneFile::Save(world, saveAbs);
+		g_CurrentScenePath = savePath; // 논리 경로로 유지
 		g_HasCurrentScenePath = true;
 		g_SceneDirty = false;
 
@@ -2171,12 +2368,13 @@ namespace Alice
 			char buf[256] = {};
 			std::snprintf(buf, sizeof(buf),
 				"[Editor] SceneFile::Load (after save): \"%s\"\n",
-				g_NextScenePath.u8string().c_str());
+				g_NextScenePath.string().c_str());
 			OutputDebugStringA(buf);
 		}
-		SceneFile::Load(world, g_NextScenePath);
+		const std::filesystem::path loadAbs = (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+		SceneFile::Load(world, loadAbs);
 		EnsureSkinnedMeshesRegistered(world);
-		g_CurrentScenePath = g_NextScenePath;
+		g_CurrentScenePath = g_NextScenePath; // 논리 경로
 		g_HasCurrentScenePath = true;
 		g_SceneDirty = false;
 
