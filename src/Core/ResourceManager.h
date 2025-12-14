@@ -83,7 +83,7 @@ namespace Alice
         static bool StartsWith(std::string_view s, std::string_view prefix);
         static std::filesystem::path NormalizeLegacyDotDot(const std::filesystem::path& p);
         static std::filesystem::path ToAlicePath(std::filesystem::path p);
-        static std::filesystem::path TryNormalizeAbsoluteResourceToLogical(const std::filesystem::path& p);
+        static std::filesystem::path NormalizeResourcePathAbsoluteToLogical(const std::filesystem::path& p);
         static std::uint64_t Fnv1a64Bytes(const std::uint8_t* data, std::size_t size);
         static std::uint64_t HashString64(std::string_view s);
         static std::uint64_t ComputeBufferHashSampled(const std::vector<std::uint8_t>& data);

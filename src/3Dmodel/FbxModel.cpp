@@ -5,9 +5,13 @@
 #include "FbxAnimation.h"
 #include "../Core/Helper.h"
 
+#include <filesystem>
+#include <ranges>
+
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include <queue>
 
 using namespace DirectX;
 
@@ -45,6 +49,7 @@ void FbxModel::Release()
 	m_->animType = AnimationType::None;
 }
 
+// pathW는 절대경로가 들어온다.
 bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 {
 	Release();
@@ -70,9 +75,12 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 	}
 
 	// Base dir
-	std::wstring baseDir = pathW; size_t slash = baseDir.find_last_of(L"/\\"); baseDir = (slash == std::wstring::npos) ? L"" : baseDir.substr(0, slash + 1);
+	// L"D:\\Project\\Resource\\Models\\player.fbx";
+	// -> L"D:\\Project\\Resource\\Models\\" 
+	auto baseDir = std::filesystem::path(pathW).parent_path().wstring();
 
 	// Build subsystems
+	// 해당하는 폴더에 있는 모든 텍스쳐를 읽어봄.
 	if (!m_->materials.Load(device, m_->scene, baseDir)) return false;
 	if (!m_->geometry.Build(device, m_->scene)) return false;
 	m_->skeleton.BuildFromScene(m_->scene);
@@ -83,6 +91,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 	bool hasBones = m_->skeleton.HasBones();
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{
+		m_->animType = AnimationType::Rigid;
 		m_->skeleton.BuildRigidBones();
 		// Build rigid weights from per-vertex owning nodes so GPU skinning path can be reused
 		{
@@ -122,7 +131,6 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 				m_->geometry.RebuildVBFromCPU(device);
 			}
 		}
-		m_->animType = AnimationType::Rigid;
 	}
 	else if (hasBones)
 	{
@@ -141,7 +149,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			// Build base vertex table (mesh -> start in aggregated array) using same traversal order as geometry
 			std::vector<size_t> baseVertex; baseVertex.resize(m_->scene->mNumMeshes, 0);
 			size_t cursor = 0;
-			std::function<void(const aiNode*)> fillBase = [&](const aiNode* node){
+			/*std::function<void(const aiNode*)> fillBase = [&](const aiNode* node){
 				for (unsigned mi = 0; mi < node->mNumMeshes; ++mi)
 				{
 					unsigned meshIdx = node->mMeshes[mi];
@@ -150,7 +158,23 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 				}
 				for (unsigned ci = 0; ci < node->mNumChildren; ++ci) fillBase(node->mChildren[ci]);
 			};
-			fillBase(m_->scene->mRootNode);
+			fillBase(m_->scene->mRootNode);*/
+			std::queue<const aiNode*> q;
+			q.push(m_->scene->mRootNode);
+
+			while (!q.empty()) {
+				const aiNode* node = q.front(); q.pop();
+				// 메시 처리
+				for (unsigned mi : std::views::counted(node->mMeshes, node->mNumMeshes)) {
+					unsigned meshIdx = node->mMeshes[mi];
+					baseVertex[meshIdx] = cursor;
+					cursor += m_->scene->mMeshes[meshIdx]->mNumVertices;
+				}
+				// 자식 노드 큐에 추가
+				for (const aiNode* child : std::views::counted(node->mChildren, node->mNumChildren)) {
+					q.push(child);
+				}
+			}
 
 			for (unsigned mi = 0; mi < m_->scene->mNumMeshes; ++mi)
 			{
@@ -168,8 +192,12 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 						const aiVertexWeight& vw = b->mWeights[wi];
 						size_t v = base + (size_t)vw.mVertexId;
 						if (v >= inf.size()) continue;
-						int slot = 0; float minW = inf[v].w[0];
-						for (int s = 1; s < 4; ++s) { if (inf[v].w[s] < minW) { minW = inf[v].w[s]; slot = s; } }
+
+						//int slot = 0; float minW = inf[v].w[0];
+						//for (int s = 1; s < 4; ++s) { if (inf[v].w[s] < minW) { minW = inf[v].w[s]; slot = s; } }
+						auto min_it = std::min_element(std::begin(inf[v].w), std::end(inf[v].w));
+						int slot = (int)std::distance(std::begin(inf[v].w), min_it);
+
 						inf[v].idx[slot] = (unsigned short)boneIdx;
 						inf[v].w[slot] = (float)vw.mWeight;
 					}

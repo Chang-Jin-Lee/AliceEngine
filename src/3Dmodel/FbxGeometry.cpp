@@ -47,7 +47,7 @@ bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
 	if (!device || !scene || !scene->HasMeshes()) return false;
 	Clear();
 
-	// 비재귀 BFS(부모→자식 위상 순서)로 모든 메쉬를 나열하고, 레벨 단위 병렬 처리
+	// 부모→자식 위상 정렬로 모든 메쉬를 나열하고, 레벨 단위 병렬 처리
 	struct MeshEntry
 	{
 		const aiNode* node;
@@ -77,12 +77,8 @@ bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
 			{
 				const aiMesh* mesh = scene->mMeshes[node->mMeshes[mi]];
 				uint32_t vtx = mesh->mNumVertices;
-				uint32_t idx = 0;
-				for (unsigned f = 0; f < mesh->mNumFaces; ++f)
-				{
-					const aiFace& face = mesh->mFaces[f];
-					if (face.mNumIndices == 3) idx += 3;
-				}
+				uint32_t idx = mesh->mNumFaces * 3; // 단순 곱셈으로 진행
+
 				size_t entryIndex = entries.size();
 				entries.push_back({ node, mesh, mesh->mMaterialIndex, vtx, idx, 0, 0, entryIndex });
 				totalVertices += vtx;
@@ -134,29 +130,23 @@ bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
 			m_->owningNode[vBase + i] = e.node->mName.C_Str();
 		}
 		size_t iBase = e.indexOffset;
-		uint32_t triW = 0;
 		for (unsigned f = 0; f < mesh->mNumFaces; ++f)
 		{
 			const aiFace& face = mesh->mFaces[f];
-			if (face.mNumIndices == 3)
-			{
-				m_->indices[iBase + triW + 0] = (uint32_t)(vBase + face.mIndices[0]);
-				m_->indices[iBase + triW + 1] = (uint32_t)(vBase + face.mIndices[1]);
-				m_->indices[iBase + triW + 2] = (uint32_t)(vBase + face.mIndices[2]);
-				triW += 3;
-			}
+			// Face는 항상 3개의 인덱스를 가집니다. 인덱스 버퍼에 바로 기록
+			m_->indices[iBase + (f * 3) + 0] = (uint32_t)(vBase + face.mIndices[0]);
+			m_->indices[iBase + (f * 3) + 1] = (uint32_t)(vBase + face.mIndices[1]);
+			m_->indices[iBase + (f * 3) + 2] = (uint32_t)(vBase + face.mIndices[2]);
 		}
 		m_->subsets[e.entryIndex] = { (uint32_t)e.indexOffset, (uint32_t)e.indexCount, e.materialIndex };
 	};
 
 	for (const auto& range : levelRanges)
 	{
-		auto begin = entries.begin() + range.first;
-		auto end = begin + range.second;
 #if FBX_HAS_EXECUTION
-		std::for_each(std::execution::par, begin, end, processEntry);
+		std::for_each(std::execution::par, entries.begin(), entries.end(), processEntry);
 #else
-		std::for_each(begin, end, processEntry);
+		std::for_each(entries.begin(), entries.end(), processEntry);
 #endif
 	}
 

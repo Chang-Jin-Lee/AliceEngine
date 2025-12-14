@@ -34,25 +34,25 @@ namespace Alice
         return p;
     }
 
-    std::filesystem::path ResourceManager::TryNormalizeAbsoluteResourceToLogical(const std::filesystem::path& p)
+    // D:\Project\Resource\Textures\player.png 
+    // -> Resource/Textures/player.png 
+    std::filesystem::path ResourceManager::NormalizeResourcePathAbsoluteToLogical(const std::filesystem::path& p)
     {
-        if (!p.is_absolute())
-            return p;
+		// 절대 경로가 아니면 그대로 반환함
+        if (!p.is_absolute()) return p;
 
         // absolute 경로 안에 ".../Resource/<rel>" 또는 "...\\Resource\\<rel>" 가 있으면
-        // "Resource/<rel>" 로 정규화합니다 (최종 빌드에서 경로 노출 최소화).
+        // "Resource/<rel>" 로 정규화함 (최종 빌드에서 경로 노출 최소화).
         const std::string s = p.generic_string(); // '/' 로 통일
         std::string lower = s;
         for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
         const std::string needle = "/resource/";
         const auto pos = lower.find(needle);
-        if (pos == std::string::npos)
-            return p;
+        if (pos == std::string::npos) return p;
 
         const std::string rel = s.substr(pos + needle.size());
-        if (rel.empty())
-            return std::filesystem::path("Resource");
+        if (rel.empty()) return std::filesystem::path("Resource");
         return std::filesystem::path("Resource") / std::filesystem::path(rel);
     }
 
@@ -117,14 +117,14 @@ namespace Alice
 
     std::filesystem::path ResourceManager::Resolve(const std::filesystem::path& logicalOrRelative) const
     {
-        if (logicalOrRelative.empty())
-            return {};
+        if (logicalOrRelative.empty()) return {};
 
+        // lexically_normal()를 쓰면 사이사이에 있는 ./ or ../ or /// 등을 정리해줌
         if (logicalOrRelative.is_absolute())
-            return TryNormalizeAbsoluteResourceToLogical(logicalOrRelative).lexically_normal();
+            return NormalizeResourcePathAbsoluteToLogical(logicalOrRelative).lexically_normal();
 
         std::filesystem::path p = NormalizeLegacyDotDot(logicalOrRelative);
-        p = TryNormalizeAbsoluteResourceToLogical(p);
+        p = NormalizeResourcePathAbsoluteToLogical(p);
         const std::string s = p.generic_string();
 
         // 논리 루트 3종을 지원합니다.
@@ -199,7 +199,7 @@ namespace Alice
 
     std::shared_ptr<const std::vector<std::uint8_t>> ResourceManager::LoadSharedBinaryAuto(const std::filesystem::path& logicalPath) const
     {
-        const std::filesystem::path normalized = TryNormalizeAbsoluteResourceToLogical(NormalizeLegacyDotDot(logicalPath));
+        const std::filesystem::path normalized = NormalizeResourcePathAbsoluteToLogical(NormalizeLegacyDotDot(logicalPath));
         const std::string logicalKey = normalized.generic_string();
 
         // 0) logicalPath -> contentHash 캐시

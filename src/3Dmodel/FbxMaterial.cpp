@@ -225,94 +225,88 @@ static HRESULT CreateTextureFromFileWithTga(
 }
 
 // 공통 텍스처 로더: aiMaterial + aiTextureType 기반으로 한 장 로드
+// fbx 내부에 저장된 텍스쳐 검색 
+// 없으면 임베드된 경로로 탐색
 static ID3D11ShaderResourceView* LoadTextureFromMaterial(
 	ID3D11Device* device,
 	const aiScene* scene,
 	aiMaterial* mat,
 	aiTextureType texType,
-	const std::wstring& baseDir,
+	const std::wstring& baseDirW,
 	std::unordered_map<std::wstring, ID3D11ShaderResourceView*>& cache,
 	ID3D11ShaderResourceView* fallback)
 {
 	if (!device || !scene || !mat) return nullptr;
 
 	aiString texPath;
-	if (mat->GetTexture(texType, 0, &texPath) != AI_SUCCESS)
-	{
-		if (fallback) { fallback->AddRef(); }
-		return fallback;
-	}
-
-	std::string t = texPath.C_Str();
-
 	ID3D11ShaderResourceView* result = nullptr;
+	std::wstring fullPathW;
 
-	// png, jpg등 으로 해봄
-	if (!t.empty())
+	// 1. 텍스처 경로 획득 및 임베디드 확인
+	if (mat->GetTexture(texType, 0, &texPath) == AI_SUCCESS)
 	{
-		const aiTexture* at = scene->GetEmbeddedTexture(t.c_str());
-		if (at)
-		{
-			result = CreateSRVFromEmbedded(device, at);
-		}
-	}
+		std::string texPathStr = texPath.C_Str();
 
-	// 안되면 tga 해보자 
-	if (!result)
-	{
-		std::wstring wtex = WStringFromUtf8(t);
-		bool isAbs = (!wtex.empty() && (wtex.find(L":") != std::wstring::npos || wtex[0] == L'/' || wtex[0] == L'\\'));
-		std::wstring full = isAbs ? wtex : (baseDir + wtex);
-
-		if (auto* cached = FindCached(cache, full))
+		// 임베디드 텍스처를 확인하고 처리 (가장 빠른 경로)
+		if (!texPathStr.empty())
 		{
-			result = cached;
-			result->AddRef();
-		}
-		else
-		{
-			ComPtr<ID3D11Resource> res;
-			ID3D11ShaderResourceView* srv = nullptr;
-			HRESULT hr = CreateTextureFromFileWithTga(device, full, res.GetAddressOf(), &srv);
-			if (SUCCEEDED(hr))
+			const aiTexture* at = scene->GetEmbeddedTexture(texPathStr.c_str());
+			if (at)
 			{
-				result = srv;
-				AddCache(cache, full, srv);
+				// (Embedded 텍스처를 SRV로 변환하는 함수 호출)
+				result = CreateSRVFromEmbedded(device, at);
 			}
-			else
-			{
-				// FBX가 외부 텍스처를 <fbxname>.fbm 폴더에 풀어놓는 경우 재시도
-				std::wstring fileOnly = wtex;
-				size_t p = wtex.find_last_of(L"/\\");
-				if (p != std::wstring::npos) fileOnly = wtex.substr(p + 1);
+		}
 
+		// 임베디드 처리에 실패했거나(result == nullptr) 외부 파일인 경우, 탐색 시작
+		if (!result)
+		{
+			// 2. 외부 파일 경로 탐색 로직
+			std::wstring wtex = WStringFromUtf8(texPathStr);
+			std::filesystem::path baseDir(baseDirW);
+			std::filesystem::path fileOnly = std::filesystem::path(wtex).filename();
+
+			// A. 기본 경로 탐색 (절대 경로 or baseDir / wtex)
+			std::filesystem::path currentPath = wtex;
+			if (!currentPath.is_absolute()) {
+				currentPath = baseDir / wtex;
+			}
+
+			// B. .fbm 폴더 탐색 (경로를 찾을 때까지 시도)
+			if (!std::filesystem::exists(currentPath))
+			{
 				try
 				{
-					for (const auto& de : std::filesystem::directory_iterator(baseDir))
+					for (const auto& entry : std::filesystem::directory_iterator(baseDir))
 					{
-						if (!de.is_directory()) continue;
-						std::wstring dname = de.path().filename().wstring();
-						if (dname.size() >= 4)
+						if (entry.is_directory() &&
+							(entry.path().extension() == L".fbm" || entry.path().extension() == L".FBM"))
 						{
-							std::wstring ext = dname.substr(dname.size() - 4);
-							if (ext == L".fbm" || ext == L".FBM")
-							{
-								std::filesystem::path alt = de.path() / fileOnly;
-								ComPtr<ID3D11Resource> res2;
-								ID3D11ShaderResourceView* srv2 = nullptr;
-								if (SUCCEEDED(CreateTextureFromFileWithTga(device, alt.wstring(), res2.GetAddressOf(), &srv2)))
-								{
-									result = srv2;
-									AddCache(cache, alt.wstring(), srv2);
-									break;
-								}
+							// baseDir/.fbm_folder/file_name 으로 경로 대체
+							currentPath = entry.path() / fileOnly;
+							if (std::filesystem::exists(currentPath)) {
+								break; // 찾았으면 반복문 탈출
 							}
 						}
 					}
 				}
-				catch (...)
+				catch (...) {} // 탐색 실패는 무시
+			}
+
+			fullPathW = currentPath.wstring();
+
+			// 3. 캐시 확인 및 로드
+			if (std::filesystem::exists(currentPath))
+			{
+				if (auto* cached = FindCached(cache, fullPathW))
 				{
-					// directory_iterator 실패 시 무시하고 폴백으로 넘어감
+					result = cached;
+					result->AddRef();
+				}
+				else if (SUCCEEDED(CreateTextureFromFileWithTga(device, fullPathW,
+					(ID3D11Resource**)nullptr, &result)))
+				{
+					AddCache(cache, fullPathW, result);
 				}
 			}
 		}

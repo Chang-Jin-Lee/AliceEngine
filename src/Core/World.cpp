@@ -14,9 +14,10 @@ namespace Alice
         if (id == InvalidEntityId) return;
 
         m_transforms.erase(id);
-        m_scripts.erase(id);
+        RemoveScript(id);
         m_materials.erase(id);
         m_skinnedMeshes.erase(id);
+        m_skinnedAnimations.erase(id);
     }
 
     TransformComponent& World::AddTransform(EntityId id)
@@ -46,12 +47,7 @@ namespace Alice
         comp.instance   = ScriptFactory::Create(scriptName.c_str());
 
         if (comp.instance)
-        {
-            // 스크립트 인스턴스에 World/Entity 컨텍스트를 먼저 설정한 뒤
-            // OnCreate 콜백을 호출합니다.
             comp.instance->SetContext(this, id);
-            comp.instance->OnCreate(*this, id);
-        }
 
         return comp;
     }
@@ -72,7 +68,16 @@ namespace Alice
 
     void World::RemoveScript(EntityId id)
     {
-        m_scripts.erase(id);
+        auto it = m_scripts.find(id);
+        if (it == m_scripts.end())
+            return;
+
+        if (it->second.instance)
+        {
+            it->second.instance->OnDisable();
+            it->second.instance->OnDestroy();
+        }
+        m_scripts.erase(it);
     }
 
     MaterialComponent& World::AddMaterial(EntityId id,
@@ -132,6 +137,32 @@ namespace Alice
     void World::RemoveSkinnedMesh(EntityId id)
     {
         m_skinnedMeshes.erase(id);
+    }
+
+    SkinnedAnimationComponent& World::AddSkinnedAnimation(EntityId id)
+    {
+        return m_skinnedAnimations[id];
+    }
+
+    SkinnedAnimationComponent* World::GetSkinnedAnimation(EntityId id)
+    {
+        auto it = m_skinnedAnimations.find(id);
+        if (it == m_skinnedAnimations.end())
+            return nullptr;
+        return &it->second;
+    }
+
+    const SkinnedAnimationComponent* World::GetSkinnedAnimation(EntityId id) const
+    {
+        auto it = m_skinnedAnimations.find(id);
+        if (it == m_skinnedAnimations.end())
+            return nullptr;
+        return &it->second;
+    }
+
+    void World::RemoveSkinnedAnimation(EntityId id)
+    {
+        m_skinnedAnimations.erase(id);
     }
 }
 

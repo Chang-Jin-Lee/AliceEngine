@@ -65,6 +65,19 @@ namespace Alice
         std::uint32_t              boneCount    { 0 };       // 사용 중인 본 개수
     };
 
+    /// 스키닝 애니메이션 재생 상태(엔티티 단위)
+    /// - 실제 평가/팔레트 계산은 SkinnedAnimationSystem 이 수행합니다.
+    struct SkinnedAnimationComponent
+    {
+        int   clipIndex { 0 };   // 현재 재생 클립 인덱스
+        bool  playing   { true };
+        float speed     { 1.0f }; // 배속(1.0 = 정상)
+        double timeSec  { 0.0 };  // 현재 시간(초)
+
+        // CPU 본 팔레트(ForwardRenderSystem이 여기서 읽어 VS CB로 업로드)
+        std::vector<DirectX::XMFLOAT4X4> palette;
+    };
+
     class World
     {
     public:
@@ -102,6 +115,7 @@ namespace Alice
 
         /// 전체 Script 컴포넌트 컨테이너 (ScriptSystem 이 사용)
         const std::unordered_map<EntityId, ScriptComponent>& GetScripts() const { return m_scripts; }
+        std::unordered_map<EntityId, ScriptComponent>& GetScripts() { return m_scripts; }
 
         /// Script 컴포넌트를 제거합니다.
         void RemoveScript(EntityId id);
@@ -141,6 +155,14 @@ namespace Alice
         /// 스키닝 메시 컴포넌트를 제거합니다.
         void RemoveSkinnedMesh(EntityId id);
 
+        // ==== Skinned Animation 컴포넌트 관련 ====
+
+        SkinnedAnimationComponent& AddSkinnedAnimation(EntityId id);
+        SkinnedAnimationComponent* GetSkinnedAnimation(EntityId id);
+        const SkinnedAnimationComponent* GetSkinnedAnimation(EntityId id) const;
+        const std::unordered_map<EntityId, SkinnedAnimationComponent>& GetSkinnedAnimations() const { return m_skinnedAnimations; }
+        void RemoveSkinnedAnimation(EntityId id);
+
     private:
         EntityId m_nextEntityId { 1 };
 
@@ -148,6 +170,7 @@ namespace Alice
         std::unordered_map<EntityId, ScriptComponent>    m_scripts;
         std::unordered_map<EntityId, MaterialComponent>  m_materials;
         std::unordered_map<EntityId, SkinnedMeshComponent> m_skinnedMeshes;
+        std::unordered_map<EntityId, SkinnedAnimationComponent> m_skinnedAnimations;
     };
 }
 

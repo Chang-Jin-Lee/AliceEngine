@@ -446,6 +446,136 @@ void FbxAnimation::UpdateAndUpload(
 	UploadPalette(ctx, m_PaletteScratch);
 }
 
+void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>& outPalette)
+{
+	outPalette.clear();
+	if (m_Current < 0 || (size_t)m_Current >= m_Names.size())
+		return;
+
+	// Fast path: precomputed 팔레트 사용
+	if ((size_t)m_Current < m_Precomputed.size())
+	{
+		const auto& pc = m_Precomputed[(size_t)m_Current];
+		if (pc.valid && !pc.times.empty() && !pc.palettes.empty())
+		{
+			double dur = pc.durationSec;
+			double t = m_TimeSec;
+			if (dur > 0.0)
+			{
+				while (t < 0.0) t += dur;
+				while (t >= dur) t -= dur;
+			}
+
+			const std::vector<XMMATRIX>* src = nullptr;
+			if (pc.sampleDt > 0.0 && pc.palettes.size() >= 2)
+			{
+				double f = t / pc.sampleDt;
+				double fFloor = std::floor(f);
+				int idx0 = (int)fFloor;
+				int idx1 = idx0 + 1;
+				if (idx0 < 0) idx0 = 0;
+				if (idx1 >= (int)pc.palettes.size()) idx1 = (int)pc.palettes.size() - 1;
+
+				float a = (float)(f - fFloor);
+				if (idx0 == idx1 || a <= 0.0f)
+				{
+					src = &pc.palettes[(size_t)idx0];
+				}
+				else
+				{
+					const auto& pal0 = pc.palettes[(size_t)idx0];
+					const auto& pal1 = pc.palettes[(size_t)idx1];
+					size_t nb = pal0.size();
+					if (pal1.size() < nb) nb = pal1.size();
+					m_PaletteScratch.resize(nb, XMMatrixIdentity());
+					for (size_t i = 0; i < nb; ++i)
+						m_PaletteScratch[i] = LerpMatrix(pal0[i], pal1[i], a);
+					src = &m_PaletteScratch;
+				}
+			}
+			else
+			{
+				int idx = 0;
+				if (dur > 0.0)
+				{
+					idx = (int)(pc.palettes.size() * (t / dur));
+					if (idx >= (int)pc.palettes.size()) idx = (int)pc.palettes.size() - 1;
+					if (idx < 0) idx = 0;
+				}
+				src = &pc.palettes[(size_t)idx];
+			}
+
+			if (src)
+			{
+				outPalette.resize(src->size());
+				for (size_t i = 0; i < src->size(); ++i)
+					XMStoreFloat4x4(&outPalette[i], (*src)[i]);
+				return;
+			}
+		}
+	}
+
+	// Fallback: on-the-fly 평가
+	const aiScene* sc = m_Scene;
+	if (!sc)
+		return;
+
+	if (m_Type == AnimType::Rigid)
+	{
+		std::vector<XMFLOAT4X4> global;
+		EvaluateGlobals(sc, m_NodeIndexOfName, global);
+		if (global.empty() || !m_BoneNames || !m_GlobalInverse)
+			return;
+
+		outPalette.resize(m_BoneNames->size(), XMFLOAT4X4(
+			1,0,0,0,
+			0,1,0,0,
+			0,0,1,0,
+			0,0,0,1));
+
+		XMMATRIX Gi = XMLoadFloat4x4(m_GlobalInverse);
+		for (size_t bi = 0; bi < m_BoneNames->size(); ++bi)
+		{
+			auto itN = m_NodeIndexOfName.find((*m_BoneNames)[bi]);
+			if (itN == m_NodeIndexOfName.end()) continue;
+			int nodeIdx = itN->second;
+			if (nodeIdx < 0 || nodeIdx >= (int)global.size()) continue;
+			XMMATRIX G = XMLoadFloat4x4(&global[(size_t)nodeIdx]);
+			XMStoreFloat4x4(&outPalette[bi], XMMatrixMultiply(Gi, G));
+		}
+		return;
+	}
+
+	if (m_ChannelDirty && !m_ChannelOfNode.empty())
+	{
+		RebuildChannelMapIfNeeded(sc, m_Current, m_NodeIndexOfName, m_ChannelOfNode);
+		m_ChannelDirty = false;
+	}
+
+	EvaluateGlobals(sc, m_NodeIndexOfName, m_GlobalScratch);
+	if (!m_BoneNames || !m_BoneOffsets || !m_GlobalInverse)
+		return;
+
+	outPalette.resize(m_BoneNames->size(), XMFLOAT4X4(
+		1,0,0,0,
+		0,1,0,0,
+		0,0,1,0,
+		0,0,0,1));
+
+	XMMATRIX Gi = XMLoadFloat4x4(m_GlobalInverse);
+	for (size_t bi = 0; bi < m_BoneNames->size(); ++bi)
+	{
+		auto itN = m_NodeIndexOfName.find((*m_BoneNames)[bi]);
+		if (itN == m_NodeIndexOfName.end()) continue;
+		int nodeIdx = itN->second;
+		if (nodeIdx < 0 || nodeIdx >= (int)m_GlobalScratch.size()) continue;
+
+		XMMATRIX G = XMLoadFloat4x4(&m_GlobalScratch[(size_t)nodeIdx]);
+		XMMATRIX Off = XMLoadFloat4x4(&(*m_BoneOffsets)[bi]);
+		XMStoreFloat4x4(&outPalette[bi], XMMatrixMultiply(XMMatrixMultiply(Gi, G), Off));
+	}
+}
+
 void FbxAnimation::UploadRigid(
 	ID3D11DeviceContext* ctx,
 	const aiScene* scene,

@@ -67,6 +67,10 @@ public:
 	void EvaluateGlobals(const aiScene* scene,
 		const std::unordered_map<std::string,int>& nodeIndexOfName,
 		std::vector<DirectX::XMFLOAT4X4>& outGlobal) const;
+
+	// CPU 팔레트 생성 (ForwardRenderSystem에서 전치해서 업로드하므로 전치 없이 XMFLOAT4X4로 반환)
+	// - precomputed clip이 있으면 그걸 사용하고, 없으면 on-the-fly 평가로 fallback 합니다.
+	void BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>& outPalette);
 private:
 	void UploadPalette(ID3D11DeviceContext* ctx, const std::vector<DirectX::XMMATRIX>& pal);
 

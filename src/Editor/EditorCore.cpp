@@ -6,6 +6,7 @@
 #include "Core/ScriptHotReload.h"
 #include "Core/ResourceManager.h"
 #include "Game/FbxImporter.h"
+#include "3Dmodel/FbxModel.h"
 #include "Core/Logger.h"
 
 // ImGui
@@ -674,8 +675,8 @@ namespace Alice
                 static char  s_ExportPath[260] = "../Build/Export"; // 배포용 출력 경로
 
                 ImGui::Text("Output Resolution");
-                ImGui::InputInt("Width",  &s_Width);
-                ImGui::InputInt("Height", &s_Height);
+                ImGui::InputInt("Width (min : 320)",  &s_Width);
+                ImGui::InputInt("Height (min : 240)", &s_Height);
                 if (s_Width < 320)  s_Width  = 320;
                 if (s_Height < 240) s_Height = 240;
 
@@ -1565,41 +1566,146 @@ namespace Alice
         }
         ImGui::End();
 
-        // === Camera ===
+        // === Camera / Animation (같은 영역, 탭) ===
         if (ImGui::Begin("Camera"))
         {
-            Alice::ImGuiText(L"카메라 정보");
-            ImGui::Separator();
-
-            XMFLOAT3 camPos = camera.GetPosition();
-            ImGui::Text("Position : (%.2f, %.2f, %.2f)",
-                        camPos.x, camPos.y, camPos.z);
-
-            ImGui::Separator();
-            Alice::ImGuiText(L"카메라 설정");
-
-            // FOV / near / far 는 Camera 내부 상태를 그대로 읽어와서 수정합니다.
-            float fovDeg = XMConvertToDegrees(camera.GetFovYRadians());
-            float nearPlane = camera.GetNearPlane();
-            float farPlane  = camera.GetFarPlane();
-
-            bool changed = false;
-            changed |= ImGui::SliderFloat("FOV (deg)", &fovDeg, 20.0f, 120.0f);
-            changed |= ImGui::DragFloat("Near Plane",  &nearPlane, 0.01f, 0.01f, 10.0f, "%.3f");
-            changed |= ImGui::DragFloat("Far Plane",   &farPlane,  1.0f,  10.0f, 5000.0f, "%.1f");
-
-            // 카메라 이동 속도 (엔진에서 사용하는 값)
-            ImGui::SliderFloat("Move Speed", &cameraMoveSpeed, 0.1f, 50.0f, "%.2f");
-
-            if (changed)
+            if (ImGui::BeginTabBar("##CameraTabs"))
             {
-                // 값이 바뀐 경우, 기존 종횡비를 유지한 채로 투영 행렬을 재설정합니다.
-                float fovRad  = XMConvertToRadians(fovDeg);
-                float aspect  = camera.GetAspectRatio();
-                // near/far 가 뒤집히지 않도록 간단히 보정
-                nearPlane = (std::max)(nearPlane, 0.01f);
-                farPlane  = (std::max)(farPlane,  nearPlane + 0.1f);
-                camera.SetPerspective(fovRad, aspect, nearPlane, farPlane);
+                if (ImGui::BeginTabItem("Camera"))
+                {
+                    Alice::ImGuiText(L"카메라 정보");
+                    ImGui::Separator();
+
+                    XMFLOAT3 camPos = camera.GetPosition();
+                    ImGui::Text("Position : (%.2f, %.2f, %.2f)",
+                                camPos.x, camPos.y, camPos.z);
+
+                    ImGui::Separator();
+                    Alice::ImGuiText(L"카메라 설정");
+
+                    float fovDeg = XMConvertToDegrees(camera.GetFovYRadians());
+                    float nearPlane = camera.GetNearPlane();
+                    float farPlane  = camera.GetFarPlane();
+
+                    bool changed = false;
+                    changed |= ImGui::SliderFloat("FOV (deg)", &fovDeg, 20.0f, 120.0f);
+                    changed |= ImGui::DragFloat("Near Plane",  &nearPlane, 0.01f, 0.01f, 10.0f, "%.3f");
+                    changed |= ImGui::DragFloat("Far Plane",   &farPlane,  1.0f,  10.0f, 5000.0f, "%.1f");
+                    ImGui::SliderFloat("Move Speed", &cameraMoveSpeed, 0.1f, 50.0f, "%.2f");
+
+                    if (changed)
+                    {
+                        float fovRad  = XMConvertToRadians(fovDeg);
+                        float aspect  = camera.GetAspectRatio();
+                        nearPlane = (std::max)(nearPlane, 0.01f);
+                        farPlane  = (std::max)(farPlane,  nearPlane + 0.1f);
+                        camera.SetPerspective(fovRad, aspect, nearPlane, farPlane);
+                    }
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("Animation"))
+                {
+                    if (selectedEntity == InvalidEntityId)
+                    {
+                        ImGui::TextUnformatted("No entity selected.");
+                    }
+                    else
+                    {
+                        SkinnedMeshComponent* skinned = world.GetSkinnedMesh(selectedEntity);
+                        if (!skinned || skinned->meshAssetPath.empty())
+                        {
+                            ImGui::TextUnformatted("Selected entity has no SkinnedMesh.");
+                        }
+                        else
+                        {
+                            std::shared_ptr<SkinnedMeshGPU> mesh;
+                            if (m_skinnedRegistry)
+                                mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+
+                            ImGui::Text("Entity: %u", (unsigned)selectedEntity);
+                            ImGui::Text("Mesh : %s", skinned->meshAssetPath.c_str());
+
+                            if (!mesh || !mesh->sourceModel)
+                            {
+                                ImGui::Separator();
+                                ImGui::TextUnformatted("Animation data is not ready (re-import FBX once).");
+                                if (ImGui::Button("Re-import Skinned Meshes"))
+                                    EnsureSkinnedMeshesRegistered(world);
+                            }
+                            else
+                            {
+                                const auto& names = mesh->sourceModel->GetAnimationNames();
+                                if (names.empty())
+                                {
+                                    ImGui::TextUnformatted("This mesh has no animations.");
+                                }
+                                else
+                                {
+                                    auto* anim = world.GetSkinnedAnimation(selectedEntity);
+                                    if (!anim)
+                                        anim = &world.AddSkinnedAnimation(selectedEntity);
+
+                                    ImGui::Separator();
+                                    ImGui::Checkbox("Playing", &anim->playing);
+                                    ImGui::SliderFloat("Speed", &anim->speed, 0.0f, 3.0f, "%.2f");
+
+                                    int clip = anim->clipIndex;
+                                    if (clip < 0) clip = 0;
+                                    if (clip >= (int)names.size()) clip = (int)names.size() - 1;
+
+                                    if (ImGui::BeginCombo("Clip", names[(size_t)clip].c_str()))
+                                    {
+                                        for (int i = 0; i < (int)names.size(); ++i)
+                                        {
+                                            const bool sel = (i == clip);
+                                            if (ImGui::Selectable(names[(size_t)i].c_str(), sel))
+                                            {
+                                                clip = i;
+                                                anim->clipIndex = i;
+                                                anim->timeSec = 0.0;
+                                            }
+                                            if (sel) ImGui::SetItemDefaultFocus();
+                                        }
+                                        ImGui::EndCombo();
+                                    }
+                                    anim->clipIndex = clip;
+
+                                    const double dur = mesh->sourceModel->GetClipDurationSec(anim->clipIndex);
+                                    float timeSec = (float)anim->timeSec;
+                                    float durF = (dur > 0.0) ? (float)dur : 0.0f;
+
+                                    ImGui::BeginDisabled(durF <= 0.0f);
+                                    if (ImGui::SliderFloat("Time (sec)", &timeSec, 0.0f, durF, "%.3f"))
+                                        anim->timeSec = (double)timeSec;
+                                    ImGui::EndDisabled();
+
+                                    if (ImGui::Button("Stop"))
+                                    {
+                                        anim->playing = false;
+                                        anim->timeSec = 0.0;
+                                    }
+                                    ImGui::SameLine();
+                                    if (ImGui::Button("<<"))
+                                    {
+                                        anim->playing = false;
+                                        anim->timeSec = (std::max)(0.0, anim->timeSec - 0.1);
+                                    }
+                                    ImGui::SameLine();
+                                    if (ImGui::Button(">>"))
+                                    {
+                                        anim->playing = false;
+                                        anim->timeSec = anim->timeSec + 0.1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
             }
         }
         ImGui::End();

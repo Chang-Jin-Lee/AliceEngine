@@ -298,6 +298,13 @@ namespace Alice
 		// SkinnedMeshRegistry 에 모두 등록되어 있는지 확인합니다.
 		EnsureSkinnedMeshesRegisteredForWorld();
 
+		// ScriptSystem 에 서비스 연결 (입력/씬/리소스/스키닝 레지스트리)
+		m_scriptSystem.SetServices(&m_inputSystem, m_sceneManager.get(), &m_resourceManager, &m_skinnedMeshRegistry);
+		m_scriptSystem.SetAfterSceneLoadedCallback([this]()
+		{
+			EnsureSkinnedMeshesRegisteredForWorld();
+		});
+
 		const auto& transforms = m_world.GetTransforms();
 		const auto& skinnedMeshes = m_world.GetSkinnedMeshes();
 		const auto& scripts = m_world.GetScripts();
@@ -341,6 +348,8 @@ namespace Alice
 			Render();
 		}
 
+		// 종료 라이프사이클
+		m_scriptSystem.OnApplicationQuit(m_world);
 		return static_cast<int>(msg.wParam);
 	}
 
@@ -431,8 +440,8 @@ namespace Alice
 				m_sceneManager->Update(m_timer.DeltaTime());
 			}
 
-			// 엔티티에 붙어 있는 모든 ScriptComponent 를 갱신합니다.
-			m_scriptSystem.Update(m_world, m_timer.DeltaTime());
+			// Unity 스타일 스크립트 라이프사이클 수행
+			m_scriptSystem.Tick(m_world, m_timer.DeltaTime());
 		}
 	}
 
@@ -491,6 +500,11 @@ namespace Alice
 					DirectX::XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f));
 			}
 		}
+
+		// 스키닝 애니메이션(본 팔레트)을 먼저 갱신합니다.
+		// - 에디터 모드에서도 Animation 탭에서 스크럽/재생이 즉시 반영되도록 Render 단계에서 갱신합니다.
+		// - dt=0 이어도(일시정지) 사용자가 시간을 바꾸면 팔레트가 갱신됩니다.
+		m_skinnedAnimSystem.Update(m_world, (double)m_timer.DeltaTime());
 
 		// 스키닝 메시 드로우 리스트를 먼저 구성합니다.
 		m_skinnedMeshSystem.BuildDrawList(m_world, m_skinnedDrawCommands);
