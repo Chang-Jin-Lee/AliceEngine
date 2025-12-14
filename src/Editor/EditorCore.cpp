@@ -1644,8 +1644,7 @@ namespace Alice
                                 else
                                 {
                                     auto* anim = world.GetSkinnedAnimation(selectedEntity);
-                                    if (!anim)
-                                        anim = &world.AddSkinnedAnimation(selectedEntity);
+                                    if (!anim) anim = &world.AddSkinnedAnimation(selectedEntity);
 
                                     ImGui::Separator();
                                     ImGui::Checkbox("Playing", &anim->playing);

@@ -4,6 +4,7 @@
 #include "FbxSkeleton.h"
 #include "FbxAnimation.h"
 #include "../Core/Helper.h"
+#include "../Core/Logger.h"
 
 #include <filesystem>
 #include <ranges>
@@ -149,7 +150,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			// Build base vertex table (mesh -> start in aggregated array) using same traversal order as geometry
 			std::vector<size_t> baseVertex; baseVertex.resize(m_->scene->mNumMeshes, 0);
 			size_t cursor = 0;
-			/*std::function<void(const aiNode*)> fillBase = [&](const aiNode* node){
+			std::function<void(const aiNode*)> fillBase = [&](const aiNode* node){
 				for (unsigned mi = 0; mi < node->mNumMeshes; ++mi)
 				{
 					unsigned meshIdx = node->mMeshes[mi];
@@ -158,23 +159,31 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 				}
 				for (unsigned ci = 0; ci < node->mNumChildren; ++ci) fillBase(node->mChildren[ci]);
 			};
-			fillBase(m_->scene->mRootNode);*/
-			std::queue<const aiNode*> q;
-			q.push(m_->scene->mRootNode);
+			fillBase(m_->scene->mRootNode);
+			/*std::queue<const aiNode*> q;
+			q.push(m_->scene->mRootNode);*/
 
-			while (!q.empty()) {
-				const aiNode* node = q.front(); q.pop();
-				// 메시 처리
-				for (unsigned mi : std::views::counted(node->mMeshes, node->mNumMeshes)) {
-					unsigned meshIdx = node->mMeshes[mi];
-					baseVertex[meshIdx] = cursor;
-					cursor += m_->scene->mMeshes[meshIdx]->mNumVertices;
-				}
-				// 자식 노드 큐에 추가
-				for (const aiNode* child : std::views::counted(node->mChildren, node->mNumChildren)) {
-					q.push(child);
-				}
-			}
+			//while (!q.empty()) {
+			//	const aiNode* node = q.front(); q.pop();
+			//	// 메시 처리
+			//	// NOTE:
+			//	// - node->mMeshes 는 "메시 인덱스 배열"입니다.
+			//	// - std::views::counted(node->mMeshes, node->mNumMeshes) 를 for-each 하면
+			//	//   mi 자체가 meshIdx 값인데, 아래에서 node->mMeshes[mi] 로 다시 인덱싱하면
+			//	//   잘못된 메모리를 참조하여 baseVertex 테이블이 깨지고, 결과적으로 스키닝 가중치가
+			//	//   엉뚱한 정점에 매핑되어 메시가 '부챗살/가시'처럼 찢어집니다.
+			//	// - D3D11-AliceTutorial/31_IBL(App.cpp)의 방식처럼, 인덱스(0..mNumMeshes-1)로 순회합니다.
+			//	for (unsigned mi = 0; mi < node->mNumMeshes; ++mi)
+			//	{
+			//		const unsigned meshIdx = node->mMeshes[mi];
+			//		baseVertex[meshIdx] = cursor;
+			//		cursor += m_->scene->mMeshes[meshIdx]->mNumVertices;
+			//	}
+			//	// 자식 노드 큐에 추가
+			//	for (const aiNode* child : std::views::counted(node->mChildren, node->mNumChildren)) {
+			//		q.push(child);
+			//	}
+			//}
 
 			for (unsigned mi = 0; mi < m_->scene->mNumMeshes; ++mi)
 			{
@@ -214,6 +223,37 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 				verts[i].boneIdx[3] = inf[i].idx[3];
 				verts[i].boneWeight = { inf[i].w[0], inf[i].w[1], inf[i].w[2], inf[i].w[3] };
 			}
+
+			// === Debug: 스키닝 인덱스/가중치가 정상 범위인지 빠르게 확인 ===
+			// - "부챗살/폭발"은 대개 boneIdx가 비정상(범위 밖)일 때 발생합니다.
+			{
+				const auto& boneNamesDbg = m_->skeleton.GetBoneNames();
+				unsigned short maxIdx = 0;
+				double maxWeightSum = 0.0;
+				size_t zeroWeightVerts = 0;
+				for (size_t i = 0; i < verts.size(); ++i)
+				{
+					const auto& v = verts[i];
+					maxIdx = (std::max)(maxIdx, v.boneIdx[0]);
+					maxIdx = (std::max)(maxIdx, v.boneIdx[1]);
+					maxIdx = (std::max)(maxIdx, v.boneIdx[2]);
+					maxIdx = (std::max)(maxIdx, v.boneIdx[3]);
+					const double ws = (double)v.boneWeight.x + (double)v.boneWeight.y + (double)v.boneWeight.z + (double)v.boneWeight.w;
+					maxWeightSum = (std::max)(maxWeightSum, ws);
+					if (ws < 1e-6) ++zeroWeightVerts;
+				}
+				ALICE_LOG_INFO("[FbxModel] SkinWeights: verts=%zu bones=%zu maxBoneIdx=%u zeroWeightVerts=%zu maxWeightSum=%.4f",
+					verts.size(), boneNamesDbg.size(), (unsigned)maxIdx, zeroWeightVerts, maxWeightSum);
+				for (size_t i = 0; i < (std::min<size_t>)(5, verts.size()); ++i)
+				{
+					const auto& v = verts[i];
+					ALICE_LOG_INFO("[FbxModel] v%zu idx=(%u,%u,%u,%u) w=(%.3f,%.3f,%.3f,%.3f)",
+						i,
+						(unsigned)v.boneIdx[0], (unsigned)v.boneIdx[1], (unsigned)v.boneIdx[2], (unsigned)v.boneIdx[3],
+						v.boneWeight.x, v.boneWeight.y, v.boneWeight.z, v.boneWeight.w);
+				}
+			}
+
 			m_->geometry.RebuildVBFromCPU(device);
 		}
 	}

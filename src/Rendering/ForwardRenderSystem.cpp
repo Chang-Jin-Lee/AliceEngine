@@ -74,11 +74,9 @@ VSOutput main(VSInput input)
 }
 )";
 
-        // 간단한 스키닝 전용 버텍스 셰이더
-        // 현재 단계에서는 "스킨 가중치"를 실제로 적용하지 않고,
-        // FBX 메시에 포함된 원래 위치/노말을 그대로 사용해서
-        // "정적 메쉬"처럼 그리기만 합니다.
-        // (파이프라인이 정상 동작하는지 확인하기 위한 가장 단순한 형태)
+        // 스키닝 전용 버텍스 셰이더
+        // - BLENDINDICES / BLENDWEIGHT / gBones 를 사용하여 4본 스키닝을 적용합니다.
+        // - gBones 는 CPU에서 매 프레임 갱신되며, 엔티티별 애니메이션 재생 상태를 반영합니다.
         const char* g_SkinnedVertexShaderSource = R"(
 cbuffer CBPerObject : register(b0)
 {
@@ -95,7 +93,9 @@ cbuffer CBPerObject : register(b0)
 
 cbuffer CBBones : register(b2)
 {
-    float4x4 gBones[64];
+    float4x4 gBones[1023];
+    uint     gBoneCount;
+    float3   _padBones;
 };
 
 struct VSInput
@@ -123,17 +123,36 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
 
-    // TODO(스킨 애니메이션): 나중에 BoneIndices / BoneWeights / gBones 를
-    // 실제로 사용해서 스키닝을 적용합니다.
-    // 지금은 단순히 원래 정점 위치/노말을 그대로 사용합니다.
-    float4 worldPos = mul(float4(input.Position, 1.0f), gWorld);
+    // D3D11-AliceTutorial/31_IBL 방식으로 스키닝
+    // - CPU에서 전치 업로드된 본 팔레트에 대해 row-vector 곱(mul(v, M))을 사용합니다.
+    uint4 bi = input.BoneIndices;
+    float4 bw = input.BoneWeights;
+
+    // DirectX11(행벡터) 기준: v' = v * (Σ w_i * M_i)
+    matrix M = bw.x * gBones[bi.x]
+             + bw.y * gBones[bi.y]
+             + bw.z * gBones[bi.z]
+             + bw.w * gBones[bi.w];
+
+    float4 posL = float4(input.Position, 1.0f);
+    float3 nL = input.Normal;
+    float3 tL = input.Tangent;
+    float3 bL = input.Binormal;
+
+    float4 skinnedPos = mul(posL, M);
+    float3x3 M3 = (float3x3)M;
+    float3 skinnedN = normalize(mul(nL, M3));
+    float3 skinnedT = normalize(mul(tL, M3));
+    float3 skinnedB = normalize(mul(bL, M3));
+
+    float4 worldPos = mul(skinnedPos, gWorld);
     float4 viewPos  = mul(worldPos, gView);
     output.Position = mul(viewPos, gProj);
 
     output.WorldPos = worldPos.xyz;
-    output.Normal   = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
-    output.TangentW = normalize(mul(float4(input.Tangent, 0.0f), gWorld).xyz);
-    output.BitanW   = normalize(mul(float4(input.Binormal, 0.0f), gWorld).xyz);
+    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
+    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
     output.TexCoord = input.TexCoord;
 
     return output;
@@ -1017,12 +1036,15 @@ float4 main(PSInput input) : SV_TARGET
         if (FAILED(hr))
             return false;
 
-        // 본 행렬 상수 버퍼 생성
+        // 본 행렬 상수 버퍼 생성 (31_IBL 방식)
+        // - D3D11_USAGE_DYNAMIC + Map(WRITE_DISCARD)로 매 프레임 갱신
+        // - 1023개 전체를 Identity로 초기화한 뒤 필요한 본만 덮어써서
+        //   인덱스/카운트가 어긋나더라도 메시가 '폭발'하지 않도록 합니다.
         D3D11_BUFFER_DESC cbDesc = {};
         cbDesc.ByteWidth      = sizeof(CBBones);
-        cbDesc.Usage          = D3D11_USAGE_DEFAULT;
+        cbDesc.Usage          = D3D11_USAGE_DYNAMIC;
         cbDesc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
-        cbDesc.CPUAccessFlags = 0;
+        cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
         hr = m_device->CreateBuffer(&cbDesc, nullptr, m_cbBones.ReleaseAndGetAddressOf());
         if (FAILED(hr))
@@ -1276,15 +1298,34 @@ float4 main(PSInput input) : SV_TARGET
         if (!m_cbBones || !boneMatrices || boneCount == 0)
             return;
 
-        CBBones data = {};
+        // 31_IBL과 동일하게: 전체 팔레트를 Identity로 초기화 후 필요한 범위만 덮어쓰기
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(m_context->Map(m_cbBones.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+            return;
+
+        auto* cb = reinterpret_cast<CBBones*>(mapped.pData);
+        if (!cb)
+        {
+            m_context->Unmap(m_cbBones.Get(), 0);
+            return;
+        }
+
         const std::uint32_t count = (std::min)(boneCount, MaxBones);
+        cb->boneCount = count;
+
+        const XMMATRIX I = XMMatrixIdentity();
+        for (std::uint32_t i = 0; i < MaxBones; ++i)
+        {
+            cb->bones[i] = XMMatrixTranspose(I);
+        }
+
         for (std::uint32_t i = 0; i < count; ++i)
         {
             XMMATRIX m = XMLoadFloat4x4(&boneMatrices[i]);
-            data.bones[i] = XMMatrixTranspose(m);
+            cb->bones[i] = XMMatrixTranspose(m);
         }
 
-        m_context->UpdateSubresource(m_cbBones.Get(), 0, nullptr, &data, 0, 0);
+        m_context->Unmap(m_cbBones.Get(), 0);
         m_context->VSSetConstantBuffers(2, 1, m_cbBones.GetAddressOf());
     }
 
