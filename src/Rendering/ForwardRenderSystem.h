@@ -90,10 +90,14 @@ namespace Alice
         };
 
         // 스키닝용 본 행렬 상수 버퍼
-        static constexpr std::uint32_t MaxBones = 64;
+        // - D3D11 상수버퍼 최대 크기(64KB)에 맞춰 1023개(= 1023 * 64B = 65472B)를 사용합니다.
+        // - D3D11-AliceTutorial/31_IBL 과 동일한 스케일.
+        static constexpr std::uint32_t MaxBones = 1023;
         struct CBBones
         {
             DirectX::XMMATRIX bones[MaxBones];
+            std::uint32_t     boneCount { 0 };
+            std::uint32_t     pad[3] { 0, 0, 0 }; // 16바이트 정렬
         };
 
     public:

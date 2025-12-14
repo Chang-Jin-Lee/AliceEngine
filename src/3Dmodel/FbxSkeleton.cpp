@@ -35,6 +35,7 @@ void FbxSkeleton::BuildFromScene(const aiScene* scene)
         std::string nm = node->mName.C_Str();
         FbxSkeletonNode sn{}; 
         sn.name = nm;
+        sn.nameW = WStringFromUtf8(nm);
         sn.parent = parent;
         sn.isBone = false;
 
@@ -102,16 +103,12 @@ void FbxSkeleton::BuildRigidBones()
 	m_BoneNames.clear(); m_BoneOffset.clear();
 	m_BoneNames.reserve(m_Skeleton.size());
 	m_BoneOffset.reserve(m_Skeleton.size());
-	DirectX::XMFLOAT4X4 I{
-        1,0,0,0,
-        0,1,0,0,
-        0,0,1,0,
-        0,0,0,1 
-    };
 
 	for (size_t i = 0; i < m_Skeleton.size(); ++i)
 	{
-		m_BoneNames.push_back(m_Skeleton[i].name);
+        const auto& sn = m_Skeleton[i];
+        m_BoneNames.push_back(sn.name);
+        DirectX::XMFLOAT4X4 I{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
 		m_BoneOffset.push_back(I);
 	}
 }

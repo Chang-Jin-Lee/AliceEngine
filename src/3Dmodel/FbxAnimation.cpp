@@ -453,6 +453,9 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 		return;
 
 	// Fast path: precomputed 팔레트 사용
+	// NOTE:
+	// - 튜토리얼(31_IBL/32_Sound_FMOD)은 "프레임 선택"으로만 사용하고, 행렬을 직접 LERP 하지 않습니다.
+	// - 행렬 요소별 LERP는 회전 성분을 망가뜨려 스키닝이 '납작해짐/폭발'처럼 보일 수 있습니다.
 	if ((size_t)m_Current < m_Precomputed.size())
 	{
 		const auto& pc = m_Precomputed[(size_t)m_Current];
@@ -466,52 +469,25 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 				while (t >= dur) t -= dur;
 			}
 
-			const std::vector<XMMATRIX>* src = nullptr;
-			if (pc.sampleDt > 0.0 && pc.palettes.size() >= 2)
+			int idx = 0;
+			if (pc.sampleDt > 0.0 && !pc.palettes.empty())
 			{
-				double f = t / pc.sampleDt;
-				double fFloor = std::floor(f);
-				int idx0 = (int)fFloor;
-				int idx1 = idx0 + 1;
-				if (idx0 < 0) idx0 = 0;
-				if (idx1 >= (int)pc.palettes.size()) idx1 = (int)pc.palettes.size() - 1;
-
-				float a = (float)(f - fFloor);
-				if (idx0 == idx1 || a <= 0.0f)
-				{
-					src = &pc.palettes[(size_t)idx0];
-				}
-				else
-				{
-					const auto& pal0 = pc.palettes[(size_t)idx0];
-					const auto& pal1 = pc.palettes[(size_t)idx1];
-					size_t nb = pal0.size();
-					if (pal1.size() < nb) nb = pal1.size();
-					m_PaletteScratch.resize(nb, XMMatrixIdentity());
-					for (size_t i = 0; i < nb; ++i)
-						m_PaletteScratch[i] = LerpMatrix(pal0[i], pal1[i], a);
-					src = &m_PaletteScratch;
-				}
+				idx = (int)std::floor(t / pc.sampleDt);
 			}
-			else
+			else if (dur > 0.0 && !pc.palettes.empty())
 			{
-				int idx = 0;
-				if (dur > 0.0)
-				{
-					idx = (int)(pc.palettes.size() * (t / dur));
-					if (idx >= (int)pc.palettes.size()) idx = (int)pc.palettes.size() - 1;
-					if (idx < 0) idx = 0;
-				}
-				src = &pc.palettes[(size_t)idx];
+				// 튜토리얼과 동일한 방식(비보간)
+				idx = (int)(pc.palettes.size() * (t / dur));
 			}
 
-			if (src)
-			{
-				outPalette.resize(src->size());
-				for (size_t i = 0; i < src->size(); ++i)
-					XMStoreFloat4x4(&outPalette[i], (*src)[i]);
-				return;
-			}
+			if (idx < 0) idx = 0;
+			if (idx >= (int)pc.palettes.size()) idx = (int)pc.palettes.size() - 1;
+
+			const auto& src = pc.palettes[(size_t)idx];
+			outPalette.resize(src.size());
+			for (size_t i = 0; i < src.size(); ++i)
+				XMStoreFloat4x4(&outPalette[i], src[i]);
+			return;
 		}
 	}
 

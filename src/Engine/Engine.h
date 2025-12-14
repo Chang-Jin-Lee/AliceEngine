@@ -79,7 +79,7 @@ namespace Alice
         std::uint32_t m_width  = 1600;
         std::uint32_t m_height = 900;
 
-        bool m_isRunning    = false;
+        bool m_isRunning    = false;            // 엔진 자체가 실행중인지 판단
         bool m_isPlaying    = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
         bool m_editorMode   = true;             // true: 에디터, false: 게임 전용
         EntityId m_selectedEntity { InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
