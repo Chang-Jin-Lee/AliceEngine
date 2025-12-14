@@ -140,34 +140,6 @@ add_executable(AliceRenderer
 
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_EDITOR_MAIN} ${ALICE_PLAYER_MAIN} ${ALICE_APP_COMMON_SOURCES} ${ALICE_APP_HEADERS})
 
-# === 콘텐츠 개발용 실행 파일 (Assets 폴더의 스크립트 포함) ===
-# - Unity 의 게임 프로젝트에 해당하는 대상
-file(GLOB_RECURSE ALICE_ASSET_SCRIPTS
-    "${CMAKE_CURRENT_SOURCE_DIR}/Assets/*.cpp"
-)
-
-# 동적 스크립트 DLL (라이브 코딩용)
-file(GLOB_RECURSE ALICE_SCRIPT_DLL_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/Assets/Scripts/*.cpp"
-    "${ALICE_SRC_DIR}/Core/Script.cpp"
-)
-
-add_library(AliceScripts SHARED
-    ${ALICE_SCRIPT_DLL_SOURCES}
-)
-
-target_include_directories(AliceScripts
-    PRIVATE
-        ${ALICE_SRC_DIR}
-        ${IMGUI_DIR}
-        ${IMGUI_DIR}/backends
-)
-
-target_link_libraries(AliceScripts
-    PRIVATE
-        AliceEngine
-)
-
 add_executable(AliceGame
     ${ALICE_EDITOR_MAIN}
     ${ALICE_APP_COMMON_SOURCES}
@@ -198,7 +170,6 @@ target_link_directories(AlicePlayer
 )
 
 source_group(TREE ${ALICE_SRC_DIR}   FILES ${ALICE_EDITOR_MAIN} ${ALICE_PLAYER_MAIN} ${ALICE_APP_COMMON_SOURCES} ${ALICE_APP_HEADERS})
-source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${ALICE_ASSET_SCRIPTS})
 
 # ThirdParty ImGui (docking 브랜치) 경로
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")

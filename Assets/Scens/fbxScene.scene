@@ -38,3 +38,15 @@ material_albedoTex: ../Cooked/Textures\Rapi\Rapi_Diffuse_embedded0.abtex
 skinned_mesh: Rapi
 skinned_instance: ../Assets\Fbx\Rapi.fbxasset
 
+entity: 5
+position: 0 0 0
+rotation: 0 0 0
+scale: 0.05 0.05 0.05
+script: 
+material_color: 0.7 0.7 0.7
+material_asset: D:\Github\AliceRenderer\Assets\Materials\char_0.mat
+material_roughness: 0.5
+material_metalness: 0
+material_albedoTex: Cooked/Textures\char\char_Diffuse_embedded0.alice
+skinned_mesh: char
+skinned_instance: D:\Github\AliceRenderer\Assets\Fbx\char.fbxasset
