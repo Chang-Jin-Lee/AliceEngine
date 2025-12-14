@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.20)
 # ============================================================================
 project(AliceUserScripts LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -36,11 +36,51 @@ target_include_directories(AliceScripts
         "${ALICE_ROOT}/ThirdParty/ImGui/backends"
 )
 
+# vcpkg / 외부 라이브러리(DirectXTK, DirectXTex, Assimp) 설정
+if(MSVC)
+    set(VCPKG_ROOT_DEFAULT "D:/vcpkg")
+    if(DEFINED ENV{VCPKG_ROOT})
+        set(VCPKG_ROOT_DEFAULT "$ENV{VCPKG_ROOT}")
+    endif()
+    set(VCPKG_ROOT "${VCPKG_ROOT_DEFAULT}" CACHE PATH "Path to vcpkg root (ex: D:/vcpkg)")
+
+    set(VCPKG_TRIPLET_STATIC "x64-windows-static-md" CACHE STRING "vcpkg static triplet")
+    set(VCPKG_TRIPLET_DYNAMIC "x64-windows"          CACHE STRING "vcpkg dynamic triplet")
+
+    target_include_directories(AliceScripts
+        PRIVATE
+            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
+            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
+    )
+
+    target_link_directories(AliceScripts
+        PRIVATE
+            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
+            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
+            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
+            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
+    )
+endif()
+
 # 상위 빌드 디렉터리에서 이미 빌드된 AliceEngine.lib 에 링크합니다.
 # - 기본 경로: <AliceRoot>/build/<Config>/AliceEngine.lib
 target_link_libraries(AliceScripts
     PRIVATE
         "${ALICE_ROOT}/build/$<CONFIG>/AliceEngine.lib"
+)
+
+# AliceEngine(정적)에 포함된 코드가 사용하는 외부 라이브러리들을
+# AliceScripts.dll 링크 단계에서도 반드시 같이 링크해야 합니다.
+target_link_libraries(AliceScripts
+    PRIVATE
+        d3d11
+        dxgi
+        dxguid
+        d3dcompiler
+        directxtk
+        directxtex
+        $<$<CONFIG:Debug>:assimp-vc143-mtd>
+        $<$<CONFIG:Release>:assimp-vc143-mt>
 )
 
 set_target_properties(AliceScripts PROPERTIES

@@ -133,9 +133,9 @@ namespace Alice
             }
 
             // 3) ScriptsBuild 프로젝트에서 AliceScripts 타겟만 빌드
-            std::wstring cmdBuild = L"cmake --build build --config ";
+            path buildLog = scriptsBuildDir / "AliceScripts_build.log";
+            std::wstring cmdBuild = L"cmd.exe /C \"cmake --build build --config ";
             cmdBuild += kConfig;
-            cmdBuild += L" --target AliceScripts";
 
             {
                 STARTUPINFOW        si{};
@@ -173,8 +173,9 @@ namespace Alice
 
                 if (exitCode != 0)
                 {
-                    ALICE_LOG_ERRORF("Reload Scripts: CMake build failed for ScriptsBuild (exitCode=%lu).",
-                                     static_cast<unsigned long>(exitCode));
+                    ALICE_LOG_ERRORF("Reload Scripts: CMake build failed for ScriptsBuild (exitCode=%lu). log=\"%s\"",
+                                     static_cast<unsigned long>(exitCode),
+                                     buildLog.string().c_str());
                     return;
                 }
             }
