@@ -9,28 +9,29 @@ namespace Alice
     // 이 스크립트를 리플렉션/팩토리 시스템에 등록합니다.
     REGISTER_SCRIPT(RotateAndScale);
 
-    void RotateAndScale::OnCreate(World& world, EntityId entity)
+    void RotateAndScale::Start()
     {
-        // 이 엔티티에 Transform 이 없으면 하나 추가합니다.
-        if (auto* t = world.GetTransform(entity); t)
+        // Transform 이 없으면 하나 추가합니다.
+        if (auto* t = transform(); !t)
         {
-            t = &world.AddTransform(entity);
-            // 기준 스케일(x)을 기억해 두고, 시간이 흐르면서 이 값을 중심으로 진동시킵니다.
-            m_baseScale = t->scale.x;
-            if (m_baseScale <= 0.0f)
-            {
-                m_baseScale = 1.0f;
-            }
+            // 월드가 없거나 엔티티가 유효하지 않으면 아무것도 하지 않습니다.
+            if (auto* w = GetWorld())
+                t = &w->AddTransform(GetOwner());
+        }
+
+        if (auto* t = transform())
+        {
+            m_baseScale = (t->scale.x > 0.0f) ? t->scale.x : 1.0f;
             m_timeSeconds = 0.0f;
         }
     }
 
-    void RotateAndScale::OnUpdate(World& world, EntityId entity, float deltaTime)
+    void RotateAndScale::Update(float deltaTime)
     {
         // 경과 시간 누적
         m_timeSeconds += deltaTime;
 
-        if (auto* t = world.GetTransform(entity); t)
+        if (auto* t = transform())
         {
             // (1) Y 축으로 초당 약 1라디안씩 회전
             t->rotation.y += 1.0f * deltaTime;

@@ -18,6 +18,7 @@
 #include "Editor/ViewportPicker.h"
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
+#include "Game/SkinnedAnimationSystem.h"
 
 namespace Alice
 {
@@ -113,6 +114,7 @@ namespace Alice
         // Skinned FBX 메시 렌더링용 레지스트리/시스템
         SkinnedMeshRegistry m_skinnedMeshRegistry;
         SkinnedMeshSystem   m_skinnedMeshSystem { m_skinnedMeshRegistry };
+        SkinnedAnimationSystem m_skinnedAnimSystem { m_skinnedMeshRegistry };
         std::vector<ForwardRenderSystem::SkinnedDrawCommand> m_skinnedDrawCommands;
     };
 }

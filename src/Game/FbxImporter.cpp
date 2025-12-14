@@ -20,6 +20,7 @@
 #include "Core/Logger.h"
 #include "3Dmodel/FbxModel.h"
 #include "Rendering/SkinnedMeshRegistry.h"   // SkinnedMeshGPU / SkinnedMeshRegistry
+#include <Core/Helper.h>
 
 namespace Alice
 {
@@ -42,14 +43,6 @@ namespace Alice
         inline bool EndsWith(std::string_view s, std::string_view suffix)
         {
             return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
-        }
-
-        inline std::string StripDecryptedSuffix(std::string s)
-        {
-            constexpr std::string_view k = "_decrypted";
-            if (EndsWith(s, k))
-                s.resize(s.size() - k.size());
-            return s;
         }
 
         // "...\Resource\<rel>" absolute 경로를 "Resource/<rel>" 로 최대한 정규화합니다.
@@ -82,10 +75,10 @@ namespace Alice
                                         const std::filesystem::path& fbxPath,
                                         const FbxImportOptions& /*options*/)
     {
+        auto model = std::make_shared<FbxModel>();
         FbxImportResult result;
 
-        ALICE_LOG_INFO("[FbxImporter] Import start: path=\"%s\"",
-                       fbxPath.string().c_str());
+        ALICE_LOG_INFO("[FbxImporter] Import start: path=\"%s\"", fbxPath.string().c_str());
 
         // 절대 "decrypted 임시파일"을 만들지 않습니다.
         // - 파일이 있으면 그대로 파일 로드
@@ -94,34 +87,18 @@ namespace Alice
 
         const bool fileExists = !fbxPath.empty() && fs::exists(fbxPath);
 
-        // 키/생성물 이름은 항상 원래 요청된 fbxPath 기준(stem)으로 고정하되,
-        // 이미 잘못 저장된 *_decrypted 경로가 들어와도 "Rapi"로 복구합니다.
-        std::string baseName = StripDecryptedSuffix(std::filesystem::path(fbxPath).stem().string());
+        // 키/생성물 이름은 항상 원래 요청된 fbxPath 기준(stem)으로 고정함
+        // C:/Models/Robot/robot_01.fbx -> 	robot_01
+        std::string baseName = std::filesystem::path(fbxPath).stem().string();
 
-        // 이전 버전이 source_fbx 를 Temp(AliceDecrypted)로 저장해버린 경우를 구제:
-        //  - "...\AliceDecrypted\<Name>_decrypted.fbx" 형태면 Resource/fbx/<Name>/<Name>.fbx 를 우선 시도합니다.
         std::filesystem::path resolvedLogical = fbxPath;
-        if (!fileExists)
-        {
-            const std::string lower = fs::path(fbxPath).generic_string();
-            if (lower.find("alicedecrypted") != std::string::npos && EndsWith(lower, "_decrypted.fbx"))
-            {
-                resolvedLogical = fs::path("Resource") / "fbx" / baseName / (baseName + ".fbx");
-            }
-        }
 
-        FbxModel model;
         if (fileExists)
         {
             const fs::path absFbxPath = fs::absolute(fbxPath);
-            if (!model.Load(device, absFbxPath.wstring()))
+            if (!model->Load(device, absFbxPath.wstring()))
             {
-                char buf[256] = {};
-                std::snprintf(buf, sizeof(buf),
-                              "[FbxImporter] FbxModel::Load FAILED for \"%s\"\n",
-                              absFbxPath.string().c_str());
-                ALICE_LOG_ERRORF("%s", buf);
-                ALICE_LOG_ERRORF("%s", buf);
+                ALICE_LOG_ERRORF("[FbxImporter] FbxModel::Load FAILED for \"%s\"\n", absFbxPath.string().c_str());
                 return result;
             }
         }
@@ -130,53 +107,43 @@ namespace Alice
             auto sp = m_resources.LoadSharedBinaryAuto(resolvedLogical);
             if (!sp || sp->empty())
             {
-                char buf[256] = {};
-                std::snprintf(buf, sizeof(buf),
-                              "[FbxImporter] Import FAILED: cooked load failed \"%s\"\n",
-                              resolvedLogical.string().c_str());
-                ALICE_LOG_ERRORF("%s", buf);
+                ALICE_LOG_ERRORF("[FbxImporter] Import FAILED: cooked load failed \"%s\"\n",
+                    resolvedLogical.string().c_str());
                 return result;
             }
 
             // baseDirW는 외부 텍스처 상대경로 해석용인데, 배포 빌드에선 파일이 없을 수 있어 빈 값으로 둡니다.
-            if (!model.LoadFromMemory(device, sp->data(), sp->size(), baseName + ".fbx", L""))
+            if (!model->LoadFromMemory(device, sp->data(), sp->size(), baseName + ".fbx", L""))
             {
-                char buf[256] = {};
-                std::snprintf(buf, sizeof(buf),
-                              "[FbxImporter] FbxModel::LoadFromMemory FAILED for \"%s\" (bytes=%zu)\n",
-                              resolvedLogical.string().c_str(), sp->size());
-                ALICE_LOG_ERRORF("%s", buf);
+                ALICE_LOG_ERRORF("[FbxImporter] FbxModel::LoadFromMemory FAILED for \"%s\" (bytes=%zu)\n", resolvedLogical.string().c_str(), sp->size());
                 return result;
             }
         }
 
-        const aiScene* scene = model.GetScenePtr();
+        const aiScene* scene = model->GetScenePtr();
         if (!scene)
         {
-            char buf[256] = {};
-            std::snprintf(buf, sizeof(buf),
-                          "[FbxImporter] model.GetScenePtr() returned null for \"%s\"\n",
-                          resolvedLogical.string().c_str());
-            ALICE_LOG_ERRORF("%s", buf);
+            ALICE_LOG_ERRORF("[FbxImporter] model.GetScenePtr() returned null for \"%s\"\n",
+                resolvedLogical.string().c_str());
             return result;
         }
 
-        // 0-1) 스키닝 메시 GPU 를 레지스트리에 등록 (선택적)
-        //      - FBX 모델이 유효하고 레지스트리가 주입된 경우에만 수행합니다.
-        if (m_meshRegistry && model.HasMesh())
+        // 0-1) 스키닝 메시 GPU 를 레지스트리에 등록
+        //     - FBX 모델이 유효하고 레지스트리가 주입된 경우에만 수행합니다.
+        if (m_meshRegistry && model->HasMesh())
         {
             auto gpu = std::make_shared<SkinnedMeshGPU>();
-            gpu->vertexBuffer = model.GetVertexBuffer(); // AddRef 발생
-            gpu->indexBuffer  = model.GetIndexBuffer();
-            gpu->stride       = model.GetVertexStride();
-            gpu->indexCount   = static_cast<UINT>(model.GetIndexCount());
+            gpu->vertexBuffer = model->GetVertexBuffer(); // AddRef 발생
+            gpu->indexBuffer  = model->GetIndexBuffer();
+            gpu->stride       = model->GetVertexStride();
+            gpu->indexCount   = static_cast<UINT>(model->GetIndexCount());
             gpu->startIndex   = 0;
             gpu->baseVertex   = 0;
 
             // 서브셋 / 머티리얼 SRV 복사
-            gpu->subsets = model.GetSubsets();
-            const auto& matSrvs = model.GetMaterialSRVs();
-            const auto& nrmSrvs = model.GetNormalSRVs();
+            gpu->subsets = model->GetSubsets();
+            const auto& matSrvs = model->GetMaterialSRVs();
+            const auto& nrmSrvs = model->GetNormalSRVs();
             gpu->materialSRVs.resize(matSrvs.size());
             gpu->normalSRVs.resize(nrmSrvs.size());
             gpu->materialOverridePaths.resize(matSrvs.size());
@@ -191,10 +158,10 @@ namespace Alice
             }
 
             // 스켈레톤 정보 복사
-            if (model.HasSkeleton())
+            if (model->HasSkeleton())
             {
-                gpu->skeleton     = model.GetSkeleton();
-                gpu->skeletonRoot = model.GetSkeletonRoot();
+                gpu->skeleton     = model->GetSkeleton();
+                gpu->skeletonRoot = model->GetSkeletonRoot();
 
                 // 간단한 본 트리 텍스트 생성 (App.cpp 의 boneDisplayText 와 유사)
                 const auto& nodes = gpu->skeleton;
@@ -217,18 +184,18 @@ namespace Alice
                 gpu->skeletonText = text;
             }
 
+            // 애니메이션 재생/클립 목록을 위해 원본 컨텍스트를 유지합니다.
+            gpu->sourceModel = model;
+
             const std::string meshKey = baseName;
             m_meshRegistry->Register(meshKey, gpu);
 
-            char buf[256] = {};
-            std::snprintf(buf, sizeof(buf),
-                          "[FbxImporter] Registered mesh key=\"%s\" stride=%u indexCount=%u subsets=%zu mats=%zu\n",
-                          meshKey.c_str(),
-                          gpu->stride,
-                          gpu->indexCount,
-                          gpu->subsets.size(),
-                          gpu->materialSRVs.size());
-            ALICE_LOG_INFO("%s", buf);
+            ALICE_LOG_INFO("[FbxImporter] Registered mesh key=\"%s\" stride=%u indexCount=%u subsets=%zu mats=%zu\n",
+                meshKey.c_str(),
+                gpu->stride,
+                gpu->indexCount,
+                gpu->subsets.size(),
+                gpu->materialSRVs.size());
         }
 
         // 1) 텍스처는 "평문 파일로 추출"하지 않습니다.

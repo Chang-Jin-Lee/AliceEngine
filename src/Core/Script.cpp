@@ -1,6 +1,11 @@
 #include "Core/Script.h"
 
 #include "Core/World.h"
+#include "Core/GameObject.h"
+#include "Core/InputSystem.h"
+#include "Core/Scene.h"
+#include "Core/SceneFile.h"
+#include "Rendering/SkinnedMeshRegistry.h"
 #include "Logger.h"
 
 namespace Alice
@@ -13,6 +18,11 @@ namespace Alice
             return nullptr;
 
         return m_world->GetTransform(m_entity);
+    }
+
+    GameObject IScript::gameObject() const
+    {
+        return GameObject(m_world, m_entity, m_services);
     }
 
     namespace
@@ -109,15 +119,246 @@ namespace Alice
 
     // === ScriptSystem 구현 ===
 
-    void ScriptSystem::Update(World& world, float deltaTime)
+    void ScriptSystem::SetServices(InputSystem* input,
+                                   SceneManager* scenes,
+                                   ResourceManager* resources,
+                                   SkinnedMeshRegistry* skinnedRegistry)
     {
-        const auto& scripts = world.GetScripts();
-        for (const auto& [entityId, scriptComp] : scripts)
+        m_input = input;
+        m_scenes = scenes;
+        m_resources = resources;
+        m_skinnedRegistry = skinnedRegistry;
+
+        m_services.input = this;
+        m_services.scene = this;
+        m_services.skinnedRegistry = m_skinnedRegistry;
+        m_services.resources = m_resources;
+    }
+
+    void ScriptSystem::BeginInputFrame()
+    {
+        m_prevKeys = m_currKeys;
+        m_currKeys = {};
+
+        auto toDx = [](KeyCode k) -> DirectX::Keyboard::Keys
         {
-            if (!scriptComp.instance)
+            using K = DirectX::Keyboard::Keys;
+            switch (k)
+            {
+            case KeyCode::Alpha1: return K::D1;
+            case KeyCode::Alpha2: return K::D2;
+            case KeyCode::Alpha3: return K::D3;
+            case KeyCode::F1:     return K::F1;
+            case KeyCode::F2:     return K::F2;
+            case KeyCode::Space:  return K::Space;
+            default:              return K::None;
+            }
+        };
+
+        auto snap = [&](KeyCode k, bool& out)
+        {
+            if (!m_input) { out = false; return; }
+            const auto dx = toDx(k);
+            out = (dx != DirectX::Keyboard::Keys::None) ? m_input->IsKeyDown(dx) : false;
+        };
+
+        snap(KeyCode::Alpha1, m_currKeys.k1);
+        snap(KeyCode::Alpha2, m_currKeys.k2);
+        snap(KeyCode::Alpha3, m_currKeys.k3);
+        snap(KeyCode::F1,     m_currKeys.f1);
+        snap(KeyCode::F2,     m_currKeys.f2);
+        snap(KeyCode::Space,  m_currKeys.sp);
+    }
+
+    bool ScriptSystem::GetKeyInternal(KeyCode key) const
+    {
+        switch (key)
+        {
+        case KeyCode::Alpha1: return m_currKeys.k1;
+        case KeyCode::Alpha2: return m_currKeys.k2;
+        case KeyCode::Alpha3: return m_currKeys.k3;
+        case KeyCode::F1:     return m_currKeys.f1;
+        case KeyCode::F2:     return m_currKeys.f2;
+        case KeyCode::Space:  return m_currKeys.sp;
+        default:              return false;
+        }
+    }
+
+    bool ScriptSystem::GetKey(KeyCode key) const { return GetKeyInternal(key); }
+    bool ScriptSystem::GetKeyDown(KeyCode key) const
+    {
+        const bool now = GetKeyInternal(key);
+        bool prev = false;
+        switch (key)
+        {
+        case KeyCode::Alpha1: prev = m_prevKeys.k1; break;
+        case KeyCode::Alpha2: prev = m_prevKeys.k2; break;
+        case KeyCode::Alpha3: prev = m_prevKeys.k3; break;
+        case KeyCode::F1:     prev = m_prevKeys.f1; break;
+        case KeyCode::F2:     prev = m_prevKeys.f2; break;
+        case KeyCode::Space:  prev = m_prevKeys.sp; break;
+        default:              prev = false; break;
+        }
+        return now && !prev;
+    }
+    bool ScriptSystem::GetKeyUp(KeyCode key) const
+    {
+        const bool now = GetKeyInternal(key);
+        bool prev = false;
+        switch (key)
+        {
+        case KeyCode::Alpha1: prev = m_prevKeys.k1; break;
+        case KeyCode::Alpha2: prev = m_prevKeys.k2; break;
+        case KeyCode::Alpha3: prev = m_prevKeys.k3; break;
+        case KeyCode::F1:     prev = m_prevKeys.f1; break;
+        case KeyCode::F2:     prev = m_prevKeys.f2; break;
+        case KeyCode::Space:  prev = m_prevKeys.sp; break;
+        default:              prev = false; break;
+        }
+        return !now && prev;
+    }
+
+    void ScriptSystem::SwitchTo(const char* sceneName)
+    {
+        if (!sceneName || !sceneName[0])
+            return;
+        m_pendingSwitch = sceneName;
+    }
+
+    void ScriptSystem::LoadSceneFile(const char* scenePathUtf8)
+    {
+        if (!scenePathUtf8 || !scenePathUtf8[0])
+            return;
+        m_pendingSceneFile = scenePathUtf8;
+    }
+
+    void ScriptSystem::EnsureServicesBound(World& world)
+    {
+        for (auto& [entityId, comp] : world.GetScripts())
+        {
+            if (!comp.instance) continue;
+            comp.instance->SetContext(&world, entityId);
+            comp.instance->SetServices(&m_services);
+        }
+    }
+
+    void ScriptSystem::CallFixedUpdate(World& world, float fixedDt)
+    {
+        for (auto& [entityId, comp] : world.GetScripts())
+        {
+            if (!comp.instance || !comp.enabled) continue;
+            comp.instance->FixedUpdate(fixedDt);
+        }
+    }
+
+    void ScriptSystem::CallLateUpdate(World& world, float deltaTime)
+    {
+        for (auto& [entityId, comp] : world.GetScripts())
+        {
+            if (!comp.instance || !comp.enabled) continue;
+            comp.instance->LateUpdate(deltaTime);
+        }
+    }
+
+    void ScriptSystem::ProcessSceneRequests(World& world)
+    {
+        if (m_pendingSwitch.empty() && m_pendingSceneFile.empty())
+            return;
+
+        // 1) 코드 씬 전환
+        if (m_scenes)
+        {
+            if (!m_pendingSwitch.empty())
+            {
+                const std::string name = std::exchange(m_pendingSwitch, {});
+                if (!m_scenes->SwitchTo(name.c_str()))
+                    ALICE_LOG_WARN("ScriptSystem: SceneManager::SwitchTo failed. name=\"%s\"", name.c_str());
+            }
+        }
+
+        // 2) .scene 파일 로드
+        {
+            if (!m_pendingSceneFile.empty())
+            {
+                const std::string path = std::exchange(m_pendingSceneFile, {});
+                const bool ok = SceneFile::Load(world, std::filesystem::path(path));
+                if (!ok)
+                    ALICE_LOG_ERRORF("ScriptSystem: SceneFile::Load failed. path=\"%s\"", path.c_str());
+                else if (m_afterSceneLoaded)
+                    m_afterSceneLoaded();
+            }
+        }
+    }
+
+    void ScriptSystem::Tick(World& world, float deltaTime)
+    {
+        BeginInputFrame();
+        EnsureServicesBound(world);
+
+        // Awake/OnEnable/Start/Update
+        for (auto& [entityId, comp] : world.GetScripts())
+        for (auto& [entityId, comp] : world.GetScripts())
+        {
+            if (!comp.instance)
                 continue;
 
-            scriptComp.instance->OnUpdate(world, entityId, deltaTime);
+            comp.instance->SetContext(&world, entityId);
+            comp.instance->SetServices(&m_services);
+
+            if (!comp.awoken)
+            {
+                comp.awoken = true;
+                comp.wasEnabled = comp.enabled;
+
+                comp.instance->Awake();
+                comp.instance->OnCreate(world, entityId); // 구 버전 호환
+
+                if (comp.enabled)
+                    comp.instance->OnEnable();
+            }
+
+            if (comp.enabled != comp.wasEnabled)
+            {
+                if (comp.enabled) comp.instance->OnEnable();
+                else              comp.instance->OnDisable();
+                comp.wasEnabled = comp.enabled;
+            }
+
+            if (!comp.enabled)
+                continue;
+
+            if (!comp.started)
+            {
+                comp.started = true;
+                comp.instance->Start();
+            }
+
+            comp.instance->Update(deltaTime);
+            comp.instance->OnUpdate(world, entityId, deltaTime); // 구 버전 호환
+        }
+
+        // FixedUpdate
+        m_fixedAcc += deltaTime;
+        while (m_fixedAcc >= m_fixedDt)
+        {
+            CallFixedUpdate(world, m_fixedDt);
+            m_fixedAcc -= m_fixedDt;
+        }
+
+        // LateUpdate
+        CallLateUpdate(world, deltaTime);
+
+        // 씬 요청은 프레임 끝에 반영
+        ProcessSceneRequests(world);
+    }
+
+    void ScriptSystem::OnApplicationQuit(World& world)
+    {
+        EnsureServicesBound(world);
+        for (auto& [entityId, comp] : world.GetScripts())
+        {
+            if (!comp.instance) continue;
+            comp.instance->OnApplicationQuit();
         }
     }
 }

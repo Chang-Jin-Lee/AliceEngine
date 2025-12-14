@@ -12,8 +12,8 @@ namespace Alice
     public:
         const char* GetName() const override { return "RotateAndScale"; }
 
-        void OnCreate(World& world, EntityId entity) override;
-        void OnUpdate(World& world, EntityId entity, float deltaTime) override;
+        void Start() override;
+        void Update(float deltaTime) override;
 
     private:
         float m_timeSeconds = 0.0f; // 누적 시간

@@ -10,6 +10,9 @@
 
 #include "3Dmodel/FbxTypes.h"
 
+// FbxModel은 전역 네임스페이스(3Dmodel/FbxModel.h) 에 정의되어 있습니다.
+class FbxModel;
+
 namespace Alice
 {
     /// GPU 상의 스키닝 메시 1개를 표현하는 구조입니다.
@@ -35,6 +38,11 @@ namespace Alice
         std::vector<FbxSkeletonNode> skeleton; // 전체 노드 캐시
         int                          skeletonRoot { -1 }; // 루트 인덱스
         std::string                  skeletonText;         // 간단한 트리 텍스트 (Inspector에서 표시)
+
+        // === FBX 애니메이션/원본 컨텍스트 ===
+        // - per-entity 애니메이션 재생을 위해 "공유 데이터(Assimp scene + bone metadata)"를 유지합니다.
+        // - 재생 상태(시간/클립/속도)는 엔티티 컴포넌트에서 관리합니다.
+        std::shared_ptr<FbxModel> sourceModel;
     };
 
     /// FBX 로부터 만들어진 스키닝 메시 자산을

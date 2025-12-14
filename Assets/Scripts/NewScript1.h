@@ -10,7 +10,7 @@ namespace Alice
     public:
         const char* GetName() const override { return "NewScript1"; }
 
-        void OnCreate(World& world, EntityId entity) override;
-        void OnUpdate(World& world, EntityId entity, float deltaTime) override;
+        void Start() override;
+        void Update(float deltaTime) override;
     };
 }
