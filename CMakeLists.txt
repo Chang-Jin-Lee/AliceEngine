@@ -121,6 +121,7 @@ set(ALICE_APP_HEADERS
     ${ALICE_SRC_DIR}/Game/FbxImporter.h
     ${ALICE_SRC_DIR}/Game/FbxAsset.h
     ${ALICE_SRC_DIR}/Game/SkinnedMeshSystem.h
+    ${ALICE_SRC_DIR}/Game/SkinnedAnimationSystem.h
 )
 
 set(ALICE_EDITOR_MAIN
