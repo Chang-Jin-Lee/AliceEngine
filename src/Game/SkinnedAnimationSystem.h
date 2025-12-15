@@ -96,6 +96,10 @@ namespace Alice
 
                 // 팔레트 계산(전치 없음: ForwardRenderSystem에서 전치해서 업로드)
                 rt.anim.BuildCurrentPaletteFloat4x4(animComp->palette);
+				for (auto& mat : animComp->palette) {
+					DirectX::XMMATRIX m = DirectX::XMMatrixTranspose(DirectX::XMLoadFloat4x4(&mat));
+					DirectX::XMStoreFloat4x4(&mat, m);
+				}
 
                 // 렌더 시스템이 읽을 포인터 연결
                 auto* skinnedWrite = world.GetSkinnedMesh(entityId);
