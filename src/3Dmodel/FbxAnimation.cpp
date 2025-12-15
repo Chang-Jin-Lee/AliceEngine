@@ -453,102 +453,101 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 		return;
 
 	// Fast path: precomputed 팔레트 사용
-	// NOTE:
-	// - 튜토리얼(31_IBL/32_Sound_FMOD)은 "프레임 선택"으로만 사용하고, 행렬을 직접 LERP 하지 않습니다.
-	// - 행렬 요소별 LERP는 회전 성분을 망가뜨려 스키닝이 '납작해짐/폭발'처럼 보일 수 있습니다.
-	if ((size_t)m_Current < m_Precomputed.size())
+	// 1. 유효성 검사
+	if ((size_t)m_Current >= m_Precomputed.size()) return;
+	const auto& pc = m_Precomputed[(size_t)m_Current];
+	if (!pc.valid || pc.times.empty() || pc.palettes.empty()) return;
+
+	// 2. 시간 루핑 처리 (std::fmod 사용)
+	double t = m_TimeSec;
+	if (pc.durationSec > 0.0)
 	{
-		const auto& pc = m_Precomputed[(size_t)m_Current];
-		if (pc.valid && !pc.times.empty() && !pc.palettes.empty())
-		{
-			double dur = pc.durationSec;
-			double t = m_TimeSec;
-			if (dur > 0.0)
-			{
-				while (t < 0.0) t += dur;
-				while (t >= dur) t -= dur;
-			}
+		t = std::fmod(t, pc.durationSec);
+		if (t < 0.0) t += pc.durationSec;
+	}
 
-			int idx = 0;
-			if (pc.sampleDt > 0.0 && !pc.palettes.empty())
-			{
-				idx = (int)std::floor(t / pc.sampleDt);
-			}
-			else if (dur > 0.0 && !pc.palettes.empty())
-			{
-				// 튜토리얼과 동일한 방식(비보간)
-				idx = (int)(pc.palettes.size() * (t / dur));
-			}
+	// 3. 인덱스 및 보간 계수(Alpha) 계산
+	size_t idx0 = 0, idx1 = 0;
+	float alpha = 0.0f;
 
-			if (idx < 0) idx = 0;
-			if (idx >= (int)pc.palettes.size()) idx = (int)pc.palettes.size() - 1;
+	// 보간 경로
+	if (pc.sampleDt > 0.0 && pc.palettes.size() >= 2)
+	{
+		double frame = t / pc.sampleDt;
+		idx0 = std::clamp<size_t>((size_t)frame, 0, pc.palettes.size() - 1);
+		idx1 = std::min(idx0 + 1, pc.palettes.size() - 1);
+		alpha = (float)(frame - idx0);
+	}
+	// 비보간 경로 (단일 프레임이거나 혹은 샘플 정보 없을때)
+	else
+	{
+		double ratio = (pc.durationSec > 0.0) ? (t / pc.durationSec) : 0.0;
+		idx0 = std::clamp<size_t>((size_t)(ratio * pc.palettes.size()), 0, pc.palettes.size() - 1);
+		idx1 = idx0; // 보간하지 않음
+	}
 
-			const auto& src = pc.palettes[(size_t)idx];
-			outPalette.resize(src.size());
-			for (size_t i = 0; i < src.size(); ++i)
-				XMStoreFloat4x4(&outPalette[i], src[i]);
-			return;
-		}
+	// 4. 최종 행렬 계산 (보간 또는 복사)
+	const auto& p0 = pc.palettes[idx0];
+	const auto& p1 = pc.palettes[idx1];
+	size_t count = std::min(p0.size(), p1.size());
+
+	outPalette.resize(count);
+
+	// 불필요한 조건문을 줄이고 삼항 연산자로 깔끔하게 처리
+	bool doLerp = (idx0 != idx1 && alpha > 0.0001f); // 미세한 오차 무시
+
+	for (size_t i = 0; i < count; ++i)
+	{
+		DirectX::XMMATRIX m = doLerp ? LerpMatrix(p0[i], p1[i], alpha) : p0[i];
+		XMStoreFloat4x4(&outPalette[i], m);
 	}
 
 	// Fallback: on-the-fly 평가
-	const aiScene* sc = m_Scene;
-	if (!sc)
-		return;
+	// 1. 기본 유효성 검사
+	if (!m_Scene || !m_BoneNames || !m_GlobalInverse) return;
 
-	if (m_Type == AnimType::Rigid)
+	// 2. 데이터 갱신 및 전역 행렬 계산
+	bool isRigid = (m_Type == AnimType::Rigid);
+
+	if (!isRigid && m_ChannelDirty && !m_ChannelOfNode.empty())
 	{
-		std::vector<XMFLOAT4X4> global;
-		EvaluateGlobals(sc, m_NodeIndexOfName, global);
-		if (global.empty() || !m_BoneNames || !m_GlobalInverse)
-			return;
-
-		outPalette.resize(m_BoneNames->size(), XMFLOAT4X4(
-			1,0,0,0,
-			0,1,0,0,
-			0,0,1,0,
-			0,0,0,1));
-
-		XMMATRIX Gi = XMLoadFloat4x4(m_GlobalInverse);
-		for (size_t bi = 0; bi < m_BoneNames->size(); ++bi)
-		{
-			auto itN = m_NodeIndexOfName.find((*m_BoneNames)[bi]);
-			if (itN == m_NodeIndexOfName.end()) continue;
-			int nodeIdx = itN->second;
-			if (nodeIdx < 0 || nodeIdx >= (int)global.size()) continue;
-			XMMATRIX G = XMLoadFloat4x4(&global[(size_t)nodeIdx]);
-			XMStoreFloat4x4(&outPalette[bi], XMMatrixMultiply(Gi, G));
-		}
-		return;
-	}
-
-	if (m_ChannelDirty && !m_ChannelOfNode.empty())
-	{
-		RebuildChannelMapIfNeeded(sc, m_Current, m_NodeIndexOfName, m_ChannelOfNode);
+		RebuildChannelMapIfNeeded(m_Scene, m_Current, m_NodeIndexOfName, m_ChannelOfNode);
 		m_ChannelDirty = false;
 	}
 
-	EvaluateGlobals(sc, m_NodeIndexOfName, m_GlobalScratch);
-	if (!m_BoneNames || !m_BoneOffsets || !m_GlobalInverse)
-		return;
+	// m_GlobalScratch를 공용으로 사용하여 메모리 할당 방지
+	EvaluateGlobals(m_Scene, m_NodeIndexOfName, m_GlobalScratch);
+	if (m_GlobalScratch.empty()) return;
+	if (!isRigid && !m_BoneOffsets) return; // 스킨드 애니메이션은 오프셋 필수
 
-	outPalette.resize(m_BoneNames->size(), XMFLOAT4X4(
-		1,0,0,0,
-		0,1,0,0,
-		0,0,1,0,
-		0,0,0,1));
+	// 3. 팔레트 초기화
+	static const XMFLOAT4X4 I = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+	outPalette.assign(m_BoneNames->size(), I); // resize + fill 통합
 
+	// 4. 통합 계산 루프
 	XMMATRIX Gi = XMLoadFloat4x4(m_GlobalInverse);
-	for (size_t bi = 0; bi < m_BoneNames->size(); ++bi)
-	{
-		auto itN = m_NodeIndexOfName.find((*m_BoneNames)[bi]);
-		if (itN == m_NodeIndexOfName.end()) continue;
-		int nodeIdx = itN->second;
-		if (nodeIdx < 0 || nodeIdx >= (int)m_GlobalScratch.size()) continue;
 
-		XMMATRIX G = XMLoadFloat4x4(&m_GlobalScratch[(size_t)nodeIdx]);
-		XMMATRIX Off = XMLoadFloat4x4(&(*m_BoneOffsets)[bi]);
-		XMStoreFloat4x4(&outPalette[bi], XMMatrixMultiply(XMMatrixMultiply(Gi, G), Off));
+	for (size_t i = 0; i < m_BoneNames->size(); ++i)
+	{
+		// if init 구문으로 map 검색 간소화
+		if (auto it = m_NodeIndexOfName.find((*m_BoneNames)[i]); it != m_NodeIndexOfName.end())
+		{
+			int idx = it->second;
+			if (idx >= 0 && idx < (int)m_GlobalScratch.size())
+			{
+				XMMATRIX G = XMLoadFloat4x4(&m_GlobalScratch[idx]);
+				XMMATRIX FinalM = XMMatrixMultiply(Gi, G);
+
+				// Rigid가 아니면 Bone Offset 추가 적용
+				if (!isRigid)
+				{
+					XMMATRIX Off = XMLoadFloat4x4(&(*m_BoneOffsets)[i]);
+					FinalM = XMMatrixMultiply(FinalM, Off);
+				}
+
+				XMStoreFloat4x4(&outPalette[i], FinalM);
+			}
+		}
 	}
 }
 
