@@ -218,18 +218,37 @@ namespace Alice
         return !now && prev;
     }
 
+    std::string ScriptSystem::GetResolvedPath(const char* filename) const
+    {
+        if (!filename || !filename[0])
+            return "";
+
+        std::string path = filename;
+
+        // 만약 입력값에 이미 경로나 슬래시가 포함되어 있다면 그대로 쓸 수도 있겠지만,
+        // 여기서는 요청하신 대로 "파일명만 들어온다"고 가정하고 무조건 경로를 붙입니다.
+        if (m_editorMode)
+        {
+            // 에디터 실행 중: 실행 파일 위치 기준 한 단계 상위의 원본 소스 폴더 참조
+            // 예: "../Assets/Scenes/Stage1.scene"
+            return "../Assets/Scenes/" + path;
+        }
+        else
+        {
+            // 빌드된 게임 실행 중: 실행 파일 옆의 배포된 폴더 참조
+            // 예: "Assets/Scenes/Stage1.scene"
+            return "Assets/Scenes/" + path;
+        }
+    }
+
     void ScriptSystem::SwitchTo(const char* sceneName)
     {
-        if (!sceneName || !sceneName[0])
-            return;
-        m_pendingSwitch = sceneName;
+        m_pendingSwitch = GetResolvedPath(sceneName);
     }
 
     void ScriptSystem::LoadSceneFile(const char* scenePathUtf8)
     {
-        if (!scenePathUtf8 || !scenePathUtf8[0])
-            return;
-        m_pendingSceneFile = scenePathUtf8;
+        m_pendingSceneFile = GetResolvedPath(scenePathUtf8);
     }
 
     void ScriptSystem::EnsureServicesBound(World& world)
@@ -296,7 +315,6 @@ namespace Alice
         EnsureServicesBound(world);
 
         // Awake/OnEnable/Start/Update
-        for (auto& [entityId, comp] : world.GetScripts())
         for (auto& [entityId, comp] : world.GetScripts())
         {
             if (!comp.instance)

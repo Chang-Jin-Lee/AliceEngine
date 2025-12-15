@@ -14,13 +14,13 @@ namespace Alice
         if (input->GetKeyDown(KeyCode::F1))
         {
             // 코드 씬 전환 (REGISTER_SCENE 로 등록된 씬 이름)
-            scenes->SwitchTo("SampleScene");
+            scenes->LoadSceneFile("NewScene1.scene");
         }
 
         if (input->GetKeyDown(KeyCode::F2))
         {
             // .scene 파일 로드 (프레임 끝에 처리됨)
-            scenes->LoadSceneFile("Assets/Scens/fbxScene.scene");
+            scenes->LoadSceneFile("fbxScene.scene");
         }
     }
 }

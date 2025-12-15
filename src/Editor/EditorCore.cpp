@@ -1837,11 +1837,8 @@ namespace Alice
             {
                 // 저장할 필요가 없으면 바로 로드
                 {
-                    char buf[256] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[Editor] SceneFile::Load (no-save path): \"%s\"\n",
-                                  g_NextScenePath.string().c_str());
-                    ALICE_LOG_INFO("%s", buf);
+                    ALICE_LOG_INFO("[Editor] SceneFile::Load (no-save path): \"%s\"\n",
+                        g_NextScenePath.string().c_str());
                 }
                 {
                     const std::filesystem::path loadAbs =
@@ -1874,11 +1871,8 @@ namespace Alice
             if (ImGui::Button("Don't Save"))
             {
                 {
-                    char buf[256] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[Editor] SceneFile::Load (dont-save): \"%s\"\n",
-                                  g_NextScenePath.string().c_str());
-                    ALICE_LOG_INFO("%s", buf);
+                    ALICE_LOG_INFO("[Editor] SceneFile::Load (dont-save): \"%s\"\n",
+                        g_NextScenePath.string().c_str());
                 }
                 {
                     const std::filesystem::path loadAbs =
@@ -2033,8 +2027,8 @@ namespace Alice
                             hfs << "    {\n";
                             hfs << "    public:\n";
                             hfs << "        const char* GetName() const override { return \"" << className << "\"; }\n\n";
-                            hfs << "        void OnCreate(World& world, EntityId entity) override;\n";
-                            hfs << "        void OnUpdate(World& world, EntityId entity, float deltaTime) override;\n";
+                            hfs << "        void Start(World& world, EntityId entity) override;\n";
+                            hfs << "        void Update(World& world, EntityId entity, float deltaTime) override;\n";
                             hfs << "    };\n";
                             hfs << "}\n";
                         }
@@ -2051,11 +2045,11 @@ namespace Alice
                             cfs << "{\n";
                             cfs << "    // 이 스크립트를 리플렉션/팩토리 시스템에 등록합니다.\n";
                             cfs << "    REGISTER_SCRIPT(" << className << ");\n\n";
-                            cfs << "    void " << className << "::OnCreate(World& world, EntityId entity)\n";
+                            cfs << "    void " << className << "::Start(World& world, EntityId entity)\n";
                             cfs << "    {\n";
                             cfs << "        // 초기화 로직을 여기에 작성하세요.\n";
                             cfs << "    }\n\n";
-                            cfs << "    void " << className << "::OnUpdate(World& world, EntityId entity, float deltaTime)\n";
+                            cfs << "    void " << className << "::Update(World& world, EntityId entity, float deltaTime)\n";
                             cfs << "    {\n";
                             cfs << "        // 매 프레임 호출되는 로직을 여기에 작성하세요.\n";
                             cfs << "    }\n";

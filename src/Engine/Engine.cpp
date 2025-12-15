@@ -169,6 +169,7 @@ namespace Alice
 	Engine::Engine(bool editorMode)
 		: m_editorMode(editorMode)
 	{
+		m_scriptSystem.SetEditorMode(editorMode);
 	}
 
 	Engine::~Engine()

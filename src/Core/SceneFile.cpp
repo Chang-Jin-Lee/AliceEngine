@@ -127,6 +127,12 @@ namespace Alice
 
         bool Load(World& world, const std::filesystem::path& path)
         {
+            // 1. 현재 프로그램의 작업 디렉토리(CWD) 확인
+            std::filesystem::path cwd = std::filesystem::current_path();
+
+            // 2. 입력된 상대 경로가 실제로 가리키는 절대 경로 확인
+            std::filesystem::path absPath = std::filesystem::absolute(path);
+
             std::ifstream ifs(path);
             if (!ifs.is_open())
                 return false;

@@ -163,9 +163,14 @@ namespace Alice
         bool GetKeyDown(KeyCode key) const override;
         bool GetKeyUp(KeyCode key) const override;
 
+        std::string GetResolvedPath(const char* originalPath) const;
+
         // === IScriptScene ===
         void SwitchTo(const char* sceneName) override;
         void LoadSceneFile(const char* scenePathUtf8) override;
+
+        // === editormode ===
+        void SetEditorMode(const bool& isEditor) { m_editorMode = isEditor; }
 
     private:
         void BeginInputFrame();
@@ -177,6 +182,8 @@ namespace Alice
 
         float m_fixedDt = 0.02f;
         float m_fixedAcc = 0.0f;
+
+        bool m_editorMode = true;
 
         InputSystem* m_input = nullptr;
         SceneManager* m_scenes = nullptr;
