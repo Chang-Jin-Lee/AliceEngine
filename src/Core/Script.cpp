@@ -301,10 +301,11 @@ namespace Alice
             {
                 const std::string path = std::exchange(m_pendingSceneFile, {});
                 const bool ok = SceneFile::Load(world, std::filesystem::path(path));
+                onTrimVideoMemory.Execute();
                 if (!ok)
                     ALICE_LOG_ERRORF("ScriptSystem: SceneFile::Load failed. path=\"%s\"", path.c_str());
-                else if (m_afterSceneLoaded)
-                    m_afterSceneLoaded();
+                else
+                    onAfterSceneLoaded.Execute();
             }
         }
     }

@@ -28,6 +28,9 @@ namespace Alice
 
         /// 기본 깊이 스텐실 뷰를 반환합니다.
         virtual ID3D11DepthStencilView* GetBackBufferDSV() = 0;
+
+		/// 비디오 메모리를 트림(해제)합니다.
+		virtual void TrimVideoMemory() = 0;
     };
 }
 

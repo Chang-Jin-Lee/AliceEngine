@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include "Core/Logger.h"
+#include <dxgi1_3.h>
 
 namespace Alice
 {
@@ -231,6 +232,19 @@ namespace Alice
         viewport.MaxDepth = 1.0f;
 
         m_immediateContext->RSSetViewports(1, &viewport);
+    }
+
+    void D3D11RenderDevice::TrimVideoMemory()
+    {
+        Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+        if (m_device && SUCCEEDED(m_device->QueryInterface(IID_PPV_ARGS(dxgiDevice.GetAddressOf()))))
+        {
+            Microsoft::WRL::ComPtr<IDXGIDevice3> dxgiDevice3;
+            if (SUCCEEDED(dxgiDevice.As(&dxgiDevice3)) && dxgiDevice3)
+            {
+                dxgiDevice3->Trim();
+            }
+        }
     }
 }
 

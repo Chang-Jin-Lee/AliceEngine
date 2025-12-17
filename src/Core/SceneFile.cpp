@@ -8,6 +8,9 @@
 
 #include "Core/World.h"
 #include "Core/Script.h"
+#include <wrl/client.h>
+#include <dxgi.h>
+#include <dxgi1_3.h>
 
 namespace Alice
 {
@@ -129,7 +132,6 @@ namespace Alice
         {
             // 1. 현재 프로그램의 작업 디렉토리(CWD) 확인
             std::filesystem::path cwd = std::filesystem::current_path();
-
             // 2. 입력된 상대 경로가 실제로 가리키는 절대 경로 확인
             std::filesystem::path absPath = std::filesystem::absolute(path);
 
@@ -138,18 +140,7 @@ namespace Alice
                 return false;
 
             // 현재 월드 비우기
-            {
-                std::vector<EntityId> ids;
-                ids.reserve(world.GetTransforms().size());
-                for (const auto& [id, _] : world.GetTransforms())
-                {
-                    ids.push_back(id);
-                }
-                for (EntityId id : ids)
-                {
-                    world.DestroyEntity(id);
-                }
-            }
+            world.Clear();
 
             // 한 엔티티에 대한 임시 버퍼
             DirectX::XMFLOAT3 position { 0.0f, 0.0f, 0.0f };
@@ -222,15 +213,6 @@ namespace Alice
             std::string line;
             while (std::getline(ifs, line))
             {
-                // 원시 한 줄 로그 (필요 시 주석 해제)
-                // {
-                //     char dbg[256] = {};
-                //     std::snprintf(dbg, sizeof(dbg),
-                //                   "[SceneFile::Load] line=\"%s\"\n",
-                //                   line.c_str());
-                //     OutputDebugStringA(dbg);
-                // }
-
                 if (line.empty())
                 {
                     commitEntity();
@@ -312,22 +294,16 @@ namespace Alice
                     skinnedMeshAsset = value;
                     hasAnyField      = true;
 
-                    char buf[256] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[SceneFile::Load] skinned_mesh=\"%s\"\n",
-                                  skinnedMeshAsset.c_str());
-                    OutputDebugStringA(buf);
+                    ALICE_LOG_INFO("[SceneFile::Load] skinned_mesh=\"%s\"\n",
+                        skinnedMeshAsset.c_str());
                 }
                 else if (key == "skinned_instance")
                 {
                     skinnedInstanceAsset = value;
                     hasAnyField          = true;
 
-                    char buf[256] = {};
-                    std::snprintf(buf, sizeof(buf),
-                                  "[SceneFile::Load] skinned_instance=\"%s\"\n",
-                                  skinnedInstanceAsset.c_str());
-                    OutputDebugStringA(buf);
+                    ALICE_LOG_INFO("[SceneFile::Load] skinned_instance=\"%s\"\n",
+                        skinnedInstanceAsset.c_str());
                 }
             }
 
