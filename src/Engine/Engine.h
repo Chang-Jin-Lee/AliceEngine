@@ -2,23 +2,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-
 #include <memory>
-
-#include "Core/World.h"
-#include "Core/InputSystem.h"
-#include "Core/TimeSystem.h"
-#include "Core/ResourceManager.h"
-#include "Core/Scene.h"
-#include "Core/Script.h"
-#include "Rendering/Camera.h"
-#include "Rendering/D3D11/ID3D11RenderDevice.h"
-#include "Rendering/ForwardRenderSystem.h"
-#include "Rendering/SkinnedMeshRegistry.h"
-#include "Editor/ViewportPicker.h"
-#include "Editor/EditorCore.h"
-#include "Game/SkinnedMeshSystem.h"
-#include "Game/SkinnedAnimationSystem.h"
 
 namespace Alice
 {
@@ -63,59 +47,11 @@ namespace Alice
         /// 필요 시 FBX 를 다시 임포트해서 등록합니다.
         void EnsureSkinnedMeshesRegisteredForWorld();
 
+        void TrimVideoMemory();
+
     private:
-        enum class ShadingMode
-        {
-            Lambert    = 0,
-            Phong      = 1,
-            BlinnPhong = 2,
-            Toon       = 3,
-            PBR        = 4
-        };
-
-        HINSTANCE m_hInstance = nullptr;
-        HWND      m_hWnd      = nullptr;
-
-        std::uint32_t m_width  = 1600;
-        std::uint32_t m_height = 900;
-
-        bool m_isRunning    = false;            // 엔진 자체가 실행중인지 판단
-        bool m_isPlaying    = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
-        bool m_editorMode   = true;             // true: 에디터, false: 게임 전용
-        EntityId m_selectedEntity { InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
-
-        World          m_world;
-        Camera         m_camera;
-        InputSystem    m_inputSystem;
-        GameTimer      m_timer;
-        ResourceManager m_resourceManager;
-        std::unique_ptr<SceneManager> m_sceneManager;
-
-        ScriptSystem   m_scriptSystem;
-
-        ViewportPicker m_viewportPicker;
-        EditorCore     m_editorCore;
-
-        ShadingMode m_shadingMode { ShadingMode::BlinnPhong };
-        bool        m_useFillLight { true };
-
-        // 카메라 이동/회전을 위한 내부 상태 값들
-        DirectX::XMFLOAT3 m_cameraPosition { 0.0f, 2.0f, -5.0f };
-        float             m_cameraYawRadians   = 0.0f;  // Yaw (좌우 회전)
-        float             m_cameraPitchRadians = 0.0f;  // Pitch (상하 회전)
-
-        float             m_cameraMoveSpeed       = 8.0f;     // 초당 이동 속도
-        float             m_cameraMouseSensitivity = 0.0025f; // 마우스 감도 (라디안/픽셀)
-
-        std::unique_ptr<ID3D11RenderDevice>  m_renderDevice;
-        std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
-        std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
-
-        // Skinned FBX 메시 렌더링용 레지스트리/시스템
-        SkinnedMeshRegistry m_skinnedMeshRegistry;
-        SkinnedMeshSystem   m_skinnedMeshSystem { m_skinnedMeshRegistry };
-        SkinnedAnimationSystem m_skinnedAnimSystem { m_skinnedMeshRegistry };
-        std::vector<ForwardRenderSystem::SkinnedDrawCommand> m_skinnedDrawCommands;
+        struct Impl;
+		std::unique_ptr<Impl> pImpl;
     };
 }
 

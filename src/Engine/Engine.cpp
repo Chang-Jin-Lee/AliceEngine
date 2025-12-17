@@ -20,6 +20,23 @@
 #include <fstream>
 #include <sstream>
 
+// Core
+#include "Core/World.h"
+#include "Core/InputSystem.h"
+#include "Core/TimeSystem.h"
+#include "Core/ResourceManager.h"
+#include "Core/Scene.h"
+#include "Core/Script.h"
+#include "Core/Delegate.h"
+#include "Rendering/Camera.h"
+#include "Rendering/D3D11/ID3D11RenderDevice.h"
+#include "Rendering/ForwardRenderSystem.h"
+#include "Rendering/SkinnedMeshRegistry.h"
+#include "Editor/ViewportPicker.h"
+#include "Editor/EditorCore.h"
+#include "Game/SkinnedMeshSystem.h"
+#include "Game/SkinnedAnimationSystem.h"
+
 // 문자열 변환 / ImGui 래퍼
 #include "Core/StringUtils.h"
 #include "Core/ImGuiEx.h"
@@ -28,11 +45,67 @@
 #include "Core/Logger.h"
 #include "Game/FbxImporter.h"
 #include "Game/FbxAsset.h"
+#include <dxgi1_3.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace Alice
 {
+	struct Engine::Impl
+	{
+		enum class ShadingMode
+		{
+			Lambert = 0,
+			Phong = 1,
+			BlinnPhong = 2,
+			Toon = 3,
+			PBR = 4
+		};
+
+		HINSTANCE m_hInstance = nullptr;
+		HWND      m_hWnd = nullptr;
+
+		std::uint32_t m_width = 1600;
+		std::uint32_t m_height = 900;
+
+		bool m_isRunning = false;            // 엔진 자체가 실행중인지 판단
+		bool m_isPlaying = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
+		bool m_editorMode = true;             // true: 에디터, false: 게임 전용
+		EntityId m_selectedEntity{ InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
+
+		World          m_world;
+		Camera         m_camera;
+		InputSystem    m_inputSystem;
+		GameTimer      m_timer;
+		ResourceManager m_resourceManager;
+		std::unique_ptr<SceneManager> m_sceneManager;
+
+		ScriptSystem   m_scriptSystem;
+
+		ViewportPicker m_viewportPicker;
+		EditorCore     m_editorCore;
+
+		ShadingMode m_shadingMode{ ShadingMode::BlinnPhong };
+		bool        m_useFillLight{ true };
+
+		// 카메라 이동/회전을 위한 내부 상태 값들
+		DirectX::XMFLOAT3 m_cameraPosition{ 0.0f, 2.0f, -5.0f };
+		float             m_cameraYawRadians = 0.0f;  // Yaw (좌우 회전)
+		float             m_cameraPitchRadians = 0.0f;  // Pitch (상하 회전)
+
+		float             m_cameraMoveSpeed = 8.0f;     // 초당 이동 속도
+		float             m_cameraMouseSensitivity = 0.0025f; // 마우스 감도 (라디안/픽셀)
+
+		std::unique_ptr<ID3D11RenderDevice>  m_renderDevice;
+		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
+		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+
+		// Skinned FBX 메시 렌더링용 레지스트리/시스템
+		SkinnedMeshRegistry m_skinnedMeshRegistry;
+		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
+		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		std::vector<ForwardRenderSystem::SkinnedDrawCommand> m_skinnedDrawCommands;
+	};
 	namespace
 	{
 		// 윈도우 클래스 이름은 전역 상수로 관리합니다.
@@ -166,23 +239,23 @@ namespace Alice
 		}
 	}
 
-	Engine::Engine(bool editorMode)
-		: m_editorMode(editorMode)
+	Engine::Engine(bool editorMode) : pImpl(std::make_unique<Impl>())
 	{
-		m_scriptSystem.SetEditorMode(editorMode);
+		pImpl->m_editorMode = editorMode;
+		pImpl->m_scriptSystem.SetEditorMode(editorMode);
 	}
 
 	Engine::~Engine()
 	{
-		m_editorCore.Shutdown();
+		pImpl->m_editorCore.Shutdown();
 	}
 
 	bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
 	{
-		ALICE_LOG_INFO("Engine::Initialize: begin (editorMode=%d)", m_editorMode ? 1 : 0);
+		ALICE_LOG_INFO("Engine::Initialize: begin (editorMode=%d)", pImpl->m_editorMode ? 1 : 0);
 
 		// 1) 인스턴스 핸들 보관
-		m_hInstance = hInstance;
+		pImpl->m_hInstance = hInstance;
 
 		// ResourceManager: 경로 해석 기준을 "모드"로 단순하게 고정합니다.
 		// - editorMode(true)  : 프로젝트 루트 기준(= exeDir/../../..) Assets/Resource/Cooked
@@ -191,7 +264,7 @@ namespace Alice
 			wchar_t exePathW[MAX_PATH] = {};
 			GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
 			const std::filesystem::path exeDir = std::filesystem::path(exePathW).parent_path();
-			m_resourceManager.Configure(/*gameMode=*/!m_editorMode, exeDir);
+			pImpl->m_resourceManager.Configure(/*gameMode=*/!pImpl->m_editorMode, exeDir);
 		}
 
 		// 2) 윈도우 생성
@@ -203,12 +276,12 @@ namespace Alice
 		ALICE_LOG_INFO("Engine::Initialize: CreateMainWindow succeeded.");
 
 		// 3) 입력 시스템 초기화 (DirectXTK Keyboard/Mouse)
-		m_inputSystem.Initialize(m_hWnd);
+		pImpl->m_inputSystem.Initialize(pImpl->m_hWnd);
 		ALICE_LOG_INFO("Engine::Initialize: InputSystem initialized.");
 
 		// 4) 렌더 디바이스 생성(D3D11 구현체 사용)
-		m_renderDevice = std::make_unique<D3D11RenderDevice>();
-		if (!m_renderDevice->Initialize(m_hWnd, m_width, m_height))
+		pImpl->m_renderDevice = std::make_unique<D3D11RenderDevice>();
+		if (!pImpl->m_renderDevice->Initialize(pImpl->m_hWnd, pImpl->m_width, pImpl->m_height))
 		{
 			ALICE_LOG_ERRORF("Engine::Initialize: D3D11RenderDevice::Initialize failed.");
 			return false;
@@ -216,14 +289,14 @@ namespace Alice
 		ALICE_LOG_INFO("Engine::Initialize: D3D11RenderDevice initialized.");
 
 		// 5) ImGui / Editor 코어 초기화 (에디터 모드에서만)
-		if (m_editorMode)
+		if (pImpl->m_editorMode)
 		{
 			// EditorCore::Initialize 단계에서도 폰트/아이콘 등 리소스 경로가 필요하므로,
 			// 리소스 포인터는 Initialize 이전에 주입합니다.
-			m_editorCore.SetResourceManager(&m_resourceManager);
-			m_editorCore.SetSkinnedMeshRegistry(&m_skinnedMeshRegistry);
+			pImpl->m_editorCore.SetResourceManager(&pImpl->m_resourceManager);
+			pImpl->m_editorCore.SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 
-			if (!m_editorCore.Initialize(m_hWnd, *m_renderDevice))
+			if (!pImpl->m_editorCore.Initialize(pImpl->m_hWnd, *pImpl->m_renderDevice))
 			{
 				ALICE_LOG_ERRORF("Engine::Initialize: EditorCore::Initialize failed.");
 				return false;
@@ -232,12 +305,12 @@ namespace Alice
 		}
 
 		// 6) Forward 렌더 시스템 초기화
-		m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*m_renderDevice);
+		pImpl->m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*pImpl->m_renderDevice);
 		// 리소스 매니저를 렌더 시스템에 주입합니다 (텍스처 쿠킹/로딩 등에 사용).
-		m_forwardRenderSystem->SetResourceManager(&m_resourceManager);
+		pImpl->m_forwardRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		// 스키닝 메시 레지스트리를 렌더 시스템에 주입 (서브셋/스켈레톤 메타데이터 조회용)
-		m_forwardRenderSystem->SetSkinnedMeshRegistry(&m_skinnedMeshRegistry);
-		if (!m_forwardRenderSystem->Initialize(m_width, m_height))
+		pImpl->m_forwardRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
+		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height))
 		{
 			ALICE_LOG_ERRORF("Engine::Initialize: ForwardRenderSystem::Initialize failed.");
 			return false;
@@ -245,8 +318,8 @@ namespace Alice
 		ALICE_LOG_INFO("Engine::Initialize: ForwardRenderSystem initialized.");
 
 		// 7) DebugDraw 시스템 초기화 (옵션 기능)
-		m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*m_renderDevice);
-		if (!m_debugDrawSystem->Initialize())
+		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_debugDrawSystem->Initialize())
 		{
 			ALICE_LOG_ERRORF("Engine::Initialize: DebugDrawSystem::Initialize failed.");
 			return false;
@@ -254,25 +327,25 @@ namespace Alice
 		ALICE_LOG_INFO("Engine::Initialize: DebugDrawSystem initialized.");
 
 		// 8) 카메라 설정
-		const float aspect = static_cast<float>(m_width) / static_cast<float>(m_height);
-		m_cameraPosition = DirectX::XMFLOAT3(0.0f, 2.0f, -5.0f);
+		const float aspect = static_cast<float>(pImpl->m_width) / static_cast<float>(pImpl->m_height);
+		pImpl->m_cameraPosition = DirectX::XMFLOAT3(0.0f, 2.0f, -5.0f);
 		DirectX::XMFLOAT3 target(0.0f, 0.0f, 0.0f);
-		m_camera.SetLookAt(m_cameraPosition, target, DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f));
-		m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 5000.0f);
+		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, target, DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f));
+		pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 5000.0f);
 
 		// 9) 스크립트 DLL (라이브 코딩용) 로드 시도
 		ScriptHotReload_Load();
 		ALICE_LOG_INFO("Engine::Initialize: ScriptHotReload_Load called.");
 
 		// 10) 씬 매니저 생성 및 기본 씬/씬 파일 로드
-		m_resourceManager.Clear();
-		m_sceneManager = std::make_unique<SceneManager>(m_world, m_resourceManager);
+		pImpl->m_resourceManager.Clear();
+		pImpl->m_sceneManager = std::make_unique<SceneManager>(pImpl->m_world, pImpl->m_resourceManager);
 		ALICE_LOG_INFO("Engine::Initialize: SceneManager created.");
 
 		// 에디터 모드: 코드 기반 SampleScene 을 기본으로 사용
-		if (m_editorMode)
+		if (pImpl->m_editorMode)
 		{
-			m_sceneManager->SwitchTo("SampleScene");
+			pImpl->m_sceneManager->SwitchTo("SampleScene");
 			ALICE_LOG_INFO("Engine::Initialize: editor mode, switched to SampleScene.");
 		}
 		else
@@ -283,10 +356,10 @@ namespace Alice
 			std::filesystem::path exePath = exePathW;
 			std::filesystem::path exeDir = exePath.parent_path();
 
-			if (!LoadStartupSceneFromBuildSettings(m_world, exeDir))
+			if (!LoadStartupSceneFromBuildSettings(pImpl->m_world, exeDir))
 			{
 				// 실패 시 최후의 수단으로 SampleScene 을 사용
-				m_sceneManager->SwitchTo("SampleScene");
+				pImpl->m_sceneManager->SwitchTo("SampleScene");
 				ALICE_LOG_WARN("Engine::Initialize: failed to load startup scene from BuildSettings, fallback to SampleScene.");
 			}
 			else
@@ -300,16 +373,14 @@ namespace Alice
 		EnsureSkinnedMeshesRegisteredForWorld();
 
 		// ScriptSystem 에 서비스 연결 (입력/씬/리소스/스키닝 레지스트리)
-		m_scriptSystem.SetServices(&m_inputSystem, m_sceneManager.get(), &m_resourceManager, &m_skinnedMeshRegistry);
-		m_scriptSystem.SetAfterSceneLoadedCallback([this]()
-		{
-			EnsureSkinnedMeshesRegisteredForWorld();
-		});
+		pImpl->m_scriptSystem.SetServices(&pImpl->m_inputSystem, pImpl->m_sceneManager.get(), &pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
+		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
+		pImpl->m_scriptSystem.onTrimVideoMemory.BindObject(this, &Engine::TrimVideoMemory);
 
-		const auto& transforms = m_world.GetTransforms();
-		const auto& skinnedMeshes = m_world.GetSkinnedMeshes();
-		const auto& scripts = m_world.GetScripts();
-		const auto& materials = m_world.GetMaterials();
+		const auto& transforms = pImpl->m_world.GetTransforms();
+		const auto& skinnedMeshes = pImpl->m_world.GetSkinnedMeshes();
+		const auto& scripts = pImpl->m_world.GetScripts();
+		const auto& materials = pImpl->m_world.GetMaterials();
 		ALICE_LOG_INFO("Engine::Initialize: world summary: transforms=%zu, skinnedMeshes=%zu, scripts=%zu, materials=%zu",
 			transforms.size(), skinnedMeshes.size(), scripts.size(), materials.size());
 
@@ -319,77 +390,76 @@ namespace Alice
 
 	int Engine::Run()
 	{
-		m_isRunning = true;
+		pImpl->m_isRunning = true;
 
 		MSG msg = {};
 
 		// 고해상도 타이머 초기화
-		m_timer.Reset();
-		m_timer.Start();
+		pImpl->m_timer.Reset();
+		pImpl->m_timer.Start();
 
 		// 기본 게임 루프
-		while (m_isRunning)
+		while (pImpl->m_isRunning)
 		{
 			// 1) 윈도우 메시지 처리
 			while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 			{
 				if (msg.message == WM_QUIT)
 				{
-					m_isRunning = false;
+					pImpl->m_isRunning = false;
 					break;
 				}
-
 				TranslateMessage(&msg);
 				DispatchMessage(&msg);
 			}
 
-			if (!m_isRunning) break;
+			if (!pImpl->m_isRunning) break;
 
 			Update();
 			Render();
 		}
 
 		// 종료 라이프사이클
-		m_scriptSystem.OnApplicationQuit(m_world);
+		pImpl->m_scriptSystem.OnApplicationQuit(pImpl->m_world);
 		return static_cast<int>(msg.wParam);
 	}
 
 	void Engine::Update()
 	{
-		m_timer.Tick();
-		m_inputSystem.Update(m_timer.DeltaTime());
+		pImpl->m_timer.Tick();
+		pImpl->m_inputSystem.Update(pImpl->m_timer.DeltaTime());
 
 		using namespace DirectX;
 
 		// 1) 카메라 이동 (WASD + Q/E) - 오른쪽 마우스 버튼을 누르고 있을 때만 동작
-		const bool canControlCamera = m_inputSystem.IsRightButtonDown(); // 우클릭 상태에서만 이동/회전
+		const bool canControlCamera = pImpl->m_inputSystem.IsRightButtonDown(); // 우클릭 상태에서만 이동/회전
 
 		XMVECTOR moveDir = XMVectorZero();
 
 		if (canControlCamera)
 		{
-			if (m_inputSystem.IsKeyDown(Keyboard::W))
+			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::W))
 			{
 				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
 			}
-			if (m_inputSystem.IsKeyDown(Keyboard::S))
+			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::S))
 			{
 				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f));
 			}
-			if (m_inputSystem.IsKeyDown(Keyboard::D))
+			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::D))
 			{
 				moveDir = XMVectorAdd(moveDir, XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
 			}
-			if (m_inputSystem.IsKeyDown(Keyboard::A))
+			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::A))
 			{
 				moveDir = XMVectorAdd(moveDir, XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f));
 			}
 			// E: 위로, Q: 아래로 이동
-			if (m_inputSystem.IsKeyDown(Keyboard::E))
+			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::E))
 			{
 				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
 			}
-			if (m_inputSystem.IsKeyDown(Keyboard::Q))
+			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::Q))
 			{
 				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f));
 			}
@@ -397,105 +467,105 @@ namespace Alice
 			if (!XMVector3Equal(moveDir, XMVectorZero()))
 			{
 				// 카메라의 현재 회전에 맞춰 이동 벡터를 회전
-				XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(m_cameraPitchRadians, m_cameraYawRadians, 0.0f);
+				XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
 				XMVECTOR worldMoveDir = XMVector3TransformNormal(moveDir, rotMatrix);
 				worldMoveDir = XMVector3Normalize(worldMoveDir);
 
-				XMVECTOR pos = XMLoadFloat3(&m_cameraPosition);
-				pos = XMVectorAdd(pos, XMVectorScale(worldMoveDir, m_cameraMoveSpeed * m_timer.DeltaTime()));
-				XMStoreFloat3(&m_cameraPosition, pos);
+				XMVECTOR pos = XMLoadFloat3(&pImpl->m_cameraPosition);
+				pos = XMVectorAdd(pos, XMVectorScale(worldMoveDir, pImpl->m_cameraMoveSpeed * pImpl->m_timer.DeltaTime()));
+				XMStoreFloat3(&pImpl->m_cameraPosition, pos);
 			}
 
 			// 2) 마우스 이동으로 카메라 회전 (우클릭 상태에서만)
-			POINT mouseDelta = m_inputSystem.GetMouseDelta();
-			m_cameraYawRadians += static_cast<float>(mouseDelta.x) * m_cameraMouseSensitivity;
+			POINT mouseDelta = pImpl->m_inputSystem.GetMouseDelta();
+			pImpl->m_cameraYawRadians += static_cast<float>(mouseDelta.x) * pImpl->m_cameraMouseSensitivity;
 			// 마우스를 아래로 내리면 화면도 아래를 보도록 Y축 회전을 반대로 적용합니다.
-			m_cameraPitchRadians += static_cast<float>(mouseDelta.y) * m_cameraMouseSensitivity;
+			pImpl->m_cameraPitchRadians += static_cast<float>(mouseDelta.y) * pImpl->m_cameraMouseSensitivity;
 		}
 
 		// 피치 각도는 -89 ~ 89도 사이로 제한
 		const float pitchLimit = XMConvertToRadians(89.0f);
-		if (m_cameraPitchRadians > pitchLimit)  m_cameraPitchRadians = pitchLimit;
-		if (m_cameraPitchRadians < -pitchLimit) m_cameraPitchRadians = -pitchLimit;
+		if (pImpl->m_cameraPitchRadians > pitchLimit)  pImpl->m_cameraPitchRadians = pitchLimit;
+		if (pImpl->m_cameraPitchRadians < -pitchLimit) pImpl->m_cameraPitchRadians = -pitchLimit;
 
 		// 3) 카메라 LookAt 갱신
-		XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(m_cameraPitchRadians, m_cameraYawRadians, 0.0f);
+		XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
 		XMVECTOR forward = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), rotMatrix);
 
-		XMVECTOR pos = XMLoadFloat3(&m_cameraPosition);
+		XMVECTOR pos = XMLoadFloat3(&pImpl->m_cameraPosition);
 		XMVECTOR target = XMVectorAdd(pos, forward);
 
 		XMFLOAT3 targetFloat3;
 		XMStoreFloat3(&targetFloat3, target);
 
-		m_camera.SetLookAt(m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
+		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
 
 		// 4) 현재 씬 및 스크립트 업데이트
 		//    - 에디터 모드: Play 버튼이 눌렸을 때만 진행
 		//    - 게임 전용 모드: 항상 진행
-		const bool play = m_editorMode ? m_isPlaying : true;
+		const bool play = pImpl->m_editorMode ? pImpl->m_isPlaying : true;
 		if (play)
 		{
-			if (m_sceneManager)
+			if (pImpl->m_sceneManager)
 			{
-				m_sceneManager->Update(m_timer.DeltaTime());
+				pImpl->m_sceneManager->Update(pImpl->m_timer.DeltaTime());
 			}
 
 			// Unity 스타일 스크립트 라이프사이클 수행
-			m_scriptSystem.Tick(m_world, m_timer.DeltaTime());
+			pImpl->m_scriptSystem.Tick(pImpl->m_world, pImpl->m_timer.DeltaTime());
 		}
 	}
 
 	void Engine::Render()
 	{
-		if (!m_renderDevice || !m_forwardRenderSystem)
+		if (!pImpl->m_renderDevice || !pImpl->m_forwardRenderSystem)
 			return;
 
 		// 화면 클리어 색상 (짙은 파란색 계열)
 		const float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
 
-		m_renderDevice->BeginFrame(clearColor);
+		pImpl->m_renderDevice->BeginFrame(clearColor);
 
 		// 에디터 모드에서만 ImGui/도킹 UI + 디버그 축을 그립니다.
-		if (m_editorMode)
+		if (pImpl->m_editorMode)
 		{
 			// ImGui 프레임 시작 (EditorCore 에 위임)
-			m_editorCore.BeginFrame();
+			pImpl->m_editorCore.BeginFrame();
 
-			const float dt = m_timer.DeltaTime();
+			const float dt = pImpl->m_timer.DeltaTime();
 			const float fps = (dt > 0.0f) ? (1.0f / dt) : 0.0f;
-			int shadingModeValue = static_cast<int>(m_shadingMode);
-			m_editorCore.DrawEditorUI(
-				m_world,
-				m_camera,
-				*m_forwardRenderSystem,
-				m_sceneManager.get(),
+			int shadingModeValue = static_cast<int>(pImpl->m_shadingMode);
+			pImpl->m_editorCore.DrawEditorUI(
+				pImpl->m_world,
+				pImpl->m_camera,
+				*pImpl->m_forwardRenderSystem,
+				pImpl->m_sceneManager.get(),
 				dt,
 				fps,
-				m_isPlaying,
+				pImpl->m_isPlaying,
 				shadingModeValue,
-				m_useFillLight,
-				m_selectedEntity,
-				m_viewportPicker,
-				m_cameraMoveSpeed);
-			m_shadingMode = static_cast<ShadingMode>(shadingModeValue);
+				pImpl->m_useFillLight,
+				pImpl->m_selectedEntity,
+				pImpl->m_viewportPicker,
+				pImpl->m_cameraMoveSpeed);
+			pImpl->m_shadingMode = static_cast<Alice::Engine::Impl::ShadingMode>(shadingModeValue);
 
 			// DebugDraw 라인 초기화 및 예제 축(axis) 추가
-			if (m_debugDrawSystem)
+			if (pImpl->m_debugDrawSystem)
 			{
-				m_debugDrawSystem->Clear();
+				pImpl->m_debugDrawSystem->Clear();
 
 				// 원점에서 XYZ 축을 그립니다.
 				// X: 빨강, Y: 초록, Z: 파랑
-				m_debugDrawSystem->AddLine(
+				pImpl->m_debugDrawSystem->AddLine(
 					DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
 					DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f),
 					DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f));
-				m_debugDrawSystem->AddLine(
+				pImpl->m_debugDrawSystem->AddLine(
 					DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
 					DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
 					DirectX::XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f));
-				m_debugDrawSystem->AddLine(
+				pImpl->m_debugDrawSystem->AddLine(
 					DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
 					DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f),
 					DirectX::XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f));
@@ -505,38 +575,38 @@ namespace Alice
 		// 스키닝 애니메이션(본 팔레트)을 먼저 갱신합니다.
 		// - 에디터 모드에서도 Animation 탭에서 스크럽/재생이 즉시 반영되도록 Render 단계에서 갱신합니다.
 		// - dt=0 이어도(일시정지) 사용자가 시간을 바꾸면 팔레트가 갱신됩니다.
-		m_skinnedAnimSystem.Update(m_world, (double)m_timer.DeltaTime());
+		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, (double)pImpl->m_timer.DeltaTime());
 
 		// 스키닝 메시 드로우 리스트를 먼저 구성합니다.
-		m_skinnedMeshSystem.BuildDrawList(m_world, m_skinnedDrawCommands);
+		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
 		// 간단한 Forward 렌더링 (큐브 + 스키닝 메시)
 		EntityId renderEntity = InvalidEntityId;
-		if (m_sceneManager)
+		if (pImpl->m_sceneManager)
 		{
-			renderEntity = m_sceneManager->GetPrimaryRenderableEntity();
+			renderEntity = pImpl->m_sceneManager->GetPrimaryRenderableEntity();
 		}
 
-		const int shadingModeValue2 = static_cast<int>(m_shadingMode);
-		m_forwardRenderSystem->Render(
-			m_world,
-			m_camera,
+		const int shadingModeValue2 = static_cast<int>(pImpl->m_shadingMode);
+		pImpl->m_forwardRenderSystem->Render(
+			pImpl->m_world,
+			pImpl->m_camera,
 			renderEntity,
 			shadingModeValue2,
-			m_useFillLight,
-			m_skinnedDrawCommands);
+			pImpl->m_useFillLight,
+			pImpl->m_skinnedDrawCommands);
 
 		{
-			auto* ctx = m_renderDevice->GetImmediateContext();
+			auto* ctx = pImpl->m_renderDevice->GetImmediateContext();
 
-			auto* backBufferRTV = m_renderDevice->GetBackBufferRTV();
+			auto* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
 
 			// SRV/RTV 에서 리소스 꺼내기
 			Microsoft::WRL::ComPtr<ID3D11Resource> src;
 			Microsoft::WRL::ComPtr<ID3D11Resource> dst;
 
 			// src: ForwardRenderSystem 의 컬러 텍스처
-			auto* sceneSRV = m_forwardRenderSystem->GetSceneSRV();
+			auto* sceneSRV = pImpl->m_forwardRenderSystem->GetSceneSRV();
 			sceneSRV->GetResource(src.GetAddressOf());
 
 			// dst: 백버퍼 텍스처
@@ -547,30 +617,28 @@ namespace Alice
 		}
 
 		// DebugDraw 렌더링 (Forward 렌더 이후, 같은 카메라 기준)
-		if (m_debugDrawSystem)
+		if (pImpl->m_debugDrawSystem)
 		{
-			m_debugDrawSystem->Render(m_camera);
+			pImpl->m_debugDrawSystem->Render(pImpl->m_camera);
 		}
 
 		// ImGui 렌더링 (에디터 모드에서만)
-		if (m_editorMode)
+		if (pImpl->m_editorMode)
 		{
-			m_editorCore.RenderDrawData();
+			pImpl->m_editorCore.RenderDrawData();
 		}
 
-		m_renderDevice->EndFrame();
+		pImpl->m_renderDevice->EndFrame();
 	}
 
 	void Engine::EnsureSkinnedMeshesRegisteredForWorld()
 	{
-		if (!m_renderDevice)
-			return;
+		if (!pImpl->m_renderDevice) return;
 
-		auto* device = m_renderDevice->GetDevice();
-		if (!device)
-			return;
+		auto* device = pImpl->m_renderDevice->GetDevice();
+		if (!device) return;
 
-		const auto& skinnedMap = m_world.GetSkinnedMeshes();
+		const auto& skinnedMap = pImpl->m_world.GetSkinnedMeshes();
 		if (skinnedMap.empty())
 		{
 			ALICE_LOG_INFO("Engine::EnsureSkinnedMeshesRegisteredForWorld: no SkinnedMeshComponents in world.");
@@ -579,11 +647,9 @@ namespace Alice
 
 		for (const auto& [entityId, comp] : skinnedMap)
 		{
-			if (comp.meshAssetPath.empty())
-				continue;
+			if (comp.meshAssetPath.empty()) continue;
 
-			if (m_skinnedMeshRegistry.Find(comp.meshAssetPath))
-				continue; // 이미 등록됨
+			if (pImpl->m_skinnedMeshRegistry.Find(comp.meshAssetPath)) continue; // 이미 등록됨
 
 			std::filesystem::path fbxAssetPath;
 			if (!comp.instanceAssetPath.empty())
@@ -593,12 +659,11 @@ namespace Alice
 			else
 			{
 				// 논리 경로(Assets/...)만 저장/사용하고, 실제 파일 경로는 ResourceManager 가 해석합니다.
-				fbxAssetPath = std::filesystem::path("Assets/Fbx")
-					/ (comp.meshAssetPath + ".fbxasset");
+				fbxAssetPath = std::filesystem::path("Assets/Fbx") / (comp.meshAssetPath + ".fbxasset");
 			}
 
 			Alice::FbxInstanceAsset instance{};
-			const std::filesystem::path fbxAssetAbs = m_resourceManager.Resolve(fbxAssetPath);
+			const std::filesystem::path fbxAssetAbs = pImpl->m_resourceManager.Resolve(fbxAssetPath);
 			if (!Alice::LoadFbxInstanceAsset(fbxAssetAbs, instance))
 			{
 				ALICE_LOG_WARN("Engine::EnsureSkinnedMeshesRegisteredForWorld: failed to load .fbxasset \"%s\" for meshKey=\"%s\"",
@@ -615,7 +680,7 @@ namespace Alice
 			}
 
 			FbxImportOptions opt{};
-			FbxImporter importer(m_resourceManager, &m_skinnedMeshRegistry);
+			FbxImporter importer(pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
 
 			// 배포(gameMode)에서는 source_fbx(논리 "Resource/...")를 Resolve하면
 			// Cooked/Chunks/.../c0000.alice(청크 물리경로)로 바뀌어 FbxModel::Load(파일로드)가 실패합니다.
@@ -623,7 +688,7 @@ namespace Alice
 			// - editorMode: 파일 기반 로드를 위해 Resolve 사용
 			// - gameMode  : 논리 경로 그대로 넘기고, ResourceManager가 Cooked/Chunks에서 로드/복호화하도록 함
 			std::filesystem::path srcFbxPath =
-				m_editorMode ? m_resourceManager.Resolve(instance.sourceFbx)
+				pImpl->m_editorMode ? pImpl->m_resourceManager.Resolve(instance.sourceFbx)
 				             : std::filesystem::path(instance.sourceFbx);
 			FbxImportResult result = importer.Import(device, srcFbxPath, opt);
 
@@ -632,6 +697,11 @@ namespace Alice
 				comp.meshAssetPath.c_str(),
 				result.meshAssetPath.c_str());
 		}
+	}
+
+	void Engine::TrimVideoMemory()
+	{
+		pImpl->m_renderDevice->TrimVideoMemory();
 	}
 
 	bool Engine::CreateMainWindow(int nCmdShow)
@@ -643,9 +713,9 @@ namespace Alice
 		wc.lpfnWndProc = &Engine::WindowProc;
 		wc.cbClsExtra = 0;
 		wc.cbWndExtra = 0;
-		wc.hInstance = m_hInstance;
+		wc.hInstance = pImpl->m_hInstance;
 		// 엔진 전용 아이콘을 로드합니다. (실패하면 기본 아이콘을 사용)
-		const std::filesystem::path iconAbs = m_resourceManager.Resolve("Resource/Icon/Alice.ico");
+		const std::filesystem::path iconAbs = pImpl->m_resourceManager.Resolve("Resource/Icon/Alice.ico");
 		HICON hIconBig = static_cast<HICON>(LoadImageW(
 			nullptr,
 			iconAbs.wstring().c_str(),
@@ -673,14 +743,14 @@ namespace Alice
 		if (!RegisterClassExW(&wc)) return false;
 
 		// 2) 윈도우 크기를 클라이언트 기준으로 맞추기 위해 조정
-		RECT windowRect = { 0, 0, static_cast<LONG>(m_width), static_cast<LONG>(m_height) };
+		RECT windowRect = { 0, 0, static_cast<LONG>(pImpl->m_width), static_cast<LONG>(pImpl->m_height) };
 		AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
 		const int windowWidth = windowRect.right - windowRect.left;
 		const int windowHeight = windowRect.bottom - windowRect.top;
 
 		// 3) 윈도우 생성 (this 포인터를 lpParam으로 전달)
-		m_hWnd = CreateWindowExW(
+		pImpl->m_hWnd = CreateWindowExW(
 			0,
 			kWindowClassName,
 			L"AliceRenderer",
@@ -691,36 +761,36 @@ namespace Alice
 			windowHeight,
 			nullptr,
 			nullptr,
-			m_hInstance,
+			pImpl->m_hInstance,
 			this
 		);
 
-		if (!m_hWnd) return false;
+		if (!pImpl->m_hWnd) return false;
 
-		ShowWindow(m_hWnd, nCmdShow);
-		UpdateWindow(m_hWnd);
+		ShowWindow(pImpl->m_hWnd, nCmdShow);
+		UpdateWindow(pImpl->m_hWnd);
 
 		return true;
 	}
 
 	void Engine::OnResize(std::uint32_t width, std::uint32_t height)
 	{
-		m_width = width;
-		m_height = height;
+		pImpl->m_width = width;
+		pImpl->m_height = height;
 
-		if (m_renderDevice)
+		if (pImpl->m_renderDevice)
 		{
-			m_renderDevice->Resize(width, height);
+			pImpl->m_renderDevice->Resize(width, height);
 
 			const float aspect = (height != 0)
 				? static_cast<float>(width) / static_cast<float>(height)
 				: 1.0f;
-			m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 100.0f);
+			pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 100.0f);
 		}
 
-		if (m_forwardRenderSystem)
+		if (pImpl->m_forwardRenderSystem)
 		{
-			m_forwardRenderSystem->Resize(width, height);
+			pImpl->m_forwardRenderSystem->Resize(width, height);
 		}
 	}
 
@@ -736,7 +806,7 @@ namespace Alice
 			return 0;
 		}
 		case WM_DESTROY:
-			m_isRunning = false;
+			pImpl->m_isRunning = false;
 			PostQuitMessage(0);
 			return 0;
 		default:
