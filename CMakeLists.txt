@@ -59,6 +59,7 @@ set(ALICE_ENGINE_HEADERS
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.h
     ${ALICE_SRC_DIR}/Core/Script.h
+    ${ALICE_SRC_DIR}/Core/ScriptAPI.h
     ${ALICE_SRC_DIR}/Core/ScriptHotReload.h
     ${ALICE_SRC_DIR}/Core/Prefab.h
     ${ALICE_SRC_DIR}/Core/Material.h
