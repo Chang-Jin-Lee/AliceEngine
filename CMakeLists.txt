@@ -56,8 +56,9 @@ set(ALICE_ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.h
     ${ALICE_SRC_DIR}/Editor/EditorCore.h
 
-    # 코어(ECS 스타일)
+    # 코어
     ${ALICE_SRC_DIR}/Core/World.h
+    ${ALICE_SRC_DIR}/Core/Delegate.h
     ${ALICE_SRC_DIR}/Core/Script.h
     ${ALICE_SRC_DIR}/Core/ScriptAPI.h
     ${ALICE_SRC_DIR}/Core/ScriptHotReload.h
