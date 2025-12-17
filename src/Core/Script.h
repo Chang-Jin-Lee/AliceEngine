@@ -6,6 +6,7 @@
 #include <vector>
 #include <functional>
 
+#include "Delegate.h"
 #include "Core/Entity.h"
 #include "Core/ScriptAPI.h"
 #include "Logger.h"
@@ -22,6 +23,9 @@ namespace Alice
     class SkinnedMeshRegistry;
     class InputSystem;
     class GameObject;
+
+    ALICE_DECLARE_DELEGATE(FOnTrimVideoMemory);
+    ALICE_DECLARE_DELEGATE(FOnAfterSceneLoaded);
 
     /// 모든 스크립트가 상속해야 하는 기본 베이스 클래스입니다.
     /// - Unity 의 MonoBehaviour 와 비슷한 개념
@@ -155,9 +159,6 @@ namespace Alice
         // 종료 시 호출
         void OnApplicationQuit(World& world);
 
-        // 씬 로드 직후 엔진 쪽에서 추가 작업이 필요할 때(예: 스키닝 레지스트리 재등록)
-        void SetAfterSceneLoadedCallback(std::function<void()> cb) { m_afterSceneLoaded = std::move(cb); }
-
         // === IScriptInput ===
         bool GetKey(KeyCode key) const override;
         bool GetKeyDown(KeyCode key) const override;
@@ -200,8 +201,11 @@ namespace Alice
         // scene requests
         std::string m_pendingSwitch;
         std::string m_pendingSceneFile;
-
-        std::function<void()> m_afterSceneLoaded;
+        
+    public:
+        // 씬 로드 직후 엔진 쪽에서 추가 작업
+        FOnAfterSceneLoaded onAfterSceneLoaded;
+        FOnTrimVideoMemory onTrimVideoMemory;
     };
 
     // 매크로로 간단하게 스크립트를 등록합니다.
