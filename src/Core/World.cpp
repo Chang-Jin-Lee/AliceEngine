@@ -1,10 +1,25 @@
-#include "Core/World.h"
+﻿#include "Core/World.h"
 
 namespace Alice
 {
+    void World::Clear()
+    {
+        // 1. 스크립트 컴포넌트들의 정리(Cleanup) 함수 호출
+        RemoveAllScript();
+        // 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
+        m_transforms.clear();
+        m_scripts.clear();
+        m_materials.clear();
+        m_skinnedMeshes.clear();
+        m_skinnedAnimations.clear();
+
+        // 3. 엔티티 ID 카운터 초기화 (선택 사항이지만 권장)
+        //    새 씬을 로드할 때 ID가 1번부터 다시 시작하도록 함.
+        m_nextEntityId = 1;
+    }
     EntityId World::CreateEntity()
     {
-        // ������ ������ ID�� ����մϴ�.
+        // 간단한 증가형 ID를 사용합니다.
         const EntityId newId = m_nextEntityId++;
         return newId;
     }
@@ -22,7 +37,7 @@ namespace Alice
 
     TransformComponent& World::AddTransform(EntityId id)
     {
-        // ���� Ű�� ��� �⺻ ������ ���� �����˴ϴ�.
+        // 없는 키일 경우 기본 값으로 새로 생성됩니다.
         return m_transforms[id];
     }
 
@@ -79,6 +94,19 @@ namespace Alice
         }
         m_scripts.erase(it);
     }
+
+    void World::RemoveAllScript()
+    {
+        for (auto& [id, scriptComp] : m_scripts)
+        {
+            if (scriptComp.instance)
+            {
+                scriptComp.instance->OnDisable();
+                scriptComp.instance->OnDestroy();
+            }
+        }
+        m_scripts.clear();
+	}
 
     MaterialComponent& World::AddMaterial(EntityId id,
                                           const DirectX::XMFLOAT3& color,
