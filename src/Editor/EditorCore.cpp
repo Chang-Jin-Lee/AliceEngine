@@ -71,12 +71,13 @@ namespace Alice
             path exeDir  = exePath.parent_path();
             path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
             path scriptsRoot = projectRoot / "ScriptsBuild";
+			path scriptsCMakePath = scriptsRoot / "CMakeLists.txt";
             path scriptsBuildDir = scriptsRoot / "build";
 
-            if (!exists(scriptsRoot / "CMakeLists.txt"))
+            if (!exists(scriptsCMakePath))
             {
                 ALICE_LOG_ERRORF("Reload Scripts: ScriptsBuild/CMakeLists.txt not found. path=\"%s\"",
-                                 (scriptsRoot / "CMakeLists.txt").string().c_str());
+                                 (scriptsCMakePath).string().c_str());
                 return;
             }
 
@@ -86,98 +87,38 @@ namespace Alice
             constexpr const wchar_t* kConfig = L"Release";
 #endif
 
-            // 2) 매번 ScriptsBuild 를 cmake -S . -B build 로 갱신해서
-            //    새로 추가된 C++ 스크립트 파일들도 CMake 타겟에 포함되도록 합니다.
+            std::wstring cmdConfig = L"cmake -S \"";
+            cmdConfig += scriptsRoot.wstring();
+            cmdConfig += L"\" -B \"";
+            cmdConfig += scriptsBuildDir.wstring();
+            cmdConfig += L"\"";
+
+            // ----------------------------------------------------------------------
+            // 1단계: CMake Configure (프로젝트 파일 생성)
+            // 명령: cmake -S "소스경로(scriptsRoot)" -B "빌드경로(scriptsBuildDir)"
+            // ----------------------------------------------------------------------
+            // Configure 실행 (실패 시 중단)
+            if (_wsystem(cmdConfig.c_str()) != 0)
             {
-                std::wstring cmdConfig = L"cmake -S . -B build";
-
-                STARTUPINFOW        si{};
-                PROCESS_INFORMATION pi{};
-                si.cb = sizeof(si);
-                si.dwFlags = STARTF_USESHOWWINDOW;
-                si.wShowWindow = SW_HIDE;
-
-                BOOL okCfg = CreateProcessW(
-                    nullptr,
-                    cmdConfig.data(),
-                    nullptr,
-                    nullptr,
-                    FALSE,
-                    0,
-                    nullptr,
-                    scriptsRoot.wstring().c_str(),
-                    &si,
-                    &pi);
-
-                if (!okCfg)
-                {
-                    ALICE_LOG_ERRORF("Reload Scripts: failed to start CMake configure process for ScriptsBuild.");
-                    return;
-                }
-
-                WaitForSingleObject(pi.hProcess, INFINITE);
-                DWORD exitCodeCfg = 0;
-                GetExitCodeProcess(pi.hProcess, &exitCodeCfg);
-                CloseHandle(pi.hProcess);
-                CloseHandle(pi.hThread);
-
-                ALICE_LOG_INFO("Reload Scripts: CMake configure finished with exitCode=%lu",
-                               static_cast<unsigned long>(exitCodeCfg));
-
-                if (exitCodeCfg != 0)
-                {
-                    ALICE_LOG_ERRORF("Reload Scripts: CMake configure failed for ScriptsBuild (exitCode=%lu).",
-                                     static_cast<unsigned long>(exitCodeCfg));
-                    return;
-                }
+                ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed.");
+                return;
             }
 
-            // 3) ScriptsBuild 프로젝트에서 AliceScripts 타겟만 빌드
-            path buildLog = scriptsBuildDir / "AliceScripts_build.log";
-            std::wstring cmdBuild = L"cmd.exe /C \"cmake --build build --config ";
+            // ----------------------------------------------------------------------
+            // 2단계: CMake Build (컴파일)
+            // 명령: cmake --build "빌드경로" --config Debug --target AliceScripts
+            // ----------------------------------------------------------------------
+            std::wstring cmdBuild = L"cmake --build \"";
+            cmdBuild += scriptsBuildDir.wstring(); // <-- 여기가 핵심: 빌드 폴더를 지정
+            cmdBuild += L"\" --config ";
             cmdBuild += kConfig;
+            cmdBuild += L" --target AliceScripts"; // <-- 특정 타겟만 빌드
 
+            // Build 실행
+            if (_wsystem(cmdBuild.c_str()) != 0)
             {
-                STARTUPINFOW        si{};
-                PROCESS_INFORMATION pi{};
-                si.cb = sizeof(si);
-                si.dwFlags = STARTF_USESHOWWINDOW;
-                si.wShowWindow = SW_HIDE;
-
-                BOOL okBuild = CreateProcessW(
-                    nullptr,
-                    cmdBuild.data(),
-                    nullptr,
-                    nullptr,
-                    FALSE,
-                    0,
-                    nullptr,
-                    scriptsRoot.wstring().c_str(),
-                    &si,
-                    &pi);
-
-                if (!okBuild)
-                {
-                    ALICE_LOG_ERRORF("Reload Scripts: failed to start CMake build process for ScriptsBuild.");
-                    return;
-                }
-
-                WaitForSingleObject(pi.hProcess, INFINITE);
-                DWORD exitCode = 0;
-                GetExitCodeProcess(pi.hProcess, &exitCode);
-                CloseHandle(pi.hProcess);
-                CloseHandle(pi.hThread);
-
-                ALICE_LOG_INFO("Reload Scripts: CMake build finished with exitCode=%lu",
-                               static_cast<unsigned long>(exitCode));
-
-                if (exitCode != 0)
-                {
-                    ALICE_LOG_ERRORF("Reload Scripts: CMake build failed for ScriptsBuild (exitCode=%lu). log=\"%s\"",
-                                     static_cast<unsigned long>(exitCode),
-                                     buildLog.string().c_str());
-                    return;
-                }
+                ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed.");
+                return;
             }
 
             // 4) ScriptsBuild/build/<Config>/AliceScripts.dll 을 실행 파일 옆으로 복사
@@ -915,12 +856,12 @@ namespace Alice
                             {
                                 // 3) Release 실행 파일 폴더(= exe 옆)로 필요한 디렉터리 배치
                                 namespace fs2 = std::filesystem;
-//#ifdef _DEBUG
-//                                fs2::path releaseBinDir = projectRoot / "build/bin/Debug";
-//#else
-//                                fs2::path releaseBinDir = projectRoot / "build/bin/Release";
-//#endif
+#ifdef _DEBUG
+                                fs2::path releaseBinDir = projectRoot / "build/bin/Debug";
+#else
                                 fs2::path releaseBinDir = projectRoot / "build/bin/Release";
+#endif
+                                //fs2::path releaseBinDir = projectRoot / "build/bin/Release";
 
                                 // 이제는 exe 와 같은 폴더에 Assets/Cooked 가 존재하도록 합니다.
                                 // (기존처럼 build/bin 에 복사하고 ../ 로 접근하는 방식은 제거)
@@ -2027,8 +1968,8 @@ namespace Alice
                             hfs << "    {\n";
                             hfs << "    public:\n";
                             hfs << "        const char* GetName() const override { return \"" << className << "\"; }\n\n";
-                            hfs << "        void Start(World& world, EntityId entity) override;\n";
-                            hfs << "        void Update(World& world, EntityId entity, float deltaTime) override;\n";
+                            hfs << "        void Start() override;\n";
+                            hfs << "        void Update(float deltaTime) override;\n";
                             hfs << "    };\n";
                             hfs << "}\n";
                         }
@@ -2045,11 +1986,11 @@ namespace Alice
                             cfs << "{\n";
                             cfs << "    // 이 스크립트를 리플렉션/팩토리 시스템에 등록합니다.\n";
                             cfs << "    REGISTER_SCRIPT(" << className << ");\n\n";
-                            cfs << "    void " << className << "::Start(World& world, EntityId entity)\n";
+                            cfs << "    void " << className << "::Start()\n";
                             cfs << "    {\n";
                             cfs << "        // 초기화 로직을 여기에 작성하세요.\n";
                             cfs << "    }\n\n";
-                            cfs << "    void " << className << "::Update(World& world, EntityId entity, float deltaTime)\n";
+                            cfs << "    void " << className << "::Update(float deltaTime)\n";
                             cfs << "    {\n";
                             cfs << "        // 매 프레임 호출되는 로직을 여기에 작성하세요.\n";
                             cfs << "    }\n";
