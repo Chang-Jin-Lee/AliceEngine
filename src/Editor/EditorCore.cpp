@@ -57,6 +57,59 @@ namespace Alice
             ~ScopedHandle() { if (h) CloseHandle(h); }
         };
 
+        // 명령어를 실행하고 Exit Code를 반환하는 함수임
+        int ExecuteCommandWithConsole(const std::wstring& command)
+        {
+            STARTUPINFOW si;
+            PROCESS_INFORMATION pi;
+
+            ZeroMemory(&si, sizeof(si));
+            si.cb = sizeof(si);
+            ZeroMemory(&pi, sizeof(pi));
+
+            // cmd.exe /C 를 앞에 붙여서 실행해야 쉘 명령어(cmake 등)가 인식됨
+            // 전체 명령어를 " "로 감싸서 공백이나 특수문자 문제를 방지합니다.
+            std::wstring finalCmd = L"cmd.exe /C \"" + command + L"\"";
+
+            // CreateProcess는 문자열 버퍼를 수정할 수 있어야 하므로 vector에 복사
+            std::vector<wchar_t> cmdBuffer(finalCmd.begin(), finalCmd.end());
+            cmdBuffer.push_back(0); // Null terminator
+
+            // CreateProcess 실행
+            // CREATE_NEW_CONSOLE: 부모가 GUI라도 무조건 새 콘솔창을 띄움
+            BOOL result = CreateProcessW(
+                NULL,                   // 어플리케이션 이름 (NULL이면 커맨드라인에서 파싱)
+                cmdBuffer.data(),       // 커맨드 라인
+                NULL,                   // 프로세스 보안 속성
+                NULL,                   // 스레드 보안 속성
+                FALSE,                  // 핸들 상속 여부
+                CREATE_NEW_CONSOLE,     // 새 콘솔 창 생성 플래그
+                NULL,                   // 환경 변수 (NULL이면 부모 상속)
+                NULL,                   // 현재 디렉토리 (NULL이면 부모와 동일)
+                &si,                    // 시작 정보
+                &pi                     // 프로세스 정보 (핸들 등)
+            );
+
+            if (!result)
+            {
+                // 실행 자체 실패
+                return -1;
+            }
+
+            // 프로세스가 끝날 때까지 대기
+            WaitForSingleObject(pi.hProcess, INFINITE);
+
+            // 종료 코드(Exit Code) 가져오기
+            DWORD exitCode = 0;
+            GetExitCodeProcess(pi.hProcess, &exitCode);
+
+            // 핸들 닫기
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+
+            return static_cast<int>(exitCode);
+        }
+
         /// 에디터 Reload Scripts 버튼에서 호출하는 헬퍼입니다.
         /// - ScriptsBuild CMake 프로젝트를 configure/build 해서 AliceScripts.dll 을 만들고
         ///   현재 실행 중인 exe 옆으로 복사한 뒤 ScriptHotReload_Reload 를 호출합니다.
@@ -98,7 +151,7 @@ namespace Alice
             // 명령: cmake -S "소스경로(scriptsRoot)" -B "빌드경로(scriptsBuildDir)"
             // ----------------------------------------------------------------------
             // Configure 실행 (실패 시 중단)
-            if (_wsystem(cmdConfig.c_str()) != 0)
+            if (ExecuteCommandWithConsole(cmdConfig.c_str()) != 0)
             {
                 ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed.");
                 return;
@@ -115,7 +168,7 @@ namespace Alice
             cmdBuild += L" --target AliceScripts"; // <-- 특정 타겟만 빌드
 
             // Build 실행
-            if (_wsystem(cmdBuild.c_str()) != 0)
+            if (ExecuteCommandWithConsole(cmdBuild.c_str()) != 0)
             {
                 ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed.");
                 return;
