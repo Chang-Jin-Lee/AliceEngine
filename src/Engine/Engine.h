@@ -47,6 +47,10 @@ namespace Alice
         /// 필요 시 FBX 를 다시 임포트해서 등록합니다.
         void EnsureSkinnedMeshesRegisteredForWorld();
 
+        /// 씬 전환 시 IBL 세트를 업데이트합니다.
+        /// - onAfterSceneLoaded 델리게이트에 연결되어 자동으로 호출됩니다.
+        void UpdateIblForScene();
+
         void TrimVideoMemory();
 
     private:

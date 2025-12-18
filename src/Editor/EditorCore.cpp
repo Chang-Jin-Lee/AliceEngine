@@ -1722,6 +1722,27 @@ namespace Alice
             Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
 
             auto& lighting = forward.GetLightingParameters();
+            
+            // PBR 모드일 때 PBR 파라미터 표시
+            if (mode == 4)
+            {
+                ImGui::Separator();
+                ImGui::Text("PBR Material Parameters");
+                ImGui::ColorEdit3("Base Color", &lighting.baseColor.x);
+                ImGui::SliderFloat("Metalness", &lighting.metalness, 0.0f, 1.0f);
+                ImGui::SliderFloat("Roughness", &lighting.roughness, 0.0f, 1.0f);
+                ImGui::SliderFloat("Ambient Occlusion", &lighting.ambientOcclusion, 0.0f, 1.0f);
+                ImGui::Separator();
+            }
+            else
+            {
+                // 레거시 쉐이더 파라미터
+                ImGui::SliderFloat("Shininess", &lighting.shininess, 2.0f, 128.0f);
+                ImGui::ColorEdit3("Diffuse Color", &lighting.diffuseColor.x);
+                ImGui::ColorEdit3("Specular Color", &lighting.specularColor.x);
+            }
+
+            // 공통 조명 파라미터
             Alice::ImGuiSliderFloat(L"Key Intensity (주광)",
                                     &lighting.keyIntensity,
                                     0.0f,
@@ -1730,9 +1751,6 @@ namespace Alice
                                     &lighting.fillIntensity,
                                     0.0f,
                                     3.0f);
-            ImGui::SliderFloat("Shininess",      &lighting.shininess,     2.0f, 128.0f);
-            ImGui::ColorEdit3("Diffuse Color",  &lighting.diffuseColor.x);
-            ImGui::ColorEdit3("Specular Color", &lighting.specularColor.x);
 
             Alice::ImGuiSliderFloat3(L"Key Direction (주광)",
                                      &lighting.keyDirection.x,
@@ -1742,6 +1760,53 @@ namespace Alice
                                      &lighting.fillDirection.x,
                                      -1.0f,
                                      1.0f);
+
+            // === Skybox 선택 ===
+            ImGui::Separator();
+            ImGui::Text("Skybox");
+            
+            // 스카이박스 선택 상태를 저장할 변수 (static으로 유지)
+            static int skyboxChoice = 3; // 기본값: Baker (Sample) - 인덱스 3
+            const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker" };
+            
+            if (ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems)))
+            {
+                // 스카이박스 변경
+                if (skyboxChoice == 0) // Off
+                {
+                    // 스카이박스 비활성화
+                    forward.SetSkyboxEnabled(false);
+                }
+                else
+                {
+                    // 스카이박스 활성화 및 IBL 세트 로드
+                    forward.SetSkyboxEnabled(true);
+                    switch (skyboxChoice)
+                    {
+                    case 1: // Bridge
+                        forward.SetIblSet("Bridge");
+                        break;
+                    case 2: // Indoor
+                        forward.SetIblSet("Indoor");
+                        break;
+                    case 3: // Baker (Sample)
+                        forward.SetIblSet("Sample");
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+
+            // Off일 때만 배경색 편집
+            if (skyboxChoice == 0)
+            {
+                DirectX::XMFLOAT4 bgColor = forward.GetBackgroundColor();
+                if (ImGui::ColorEdit4("Background Color", &bgColor.x))
+                {
+                    forward.SetBackgroundColor(bgColor);
+                }
+            }
         }
         ImGui::End();
 
