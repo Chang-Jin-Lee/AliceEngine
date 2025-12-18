@@ -1,6 +1,6 @@
 /**
     @file      TimeSystem.h
-    @brief     High resolution game timer (based on Frank Luna's code).
+    @brief     High resolution game timer
 */
 
 #pragma once

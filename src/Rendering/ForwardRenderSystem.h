@@ -143,10 +143,16 @@ namespace Alice
         /// 조명/재질 파라미터를 외부에서 쉽게 조절할 수 있도록 모아둔 구조체입니다.
         struct LightingParameters
         {
-            // 재질 색상/하이라이트
+            // 재질 색상/하이라이트 (레거시 쉐이더용)
             DirectX::XMFLOAT3 diffuseColor  { 0.7f, 0.7f, 0.9f };
             DirectX::XMFLOAT3 specularColor { 1.0f, 1.0f, 1.0f };
             float             shininess     { 32.0f };
+
+            // PBR 재질 파라미터
+            DirectX::XMFLOAT3 baseColor     { 1.0f, 1.0f, 1.0f };  // PBR Base Color (Albedo)
+            float             metalness    { 0.0f };                // 0.0 = 비금속, 1.0 = 금속
+            float             roughness    { 0.5f };                // 0.0 = 거울, 1.0 = 거친 표면
+            float             ambientOcclusion { 1.0f };            // AO (0.0 ~ 1.0)
 
             // 광원 세기
             float             keyIntensity  { 1.0f };
@@ -166,6 +172,7 @@ namespace Alice
         bool CreateRasterizerStates();
 
         bool CreateSkyboxResources();
+        bool CreateIblResources(const std::string& iblSetName = "Sample");
         bool CreateSkinnedResources();
 
         void RenderSkybox(const Camera& camera,
@@ -211,6 +218,7 @@ namespace Alice
 
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbLighting;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbSkybox; // 스카이박스 전용 CB (DYNAMIC)
 
         // 텍스처 / 샘플러
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_diffuseSRV;
@@ -235,6 +243,18 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11PixelShader>        m_skyboxPS;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilState>  m_skyboxDepthState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_skyboxRasterizerState;
+        
+        // 배경색 (스카이박스가 Off일 때 사용)
+        DirectX::XMFLOAT4                                m_backgroundColor { 0.1f, 0.1f, 0.1f, 1.0f };
+
+        // ==== IBL (Image-Based Lighting) 리소스 ====
+        // - Diffuse IBL: Irradiance map (간접 난반사)
+        // - Specular IBL: Prefiltered env map (거칠기별 반사)
+        // - BRDF LUT: (NdotV, Roughness)에 대한 F,G 적분 평균값
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblDiffuseSRV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblSpecularSRV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblBrdfLutSRV;
+        std::string                                      m_currentIblSet; // 현재 IBL 세트 이름 (Bridge/Indoor/Sample)
 
         // ==== 게임 뷰포트 렌더 타깃 (Scene Color) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneColorTex;
@@ -281,6 +301,18 @@ namespace Alice
         std::uint32_t GetSceneHeight() const { return m_sceneHeight; }
 
 		ID3D11ShaderResourceView* GetSceneSRV() const { return m_sceneSRV.Get(); }
+
+        /// IBL 세트를 변경합니다 (Bridge/Indoor/Sample)
+        /// - 씬 전환 시 호출하여 환경에 맞는 IBL을 로드합니다.
+        bool SetIblSet(const std::string& iblSetName);
+
+        /// 스카이박스 활성화/비활성화를 설정합니다.
+        /// - enabled가 false이면 IBL도 함께 비활성화됩니다.
+        void SetSkyboxEnabled(bool enabled);
+
+        /// 배경색을 설정합니다 (스카이박스가 Off일 때 사용).
+        void SetBackgroundColor(const DirectX::XMFLOAT4& color) { m_backgroundColor = color; }
+        const DirectX::XMFLOAT4& GetBackgroundColor() const { return m_backgroundColor; }
     };
 }
 

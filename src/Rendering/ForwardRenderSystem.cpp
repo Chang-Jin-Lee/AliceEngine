@@ -17,7 +17,7 @@ namespace Alice
 {
     // 간단한 Lambert / Phong / Blinn-Phong 셰이더 코드
     // (D3D11 튜토리얼의 기본 조명 코드를 참고한 단순 버전)
-    namespace
+	namespace
     {
         const char* g_PhongVertexShaderSource = R"(
 cbuffer CBPerObject : register(b0)
@@ -163,11 +163,20 @@ VSOutput main(VSInput input)
 Texture2D gDiffuseMap  : register(t0);
 Texture2D gNormalMap   : register(t1);
 Texture2D gSpecularMap : register(t2);
+TextureCube gSkybox    : register(t3);
 SamplerState gSampler  : register(s0);
 
 // 섀도우 맵 (Depth 텍스처)
 Texture2D<float>        gShadowMap     : register(t4);
 SamplerComparisonState  gShadowSampler : register(s1);
+
+// IBL (Image-Based Lighting) 텍스처들
+// - gIBL_Diffuse  : Diffuse IBL (Irradiance map, N 방향 샘플)
+// - gIBL_Specular : Specular IBL (Prefiltered env map, R 방향 + roughness)
+// - gIBL_BRDF_LUT : BRDF LUT (RG = A,B, NdotV/Roughness → 평균 F,G 계수)
+TextureCube gIBL_Diffuse  : register(t5);
+TextureCube gIBL_Specular : register(t6);
+Texture2D   gIBL_BRDF_LUT : register(t7);
 
 // VS 와 동일한 CBPerObject 레이아웃 (materialColor 포함)
 cbuffer CBPerObject : register(b0)
@@ -408,10 +417,21 @@ float4 main(PSInput input) : SV_TARGET
 
         float3 radiance = lightColor * NdotL;
 
-        float3 Lo = (diffuseTerm + specularTerm) * radiance;
+        float3 Lo = (diffuseTerm + specularTerm) * radiance * shadow;
 
-        float3 ambientPbr = 0.03f * albedo;
-        float3 colorPbr   = ambientPbr + Lo;
+        // === IBL (Image-Based Lighting) 계산 ===
+        // Diffuse IBL: Irradiance map을 법선 방향으로 샘플링
+        float3 diffuseIBL = kd * gIBL_Diffuse.Sample(gSampler, Np).rgb * albedo;
+
+        // Specular IBL: Prefiltered env map + BRDF LUT (split-sum 근사)
+        float3 Renv = reflect(-Vp, Np);
+        const float kMaxSpecularMip = 8.0f;
+        float3 prefilteredColor = gIBL_Specular.SampleLevel(gSampler, Renv, roughness * kMaxSpecularMip).rgb;
+        float2 specBRDF = gIBL_BRDF_LUT.Sample(gSampler, float2(NdotV, roughness)).rg;
+        float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
+
+        // 최종 색상 = 직접광 + 간접광(IBL)
+        float3 colorPbr = Lo + (diffuseIBL + specularIBL);
 
         return float4(colorPbr, 1.0f);
     }
@@ -426,20 +446,18 @@ float4 main(PSInput input) : SV_TARGET
 }
 )";
 
-        // 스카이박스 전용 셰이더 (단순 큐브 맵 샘플링)
+        // 스카이박스 전용 셰이더
+        // - 불필요한 역행렬 연산 제거, input.Position을 그대로 Direction으로 사용
+        // - z/w = 1.0으로 고정하여 항상 배경으로 렌더링
         const char* g_SkyboxVertexShaderSource = R"(
-cbuffer CBPerObject : register(b0)
+cbuffer CBSkybox : register(b0)
 {
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
+    float4x4 gWorldViewProj; // View(회전only) * Proj
 };
 
 struct VSInput
 {
     float3 Position : POSITION;
-    float3 Normal   : NORMAL;
-    float2 TexCoord : TEXCOORD0;
 };
 
 struct VSOutput
@@ -450,21 +468,25 @@ struct VSOutput
 
 VSOutput main(VSInput input)
 {
-    VSOutput output;
+    VSOutput o;
 
-    float4 worldPos = mul(float4(input.Position, 1.0f), gWorld);
-    float4 viewPos  = mul(worldPos, gView);
-    output.Position = mul(viewPos, gProj);
+    // 방향 벡터: 큐브의 로컬 위치가 곧 월드 상의 방향입니다.
+    o.Direction = input.Position;
 
-    // 방향 벡터는 위치를 그대로 사용 (정규화는 PS에서 수행)
-    output.Direction = input.Position;
-    return output;
+    // 위치 변환: 이동 성분이 제거된 ViewProj 행렬을 곱합니다.
+    float4 posH = mul(float4(input.Position, 1.0f), gWorldViewProj);
+    
+    // Z-Fighting 방지 및 배경 처리 최적화
+    // z를 w로 치환하면, Perspective Divide(z/w) 후 깊이 값이 항상 1.0(Far Plane)이 됩니다.
+    o.Position = posH.xyww;
+    
+    return o;
 }
 )";
 
         const char* g_SkyboxPixelShaderSource = R"(
-TextureCube gSkybox : register(t3);
-SamplerState gSampler : register(s0);
+TextureCube g_TexCube : register(t0);
+SamplerState g_Sam : register(s0);
 
 struct PSInput
 {
@@ -474,8 +496,9 @@ struct PSInput
 
 float4 main(PSInput input) : SV_TARGET
 {
-    float3 dir = normalize(input.Direction);
-    return gSkybox.Sample(gSampler, dir);
+    // 방향 벡터로 큐브맵 샘플링 (참고 프로젝트와 동일)
+    // Sample 함수가 자동으로 정규화하므로 명시적 정규화 불필요
+    return g_TexCube.Sample(g_Sam, input.Direction);
 }
 )";
     }
@@ -544,6 +567,11 @@ float4 main(PSInput input) : SV_TARGET
         if (!CreateSkyboxResources())
         {
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateSkyboxResources failed.");
+            return false;
+        }
+        if (!CreateIblResources("Sample"))
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateIblResources failed.");
             return false;
         }
 
@@ -695,27 +723,15 @@ float4 main(PSInput input) : SV_TARGET
 
     bool ForwardRenderSystem::CreateSkyboxResources()
     {
-        // 스카이박스 큐브 맵 텍스처 로드 (OasisSunset.dds)
-        const wchar_t* skyboxPath = L"../Resource/Skybox/OasisSunset.dds";
-        HRESULT hr = DirectX::CreateDDSTextureFromFile(
-            m_device.Get(),
-            skyboxPath,
-            nullptr,
-            m_skyboxSRV.ReleaseAndGetAddressOf());
-
-        if (FAILED(hr))
-        {
-            // 스카이박스는 선택 사항이므로, 로드 실패 시 비활성화만 하고 계속 진행합니다.
-            m_skyboxEnabled = false;
-            return true;
-        }
+        // 스카이박스 텍스처는 CreateIblResources()에서 IBL 환경맵과 함께 로드됩니다.
+        // 여기서는 쉐이더와 렌더 상태만 생성합니다.
 
         // 스카이박스용 셰이더 컴파일
         ComPtr<ID3DBlob> vsBlob;
         ComPtr<ID3DBlob> psBlob;
         ComPtr<ID3DBlob> errorBlob;
 
-        hr = D3DCompile(
+        HRESULT hr = D3DCompile(
             g_SkyboxVertexShaderSource,
             strlen(g_SkyboxVertexShaderSource),
             nullptr,
@@ -774,17 +790,154 @@ float4 main(PSInput input) : SV_TARGET
         hr = m_device->CreateDepthStencilState(&dsDesc, m_skyboxDepthState.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return false;
 
-        // 스카이박스를 안쪽에서 보기 위해 전면 컬링을 사용
+        // 스카이박스는 컬링 없이 렌더링 (참고 프로젝트와 동일)
         D3D11_RASTERIZER_DESC rsDesc = {};
         rsDesc.FillMode              = D3D11_FILL_SOLID;
-        rsDesc.CullMode              = D3D11_CULL_FRONT;
+        rsDesc.CullMode              = D3D11_CULL_NONE;  // 참고 프로젝트와 동일
         rsDesc.FrontCounterClockwise = FALSE;
         rsDesc.DepthClipEnable       = TRUE;
 
         hr = m_device->CreateRasterizerState(&rsDesc, m_skyboxRasterizerState.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return false;
 
+        ALICE_LOG_INFO("ForwardRenderSystem::CreateSkyboxResources: shaders and states created successfully");
         return true;
+    }
+
+    bool ForwardRenderSystem::CreateIblResources(const std::string& iblSetName)
+    {
+        // IBL 리소스 경로 구성 (Resource/Skybox/{SetName}/)
+        // 파일명은 소문자로 시작: bridge, indoor, BakerSample
+        namespace fs = std::filesystem;
+        fs::path basePath = fs::path("Resource/Skybox") / iblSetName;
+
+        // 파일명 접두사 결정 (Sample -> BakerSample, 나머지는 소문자)
+        std::string prefix = iblSetName;
+        if (iblSetName == "Sample")
+        {
+            prefix = "BakerSample";
+        }
+        else
+        {
+            // Bridge -> bridge, Indoor -> indoor
+            prefix[0] = static_cast<char>(std::tolower(prefix[0]));
+        }
+
+        // Diffuse IBL (Irradiance map)
+        fs::path diffusePath = basePath / (prefix + "DiffuseHDR.dds");
+        if (m_resources)
+        {
+            fs::path resolved = m_resources->Resolve(diffusePath);
+            HRESULT hr = DirectX::CreateDDSTextureFromFile(
+                m_device.Get(),
+                resolved.wstring().c_str(),
+                nullptr,
+                m_iblDiffuseSRV.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+            {
+                ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Diffuse IBL \"%s\"",
+                    resolved.string().c_str());
+            }
+        }
+
+        // Specular IBL (Prefiltered env map)
+        fs::path specularPath = basePath / (prefix + "SpecularHDR.dds");
+        if (m_resources)
+        {
+            fs::path resolved = m_resources->Resolve(specularPath);
+            HRESULT hr = DirectX::CreateDDSTextureFromFile(
+                m_device.Get(),
+                resolved.wstring().c_str(),
+                nullptr,
+                m_iblSpecularSRV.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+            {
+                ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Specular IBL \"%s\"",
+                    resolved.string().c_str());
+            }
+        }
+
+        // BRDF LUT
+        fs::path brdfPath = basePath / (prefix + "Brdf.dds");
+        if (m_resources)
+        {
+            fs::path resolved = m_resources->Resolve(brdfPath);
+            HRESULT hr = DirectX::CreateDDSTextureFromFile(
+                m_device.Get(),
+                resolved.wstring().c_str(),
+                nullptr,
+                m_iblBrdfLutSRV.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+            {
+                ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load BRDF LUT \"%s\"",
+                    resolved.string().c_str());
+            }
+        }
+
+        // 스카이박스 환경맵도 함께 로드 (같은 세트 사용)
+        fs::path envPath = basePath / (prefix + "EnvHDR.dds");
+        bool skyboxLoaded = false;
+        if (m_resources)
+        {
+            fs::path resolved = m_resources->Resolve(envPath);
+            HRESULT hr = DirectX::CreateDDSTextureFromFile(
+                m_device.Get(),
+                resolved.wstring().c_str(),
+                nullptr,
+                m_skyboxSRV.ReleaseAndGetAddressOf());
+            if (SUCCEEDED(hr) && m_skyboxSRV)
+            {
+                m_skyboxEnabled = true;
+                skyboxLoaded = true;
+                ALICE_LOG_INFO("ForwardRenderSystem::CreateIblResources: Skybox loaded from \"%s\"",
+                    resolved.string().c_str());
+            }
+            else
+            {
+                ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Skybox \"%s\" (hr=0x%08X)",
+                    resolved.string().c_str(), hr);
+            }
+        }
+        else
+        {
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: ResourceManager not set, cannot load Skybox");
+        }
+
+        // 스카이박스가 로드되지 않았으면 비활성화
+        if (!skyboxLoaded)
+        {
+            m_skyboxEnabled = false;
+        }
+
+        m_currentIblSet = iblSetName;
+        ALICE_LOG_INFO("ForwardRenderSystem::CreateIblResources: IBL set \"%s\" loaded", iblSetName.c_str());
+        return true;
+    }
+
+    bool ForwardRenderSystem::SetIblSet(const std::string& iblSetName)
+    {
+        // 기존 리소스 해제
+        m_iblDiffuseSRV.Reset();
+        m_iblSpecularSRV.Reset();
+        m_iblBrdfLutSRV.Reset();
+        m_skyboxSRV.Reset();
+
+        // 새 IBL 세트 로드
+        return CreateIblResources(iblSetName);
+    }
+
+    void ForwardRenderSystem::SetSkyboxEnabled(bool enabled)
+    {
+        m_skyboxEnabled = enabled;
+        
+        // 스카이박스를 끄면 IBL도 함께 끕니다
+        if (!enabled)
+        {
+            m_iblDiffuseSRV.Reset();
+            m_iblSpecularSRV.Reset();
+            m_iblBrdfLutSRV.Reset();
+            m_skyboxSRV.Reset();
+        }
     }
 
     bool ForwardRenderSystem::CreateCubeGeometry()
@@ -967,6 +1120,15 @@ float4 main(PSInput input) : SV_TARGET
 
         cbDesc.ByteWidth = sizeof(CBLighting);
         hr = m_device->CreateBuffer(&cbDesc, nullptr, m_cbLighting.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        // 스카이박스 전용 CB (DYNAMIC, Map 가능)
+        D3D11_BUFFER_DESC skyboxDesc = {};
+        skyboxDesc.ByteWidth = sizeof(XMMATRIX); // ViewProj만 (64 bytes)
+        skyboxDesc.Usage = D3D11_USAGE_DYNAMIC;
+        skyboxDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        skyboxDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        hr = m_device->CreateBuffer(&skyboxDesc, nullptr, m_cbSkybox.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return false;
 
         return true;
@@ -1404,10 +1566,33 @@ float4 main(PSInput input) : SV_TARGET
                                            const XMMATRIX& view,
                                            const XMMATRIX& projection)
     {
-        if (!m_skyboxEnabled || !m_skyboxSRV || !m_skyboxVS || !m_skyboxPS)
+        if (!m_skyboxEnabled || !m_skyboxSRV || !m_skyboxVS || !m_skyboxPS || !m_cbSkybox)
+        {
+            ALICE_LOG_WARN("ForwardRenderSystem::RenderSkybox: skipped (enabled=%d, srv=%p, vs=%p, ps=%p, cb=%p)",
+                m_skyboxEnabled ? 1 : 0,
+                m_skyboxSRV.Get(),
+                m_skyboxVS.Get(),
+                m_skyboxPS.Get(),
+                m_cbSkybox.Get());
             return;
+        }
 
-        // 입력 어셈블러 설정은 기존 큐브 지오메트리를 재사용합니다.
+        // 이전 상태 저장
+        ID3D11RasterizerState* prevRS = nullptr;
+        ID3D11DepthStencilState* prevDS = nullptr;
+        UINT prevStencilRef = 0;
+        ID3D11ShaderResourceView* prevSRV0 = nullptr;
+        m_context->RSGetState(&prevRS);
+        m_context->OMGetDepthStencilState(&prevDS, &prevStencilRef);
+        m_context->PSGetShaderResources(0, 1, &prevSRV0);
+
+        // 스카이박스 전용 상태 설정
+        if (m_skyboxDepthState)
+            m_context->OMSetDepthStencilState(m_skyboxDepthState.Get(), 0);
+        if (m_skyboxRasterizerState)
+            m_context->RSSetState(m_skyboxRasterizerState.Get());
+
+        // 입력 어셈블러 설정
         UINT stride = sizeof(SimpleVertex);
         UINT offset = 0;
         ID3D11Buffer* vb = m_vertexBuffer.Get();
@@ -1416,36 +1601,50 @@ float4 main(PSInput input) : SV_TARGET
         m_context->IASetInputLayout(m_inputLayout.Get());
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-        // 카메라를 원점에 두기 위해 View 행렬의 이동 성분을 제거합니다.
+        // [핵심 수정] View 행렬에서 이동(Translation) 성분을 제거
+        // 스카이박스는 카메라를 따라다녀야 하므로 회전값만 적용
         XMMATRIX viewNoTrans = view;
-        viewNoTrans.r[3] = XMVectorSet(0.0f, 0.0f, 0.0f, XMVectorGetW(view.r[3]));
+        viewNoTrans.r[3] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 
-        XMMATRIX world = XMMatrixIdentity();
-        XMFLOAT4 whiteColor = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-        // 스카이박스에서는 PBR 파라미터/텍스처를 사용하지 않습니다.
-        UpdatePerObjectCB(world, viewNoTrans, projection, whiteColor, 1.0f, 0.0f, false, false);
+        // row-vector 규칙: v * (View * Proj)
+        XMMATRIX wvp = viewNoTrans * projection;
 
-        // 스카이박스 전용 상태 설정
-        if (m_skyboxDepthState)
-            m_context->OMSetDepthStencilState(m_skyboxDepthState.Get(), 0);
-        if (m_skyboxRasterizerState)
-            m_context->RSSetState(m_skyboxRasterizerState.Get());
+        // 상수 버퍼 데이터 준비 (ViewProj만)
+        XMMATRIX wvpT = XMMatrixTranspose(wvp);
 
-        ID3D11ShaderResourceView* skyboxSrv = m_skyboxSRV.Get();
-        m_context->PSSetShaderResources(3, 1, &skyboxSrv);
+        // DYNAMIC 버퍼에 Map하여 업로드
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (SUCCEEDED(m_context->Map(m_cbSkybox.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            std::memcpy(mapped.pData, &wvpT, sizeof(XMMATRIX));
+            m_context->Unmap(m_cbSkybox.Get(), 0);
+        }
 
-        // 샘플러는 기존 것 재사용
-        ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
-        m_context->PSSetSamplers(0, 1, samplers);
-
+        // 셰이더 설정
         m_context->VSSetShader(m_skyboxVS.Get(), nullptr, 0);
         m_context->PSSetShader(m_skyboxPS.Get(), nullptr, 0);
 
+        // 스카이박스 전용 CB 바인딩
+        ID3D11Buffer* cbs[] = { m_cbSkybox.Get() };
+        m_context->VSSetConstantBuffers(0, 1, cbs);
+
+        // 스카이박스 텍스처 바인딩 (t0)
+        ID3D11ShaderResourceView* skyboxSrv = m_skyboxSRV.Get();
+        m_context->PSSetShaderResources(0, 1, &skyboxSrv);
+
+        // 샘플러 바인딩
+        ID3D11SamplerState* sam = m_samplerState.Get();
+        m_context->PSSetSamplers(0, 1, &sam);
+
         m_context->DrawIndexed(m_indexCount, 0, 0);
 
-        // 기본 깊이 스텐실 상태로 복원 (nullptr = 디폴트)
-        m_context->OMSetDepthStencilState(nullptr, 0);
-        // 래스터라이저 상태는 Render 본문에서 다시 설정합니다.
+        // 이전 상태 복원
+        m_context->OMSetDepthStencilState(prevDS, prevStencilRef);
+        m_context->RSSetState(prevRS);
+        m_context->PSSetShaderResources(0, 1, &prevSRV0);
+        if (prevSRV0) prevSRV0->Release();
+        if (prevDS) prevDS->Release();
+        if (prevRS) prevRS->Release();
     }
 
     void ForwardRenderSystem::RenderSkinnedMeshes(
@@ -1500,13 +1699,21 @@ float4 main(PSInput input) : SV_TARGET
             UpdateBonesCB(cmd.bones, cmd.boneCount);
 
             // 머티리얼/PBR 파라미터 포함 per-object CB 업데이트
+            // cmd에 값이 있으면 사용하고, 없으면 LightingParameters의 기본값 사용
             XMFLOAT4 matColor(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
+            float roughness = (cmd.roughness > 0.0f || cmd.roughness < 0.0f) 
+                ? cmd.roughness 
+                : m_lightingParameters.roughness;
+            float metalness = (cmd.metalness > 0.0f || cmd.metalness < 0.0f) 
+                ? cmd.metalness 
+                : m_lightingParameters.metalness;
+            
             // 스키닝 메시에서는 기본적으로 텍스처를 사용하는 것이 자연스럽습니다.
             // 노말맵은 SRV(t1)가 유효할 때만 활성화합니다.
             // (스키닝 메시의 경우, 머티리얼별 normalSRV가 없으면 flatNormal을 사용합니다)
             const bool enableNormalMap = (m_flatNormalSRV != nullptr);
             UpdatePerObjectCB(cmd.world, view, proj, matColor,
-                              cmd.roughness, cmd.metalness,
+                              roughness, metalness,
                               true,
                               enableNormalMap);
 
@@ -1523,13 +1730,16 @@ float4 main(PSInput input) : SV_TARGET
                     }
                 }
 
-                ID3D11ShaderResourceView* srvs[] =
-                {
-                    diffuseSrv,
-                    m_flatNormalSRV ? m_flatNormalSRV.Get() : m_normalSRV.Get(),
-                    m_specularSRV.Get()
-                };
-                m_context->PSSetShaderResources(0, 3, srvs);
+                // 스키닝 메시 렌더링 시에도 IBL 텍스처를 바인딩
+                ID3D11ShaderResourceView* srvs[8] = {};
+                srvs[0] = diffuseSrv;
+                srvs[1] = m_flatNormalSRV ? m_flatNormalSRV.Get() : m_normalSRV.Get();
+                srvs[2] = m_specularSRV.Get();
+                srvs[3] = m_skyboxSRV.Get();
+                srvs[5] = m_iblDiffuseSRV.Get();
+                srvs[6] = m_iblSpecularSRV.Get();
+                srvs[7] = m_iblBrdfLutSRV.Get();
+                m_context->PSSetShaderResources(0, 8, srvs);
 
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 continue;
@@ -1562,13 +1772,16 @@ float4 main(PSInput input) : SV_TARGET
                     normalSrv = mesh->normalSRVs[subset.materialIndex].Get();
                 }
 
-                ID3D11ShaderResourceView* srvs[] =
-                {
-                    diffuseSrv,
-                    normalSrv,
-                    m_specularSRV.Get()
-                };
-                m_context->PSSetShaderResources(0, 3, srvs);
+                // 서브셋별 렌더링 시에도 IBL 텍스처를 바인딩
+                ID3D11ShaderResourceView* srvs[8] = {};
+                srvs[0] = diffuseSrv;
+                srvs[1] = normalSrv;
+                srvs[2] = m_specularSRV.Get();
+                srvs[3] = m_skyboxSRV.Get();
+                srvs[5] = m_iblDiffuseSRV.Get();
+                srvs[6] = m_iblSpecularSRV.Get();
+                srvs[7] = m_iblBrdfLutSRV.Get();
+                m_context->PSSetShaderResources(0, 8, srvs);
 
                 m_context->DrawIndexed(subset.indexCount, subset.startIndex, cmd.baseVertex);
             }
@@ -1672,7 +1885,13 @@ float4 main(PSInput input) : SV_TARGET
         }
 
         // === 2) 메인 컬러 패스 ===
-        const float sceneClearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
+        // 배경색 사용 (스카이박스가 Off일 때 이 색상이 보임)
+        float sceneClearColor[4] = {
+            m_backgroundColor.x,
+            m_backgroundColor.y,
+            m_backgroundColor.z,
+            m_backgroundColor.w
+        };
         ID3D11RenderTargetView* rtvs[] = { m_sceneRTV.Get() };
 
         // 씬 렌더 타깃 뷰포트 설정
@@ -1700,13 +1919,7 @@ float4 main(PSInput input) : SV_TARGET
         XMMATRIX projM  = camera.GetProjectionMatrix();
         UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
 
-        // 스카이박스 렌더링 (옵션)
-        if (m_skyboxEnabled)
-        {
-            RenderSkybox(camera, viewM, projM);
-        }
-
-        // 이후 일반 오브젝트 렌더링을 위한 상태 설정
+        // 일반 오브젝트 렌더링을 위한 상태 설정
         UINT stride = sizeof(SimpleVertex);
         UINT offset = 0;
         ID3D11Buffer* vb = m_vertexBuffer.Get();
@@ -1727,13 +1940,18 @@ float4 main(PSInput input) : SV_TARGET
             m_context->PSSetSamplers(1, 1, &shadowSampler);
         }
 
-        ID3D11ShaderResourceView* srvs[] =
-        {
-            m_diffuseSRV.Get(),
-            m_normalSRV.Get(),
-            m_specularSRV.Get()
-        };
-        m_context->PSSetShaderResources(0, 3, srvs);
+        // 텍스처 SRV 바인딩 (t0~t7)
+        // 주의: 스카이박스(t3)는 스카이박스 렌더링 후에도 유지되어야 하므로 여기서도 바인딩합니다.
+        ID3D11ShaderResourceView* srvs[8] = {};
+        srvs[0] = m_diffuseSRV.Get();
+        srvs[1] = m_normalSRV.Get();
+        srvs[2] = m_specularSRV.Get();
+        srvs[3] = m_skyboxSRV.Get(); // 스카이박스 (t3) - 스카이박스 렌더링 후에도 유지
+        // t4는 섀도우 맵 (이미 바인딩됨)
+        srvs[5] = m_iblDiffuseSRV.Get();  // IBL Diffuse (t5)
+        srvs[6] = m_iblSpecularSRV.Get(); // IBL Specular (t6)
+        srvs[7] = m_iblBrdfLutSRV.Get();  // IBL BRDF LUT (t7)
+        m_context->PSSetShaderResources(0, 8, srvs);
         ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
         m_context->PSSetSamplers(0, 1, samplers);
 
@@ -1746,10 +1964,14 @@ float4 main(PSInput input) : SV_TARGET
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
 
-            // 기본 회색 머티리얼 (유니티 기본 큐브 느낌)
-            XMFLOAT4 materialColor = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
-            float    roughness     = 0.5f;
-            float    metalness     = 0.0f;
+            // 기본 머티리얼 값 (MaterialComponent가 없으면 LightingParameters의 PBR 값 사용)
+            XMFLOAT4 materialColor = XMFLOAT4(
+                m_lightingParameters.baseColor.x,
+                m_lightingParameters.baseColor.y,
+                m_lightingParameters.baseColor.z,
+                1.0f);
+            float    roughness     = m_lightingParameters.roughness;
+            float    metalness     = m_lightingParameters.metalness;
             bool useTexture = false;
             if (const MaterialComponent* mat = world.GetMaterial(id))
             {
@@ -1787,7 +2009,15 @@ float4 main(PSInput input) : SV_TARGET
             RenderSkinnedMeshes(camera, skinnedCommands);
         }
 
-        if (backBufferRTV)
+        // === 4) 스카이박스 렌더링 (참고 프로젝트: 메인 렌더링 후에 그리기) ===
+        // 주의: 스카이박스는 깊이 테스트는 하되 깊이 쓰기는 하지 않으므로,
+        // 다른 오브젝트 뒤에 그려도 깊이 테스트를 통과하여 배경으로 보입니다.
+        if (m_skyboxEnabled && m_skyboxSRV && m_skyboxVS && m_skyboxPS)
+        {
+            RenderSkybox(camera, viewM, projM);
+        }
+
+		if (backBufferRTV)
         {
             ID3D11RenderTargetView* bbRtvs[] = { backBufferRTV };
             m_context->OMSetRenderTargets(1, bbRtvs, backBufferDSV);
