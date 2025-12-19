@@ -137,7 +137,7 @@ target_link_libraries(Engine PUBLIC RTTR::Core_Lib)
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
 # ==========================================
-# [Target] Launch (기존 AliceGame, 실행 파일)
+# [Target] Launch & AlicePlayer
 # ==========================================
 # 공통 게임 코드
 set(APP_COMMON_SOURCES
@@ -154,19 +154,31 @@ set(APP_HEADERS
     ${ALICE_SRC_DIR}/Game/SkinnedAnimationSystem.h
 )
 
-# 엔트리 포인트 (기존 AliceGame이 사용하던 Main.cpp 사용)
+# 1. Launch (에디터/툴 모드) 엔트리 포인트
 set(LAUNCH_MAIN
     ${ALICE_SRC_DIR}/Sandbox/Main.cpp
 )
 
-# [변경] AliceGame -> Launch
+# 2. AlicePlayer (순수 게임 모드) 엔트리 포인트
+set(PLAYER_MAIN
+    ${ALICE_SRC_DIR}/Sandbox/GameMain.cpp
+)
+
+# [Target 1] Launch (기존 AliceGame/AliceRenderer)
 add_executable(Launch
     ${LAUNCH_MAIN}
     ${APP_COMMON_SOURCES}
     ${APP_HEADERS}
 )
 
-source_group(TREE ${ALICE_SRC_DIR} FILES ${LAUNCH_MAIN} ${APP_COMMON_SOURCES} ${APP_HEADERS})
+# [Target 2] AlicePlayer (최종 빌드용 플레이어)
+add_executable(AlicePlayer
+    ${PLAYER_MAIN}
+    ${APP_COMMON_SOURCES}
+    ${APP_HEADERS}
+)
+
+source_group(TREE ${ALICE_SRC_DIR} FILES ${LAUNCH_MAIN} ${PLAYER_MAIN} ${APP_COMMON_SOURCES} ${APP_HEADERS})
 
 # ==========================================
 # [ThirdParty] ImGui
@@ -207,13 +219,63 @@ target_include_directories(imgui
         ${IMGUI_DIR}/backends
 )
 
-# Launch가 ImGui 헤더를 찾을 수 있도록 설정
-target_include_directories(Launch
+# Launch와 AlicePlayer가 ImGui 헤더를 찾을 수 있도록 설정
+foreach(target Launch AlicePlayer)
+    target_include_directories(${target}
+        PRIVATE
+            ${ALICE_SRC_DIR}
+            ${IMGUI_DIR}
+            ${IMGUI_DIR}/backends
+    )
+endforeach()
+
+# ==========================================
+# [ThirdParty] ImGuizmo
+# ==========================================
+set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
+
+# Engine이 ImGuizmo 헤더를 찾을 수 있도록 설정
+target_include_directories(Engine
     PRIVATE
-        ${ALICE_SRC_DIR}
-        ${IMGUI_DIR}
-        ${IMGUI_DIR}/backends
+        ${IMGUIZMO_DIR}
 )
+
+# ImGuizmo 정적 라이브러리
+add_library(imguizmo STATIC
+    ${IMGUIZMO_DIR}/ImGuizmo.cpp
+    ${IMGUIZMO_DIR}/ImGuizmo.h
+)
+
+target_include_directories(imguizmo
+    PUBLIC
+        ${IMGUIZMO_DIR}
+)
+
+# ImGuizmo를 DirectX 모드로 컴파일 (LH 좌표계, depth 0~1)
+target_compile_definitions(imguizmo
+    PUBLIC
+        IMGUIZMO_USE_DIRECTX
+)
+
+# Engine도 동일한 정의 사용
+target_compile_definitions(Engine
+    PRIVATE
+        IMGUIZMO_USE_DIRECTX
+)
+
+# ImGuizmo는 ImGui에 의존
+target_link_libraries(imguizmo
+    PUBLIC
+        imgui
+)
+
+# 실행 파일들이 ImGuizmo 헤더를 찾을 수 있도록 설정
+foreach(target Launch AlicePlayer)
+    target_include_directories(${target}
+        PRIVATE
+            ${IMGUIZMO_DIR}
+    )
+endforeach()
 
 # ==========================================
 # [설정] 컴파일 옵션 및 vcpkg
@@ -221,7 +283,8 @@ target_include_directories(Launch
 if(MSVC)
     # 경고 레벨
     target_compile_options(Engine      PRIVATE /W4 /permissive-)
-    target_compile_options(Launch PRIVATE /W4 /permissive-)
+    target_compile_options(Launch      PRIVATE /W4 /permissive-)
+    target_compile_options(AlicePlayer PRIVATE /W4 /permissive-)
 
     # VCPKG 설정
     set(VCPKG_ROOT_DEFAULT "D:/vcpkg")
@@ -240,51 +303,56 @@ if(MSVC)
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
     )
 
-    target_include_directories(Launch
-        PRIVATE
-            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
-            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
-    )
+    # Launch와 AlicePlayer에 VCPKG Include/Lib 경로 설정
+    foreach(target Launch AlicePlayer)
+        target_include_directories(${target}
+            PRIVATE
+                "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
+                "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
+        )
 
-    # Lib 경로 추가
-    target_link_directories(Launch
-        PRIVATE
-            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
-            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
-            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
-            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
-    )
+        target_link_directories(${target}
+            PRIVATE
+                "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
+                "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
+                "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
+                "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
+        )
+    endforeach()
 endif()
 
 # Win32 하위 시스템 (콘솔 숨김)
-set_target_properties(Launch PROPERTIES
-    WIN32_EXECUTABLE YES
-)
+set_target_properties(Launch PROPERTIES WIN32_EXECUTABLE YES)
+set_target_properties(AlicePlayer PROPERTIES WIN32_EXECUTABLE YES)
 
 # ==========================================
 # [Link] 라이브러리 연결
 # ==========================================
-target_link_libraries(Launch
-    PRIVATE
-        Engine          # [변경] AliceEngine 대신 Engine 링크
-        imgui
-        d3d11
-        dxgi
-        dxguid
-        d3dcompiler
-        directxtk
-        directxtex
-        $<$<CONFIG:Debug>:assimp-vc143-mtd>
-        $<$<CONFIG:Release>:assimp-vc143-mt>
-)
+# 두 타겟 모두 동일한 라이브러리 의존성을 가짐
+foreach(target Launch AlicePlayer)
+    target_link_libraries(${target}
+        PRIVATE
+            Engine          # 핵심 엔진
+            imgui
+            imguizmo
+            d3d11
+            dxgi
+            dxguid
+            d3dcompiler
+            directxtk
+            directxtex
+            $<$<CONFIG:Debug>:assimp-vc143-mtd>
+            $<$<CONFIG:Release>:assimp-vc143-mt>
+    )
+endforeach()
 
 # ==========================================
 # [Post-Build] DLL 복사
 # ==========================================
 set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 
-# [변경] Launch 타겟에만 복사 수행
-foreach(target Launch)
+# [변경] Launch와 AlicePlayer 타겟 모두에 DLL 복사 수행
+foreach(target Launch AlicePlayer)
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${THIRDPARTY_3DMODEL_DIR}/zlib1.dll"       "$<TARGET_FILE_DIR:${target}>/zlib1.dll"
@@ -297,9 +365,9 @@ foreach(target Launch)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${THIRDPARTY_3DMODEL_DIR}/poly2tri.dll"    "$<TARGET_FILE_DIR:${target}>/poly2tri.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${THIRDPARTY_3DMODEL_DIR}/kubazip.dll"     "$<TARGET_FILE_DIR:${target}>/kubazip.dll"
+            "${THIRDPARTY_3DMODEL_DIR}/kubazip.dll"      "$<TARGET_FILE_DIR:${target}>/kubazip.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${THIRDPARTY_3DMODEL_DIR}/minizip.dll"     "$<TARGET_FILE_DIR:${target}>/minizip.dll"
+            "${THIRDPARTY_3DMODEL_DIR}/minizip.dll"      "$<TARGET_FILE_DIR:${target}>/minizip.dll"
 
         # vcpkg Assimp DLL 복사
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
