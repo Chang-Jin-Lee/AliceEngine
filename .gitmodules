@@ -2,3 +2,6 @@
 	path = ThirdParty/ImGui
 	url = https://github.com/ocornut/imgui.git
 	branch = docking
+[submodule "ThirdParty/rttr"]
+	path = ThirdParty/rttr
+	url = https://github.com/Chang-Jin-Lee/rttr.git
