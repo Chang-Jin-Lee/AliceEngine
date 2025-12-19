@@ -12,8 +12,39 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# AliceRenderer 루트 경로 (ScriptsBuild 기준 상대 경로)
-set(ALICE_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
+# ============================================================================
+# [핵심 수정] 경로를 '진짜 절대 경로(Real Path)'로 확정합니다.
+# ============================================================================
+# CMAKE_CURRENT_LIST_DIR이 "D:/Github/AliceRenderer/ScriptsBuild" 라면
+# ALICE_ROOT는 "D:/Github/AliceRenderer" 로 깔끔하게 변환됩니다. (.. 제거됨)
+get_filename_component(ALICE_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." REALPATH)
+
+# 로그로 경로가 맞는지 확인 (CMake 실행 시 출력됨)
+message(STATUS "-----------------------------------------------------------")
+message(STATUS ">> Alice Root Path (Absolute): ${ALICE_ROOT}")
+
+# ==========================================
+# [설정] RTTR 라이브러리 (스크립트 프로젝트에 통합)
+# ==========================================
+# Boost/Doxygen 의존성을 제거하고 가볍게 빌드하기 위한 옵션들
+set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
+set(BUILD_INSTALLER OFF CACHE BOOL "" FORCE)
+set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+# 정적 라이브러리(.lib)로 빌드하여 DLL 복사 과정 생략
+set(BUILD_STATIC ON CACHE BOOL "" FORCE)
+
+# 런타임 라이브러리 설정 (vcpkg 및 엔진과 맞추기 위해 Static Runtime 끔 -> MD/MDd 사용)
+set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
+
+# RTTR 서브모듈 추가 (경로: ThirdParty/rttr)
+add_subdirectory("${ALICE_ROOT}/ThirdParty/rttr" "${CMAKE_BINARY_DIR}/ThirdParty/rttr")
+
+message(STATUS "-----------------------------------------------------------")
+
+
 
 # 유저 스크립트 소스 (에디터에서 생성되는 C++ 스크립트들)
 file(GLOB_RECURSE USER_SCRIPT_SOURCES CONFIGURE_DEPENDS
@@ -29,13 +60,21 @@ add_library(AliceScripts SHARED
     ${USER_SCRIPT_SOURCES}
 )
 
+# ============================================================================
+# [헤더 경로 설정]
+# ============================================================================
+
 target_include_directories(AliceScripts
     PRIVATE
         "${ALICE_ROOT}/src"
         "${ALICE_ROOT}/ThirdParty/ImGui"
         "${ALICE_ROOT}/ThirdParty/ImGui/backends"
+	"${ALICE_ROOT}/ThirdParty/rttr/src"
 )
 
+# ============================================================================
+# [VCPKG 설정]
+# ============================================================================
 # vcpkg / 외부 라이브러리(DirectXTK, DirectXTex, Assimp) 설정
 if(MSVC)
     set(VCPKG_ROOT_DEFAULT "D:/vcpkg")
@@ -62,17 +101,17 @@ if(MSVC)
     )
 endif()
 
-# 상위 빌드 디렉터리에서 이미 빌드된 Engine.lib 에 링크합니다.
-# - 기본 경로: <AliceRoot>/build/<Config>/Engine.lib
-target_link_libraries(AliceScripts
-    PRIVATE
-        "${ALICE_ROOT}/build/$<CONFIG>/Engine.lib"
-)
+# ============================================================================
+# [라이브러리 링크]
+# ============================================================================
 
 # Engine(정적)에 포함된 코드가 사용하는 외부 라이브러리들을
 # AliceScripts.dll 링크 단계에서도 반드시 같이 링크해야 합니다.
 target_link_libraries(AliceScripts
     PRIVATE
+	"${ALICE_ROOT}/build/$<CONFIG>/Engine.lib"
+        RTTR::Core_Lib
+
         d3d11
         dxgi
         dxguid
