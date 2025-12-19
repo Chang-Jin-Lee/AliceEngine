@@ -17,9 +17,12 @@
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
+#include "ImGuizmo.h"
+
 #include <fstream>
 #include <atomic>
 #include <thread>
+#include <mutex>
 #include <Core/Prefab.h>
 #include <Core/Script.h>
 #include <Core/Material.h>
@@ -281,7 +284,37 @@ namespace Alice
             if (!fs::exists(srcRoot, ec) || ec) return true; // 없는 건 스킵
             if (!fs::is_directory(srcRoot, ec) || ec) return true;
 
-            Alice::ResourceManager rm;
+            // 싱글스레드로 도는 버전임. 오류나면 이걸로 빌드ㄱ
+            //Alice::ResourceManager rm;
+			//if (alreadyEncrypted)
+			//{
+			//	// .alice → .alice 로 그대로 복사 (경로/파일명은 rel 기준으로 새로 배치)
+			//	if (!CopyFileOver(inPath, outPath))
+			//		return false;
+			//}
+			//else
+			//{
+			//	// 디버그: 어떤 파일이 어떤 경로로 cook 되는지 전부 로그로 남깁니다.
+			//	ALICE_LOG_INFO("CookFile: in=\"%s\" -> out=\"%s\"",
+			//		inPath.string().c_str(),
+			//		outPath.string().c_str());
+			//	if (!rm.CookAndSave(inPath, outPath))
+			//	{
+			//		ALICE_LOG_ERRORF("BuildGame: CookAndSave failed. in=\"%s\" out=\"%s\"",
+			//			inPath.string().c_str(), outPath.string().c_str());
+			//		return false;
+			//	}
+			//}
+
+            // 빌드할때 Cook으로 변환할때 쓸 멀티쓰레드 잡임
+            // 모든 작업을 벡터에 수집
+            struct Job
+            {
+                fs::path inPath;
+                fs::path outPath;
+                bool alreadyEncrypted;
+            };
+            std::vector<Job> jobs;
 
             for (fs::recursive_directory_iterator it(srcRoot, ec), end; it != end; it.increment(ec))
             {
@@ -297,32 +330,66 @@ namespace Alice
                     continue;
 
                 fs::path outPath = dstCookedRoot / rel;
-                outPath.replace_extension(".alice"); // 확장자 통일
+                outPath.replace_extension(".alice");
                 const std::string ext = inPath.extension().string();
                 const bool alreadyEncrypted = (_stricmp(ext.c_str(), ".alice") == 0);
 
-                if (alreadyEncrypted)
-                {
-                    // .alice → .alice 로 그대로 복사 (경로/파일명은 rel 기준으로 새로 배치)
-                    if (!CopyFileOver(inPath, outPath))
-                        return false;
-                }
-                else
-                {
-                    // 디버그: 어떤 파일이 어떤 경로로 cook 되는지 전부 로그로 남깁니다.
-                    ALICE_LOG_INFO("CookFile: in=\"%s\" -> out=\"%s\"",
-                                   inPath.string().c_str(),
-                                   outPath.string().c_str());
-                    if (!rm.CookAndSave(inPath, outPath))
-                    {
-                        ALICE_LOG_ERRORF("BuildGame: CookAndSave failed. in=\"%s\" out=\"%s\"",
-                                         inPath.string().c_str(), outPath.string().c_str());
-                        return false;
-                    }
-                }
+                jobs.push_back({ inPath, outPath, alreadyEncrypted });
             }
 
-            return true;
+            if (jobs.empty()) return true;
+
+            // 2단계: 멀티스레드 병렬 처리
+            std::atomic<size_t> nextIdx = 0;
+            std::atomic<bool> success = true;
+            std::mutex logMutex;
+
+            const size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
+            std::vector<std::thread> workers;
+
+            auto worker = [&]()
+            {
+                Alice::ResourceManager rm; // 스레드별 별도 생성
+                while (true)
+                {
+                    size_t idx = nextIdx.fetch_add(1);
+                    if (idx >= jobs.size()) break;
+
+                    const Job& job = jobs[idx];
+                    bool result = false;
+
+                    if (job.alreadyEncrypted)
+                    {
+                        result = CopyFileOver(job.inPath, job.outPath);
+                    }
+                    else
+                    {
+                        {
+                            std::lock_guard<std::mutex> lock(logMutex);
+                            ALICE_LOG_INFO("CookFile: in=\"%s\" -> out=\"%s\"",
+                                           job.inPath.string().c_str(),
+                                           job.outPath.string().c_str());
+                        }
+                        result = rm.CookAndSave(job.inPath, job.outPath);
+                        if (!result)
+                        {
+                            std::lock_guard<std::mutex> lock(logMutex);
+                            ALICE_LOG_ERRORF("BuildGame: CookAndSave failed. in=\"%s\" out=\"%s\"",
+                                             job.inPath.string().c_str(), job.outPath.string().c_str());
+                        }
+                    }
+
+                    if (!result) success = false;
+                }
+            };
+
+            for (size_t i = 0; i < numThreads; ++i)
+                workers.emplace_back(worker);
+
+            for (auto& t : workers)
+                t.join();
+
+            return success.load();
         }
 
         void CopyAllDlls(const std::filesystem::path& fromDir, const std::filesystem::path& toDir)
@@ -333,6 +400,8 @@ namespace Alice
             fs::create_directories(toDir, ec);
             ec.clear();
 
+            // 1단계: 모든 DLL 파일 경로 수집
+            std::vector<fs::path> dllFiles;
             for (fs::directory_iterator it(fromDir, ec), end; it != end; it.increment(ec))
             {
                 if (ec) { ec.clear(); continue; }
@@ -340,9 +409,35 @@ namespace Alice
                 const fs::path p = it->path();
                 if (p.extension() == ".dll")
                 {
-                    CopyFileOver(p, toDir / p.filename());
+                    // 이 부분에서 dllFiles을 푸시해서 멀티스레드 도는  건데, 
+                    // 만약 오류가 생긴다면 바로 CopyFileOver로 여기서 싱글스레드로 할것.
+                    //CopyFileOver(p, toDir / p.filename());
+                    dllFiles.push_back(p);
                 }
             }
+
+            if (dllFiles.empty()) return;
+
+            // 2단계: 멀티스레드 병렬 복사
+            std::atomic<size_t> nextIdx = 0;
+            const size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
+            std::vector<std::thread> workers;
+
+            auto worker = [&]()
+            {
+                while (true)
+                {
+                    size_t idx = nextIdx.fetch_add(1);
+                    if (idx >= dllFiles.size()) break;
+                    CopyFileOver(dllFiles[idx], toDir / dllFiles[idx].filename());
+                }
+            };
+
+            for (size_t i = 0; i < numThreads; ++i)
+                workers.emplace_back(worker);
+
+            for (auto& t : workers)
+                t.join();
         }
     }
 
@@ -423,6 +518,11 @@ namespace Alice
         ImGui_ImplWin32_Init(hwnd);
         ImGui_ImplDX11_Init(d3dDevice, d3dContext);
 
+        // ImGuizmo 스타일 설정
+        ImGuizmo::Style& style = ImGuizmo::GetStyle();
+        style.RotationLineThickness = 3.0f;
+        style.RotationOuterLineThickness = 2.0f;
+
         m_initialized = true;
         return true;
     }
@@ -450,6 +550,7 @@ namespace Alice
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
     }
 
     void EditorCore::RenderDrawData()
@@ -852,7 +953,11 @@ namespace Alice
                         std::thread([projectRoot, cfgPath, exportPathStr]()
                         {
                             // CMake 빌드 프로세스 시작
+#ifdef _DEBUG
+                            std::wstring cmd = L"cmake --build build --config Debug --target AlicePlayer";
+#else
                             std::wstring cmd = L"cmake --build build --config Release --target AlicePlayer";
+#endif
 
                             STARTUPINFOW        si{};
                             PROCESS_INFORMATION pi{};
@@ -1268,11 +1373,8 @@ namespace Alice
                             mat->albedoTexturePath = src.string();
                             changed = true;
 
-                            char buf[256] = {};
-                            std::snprintf(buf, sizeof(buf),
-                                          "[Editor] Material albedo set from Inspector: \"%s\"\n",
+                            ALICE_LOG_INFO("[Editor] Material albedo set from Inspector: \"%s\"\n",
                                           mat->albedoTexturePath.c_str());
-                            ALICE_LOG_INFO("%s", buf);
                         }
                     }
 
@@ -1460,14 +1562,11 @@ namespace Alice
                                             mesh->materialOverridePaths[matIndex] = src.string();
                                         }
 
-                                        char buf[256] = {};
-                                        std::snprintf(buf, sizeof(buf),
-                                                      "[Editor] Submesh texture override: mesh=\"%s\" subset=%d matIndex=%zu path=\"%s\"\n",
+                                        ALICE_LOG_INFO("[Editor] Submesh texture override: mesh=\"%s\" subset=%d matIndex=%zu path=\"%s\"\n",
                                                       skinned->meshAssetPath.c_str(),
                                                       s_selectedSubset,
                                                       matIndex,
                                                       mesh->materialOverridePaths[matIndex].c_str());
-                                        ALICE_LOG_INFO("%s", buf);
                                     }
                                 }
                             }
@@ -1511,6 +1610,81 @@ namespace Alice
         // === Game ===
         if (ImGui::Begin("Game"))
         {
+            // Gizmo 컨트롤 UI (static 변수로 상태 유지)
+            static ImGuizmo::OPERATION gizmoOp = ImGuizmo::TRANSLATE;
+            static ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD; // 기본값: WORLD 모드
+            static bool gizmoSnap = false;
+            static XMFLOAT3 snapTranslation = XMFLOAT3(1.0f, 1.0f, 1.0f);
+            static float snapRotation = 15.0f; // degrees
+            static float snapScale = 1.0f;
+
+            // 키보드 단축키로 Gizmo 모드 변경 (InputSystem 사용)
+            if (m_inputSystem)
+            {
+                using namespace DirectX;
+                if (m_inputSystem->IsKeyPressed(Keyboard::Keys::W)) gizmoOp = ImGuizmo::TRANSLATE;
+                if (m_inputSystem->IsKeyPressed(Keyboard::Keys::E)) gizmoOp = ImGuizmo::ROTATE;
+                if (m_inputSystem->IsKeyPressed(Keyboard::Keys::R)) gizmoOp = ImGuizmo::SCALE;
+                if (m_inputSystem->IsKeyPressed(Keyboard::Keys::X))
+                {
+                    gizmoMode = (gizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+                }
+            }
+
+            // Gizmo Operation 선택 버튼
+            if (ImGui::RadioButton("Translate (W)", gizmoOp == ImGuizmo::TRANSLATE))
+                gizmoOp = ImGuizmo::TRANSLATE;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Rotate (E)", gizmoOp == ImGuizmo::ROTATE))
+                gizmoOp = ImGuizmo::ROTATE;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Scale (R)", gizmoOp == ImGuizmo::SCALE))
+                gizmoOp = ImGuizmo::SCALE;
+
+            // Gizmo Mode 선택 (Scale 모드에서는 World만 지원)
+            if (gizmoOp != ImGuizmo::SCALE)
+            {
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Local (X)", gizmoMode == ImGuizmo::LOCAL))
+                    gizmoMode = ImGuizmo::LOCAL;
+                ImGui::SameLine();
+                if (ImGui::RadioButton("World (X)", gizmoMode == ImGuizmo::WORLD))
+                    gizmoMode = ImGuizmo::WORLD;
+            }
+            else
+            {
+                gizmoMode = ImGuizmo::LOCAL; // Scale은 항상 Local
+            }
+
+            // Snap 토글
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Snap (Ctrl)", &gizmoSnap))
+            {
+                // Snap 체크박스 클릭 시 토글
+            }
+
+            // Snap 값 설정 (접을 수 있는 섹션)
+            if (gizmoSnap)
+            {
+                ImGui::Indent();
+                switch (gizmoOp)
+                {
+                case ImGuizmo::TRANSLATE:
+                    ImGui::DragFloat3("Snap Translation", &snapTranslation.x, 0.1f, 0.01f, 100.0f);
+                    break;
+                case ImGuizmo::ROTATE:
+                    ImGui::DragFloat("Snap Rotation (deg)", &snapRotation, 1.0f, 1.0f, 90.0f);
+                    break;
+                case ImGuizmo::SCALE:
+                    ImGui::DragFloat("Snap Scale", &snapScale, 0.1f, 0.1f, 10.0f);
+                    break;
+                default:
+                    break;
+                }
+                ImGui::Unindent();
+            }
+
+            ImGui::Separator();
             Alice::ImGuiText(L"게임 상태");
             ImGui::Separator();
             ImGui::Text("Play State : %s", isPlaying ? "Playing" : "Stopped");
@@ -1540,24 +1714,137 @@ namespace Alice
                     }
                 }
 
-                ImVec2 imagePos = ImGui::GetCursorScreenPos();
+                // Image를 그린다
                 ImGui::Image(sceneSRV, size);
 
+                // 이미지가 화면에 그려진 사각형(픽셀) - Image 호출 직후에만 유효
+                ImVec2 imgMin  = ImGui::GetItemRectMin();
+                ImVec2 imgMax  = ImGui::GetItemRectMax();
+                ImVec2 imgSize = ImGui::GetItemRectSize();
+
+                // ImGuizmo를 사용하여 선택된 엔티티 조작 (재생 중이 아닐 때만)
+                if (!isPlaying && selectedEntity != InvalidEntityId)
+                {
+                    if (TransformComponent* transform = world.GetTransform(selectedEntity))
+                    {
+                        // View/Proj 행렬 준비 (XMFLOAT4X4로 변환)
+                        XMMATRIX viewXM = camera.GetViewMatrix();
+                        XMMATRIX projXM = camera.GetProjectionMatrix();
+                        
+                        XMFLOAT4X4 viewMatrix, projMatrix;
+                        XMStoreFloat4x4(&viewMatrix, viewXM);
+                        XMStoreFloat4x4(&projMatrix, projXM);
+
+                        // [핵심 수정] ImGuizmo의 RecomposeMatrixFromComponents를 사용하여 행렬 생성
+                        // 이렇게 하면 DecomposeMatrixToComponents와 알고리즘이 일치하여 떨림이 사라집니다
+                        // ImGuizmo는 Degree(도) 단위를 사용하므로 변환 필요
+                        float matrixTranslation[3], matrixRotation[3], matrixScale[3];
+
+                        matrixTranslation[0] = transform->position.x;
+                        matrixTranslation[1] = transform->position.y;
+                        matrixTranslation[2] = transform->position.z;
+
+                        // Radian을 Degree로 변환
+                        matrixRotation[1] = XMConvertToDegrees(transform->rotation.x);
+                        matrixRotation[0] = XMConvertToDegrees(transform->rotation.y);
+                        matrixRotation[2] = XMConvertToDegrees(transform->rotation.z);
+
+                        matrixScale[0] = transform->scale.x;
+                        matrixScale[1] = transform->scale.y;
+                        matrixScale[2] = transform->scale.z;
+
+                        // ImGuizmo 방식으로 행렬을 재조립 (Recompose)
+                        // 이렇게 하면 나중에 Decompose할 때의 알고리즘과 대칭이 되어 떨림이 사라집니다
+                        float worldMatrix[16];
+                        ImGuizmo::RecomposeMatrixFromComponents(matrixTranslation, matrixRotation, matrixScale, worldMatrix);
+
+                        // ImGuizmo에 직접 포인터 전달
+                        const float* viewMat = reinterpret_cast<const float*>(viewMatrix.m);
+                        const float* projMat = reinterpret_cast<const float*>(projMatrix.m);
+                        float* objMat = worldMatrix;
+
+                        // ImGuizmo 설정
+                        ImGuizmo::SetOrthographic(false);
+                        ImDrawList* drawList = ImGui::GetWindowDrawList();
+                        ImGuizmo::SetDrawlist(drawList);
+                        // SetRect는 실제 이미지가 그려진 사각형(픽셀)을 사용
+                        // sceneWidth/sceneHeight는 GPU 렌더 타겟 해상도이므로 화면 픽셀과 다를 수 있음
+                        ImGuizmo::SetRect(imgMin.x, imgMin.y, imgSize.x, imgSize.y);
+
+                        // Snap 값 준비
+                        float* snap = nullptr;
+                        float snapValue[3] = { 0, 0, 0 }; // Snap 값을 받을 임시 배열
+                        bool forceSnap = false;
+                        if (m_inputSystem)
+                        {
+                            using namespace DirectX;
+                            forceSnap = m_inputSystem->IsKeyDown(Keyboard::Keys::LeftControl) || 
+                                       m_inputSystem->IsKeyDown(Keyboard::Keys::RightControl);
+                        }
+                        if (gizmoSnap || forceSnap)
+                        {
+                            if (gizmoOp == ImGuizmo::TRANSLATE)
+                            {
+                                snapValue[0] = snapValue[1] = snapValue[2] = snapTranslation.x;
+                                snap = snapValue;
+                            }
+                            else if (gizmoOp == ImGuizmo::ROTATE)
+                            {
+                                snapValue[0] = snapRotation;
+                                snap = snapValue;
+                            }
+                            else if (gizmoOp == ImGuizmo::SCALE)
+                            {
+                                snapValue[0] = snapScale;
+                                snap = snapValue;
+                            }
+                        }
+
+                        // Gizmo 조작 (worldMatrix 배열을 직접 넘겨주어 수정되게 함)
+                        bool manipulated = ImGuizmo::Manipulate(viewMat, projMat, gizmoOp, gizmoMode, objMat, nullptr, snap);
+
+                        if (manipulated)
+                        {
+                            // [핵심 수정] ImGuizmo로 조립했으므로 분해(Decompose)도 안정적으로 동작함
+                            // Recompose와 Decompose의 알고리즘이 일치하여 떨림이 사라집니다
+                            ImGuizmo::DecomposeMatrixToComponents(worldMatrix, matrixTranslation, matrixRotation, matrixScale);
+
+                            // Transform 컴포넌트 업데이트 (다시 Radian으로 변환하여 저장)
+                            transform->position = XMFLOAT3(matrixTranslation[0], matrixTranslation[1], matrixTranslation[2]);
+                            
+                            transform->rotation = XMFLOAT3(
+                                XMConvertToRadians(matrixRotation[1]),  // pitch (x)
+                                XMConvertToRadians(matrixRotation[0]),  // yaw (y)
+                                XMConvertToRadians(matrixRotation[2])   // roll (z)
+                            );
+                            
+                            transform->scale = XMFLOAT3(matrixScale[0], matrixScale[1], matrixScale[2]);
+                        }
+                    }
+                }
+
+                // 엔티티 선택 (Gizmo 위에 있지 않을 때만)
                 if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 {
-                    ImGuiIO& io = ImGui::GetIO();
-                    ImVec2 mousePos = io.MousePos;
-
-                    const float localX = mousePos.x - imagePos.x;
-                    const float localY = mousePos.y - imagePos.y;
-
-                    if (localX >= 0.0f && localX <= size.x &&
-                        localY >= 0.0f && localY <= size.y)
+                    // Gizmo 위에 있지 않고 사용 중이 아닐 때만 선택 처리
+                    if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing())
                     {
-                        const float u = (size.x > 0.0f) ? (localX / size.x) : 0.0f;
-                        const float v = (size.y > 0.0f) ? (localY / size.y) : 0.0f;
-                        EntityId hit = picker.Pick(world, camera, u, v);
-                        selectedEntity = hit;
+                        const ImVec2 mousePos = ImGui::GetIO().MousePos;
+
+                        //피킹은 실제 이미지 사각형(imgMin, imgSize)을 기준으로 계산
+                        // imagePos나 size를 사용하면 레터박스/패딩 때문에 위치가 어긋남
+                        const float localX = mousePos.x - imgMin.x;
+                        const float localY = mousePos.y - imgMin.y;
+
+                        if (localX >= 0.0f && localX <= imgSize.x &&
+                            localY >= 0.0f && localY <= imgSize.y)
+                        {
+                            // UV 좌표를 실제 이미지 크기 기준으로 계산
+                            const float u = (imgSize.x > 0.0f) ? (localX / imgSize.x) : 0.0f;
+                            const float v = (imgSize.y > 0.0f) ? (localY / imgSize.y) : 0.0f;
+                            EntityId hit = picker.Pick(world, camera, u, v);
+                            selectedEntity = hit;
+                        }
                     }
                 }
             }
@@ -1857,11 +2144,8 @@ namespace Alice
                         g_MaterialEditorData.albedoTexturePath = src.string();
                         changed = true;
 
-                        char buf[256] = {};
-                        std::snprintf(buf, sizeof(buf),
-                                      "[Editor] Material albedo set from MatEditor: \"%s\"\n",
+                        ALICE_LOG_INFO("[Editor] Material albedo set from MatEditor: \"%s\"\n",
                                       g_MaterialEditorData.albedoTexturePath.c_str());
-                        ALICE_LOG_INFO("%s", buf);
                     }
                 }
 
@@ -2382,16 +2666,11 @@ namespace Alice
                         if (Alice::LoadFbxInstanceAsset(path, asset) && !asset.meshAssetPath.empty())
                         {
                             // 디버그 로깅: .fbxasset 로드 결과
-                            {
-                                char buf[512] = {};
-                                std::snprintf(buf, sizeof(buf),
-                                              "[Editor] Instantiate FBX: assetPath=\"%s\" sourceFbx=\"%s\" meshKey=\"%s\" mats=%zu\n",
-                                              path.string().c_str(),
-                                              asset.sourceFbx.c_str(),
-                                              asset.meshAssetPath.c_str(),
-                                              asset.materialAssetPaths.size());
-                                ALICE_LOG_INFO("%s", buf);
-                            }
+                            ALICE_LOG_INFO("[Editor] Instantiate FBX: assetPath=\"%s\" sourceFbx=\"%s\" meshKey=\"%s\" mats=%zu\n",
+                                          path.string().c_str(),
+                                          asset.sourceFbx.c_str(),
+                                          asset.meshAssetPath.c_str(),
+                                          asset.materialAssetPaths.size());
 
                             // 레지스트리에 GPU 메시가 없다면, 원본 FBX 를 다시 임포트해서 등록합니다.
                             if (m_skinnedRegistry && m_resources && m_renderDevice)
@@ -2430,14 +2709,9 @@ namespace Alice
                             skinned.boneMatrices = &s_identityBone;
                             skinned.boneCount    = 1;
 
-                            {
-                                char buf[256] = {};
-                                std::snprintf(buf, sizeof(buf),
-                                              "[Editor] Instantiate FBX: created entity=%u, boneCount=%u\n",
-                                              static_cast<unsigned>(e),
-                                              skinned.boneCount);
-                                ALICE_LOG_INFO("%s", buf);
-                            }
+                            ALICE_LOG_INFO("[Editor] Instantiate FBX: created entity=%u, boneCount=%u\n",
+                                          static_cast<unsigned>(e),
+                                          skinned.boneCount);
 
                             if (!asset.materialAssetPaths.empty())
                             {
@@ -2493,22 +2767,16 @@ namespace Alice
             const std::filesystem::path fbxAssetAbs = m_resources->Resolve(fbxAssetPath);
             if (!Alice::LoadFbxInstanceAsset(fbxAssetAbs, instance))
             {
-                char buf[256] = {};
-                std::snprintf(buf, sizeof(buf),
-                              "[Editor] EnsureSkinnedMeshesRegistered: failed to load .fbxasset \"%s\" for meshKey=\"%s\"\n",
+                ALICE_LOG_WARN("[Editor] EnsureSkinnedMeshesRegistered: failed to load .fbxasset \"%s\" for meshKey=\"%s\"\n",
                               fbxAssetAbs.string().c_str(),
                               comp.meshAssetPath.c_str());
-                ALICE_LOG_WARN("%s", buf);
                 continue;
             }
 
             if (instance.sourceFbx.empty())
             {
-                char buf[256] = {};
-                std::snprintf(buf, sizeof(buf),
-                              "[Editor] EnsureSkinnedMeshesRegistered: .fbxasset has empty source_fbx for \"%s\"\n",
+                ALICE_LOG_INFO("[Editor] EnsureSkinnedMeshesRegistered: .fbxasset has empty source_fbx for \"%s\"\n",
                               fbxAssetPath.string().c_str());
-                ALICE_LOG_INFO("%s", buf);
                 continue;
             }
 
@@ -2519,13 +2787,10 @@ namespace Alice
             std::filesystem::path srcFbxPath = m_resources->Resolve(instance.sourceFbx);
             FbxImportResult result = importer.Import(device, srcFbxPath, opt);
 
-            char buf[512] = {};
-            std::snprintf(buf, sizeof(buf),
-                          "[Editor] EnsureSkinnedMeshesRegistered: re-import FBX \"%s\" -> meshKey=\"%s\" result.mesh=\"%s\"\n",
+            ALICE_LOG_INFO("[Editor] EnsureSkinnedMeshesRegistered: re-import FBX \"%s\" -> meshKey=\"%s\" result.mesh=\"%s\"\n",
                           srcFbxPath.string().c_str(),
                           comp.meshAssetPath.c_str(),
                           result.meshAssetPath.c_str());
-            ALICE_LOG_INFO("%s", buf);
         }
     }
     void EditorCore::SaveScene(World& world)
@@ -2535,13 +2800,8 @@ namespace Alice
 		{
 			savePath = "Assets/AutoSaved.scene";
 		}
-		{
-			char buf[256] = {};
-			std::snprintf(buf, sizeof(buf),
-				"[Editor] SceneFile::Save: \"%s\"\n",
-				savePath.string().c_str());
-			ALICE_LOG_INFO("%s", buf);
-		}
+		ALICE_LOG_INFO("[Editor] SceneFile::Save: \"%s\"\n",
+			savePath.string().c_str());
 		const std::filesystem::path saveAbs = (m_resources ? m_resources->Resolve(savePath) : savePath);
 		SceneFile::Save(world, saveAbs);
 		g_CurrentScenePath = savePath; // 논리 경로로 유지
@@ -2551,13 +2811,8 @@ namespace Alice
     }
     void EditorCore::LoadScene(World& world)
     {
-		{
-			char buf[256] = {};
-			std::snprintf(buf, sizeof(buf),
-				"[Editor] SceneFile::Load (after save): \"%s\"\n",
-				g_NextScenePath.string().c_str());
-			ALICE_LOG_INFO("%s", buf);
-		}
+		ALICE_LOG_INFO("[Editor] SceneFile::Load (after save): \"%s\"\n",
+			g_NextScenePath.string().c_str());
 		const std::filesystem::path loadAbs = (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
 		SceneFile::Load(world, loadAbs);
 		EnsureSkinnedMeshesRegistered(world);
