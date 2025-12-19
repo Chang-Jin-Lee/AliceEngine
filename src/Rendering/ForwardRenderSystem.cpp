@@ -2003,7 +2003,7 @@ float4 main(PSInput input) : SV_TARGET
             m_context->DrawIndexed(m_indexCount, 0, 0);
         }
 
-        // === 3) 스키닝 메시 패스 (있다면) ===
+        // === 3) 스키닝 메시 패스 (있다면) === 
         if (!skinnedCommands.empty())
         {
             RenderSkinnedMeshes(camera, skinnedCommands);

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 # ============================================================================
 # AliceRenderer - User Script 전용 CMake 프로젝트
 # - Assets/Scripts/*.cpp 를 빌드해서 AliceScripts.dll 을 생성합니다.
-# - 엔진(AliceEngine.lib)은 이미 상위 프로젝트에서 빌드되어 있다고 가정합니다.
+# - 엔진(Engine.lib)은 이미 상위 프로젝트에서 빌드되어 있다고 가정합니다.
 # - Editor 의 "Reload Scripts" 버튼이 이 프로젝트를 cmake --build 로 호출합니다.
 # ============================================================================
 project(AliceUserScripts LANGUAGES CXX)
@@ -62,14 +62,14 @@ if(MSVC)
     )
 endif()
 
-# 상위 빌드 디렉터리에서 이미 빌드된 AliceEngine.lib 에 링크합니다.
-# - 기본 경로: <AliceRoot>/build/<Config>/AliceEngine.lib
+# 상위 빌드 디렉터리에서 이미 빌드된 Engine.lib 에 링크합니다.
+# - 기본 경로: <AliceRoot>/build/<Config>/Engine.lib
 target_link_libraries(AliceScripts
     PRIVATE
-        "${ALICE_ROOT}/build/$<CONFIG>/AliceEngine.lib"
+        "${ALICE_ROOT}/build/$<CONFIG>/Engine.lib"
 )
 
-# AliceEngine(정적)에 포함된 코드가 사용하는 외부 라이브러리들을
+# Engine(정적)에 포함된 코드가 사용하는 외부 라이브러리들을
 # AliceScripts.dll 링크 단계에서도 반드시 같이 링크해야 합니다.
 target_link_libraries(AliceScripts
     PRIVATE

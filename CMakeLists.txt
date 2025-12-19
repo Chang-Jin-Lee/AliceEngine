@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
+# 프로젝트 이름은 전체 솔루션 이름
 project(AliceRenderer LANGUAGES CXX)
 
 # C++ 표준 설정
@@ -12,8 +13,29 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
-# ===== 엔진 라이브러리 (Engine/Core/Rendering) =====
-set(ALICE_ENGINE_SOURCES
+# ==========================================
+# [설정] RTTR 라이브러리 (Engine에 통합)
+# ==========================================
+# Boost/Doxygen 의존성을 제거하고 가볍게 빌드하기 위한 옵션들
+set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
+set(BUILD_INSTALLER OFF CACHE BOOL "" FORCE)
+set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+# 정적 라이브러리(.lib)로 빌드하여 DLL 복사 과정 생략
+set(BUILD_STATIC ON CACHE BOOL "" FORCE)
+
+# 런타임 라이브러리 설정 (vcpkg 및 엔진과 맞추기 위해 Static Runtime 끔 -> MD/MDd 사용)
+set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
+
+# RTTR 서브모듈 추가 (경로: ThirdParty/rttr)
+add_subdirectory(ThirdParty/rttr)
+
+# ==========================================
+# [Target] Engine (기존 AliceEngine)
+# ==========================================
+set(ENGINE_SOURCES
     # 엔진 계층
     ${ALICE_SRC_DIR}/Engine/Engine.cpp
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.cpp
@@ -35,7 +57,7 @@ set(ALICE_ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Helper.cpp
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
 
-    # FBX/3D 모델 로더 (D3D11-AliceTutorial Common/Mesh 기반)
+    # FBX/3D 모델 로더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxModel.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.cpp
@@ -50,7 +72,7 @@ set(ALICE_ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
 )
 
-set(ALICE_ENGINE_HEADERS
+set(ENGINE_HEADERS
     # 엔진 계층
     ${ALICE_SRC_DIR}/Engine/Engine.h
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.h
@@ -80,7 +102,6 @@ set(ALICE_ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Helper.h
     ${ALICE_SRC_DIR}/Core/Vertex.h
 
-
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
     ${ALICE_SRC_DIR}/3Dmodel/FbxModel.h
@@ -99,99 +120,63 @@ set(ALICE_ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
 )
 
-add_library(AliceEngine STATIC
-    ${ALICE_ENGINE_SOURCES}
-    ${ALICE_ENGINE_HEADERS}
+# [변경] AliceEngine -> Engine
+add_library(Engine STATIC
+    ${ENGINE_SOURCES}
+    ${ENGINE_HEADERS}
 )
 
-source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_ENGINE_SOURCES} ${ALICE_ENGINE_HEADERS})
+# [설정] Engine에 RTTR 연결 (PUBLIC: 엔진을 쓰는 프로젝트도 RTTR 사용 가능)
+target_link_libraries(Engine PUBLIC RTTR::Core_Lib)
 
-# ===== 콘텐츠/게임 실행 파일 (Sandbox + Scenes) =====
-# 공통 게임 코드(엔트리 포인트 제외)
-set(ALICE_APP_COMMON_SOURCES
-    # 샘플 씬 (콘텐츠 계층)
+source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
+
+# ==========================================
+# [Target] Launch (기존 AliceGame, 실행 파일)
+# ==========================================
+# 공통 게임 코드
+set(APP_COMMON_SOURCES
     ${ALICE_SRC_DIR}/Scenes/SampleScene.cpp
-
-    # 게임 레벨 유틸리티 (FBX 임포터, 스키닝 시스템 등)
     ${ALICE_SRC_DIR}/Game/FbxImporter.cpp
     ${ALICE_SRC_DIR}/Game/FbxAsset.cpp
 )
 
-set(ALICE_APP_HEADERS
+set(APP_HEADERS
     ${ALICE_SRC_DIR}/Scenes/SampleScene.h
-
     ${ALICE_SRC_DIR}/Game/FbxImporter.h
     ${ALICE_SRC_DIR}/Game/FbxAsset.h
     ${ALICE_SRC_DIR}/Game/SkinnedMeshSystem.h
     ${ALICE_SRC_DIR}/Game/SkinnedAnimationSystem.h
 )
 
-set(ALICE_EDITOR_MAIN
+# 엔트리 포인트 (기존 AliceGame이 사용하던 Main.cpp 사용)
+set(LAUNCH_MAIN
     ${ALICE_SRC_DIR}/Sandbox/Main.cpp
 )
 
-set(ALICE_PLAYER_MAIN
-    ${ALICE_SRC_DIR}/Sandbox/GameMain.cpp
+# [변경] AliceGame -> Launch
+add_executable(Launch
+    ${LAUNCH_MAIN}
+    ${APP_COMMON_SOURCES}
+    ${APP_HEADERS}
 )
 
-# === 엔진 데모/기본 실행 파일 (엔진 자체 테스트용, 에디터 모드) ===
-add_executable(AliceRenderer
-    ${ALICE_EDITOR_MAIN}
-    ${ALICE_APP_COMMON_SOURCES}
-    ${ALICE_APP_HEADERS}
-)
+source_group(TREE ${ALICE_SRC_DIR} FILES ${LAUNCH_MAIN} ${APP_COMMON_SOURCES} ${APP_HEADERS})
 
-source_group(TREE ${ALICE_SRC_DIR} FILES ${ALICE_EDITOR_MAIN} ${ALICE_PLAYER_MAIN} ${ALICE_APP_COMMON_SOURCES} ${ALICE_APP_HEADERS})
-
-add_executable(AliceGame
-    ${ALICE_EDITOR_MAIN}
-    ${ALICE_APP_COMMON_SOURCES}
-    ${ALICE_APP_HEADERS}
-)
-
-add_executable(AlicePlayer
-    ${ALICE_PLAYER_MAIN}
-    ${ALICE_APP_COMMON_SOURCES}
-    ${ALICE_APP_HEADERS}
-)
-
-target_include_directories(AlicePlayer
-    PRIVATE
-        ${ALICE_SRC_DIR}
-        ${IMGUI_DIR}
-        ${IMGUI_DIR}/backends
-        "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
-        "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
-)
-
-target_link_directories(AlicePlayer
-    PRIVATE
-        "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
-        "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
-        "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
-        "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
-)
-
-source_group(TREE ${ALICE_SRC_DIR}   FILES ${ALICE_EDITOR_MAIN} ${ALICE_PLAYER_MAIN} ${ALICE_APP_COMMON_SOURCES} ${ALICE_APP_HEADERS})
-
-# ThirdParty ImGui (docking 브랜치) 경로
+# ==========================================
+# [ThirdParty] ImGui
+# ==========================================
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
 
-target_include_directories(AliceEngine
+# Engine이 ImGui 헤더를 찾을 수 있도록 설정
+target_include_directories(Engine
     PRIVATE
         ${ALICE_SRC_DIR}
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
 )
 
-target_include_directories(AliceRenderer
-    PRIVATE
-        ${ALICE_SRC_DIR}
-        ${IMGUI_DIR}
-        ${IMGUI_DIR}/backends
-)
-
-# ImGui 정적 라이브러리 (Win32 + DX11 백엔드 포함)
+# ImGui 정적 라이브러리
 add_library(imgui STATIC
     ${IMGUI_DIR}/imconfig.h
     ${IMGUI_DIR}/imgui.cpp
@@ -216,74 +201,47 @@ target_include_directories(imgui
         ${IMGUI_DIR}/backends
 )
 
-target_include_directories(AliceGame
+# Launch가 ImGui 헤더를 찾을 수 있도록 설정
+target_include_directories(Launch
     PRIVATE
         ${ALICE_SRC_DIR}
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
 )
 
+# ==========================================
+# [설정] 컴파일 옵션 및 vcpkg
+# ==========================================
 if(MSVC)
-    # 경고 레벨 및 비교적 엄격한 컴파일 옵션
-    target_compile_options(AliceEngine   PRIVATE /W4 /permissive-)
-    target_compile_options(AliceRenderer PRIVATE /W4 /permissive-)
-    target_compile_options(AliceGame     PRIVATE /W4 /permissive-)
+    # 경고 레벨
+    target_compile_options(Engine      PRIVATE /W4 /permissive-)
+    target_compile_options(Launch PRIVATE /W4 /permissive-)
 
-    # ==== vcpkg + DirectXTK/DirectXTex 연동 ====
-    # D3D11-AliceTutorial 의 Directory.Build.Props 와 동일한 개념을 CMake로 옮긴 것.
-    #
-    # VCPKG_ROOT 기본값: 환경변수 VCPKG_ROOT가 있으면 그 값을, 아니면 D:/vcpkg 사용.
+    # VCPKG 설정
     set(VCPKG_ROOT_DEFAULT "D:/vcpkg")
     if(DEFINED ENV{VCPKG_ROOT})
         set(VCPKG_ROOT_DEFAULT "$ENV{VCPKG_ROOT}")
     endif()
-    set(VCPKG_ROOT "${VCPKG_ROOT_DEFAULT}" CACHE PATH "Path to vcpkg root (ex: D:/vcpkg)")
+    set(VCPKG_ROOT "${VCPKG_ROOT_DEFAULT}" CACHE PATH "Path to vcpkg root")
 
-    # 정적/동적 트리플릿 (Props 의 TripletStatic / TripletDynamic 과 대응)
     set(VCPKG_TRIPLET_STATIC "x64-windows-static-md" CACHE STRING "vcpkg static triplet")
     set(VCPKG_TRIPLET_DYNAMIC "x64-windows" CACHE STRING "vcpkg dynamic triplet")
 
-    # vcpkg include 경로 추가 (DirectXTK / DirectXTex / ImGui / Assimp 등)
-    target_include_directories(AliceEngine
-        PRIVATE
-            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
-            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
-    )
-    target_include_directories(AliceRenderer
+    # Include 경로 추가
+    target_include_directories(Engine
         PRIVATE
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
     )
 
-    target_include_directories(AliceGame
+    target_include_directories(Launch
         PRIVATE
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
     )
 
-    target_include_directories(AlicePlayer
-        PRIVATE
-            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
-            "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
-    )
-
-    # vcpkg lib 경로 추가 (Debug/Release 를 분리해서 Props 와 동일하게 설정)
-    target_link_directories(AliceRenderer
-        PRIVATE
-            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
-            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
-            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
-            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
-    )
-
-    target_link_directories(AliceGame
-        PRIVATE
-            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
-            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
-            "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/lib>"
-            "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/lib>"
-    )
-    target_link_directories(AlicePlayer
+    # Lib 경로 추가
+    target_link_directories(Launch
         PRIVATE
             "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
             "$<$<CONFIG:Release>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/lib>"
@@ -292,21 +250,17 @@ if(MSVC)
     )
 endif()
 
-# Win32 하위 시스템으로 빌드 (콘솔 창 숨김)
-set_target_properties(AliceRenderer PROPERTIES
-    WIN32_EXECUTABLE YES
-)
-set_target_properties(AliceGame PROPERTIES
-    WIN32_EXECUTABLE YES
-)
-set_target_properties(AlicePlayer PROPERTIES
+# Win32 하위 시스템 (콘솔 숨김)
+set_target_properties(Launch PROPERTIES
     WIN32_EXECUTABLE YES
 )
 
-# DirectX 11 / DXGI / DirectXTK / DirectXTex / ImGui / Assimp 링크
-target_link_libraries(AliceRenderer
+# ==========================================
+# [Link] 라이브러리 연결
+# ==========================================
+target_link_libraries(Launch
     PRIVATE
-        AliceEngine
+        Engine          # [변경] AliceEngine 대신 Engine 링크
         imgui
         d3d11
         dxgi
@@ -318,38 +272,13 @@ target_link_libraries(AliceRenderer
         $<$<CONFIG:Release>:assimp-vc143-mt>
 )
 
-target_link_libraries(AliceGame
-    PRIVATE
-        AliceEngine
-        imgui
-        d3d11
-        dxgi
-        dxguid
-        d3dcompiler
-        directxtk
-        directxtex
-        $<$<CONFIG:Debug>:assimp-vc143-mtd>
-        $<$<CONFIG:Release>:assimp-vc143-mt>
-)
-
-target_link_libraries(AlicePlayer
-    PRIVATE
-        AliceEngine
-        imgui
-        d3d11
-        dxgi
-        dxguid
-        d3dcompiler
-        directxtk
-        directxtex
-        $<$<CONFIG:Debug>:assimp-vc143-mtd>
-        $<$<CONFIG:Release>:assimp-vc143-mt>
-)
-
-# === 3D Model 관련 DLL 들을 실행 파일 출력 폴더로 복사 ===
+# ==========================================
+# [Post-Build] DLL 복사
+# ==========================================
 set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 
-foreach(target AliceRenderer AliceGame AlicePlayer)
+# [변경] Launch 타겟에만 복사 수행
+foreach(target Launch)
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${THIRDPARTY_3DMODEL_DIR}/zlib1.dll"       "$<TARGET_FILE_DIR:${target}>/zlib1.dll"
@@ -366,8 +295,7 @@ foreach(target AliceRenderer AliceGame AlicePlayer)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${THIRDPARTY_3DMODEL_DIR}/minizip.dll"     "$<TARGET_FILE_DIR:${target}>/minizip.dll"
 
-        # vcpkg 에서 설치된 Assimp DLL 도 함께 복사
-        # (Debug/Release 둘 다 존재한다고 가정하고 단순히 복사만 수행)
+        # vcpkg Assimp DLL 복사
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/bin/assimp-vc143-mtd.dll"
             "$<TARGET_FILE_DIR:${target}>/assimp-vc143-mtd.dll"
@@ -376,5 +304,3 @@ foreach(target AliceRenderer AliceGame AlicePlayer)
             "$<TARGET_FILE_DIR:${target}>/assimp-vc143-mt.dll"
     )
 endforeach()
-
-
