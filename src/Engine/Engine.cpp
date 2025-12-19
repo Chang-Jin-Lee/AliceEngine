@@ -1,18 +1,18 @@
-ï»¿#include "Engine/Engine.h"
+#include "Engine/Engine.h"
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
 
 // ImGui
 #include "imgui.h"
-#include "imgui_internal.h"   // DockBuilder API ì‚¬ìš©
+#include "imgui_internal.h"   // DockBuilder API »ç¿ë
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
-// Win32 ë©”ì‹œì§€ í—¬í¼ (GET_X/Y_LPARAM)
+// Win32 ¸Ş½ÃÁö ÇïÆÛ (GET_X/Y_LPARAM)
 #include <Windowsx.h>
 
-// í‘œì¤€ ë¼ì´ë¸ŒëŸ¬ë¦¬
+// Ç¥ÁØ ¶óÀÌºê·¯¸®
 #include <filesystem>
 #include <cfloat>      // FLT_MAX
 #include <algorithm>   // std::max
@@ -37,7 +37,7 @@
 #include "Game/SkinnedMeshSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
 
-// ë¬¸ìì—´ ë³€í™˜ / ImGui ë˜í¼
+// ¹®ÀÚ¿­ º¯È¯ / ImGui ·¡ÆÛ
 #include "Core/StringUtils.h"
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
@@ -68,10 +68,10 @@ namespace Alice
 		std::uint32_t m_width = 1600;
 		std::uint32_t m_height = 900;
 
-		bool m_isRunning = false;            // ì—”ì§„ ìì²´ê°€ ì‹¤í–‰ì¤‘ì¸ì§€ íŒë‹¨
-		bool m_isPlaying = false;            // ì¬ìƒ / ì¼ì‹œì •ì§€ ìƒíƒœ (ì—ë””í„° ëª¨ë“œì—ì„œë§Œ ì‚¬ìš©)
-		bool m_editorMode = true;             // true: ì—ë””í„°, false: ê²Œì„ ì „ìš©
-		EntityId m_selectedEntity{ InvalidEntityId }; // í˜„ì¬ ì„ íƒëœ ì—”í‹°í‹° (í•˜ì´ëŸ¬í‚¤)
+		bool m_isRunning = false;            // ¿£Áø ÀÚÃ¼°¡ ½ÇÇàÁßÀÎÁö ÆÇ´Ü
+		bool m_isPlaying = false;            // Àç»ı / ÀÏ½ÃÁ¤Áö »óÅÂ (¿¡µğÅÍ ¸ğµå¿¡¼­¸¸ »ç¿ë)
+		bool m_editorMode = true;             // true: ¿¡µğÅÍ, false: °ÔÀÓ Àü¿ë
+		EntityId m_selectedEntity{ InvalidEntityId }; // ÇöÀç ¼±ÅÃµÈ ¿£Æ¼Æ¼ (ÇÏÀÌ·¯Å°)
 
 		World          m_world;
 		Camera         m_camera;
@@ -88,19 +88,19 @@ namespace Alice
 		ShadingMode m_shadingMode{ ShadingMode::PBR };
 		bool        m_useFillLight{ true };
 
-		// ì¹´ë©”ë¼ ì´ë™/íšŒì „ì„ ìœ„í•œ ë‚´ë¶€ ìƒíƒœ ê°’ë“¤
+		// Ä«¸Ş¶ó ÀÌµ¿/È¸ÀüÀ» À§ÇÑ ³»ºÎ »óÅÂ °ªµé
 		DirectX::XMFLOAT3 m_cameraPosition{ 0.0f, 2.0f, -5.0f };
-		float             m_cameraYawRadians = 0.0f;  // Yaw (ì¢Œìš° íšŒì „)
-		float             m_cameraPitchRadians = 0.0f;  // Pitch (ìƒí•˜ íšŒì „)
+		float             m_cameraYawRadians = 0.0f;  // Yaw (ÁÂ¿ì È¸Àü)
+		float             m_cameraPitchRadians = 0.0f;  // Pitch (»óÇÏ È¸Àü)
 
-		float             m_cameraMoveSpeed = 8.0f;     // ì´ˆë‹¹ ì´ë™ ì†ë„
-		float             m_cameraMouseSensitivity = 0.0025f; // ë§ˆìš°ìŠ¤ ê°ë„ (ë¼ë””ì•ˆ/í”½ì…€)
+		float             m_cameraMoveSpeed = 8.0f;     // ÃÊ´ç ÀÌµ¿ ¼Óµµ
+		float             m_cameraMouseSensitivity = 0.0025f; // ¸¶¿ì½º °¨µµ (¶óµğ¾È/ÇÈ¼¿)
 
 		std::unique_ptr<ID3D11RenderDevice>  m_renderDevice;
 		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
 
-		// Skinned FBX ë©”ì‹œ ë Œë”ë§ìš© ë ˆì§€ìŠ¤íŠ¸ë¦¬/ì‹œìŠ¤í…œ
+		// Skinned FBX ¸Ş½Ã ·»´õ¸µ¿ë ·¹Áö½ºÆ®¸®/½Ã½ºÅÛ
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
@@ -108,11 +108,11 @@ namespace Alice
 	};
 	namespace
 	{
-		// ìœˆë„ìš° í´ë˜ìŠ¤ ì´ë¦„ì€ ì „ì—­ ìƒìˆ˜ë¡œ ê´€ë¦¬í•©ë‹ˆë‹¤.
+		// À©µµ¿ì Å¬·¡½º ÀÌ¸§Àº Àü¿ª »ó¼ö·Î °ü¸®ÇÕ´Ï´Ù.
 		constexpr wchar_t kWindowClassName[] = L"AliceRendererWindowClass";
 
-		// BuildSettings.txt ì—ì„œ ì‹œì‘ ì”¬(.scene íŒŒì¼)ì„ ì½ì–´ì™€ World ì— ë¡œë“œí•©ë‹ˆë‹¤.
-		// - scenes ì„¹ì…˜ì€ "index: path" í˜•ì‹ìœ¼ë¡œ ì €ì¥ë˜ì–´ ìˆë‹¤ê³  ê°€ì •í•©ë‹ˆë‹¤.
+		// BuildSettings.txt ¿¡¼­ ½ÃÀÛ ¾À(.scene ÆÄÀÏ)À» ÀĞ¾î¿Í World ¿¡ ·ÎµåÇÕ´Ï´Ù.
+		// - scenes ¼½¼ÇÀº "index: path" Çü½ÄÀ¸·Î ÀúÀåµÇ¾î ÀÖ´Ù°í °¡Á¤ÇÕ´Ï´Ù.
 		bool LoadStartupSceneFromBuildSettings(World& world, const std::filesystem::path& exeDir)
 		{
 			namespace fs = std::filesystem;
@@ -120,8 +120,8 @@ namespace Alice
 			fs::path cfgPath = exeDir / "BuildSettings.txt";
 			if (!fs::exists(cfgPath))
 			{
-				// ì—ë””í„°ì—ì„œ ê¸°ë³¸ìœ¼ë¡œ ì €ì¥í•˜ëŠ” ìœ„ì¹˜ (í”„ë¡œì íŠ¸ ë£¨íŠ¸/Build) ë„ í•œ ë²ˆ ë” ì‹œë„
-				fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Release â†’ í”„ë¡œì íŠ¸ ë£¨íŠ¸
+				// ¿¡µğÅÍ¿¡¼­ ±âº»À¸·Î ÀúÀåÇÏ´Â À§Ä¡ (ÇÁ·ÎÁ§Æ® ·çÆ®/Build) µµ ÇÑ ¹ø ´õ ½Ãµµ
+				fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Release ¡æ ÇÁ·ÎÁ§Æ® ·çÆ®
 				cfgPath = projectRoot / "Build/BuildSettings.txt";
 				if (!fs::exists(cfgPath))
 					return false;
@@ -154,7 +154,7 @@ namespace Alice
 				if (line.empty() || line[0] == '#')
 					continue;
 
-				// default: í–‰ì€ ì–´ë””ì— ìˆì–´ë„ ì²˜ë¦¬
+				// default: ÇàÀº ¾îµğ¿¡ ÀÖ¾îµµ Ã³¸®
 				if (line.rfind("default:", 0) == 0)
 				{
 					std::string path = line.substr(std::strlen("default:"));
@@ -175,7 +175,7 @@ namespace Alice
 					continue;
 				}
 
-				// "- path" í˜•ì‹ì˜ ì”¬ ëª©ë¡
+				// "- path" Çü½ÄÀÇ ¾À ¸ñ·Ï
 				if (!line.empty() && line[0] == '-')
 				{
 					std::string path = line.substr(1);
@@ -200,10 +200,10 @@ namespace Alice
 			const std::string& scenePathStr = defaultScene;
 			fs::path scenePath = scenePathStr;
 
-			// ìƒëŒ€ ê²½ë¡œëŠ” exeDir ê¸°ì¤€ìœ¼ë¡œ í•´ì„
+			// »ó´ë °æ·Î´Â exeDir ±âÁØÀ¸·Î ÇØ¼®
 			if (!scenePath.is_absolute())
 			{
-				// 1) exeDir ê¸°ì¤€ìœ¼ë¡œ ì‹œë„
+				// 1) exeDir ±âÁØÀ¸·Î ½Ãµµ
 				fs::path candidate = exeDir / scenePath;
 				if (fs::exists(candidate))
 				{
@@ -211,7 +211,7 @@ namespace Alice
 				}
 				else
 				{
-					// 2) exeDir ìƒìœ„(í”„ë¡œì íŠ¸ ë£¨íŠ¸) ê¸°ì¤€ìœ¼ë¡œë„ ì‹œë„
+					// 2) exeDir »óÀ§(ÇÁ·ÎÁ§Æ® ·çÆ®) ±âÁØÀ¸·Îµµ ½Ãµµ
 					fs::path projectRoot = exeDir.parent_path().parent_path().parent_path();
 					candidate = projectRoot / scenePath;
 					if (fs::exists(candidate))
@@ -220,7 +220,7 @@ namespace Alice
 					}
 					else
 					{
-						// ê·¸ë˜ë„ ì—†ìœ¼ë©´ exeDir ê¸°ì¤€ ìƒëŒ€ ê²½ë¡œë¡œ ë‘ 
+						// ±×·¡µµ ¾øÀ¸¸é exeDir ±âÁØ »ó´ë °æ·Î·Î µÒ
 						scenePath = exeDir / scenePath;
 					}
 				}
@@ -255,12 +255,12 @@ namespace Alice
 		LinkComponentRegistry();
 		ALICE_LOG_INFO("Engine::Initialize: begin (editorMode=%d)", pImpl->m_editorMode ? 1 : 0);
 
-		// 1) ì¸ìŠ¤í„´ìŠ¤ í•¸ë“¤ ë³´ê´€
+		// 1) ÀÎ½ºÅÏ½º ÇÚµé º¸°ü
 		pImpl->m_hInstance = hInstance;
 
-		// ResourceManager: ê²½ë¡œ í•´ì„ ê¸°ì¤€ì„ "ëª¨ë“œ"ë¡œ ë‹¨ìˆœí•˜ê²Œ ê³ ì •í•©ë‹ˆë‹¤.
-		// - editorMode(true)  : í”„ë¡œì íŠ¸ ë£¨íŠ¸ ê¸°ì¤€(= exeDir/../../..) Assets/Resource/Cooked
-		// - gameMode(false)   : exeDir ê¸°ì¤€ Assets/Resource/Cooked
+		// ResourceManager: °æ·Î ÇØ¼® ±âÁØÀ» "¸ğµå"·Î ´Ü¼øÇÏ°Ô °íÁ¤ÇÕ´Ï´Ù.
+		// - editorMode(true)  : ÇÁ·ÎÁ§Æ® ·çÆ® ±âÁØ(= exeDir/../../..) Assets/Resource/Cooked
+		// - gameMode(false)   : exeDir ±âÁØ Assets/Resource/Cooked
 		{
 			wchar_t exePathW[MAX_PATH] = {};
 			GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
@@ -268,7 +268,7 @@ namespace Alice
 			pImpl->m_resourceManager.Configure(/*gameMode=*/!pImpl->m_editorMode, exeDir);
 		}
 
-		// 2) ìœˆë„ìš° ìƒì„±
+		// 2) À©µµ¿ì »ı¼º
 		if (!CreateMainWindow(nCmdShow))
 		{
 			ALICE_LOG_ERRORF("Engine::Initialize: CreateMainWindow failed.");
@@ -276,11 +276,11 @@ namespace Alice
 		}
 		ALICE_LOG_INFO("Engine::Initialize: CreateMainWindow succeeded.");
 
-		// 3) ì…ë ¥ ì‹œìŠ¤í…œ ì´ˆê¸°í™” (DirectXTK Keyboard/Mouse)
+		// 3) ÀÔ·Â ½Ã½ºÅÛ ÃÊ±âÈ­ (DirectXTK Keyboard/Mouse)
 		pImpl->m_inputSystem.Initialize(pImpl->m_hWnd);
 		ALICE_LOG_INFO("Engine::Initialize: InputSystem initialized.");
 
-		// 4) ë Œë” ë””ë°”ì´ìŠ¤ ìƒì„±(D3D11 êµ¬í˜„ì²´ ì‚¬ìš©)
+		// 4) ·»´õ µğ¹ÙÀÌ½º »ı¼º(D3D11 ±¸ÇöÃ¼ »ç¿ë)
 		pImpl->m_renderDevice = std::make_unique<D3D11RenderDevice>();
 		if (!pImpl->m_renderDevice->Initialize(pImpl->m_hWnd, pImpl->m_width, pImpl->m_height))
 		{
@@ -289,13 +289,14 @@ namespace Alice
 		}
 		ALICE_LOG_INFO("Engine::Initialize: D3D11RenderDevice initialized.");
 
-		// 5) ImGui / Editor ì½”ì–´ ì´ˆê¸°í™” (ì—ë””í„° ëª¨ë“œì—ì„œë§Œ)
+		// 5) ImGui / Editor ÄÚ¾î ÃÊ±âÈ­ (¿¡µğÅÍ ¸ğµå¿¡¼­¸¸)
 		if (pImpl->m_editorMode)
 		{
-			// EditorCore::Initialize ë‹¨ê³„ì—ì„œë„ í°íŠ¸/ì•„ì´ì½˜ ë“± ë¦¬ì†ŒìŠ¤ ê²½ë¡œê°€ í•„ìš”í•˜ë¯€ë¡œ,
-			// ë¦¬ì†ŒìŠ¤ í¬ì¸í„°ëŠ” Initialize ì´ì „ì— ì£¼ì…í•©ë‹ˆë‹¤.
+			// EditorCore::Initialize ´Ü°è¿¡¼­µµ ÆùÆ®/¾ÆÀÌÄÜ µî ¸®¼Ò½º °æ·Î°¡ ÇÊ¿äÇÏ¹Ç·Î,
+			// ¸®¼Ò½º Æ÷ÀÎÅÍ´Â Initialize ÀÌÀü¿¡ ÁÖÀÔÇÕ´Ï´Ù.
 			pImpl->m_editorCore.SetResourceManager(&pImpl->m_resourceManager);
 			pImpl->m_editorCore.SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
+			pImpl->m_editorCore.SetInputSystem(&pImpl->m_inputSystem);
 
 			if (!pImpl->m_editorCore.Initialize(pImpl->m_hWnd, *pImpl->m_renderDevice))
 			{
@@ -305,11 +306,11 @@ namespace Alice
 			ALICE_LOG_INFO("Engine::Initialize: EditorCore initialized.");
 		}
 
-		// 6) Forward ë Œë” ì‹œìŠ¤í…œ ì´ˆê¸°í™”
+		// 6) Forward ·»´õ ½Ã½ºÅÛ ÃÊ±âÈ­
 		pImpl->m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*pImpl->m_renderDevice);
-		// ë¦¬ì†ŒìŠ¤ ë§¤ë‹ˆì €ë¥¼ ë Œë” ì‹œìŠ¤í…œì— ì£¼ì…í•©ë‹ˆë‹¤ (í…ìŠ¤ì²˜ ì¿ í‚¹/ë¡œë”© ë“±ì— ì‚¬ìš©).
+		// ¸®¼Ò½º ¸Å´ÏÀú¸¦ ·»´õ ½Ã½ºÅÛ¿¡ ÁÖÀÔÇÕ´Ï´Ù (ÅØ½ºÃ³ ÄíÅ·/·Îµù µî¿¡ »ç¿ë).
 		pImpl->m_forwardRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
-		// ìŠ¤í‚¤ë‹ ë©”ì‹œ ë ˆì§€ìŠ¤íŠ¸ë¦¬ë¥¼ ë Œë” ì‹œìŠ¤í…œì— ì£¼ì… (ì„œë¸Œì…‹/ìŠ¤ì¼ˆë ˆí†¤ ë©”íƒ€ë°ì´í„° ì¡°íšŒìš©)
+		// ½ºÅ°´× ¸Ş½Ã ·¹Áö½ºÆ®¸®¸¦ ·»´õ ½Ã½ºÅÛ¿¡ ÁÖÀÔ (¼­ºê¼Â/½ºÄÌ·¹Åæ ¸ŞÅ¸µ¥ÀÌÅÍ Á¶È¸¿ë)
 		pImpl->m_forwardRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height))
 		{
@@ -318,7 +319,7 @@ namespace Alice
 		}
 		ALICE_LOG_INFO("Engine::Initialize: ForwardRenderSystem initialized.");
 
-		// 7) DebugDraw ì‹œìŠ¤í…œ ì´ˆê¸°í™” (ì˜µì…˜ ê¸°ëŠ¥)
+		// 7) DebugDraw ½Ã½ºÅÛ ÃÊ±âÈ­ (¿É¼Ç ±â´É)
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
 		if (!pImpl->m_debugDrawSystem->Initialize())
 		{
@@ -327,23 +328,23 @@ namespace Alice
 		}
 		ALICE_LOG_INFO("Engine::Initialize: DebugDrawSystem initialized.");
 
-		// 8) ì¹´ë©”ë¼ ì„¤ì •
+		// 8) Ä«¸Ş¶ó ¼³Á¤
 		const float aspect = static_cast<float>(pImpl->m_width) / static_cast<float>(pImpl->m_height);
 		pImpl->m_cameraPosition = DirectX::XMFLOAT3(0.0f, 2.0f, -5.0f);
 		DirectX::XMFLOAT3 target(0.0f, 0.0f, 0.0f);
 		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, target, DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f));
 		pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, aspect, 0.1f, 5000.0f);
 
-		// 9) ìŠ¤í¬ë¦½íŠ¸ DLL (ë¼ì´ë¸Œ ì½”ë”©ìš©) ë¡œë“œ ì‹œë„
+		// 9) ½ºÅ©¸³Æ® DLL (¶óÀÌºê ÄÚµù¿ë) ·Îµå ½Ãµµ
 		ScriptHotReload_Load();
 		ALICE_LOG_INFO("Engine::Initialize: ScriptHotReload_Load called.");
 
-		// 10) ì”¬ ë§¤ë‹ˆì € ìƒì„± ë° ê¸°ë³¸ ì”¬/ì”¬ íŒŒì¼ ë¡œë“œ
+		// 10) ¾À ¸Å´ÏÀú »ı¼º ¹× ±âº» ¾À/¾À ÆÄÀÏ ·Îµå
 		pImpl->m_resourceManager.Clear();
 		pImpl->m_sceneManager = std::make_unique<SceneManager>(pImpl->m_world, pImpl->m_resourceManager);
 		ALICE_LOG_INFO("Engine::Initialize: SceneManager created.");
 
-		// ì—ë””í„° ëª¨ë“œ: ì½”ë“œ ê¸°ë°˜ SampleScene ì„ ê¸°ë³¸ìœ¼ë¡œ ì‚¬ìš©
+		// ¿¡µğÅÍ ¸ğµå: ÄÚµå ±â¹İ SampleScene À» ±âº»À¸·Î »ç¿ë
 		if (pImpl->m_editorMode)
 		{
 			pImpl->m_sceneManager->SwitchTo("SampleScene");
@@ -351,7 +352,7 @@ namespace Alice
 		}
 		else
 		{
-			// ê²Œì„ ëª¨ë“œ: BuildSettings.txt ì— ì •ì˜ëœ 0ë²ˆ ì¸ë±ìŠ¤ ì”¬(.scene)ì„ ìš°ì„  ë¡œë“œ
+			// °ÔÀÓ ¸ğµå: BuildSettings.txt ¿¡ Á¤ÀÇµÈ 0¹ø ÀÎµ¦½º ¾À(.scene)À» ¿ì¼± ·Îµå
 			wchar_t exePathW[MAX_PATH] = {};
 			GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
 			std::filesystem::path exePath = exePathW;
@@ -359,7 +360,7 @@ namespace Alice
 
 			if (!LoadStartupSceneFromBuildSettings(pImpl->m_world, exeDir))
 			{
-				// ì‹¤íŒ¨ ì‹œ ìµœí›„ì˜ ìˆ˜ë‹¨ìœ¼ë¡œ SampleScene ì„ ì‚¬ìš©
+				// ½ÇÆĞ ½Ã ÃÖÈÄÀÇ ¼ö´ÜÀ¸·Î SampleScene À» »ç¿ë
 				pImpl->m_sceneManager->SwitchTo("SampleScene");
 				ALICE_LOG_WARN("Engine::Initialize: failed to load startup scene from BuildSettings, fallback to SampleScene.");
 			}
@@ -369,14 +370,14 @@ namespace Alice
 			}
 		}
 
-		// ì›”ë“œ ì•ˆì˜ SkinnedMeshComponent ë“¤ì— ëŒ€ì‘í•˜ëŠ” GPU ë©”ì‹œë“¤ì´
-		// SkinnedMeshRegistry ì— ëª¨ë‘ ë“±ë¡ë˜ì–´ ìˆëŠ”ì§€ í™•ì¸í•©ë‹ˆë‹¤.
+		// ¿ùµå ¾ÈÀÇ SkinnedMeshComponent µé¿¡ ´ëÀÀÇÏ´Â GPU ¸Ş½ÃµéÀÌ
+		// SkinnedMeshRegistry ¿¡ ¸ğµÎ µî·ÏµÇ¾î ÀÖ´ÂÁö È®ÀÎÇÕ´Ï´Ù.
 		EnsureSkinnedMeshesRegisteredForWorld();
 
-		// ì´ˆê¸° ì”¬ì— ëŒ€í•œ IBL ì„¤ì •
+		// ÃÊ±â ¾À¿¡ ´ëÇÑ IBL ¼³Á¤
 		UpdateIblForScene();
 
-		// ScriptSystem ì— ì„œë¹„ìŠ¤ ì—°ê²° (ì…ë ¥/ì”¬/ë¦¬ì†ŒìŠ¤/ìŠ¤í‚¤ë‹ ë ˆì§€ìŠ¤íŠ¸ë¦¬)
+		// ScriptSystem ¿¡ ¼­ºñ½º ¿¬°á (ÀÔ·Â/¾À/¸®¼Ò½º/½ºÅ°´× ·¹Áö½ºÆ®¸®)
 		pImpl->m_scriptSystem.SetServices(&pImpl->m_inputSystem, pImpl->m_sceneManager.get(), &pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::UpdateIblForScene);
@@ -399,14 +400,14 @@ namespace Alice
 
 		MSG msg = {};
 
-		// ê³ í•´ìƒë„ íƒ€ì´ë¨¸ ì´ˆê¸°í™”
+		// °íÇØ»óµµ Å¸ÀÌ¸Ó ÃÊ±âÈ­
 		pImpl->m_timer.Reset();
 		pImpl->m_timer.Start();
 
-		// ê¸°ë³¸ ê²Œì„ ë£¨í”„
+		// ±âº» °ÔÀÓ ·çÇÁ
 		while (pImpl->m_isRunning)
 		{
-			// 1) ìœˆë„ìš° ë©”ì‹œì§€ ì²˜ë¦¬
+			// 1) À©µµ¿ì ¸Ş½ÃÁö Ã³¸®
 			while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 			{
 				if (msg.message == WM_QUIT)
@@ -424,7 +425,7 @@ namespace Alice
 			Render();
 		}
 
-		// ì¢…ë£Œ ë¼ì´í”„ì‚¬ì´í´
+		// Á¾·á ¶óÀÌÇÁ»çÀÌÅ¬
 		pImpl->m_scriptSystem.OnApplicationQuit(pImpl->m_world);
 		return static_cast<int>(msg.wParam);
 	}
@@ -436,8 +437,8 @@ namespace Alice
 
 		using namespace DirectX;
 
-		// 1) ì¹´ë©”ë¼ ì´ë™ (WASD + Q/E) - ì˜¤ë¥¸ìª½ ë§ˆìš°ìŠ¤ ë²„íŠ¼ì„ ëˆ„ë¥´ê³  ìˆì„ ë•Œë§Œ ë™ì‘
-		const bool canControlCamera = pImpl->m_inputSystem.IsRightButtonDown(); // ìš°í´ë¦­ ìƒíƒœì—ì„œë§Œ ì´ë™/íšŒì „
+		// 1) Ä«¸Ş¶ó ÀÌµ¿ (WASD + Q/E) - ¿À¸¥ÂÊ ¸¶¿ì½º ¹öÆ°À» ´©¸£°í ÀÖÀ» ¶§¸¸ µ¿ÀÛ
+		const bool canControlCamera = pImpl->m_inputSystem.IsRightButtonDown(); // ¿ìÅ¬¸¯ »óÅÂ¿¡¼­¸¸ ÀÌµ¿/È¸Àü
 
 		XMVECTOR moveDir = XMVectorZero();
 
@@ -459,7 +460,7 @@ namespace Alice
 			{
 				moveDir = XMVectorAdd(moveDir, XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f));
 			}
-			// E: ìœ„ë¡œ, Q: ì•„ë˜ë¡œ ì´ë™
+			// E: À§·Î, Q: ¾Æ·¡·Î ÀÌµ¿
 			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::E))
 			{
 				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
@@ -471,7 +472,7 @@ namespace Alice
 
 			if (!XMVector3Equal(moveDir, XMVectorZero()))
 			{
-				// ì¹´ë©”ë¼ì˜ í˜„ì¬ íšŒì „ì— ë§ì¶° ì´ë™ ë²¡í„°ë¥¼ íšŒì „
+				// Ä«¸Ş¶óÀÇ ÇöÀç È¸Àü¿¡ ¸ÂÃç ÀÌµ¿ º¤ÅÍ¸¦ È¸Àü
 				XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
 				XMVECTOR worldMoveDir = XMVector3TransformNormal(moveDir, rotMatrix);
 				worldMoveDir = XMVector3Normalize(worldMoveDir);
@@ -481,19 +482,19 @@ namespace Alice
 				XMStoreFloat3(&pImpl->m_cameraPosition, pos);
 			}
 
-			// 2) ë§ˆìš°ìŠ¤ ì´ë™ìœ¼ë¡œ ì¹´ë©”ë¼ íšŒì „ (ìš°í´ë¦­ ìƒíƒœì—ì„œë§Œ)
+			// 2) ¸¶¿ì½º ÀÌµ¿À¸·Î Ä«¸Ş¶ó È¸Àü (¿ìÅ¬¸¯ »óÅÂ¿¡¼­¸¸)
 			POINT mouseDelta = pImpl->m_inputSystem.GetMouseDelta();
 			pImpl->m_cameraYawRadians += static_cast<float>(mouseDelta.x) * pImpl->m_cameraMouseSensitivity;
-			// ë§ˆìš°ìŠ¤ë¥¼ ì•„ë˜ë¡œ ë‚´ë¦¬ë©´ í™”ë©´ë„ ì•„ë˜ë¥¼ ë³´ë„ë¡ Yì¶• íšŒì „ì„ ë°˜ëŒ€ë¡œ ì ìš©í•©ë‹ˆë‹¤.
+			// ¸¶¿ì½º¸¦ ¾Æ·¡·Î ³»¸®¸é È­¸éµµ ¾Æ·¡¸¦ º¸µµ·Ï YÃà È¸ÀüÀ» ¹İ´ë·Î Àû¿ëÇÕ´Ï´Ù.
 			pImpl->m_cameraPitchRadians += static_cast<float>(mouseDelta.y) * pImpl->m_cameraMouseSensitivity;
 		}
 
-		// í”¼ì¹˜ ê°ë„ëŠ” -89 ~ 89ë„ ì‚¬ì´ë¡œ ì œí•œ
+		// ÇÇÄ¡ °¢µµ´Â -89 ~ 89µµ »çÀÌ·Î Á¦ÇÑ
 		const float pitchLimit = XMConvertToRadians(89.0f);
 		if (pImpl->m_cameraPitchRadians > pitchLimit)  pImpl->m_cameraPitchRadians = pitchLimit;
 		if (pImpl->m_cameraPitchRadians < -pitchLimit) pImpl->m_cameraPitchRadians = -pitchLimit;
 
-		// 3) ì¹´ë©”ë¼ LookAt ê°±ì‹ 
+		// 3) Ä«¸Ş¶ó LookAt °»½Å
 		XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
 		XMVECTOR forward = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), rotMatrix);
 
@@ -505,9 +506,9 @@ namespace Alice
 
 		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
 
-		// 4) í˜„ì¬ ì”¬ ë° ìŠ¤í¬ë¦½íŠ¸ ì—…ë°ì´íŠ¸
-		//    - ì—ë””í„° ëª¨ë“œ: Play ë²„íŠ¼ì´ ëˆŒë ¸ì„ ë•Œë§Œ ì§„í–‰
-		//    - ê²Œì„ ì „ìš© ëª¨ë“œ: í•­ìƒ ì§„í–‰
+		// 4) ÇöÀç ¾À ¹× ½ºÅ©¸³Æ® ¾÷µ¥ÀÌÆ®
+		//    - ¿¡µğÅÍ ¸ğµå: Play ¹öÆ°ÀÌ ´­·ÈÀ» ¶§¸¸ ÁøÇà
+		//    - °ÔÀÓ Àü¿ë ¸ğµå: Ç×»ó ÁøÇà
 		const bool play = pImpl->m_editorMode ? pImpl->m_isPlaying : true;
 		if (play)
 		{
@@ -516,7 +517,7 @@ namespace Alice
 				pImpl->m_sceneManager->Update(pImpl->m_timer.DeltaTime());
 			}
 
-			// Unity ìŠ¤íƒ€ì¼ ìŠ¤í¬ë¦½íŠ¸ ë¼ì´í”„ì‚¬ì´í´ ìˆ˜í–‰
+			// Unity ½ºÅ¸ÀÏ ½ºÅ©¸³Æ® ¶óÀÌÇÁ»çÀÌÅ¬ ¼öÇà
 			pImpl->m_scriptSystem.Tick(pImpl->m_world, pImpl->m_timer.DeltaTime());
 		}
 	}
@@ -526,15 +527,15 @@ namespace Alice
 		if (!pImpl->m_renderDevice || !pImpl->m_forwardRenderSystem)
 			return;
 
-		// í™”ë©´ í´ë¦¬ì–´ ìƒ‰ìƒ (ì§™ì€ íŒŒë€ìƒ‰ ê³„ì—´)
+		// È­¸é Å¬¸®¾î »ö»ó (Â£Àº ÆÄ¶õ»ö °è¿­)
 		const float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
 
 		pImpl->m_renderDevice->BeginFrame(clearColor);
 
-		// ì—ë””í„° ëª¨ë“œì—ì„œë§Œ ImGui/ë„í‚¹ UI + ë””ë²„ê·¸ ì¶•ì„ ê·¸ë¦½ë‹ˆë‹¤.
+		// ¿¡µğÅÍ ¸ğµå¿¡¼­¸¸ ImGui/µµÅ· UI + µğ¹ö±× ÃàÀ» ±×¸³´Ï´Ù.
 		if (pImpl->m_editorMode)
 		{
-			// ImGui í”„ë ˆì„ ì‹œì‘ (EditorCore ì— ìœ„ì„)
+			// ImGui ÇÁ·¹ÀÓ ½ÃÀÛ (EditorCore ¿¡ À§ÀÓ)
 			pImpl->m_editorCore.BeginFrame();
 
 			const float dt = pImpl->m_timer.DeltaTime();
@@ -555,13 +556,13 @@ namespace Alice
 				pImpl->m_cameraMoveSpeed);
 			pImpl->m_shadingMode = static_cast<Alice::Engine::Impl::ShadingMode>(shadingModeValue);
 
-			// DebugDraw ë¼ì¸ ì´ˆê¸°í™” ë° ì˜ˆì œ ì¶•(axis) ì¶”ê°€
+			// DebugDraw ¶óÀÎ ÃÊ±âÈ­ ¹× ¿¹Á¦ Ãà(axis) Ãß°¡
 			if (pImpl->m_debugDrawSystem)
 			{
 				pImpl->m_debugDrawSystem->Clear();
 
-				// ì›ì ì—ì„œ XYZ ì¶•ì„ ê·¸ë¦½ë‹ˆë‹¤.
-				// X: ë¹¨ê°•, Y: ì´ˆë¡, Z: íŒŒë‘
+				// ¿øÁ¡¿¡¼­ XYZ ÃàÀ» ±×¸³´Ï´Ù.
+				// X: »¡°­, Y: ÃÊ·Ï, Z: ÆÄ¶û
 				pImpl->m_debugDrawSystem->AddLine(
 					DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
 					DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f),
@@ -577,22 +578,27 @@ namespace Alice
 			}
 		}
 
-		// ìŠ¤í‚¤ë‹ ì• ë‹ˆë©”ì´ì…˜(ë³¸ íŒ”ë ˆíŠ¸)ì„ ë¨¼ì € ê°±ì‹ í•©ë‹ˆë‹¤.
-		// - ì—ë””í„° ëª¨ë“œì—ì„œë„ Animation íƒ­ì—ì„œ ìŠ¤í¬ëŸ½/ì¬ìƒì´ ì¦‰ì‹œ ë°˜ì˜ë˜ë„ë¡ Render ë‹¨ê³„ì—ì„œ ê°±ì‹ í•©ë‹ˆë‹¤.
-		// - dt=0 ì´ì–´ë„(ì¼ì‹œì •ì§€) ì‚¬ìš©ìê°€ ì‹œê°„ì„ ë°”ê¾¸ë©´ íŒ”ë ˆíŠ¸ê°€ ê°±ì‹ ë©ë‹ˆë‹¤.
+		// ½ºÅ°´× ¾Ö´Ï¸ŞÀÌ¼Ç(º» ÆÈ·¹Æ®)À» ¸ÕÀú °»½ÅÇÕ´Ï´Ù.
+		// - ¿¡µğÅÍ ¸ğµå¿¡¼­µµ Animation ÅÇ¿¡¼­ ½ºÅ©·´/Àç»ıÀÌ Áï½Ã ¹İ¿µµÇµµ·Ï Render ´Ü°è¿¡¼­ °»½ÅÇÕ´Ï´Ù.
+		// - dt=0 ÀÌ¾îµµ(ÀÏ½ÃÁ¤Áö) »ç¿ëÀÚ°¡ ½Ã°£À» ¹Ù²Ù¸é ÆÈ·¹Æ®°¡ °»½ÅµË´Ï´Ù.
 		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, (double)pImpl->m_timer.DeltaTime());
 
-		// ìŠ¤í‚¤ë‹ ë©”ì‹œ ë“œë¡œìš° ë¦¬ìŠ¤íŠ¸ë¥¼ ë¨¼ì € êµ¬ì„±í•©ë‹ˆë‹¤.
+		// ½ºÅ°´× ¸Ş½Ã µå·Î¿ì ¸®½ºÆ®¸¦ ¸ÕÀú ±¸¼ºÇÕ´Ï´Ù.
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
-		// ê°„ë‹¨í•œ Forward ë Œë”ë§ (íë¸Œ + ìŠ¤í‚¤ë‹ ë©”ì‹œ)
+		// °£´ÜÇÑ Forward ·»´õ¸µ (Å¥ºê + ½ºÅ°´× ¸Ş½Ã)
 		EntityId renderEntity = InvalidEntityId;
 		if (pImpl->m_sceneManager)
 		{
 			renderEntity = pImpl->m_sceneManager->GetPrimaryRenderableEntity();
 		}
 
-		const int shadingModeValue2 = static_cast<int>(pImpl->m_shadingMode);
+		// °ÔÀÓ ¸ğµå¿¡¼­´Â PBRÀ» °íÁ¤À¸·Î »ç¿ë
+		int shadingModeValue2 = static_cast<int>(pImpl->m_shadingMode);
+		if (!pImpl->m_editorMode)
+		{
+			shadingModeValue2 = static_cast<int>(Impl::ShadingMode::PBR); // 4
+		}
 		pImpl->m_forwardRenderSystem->Render(
 			pImpl->m_world,
 			pImpl->m_camera,
@@ -606,28 +612,28 @@ namespace Alice
 
 			auto* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
 
-			// SRV/RTV ì—ì„œ ë¦¬ì†ŒìŠ¤ êº¼ë‚´ê¸°
+			// SRV/RTV ¿¡¼­ ¸®¼Ò½º ²¨³»±â
 			Microsoft::WRL::ComPtr<ID3D11Resource> src;
 			Microsoft::WRL::ComPtr<ID3D11Resource> dst;
 
-			// src: ForwardRenderSystem ì˜ ì»¬ëŸ¬ í…ìŠ¤ì²˜
+			// src: ForwardRenderSystem ÀÇ ÄÃ·¯ ÅØ½ºÃ³
 			auto* sceneSRV = pImpl->m_forwardRenderSystem->GetSceneSRV();
 			sceneSRV->GetResource(src.GetAddressOf());
 
-			// dst: ë°±ë²„í¼ í…ìŠ¤ì²˜
+			// dst: ¹é¹öÆÛ ÅØ½ºÃ³
 			backBufferRTV->GetResource(dst.GetAddressOf());
 
-			// ì‹¤ì œ ë³µì‚¬
+			// ½ÇÁ¦ º¹»ç
 			ctx->CopyResource(dst.Get(), src.Get());
 		}
 
-		// DebugDraw ë Œë”ë§ (Forward ë Œë” ì´í›„, ê°™ì€ ì¹´ë©”ë¼ ê¸°ì¤€)
+		// DebugDraw ·»´õ¸µ (Forward ·»´õ ÀÌÈÄ, °°Àº Ä«¸Ş¶ó ±âÁØ)
 		if (pImpl->m_debugDrawSystem)
 		{
 			pImpl->m_debugDrawSystem->Render(pImpl->m_camera);
 		}
 
-		// ImGui ë Œë”ë§ (ì—ë””í„° ëª¨ë“œì—ì„œë§Œ)
+		// ImGui ·»´õ¸µ (¿¡µğÅÍ ¸ğµå¿¡¼­¸¸)
 		if (pImpl->m_editorMode)
 		{
 			pImpl->m_editorCore.RenderDrawData();
@@ -654,7 +660,7 @@ namespace Alice
 		{
 			if (comp.meshAssetPath.empty()) continue;
 
-			if (pImpl->m_skinnedMeshRegistry.Find(comp.meshAssetPath)) continue; // ì´ë¯¸ ë“±ë¡ë¨
+			if (pImpl->m_skinnedMeshRegistry.Find(comp.meshAssetPath)) continue; // ÀÌ¹Ì µî·ÏµÊ
 
 			std::filesystem::path fbxAssetPath;
 			if (!comp.instanceAssetPath.empty())
@@ -663,7 +669,7 @@ namespace Alice
 			}
 			else
 			{
-				// ë…¼ë¦¬ ê²½ë¡œ(Assets/...)ë§Œ ì €ì¥/ì‚¬ìš©í•˜ê³ , ì‹¤ì œ íŒŒì¼ ê²½ë¡œëŠ” ResourceManager ê°€ í•´ì„í•©ë‹ˆë‹¤.
+				// ³í¸® °æ·Î(Assets/...)¸¸ ÀúÀå/»ç¿ëÇÏ°í, ½ÇÁ¦ ÆÄÀÏ °æ·Î´Â ResourceManager °¡ ÇØ¼®ÇÕ´Ï´Ù.
 				fbxAssetPath = std::filesystem::path("Assets/Fbx") / (comp.meshAssetPath + ".fbxasset");
 			}
 
@@ -687,11 +693,11 @@ namespace Alice
 			FbxImportOptions opt{};
 			FbxImporter importer(pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
 
-			// ë°°í¬(gameMode)ì—ì„œëŠ” source_fbx(ë…¼ë¦¬ "Resource/...")ë¥¼ Resolveí•˜ë©´
-			// Cooked/Chunks/.../c0000.alice(ì²­í¬ ë¬¼ë¦¬ê²½ë¡œ)ë¡œ ë°”ë€Œì–´ FbxModel::Load(íŒŒì¼ë¡œë“œ)ê°€ ì‹¤íŒ¨í•©ë‹ˆë‹¤.
-			// ë”°ë¼ì„œ:
-			// - editorMode: íŒŒì¼ ê¸°ë°˜ ë¡œë“œë¥¼ ìœ„í•´ Resolve ì‚¬ìš©
-			// - gameMode  : ë…¼ë¦¬ ê²½ë¡œ ê·¸ëŒ€ë¡œ ë„˜ê¸°ê³ , ResourceManagerê°€ Cooked/Chunksì—ì„œ ë¡œë“œ/ë³µí˜¸í™”í•˜ë„ë¡ í•¨
+			// ¹èÆ÷(gameMode)¿¡¼­´Â source_fbx(³í¸® "Resource/...")¸¦ ResolveÇÏ¸é
+			// Cooked/Chunks/.../c0000.alice(Ã»Å© ¹°¸®°æ·Î)·Î ¹Ù²î¾î FbxModel::Load(ÆÄÀÏ·Îµå)°¡ ½ÇÆĞÇÕ´Ï´Ù.
+			// µû¶ó¼­:
+			// - editorMode: ÆÄÀÏ ±â¹İ ·Îµå¸¦ À§ÇØ Resolve »ç¿ë
+			// - gameMode  : ³í¸® °æ·Î ±×´ë·Î ³Ñ±â°í, ResourceManager°¡ Cooked/Chunks¿¡¼­ ·Îµå/º¹È£È­ÇÏµµ·Ï ÇÔ
 			std::filesystem::path srcFbxPath =
 				pImpl->m_editorMode ? pImpl->m_resourceManager.Resolve(instance.sourceFbx)
 				             : std::filesystem::path(instance.sourceFbx);
@@ -714,9 +720,9 @@ namespace Alice
 		if (!pImpl->m_forwardRenderSystem)
 			return;
 
-		// ì”¬ íŒŒì¼ì—ì„œ IBL ì„¸íŠ¸ ì •ë³´ë¥¼ ì½ì–´ì˜¬ ìˆ˜ ìˆë„ë¡ í™•ì¥ ê°€ëŠ¥í•˜ì§€ë§Œ,
-		// í˜„ì¬ëŠ” ê¸°ë³¸ì ìœ¼ë¡œ "Sample" IBL ì„¸íŠ¸ë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.
-		// í–¥í›„ ì”¬ íŒŒì¼ì— IBL ì„¸íŠ¸ ì •ë³´ë¥¼ ì¶”ê°€í•˜ë©´ ì—¬ê¸°ì„œ ì½ì–´ì˜¬ ìˆ˜ ìˆìŠµë‹ˆë‹¤.
+		// ¾À ÆÄÀÏ¿¡¼­ IBL ¼¼Æ® Á¤º¸¸¦ ÀĞ¾î¿Ã ¼ö ÀÖµµ·Ï È®Àå °¡´ÉÇÏÁö¸¸,
+		// ÇöÀç´Â ±âº»ÀûÀ¸·Î "Sample" IBL ¼¼Æ®¸¦ »ç¿ëÇÕ´Ï´Ù.
+		// ÇâÈÄ ¾À ÆÄÀÏ¿¡ IBL ¼¼Æ® Á¤º¸¸¦ Ãß°¡ÇÏ¸é ¿©±â¼­ ÀĞ¾î¿Ã ¼ö ÀÖ½À´Ï´Ù.
 		const std::string defaultIblSet = "Sample";
 		if (!pImpl->m_forwardRenderSystem->SetIblSet(defaultIblSet))
 		{
@@ -730,7 +736,7 @@ namespace Alice
 
 	bool Engine::CreateMainWindow(int nCmdShow)
 	{
-		// 1) ìœˆë„ìš° í´ë˜ìŠ¤ ë“±ë¡
+		// 1) À©µµ¿ì Å¬·¡½º µî·Ï
 		WNDCLASSEXW wc = {};
 		wc.cbSize = sizeof(WNDCLASSEXW);
 		wc.style = CS_HREDRAW | CS_VREDRAW;
@@ -738,7 +744,7 @@ namespace Alice
 		wc.cbClsExtra = 0;
 		wc.cbWndExtra = 0;
 		wc.hInstance = pImpl->m_hInstance;
-		// ì—”ì§„ ì „ìš© ì•„ì´ì½˜ì„ ë¡œë“œí•©ë‹ˆë‹¤. (ì‹¤íŒ¨í•˜ë©´ ê¸°ë³¸ ì•„ì´ì½˜ì„ ì‚¬ìš©)
+		// ¿£Áø Àü¿ë ¾ÆÀÌÄÜÀ» ·ÎµåÇÕ´Ï´Ù. (½ÇÆĞÇÏ¸é ±âº» ¾ÆÀÌÄÜÀ» »ç¿ë)
 		const std::filesystem::path iconAbs = pImpl->m_resourceManager.Resolve("Resource/Icon/Alice.ico");
 		HICON hIconBig = static_cast<HICON>(LoadImageW(
 			nullptr,
@@ -766,14 +772,14 @@ namespace Alice
 
 		if (!RegisterClassExW(&wc)) return false;
 
-		// 2) ìœˆë„ìš° í¬ê¸°ë¥¼ í´ë¼ì´ì–¸íŠ¸ ê¸°ì¤€ìœ¼ë¡œ ë§ì¶”ê¸° ìœ„í•´ ì¡°ì •
+		// 2) À©µµ¿ì Å©±â¸¦ Å¬¶óÀÌ¾ğÆ® ±âÁØÀ¸·Î ¸ÂÃß±â À§ÇØ Á¶Á¤
 		RECT windowRect = { 0, 0, static_cast<LONG>(pImpl->m_width), static_cast<LONG>(pImpl->m_height) };
 		AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
 		const int windowWidth = windowRect.right - windowRect.left;
 		const int windowHeight = windowRect.bottom - windowRect.top;
 
-		// 3) ìœˆë„ìš° ìƒì„± (this í¬ì¸í„°ë¥¼ lpParamìœ¼ë¡œ ì „ë‹¬)
+		// 3) À©µµ¿ì »ı¼º (this Æ÷ÀÎÅÍ¸¦ lpParamÀ¸·Î Àü´Ş)
 		pImpl->m_hWnd = CreateWindowExW(
 			0,
 			kWindowClassName,
@@ -842,11 +848,11 @@ namespace Alice
 
 	LRESULT CALLBACK Engine::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
-		// ImGuiê°€ ë¨¼ì € Win32 ë©”ì‹œì§€ë¥¼ ì²˜ë¦¬í•  ìˆ˜ ìˆë„ë¡ ì „ë‹¬í•©ë‹ˆë‹¤.
+		// ImGui°¡ ¸ÕÀú Win32 ¸Ş½ÃÁö¸¦ Ã³¸®ÇÒ ¼ö ÀÖµµ·Ï Àü´ŞÇÕ´Ï´Ù.
 		if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
 			return true;
 
-		// DirectXTK Keyboard / Mouse ì— Win32 ë©”ì‹œì§€ ì „ë‹¬ (GameApp::WndProc íŒ¨í„´)
+		// DirectXTK Keyboard / Mouse ¿¡ Win32 ¸Ş½ÃÁö Àü´Ş (GameApp::WndProc ÆĞÅÏ)
 		switch (message)
 		{
 		case WM_ACTIVATEAPP:
@@ -879,7 +885,7 @@ namespace Alice
 			break;
 		}
 
-		// 1) WM_NCCREATE ë‹¨ê³„ì—ì„œ Engine ì¸ìŠ¤í„´ìŠ¤ í¬ì¸í„°ë¥¼ HWNDì— ì €ì¥
+		// 1) WM_NCCREATE ´Ü°è¿¡¼­ Engine ÀÎ½ºÅÏ½º Æ÷ÀÎÅÍ¸¦ HWND¿¡ ÀúÀå
 		if (message == WM_NCCREATE)
 		{
 			auto createStruct = reinterpret_cast<CREATESTRUCTW*>(lParam);
@@ -887,11 +893,11 @@ namespace Alice
 			SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(engine));
 		}
 
-		// 2) ì €ì¥ëœ Engine í¬ì¸í„°ë¥¼ ê°€ì ¸ì™€ì„œ ë©¤ë²„ í•¨ìˆ˜ë¡œ ìœ„ì„
+		// 2) ÀúÀåµÈ Engine Æ÷ÀÎÅÍ¸¦ °¡Á®¿Í¼­ ¸â¹ö ÇÔ¼ö·Î À§ÀÓ
 		auto engine = reinterpret_cast<Engine*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
 		if (engine) return engine->HandleMessage(hWnd, message, wParam, lParam);
 
-		// 3) ì—”ì§„ í¬ì¸í„°ê°€ ì—†ìœ¼ë©´ ê¸°ë³¸ ì²˜ë¦¬
+		// 3) ¿£Áø Æ÷ÀÎÅÍ°¡ ¾øÀ¸¸é ±âº» Ã³¸®
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 	}
 }
