@@ -32,6 +32,9 @@ namespace Alice
         /// 지정한 키가 현재 눌려 있는지 여부를 반환합니다.
         bool IsKeyDown(DirectX::Keyboard::Keys key) const;
 
+        /// 지정한 키가 이번 프레임에 눌렸는지 여부를 반환합니다 (이전 프레임에는 눌리지 않았고 이번 프레임에 눌림).
+        bool IsKeyPressed(DirectX::Keyboard::Keys key) const;
+
         /// 오른쪽 마우스 버튼이 눌려 있는지 여부를 반환합니다.
         bool IsRightButtonDown() const;
 

@@ -55,6 +55,11 @@ namespace Alice
         return m_keyboardState.IsKeyDown(key);
     }
 
+    bool InputSystem::IsKeyPressed(Keyboard::Keys key) const
+    {
+        return m_keyboardTracker.IsKeyPressed(key);
+    }
+
     bool InputSystem::IsRightButtonDown() const
     {
         return m_mouseState.rightButton;
