@@ -1,4 +1,6 @@
 #include "Core/SceneFile.h"
+#include "Core/SceneFileHelper.h"
+#include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 
 #include <fstream>
 #include <sstream>
@@ -63,6 +65,8 @@ namespace Alice
                 const SkinnedMeshComponent* skinned = world.GetSkinnedMesh(id);
 
                 ofs << "entity: " << static_cast<std::uint32_t>(id) << "\n";
+                
+                // Transform 저장 (기존 포맷 호환: position, rotation, scale 직접)
                 ofs << "position: "
                     << transform.position.x << " "
                     << transform.position.y << " "
@@ -76,51 +80,23 @@ namespace Alice
                     << transform.scale.y << " "
                     << transform.scale.z << "\n";
 
+                // Script는 특별 처리 (문자열만)
                 ofs << "script: ";
                 if (script)
                     ofs << script->scriptName;
                 ofs << "\n";
 
-                ofs << "material_color: ";
+                // RTTR 기반으로 Material 저장
                 if (mat)
                 {
-                    ofs << mat->color.x << " "
-                        << mat->color.y << " "
-                        << mat->color.z;
+                    SceneFileHelper::SaveComponent(ofs, *mat, "material");
                 }
-                ofs << "\n";
 
-                ofs << "material_asset: ";
-                if (mat && !mat->assetPath.empty())
-                    ofs << mat->assetPath;
-                ofs << "\n";
-
-                // 추가 머티리얼 파라미터 (선택 사항)
-                ofs << "material_roughness: ";
-                if (mat)
-                    ofs << mat->roughness;
-                ofs << "\n";
-
-                ofs << "material_metalness: ";
-                if (mat)
-                    ofs << mat->metalness;
-                ofs << "\n";
-
-                ofs << "material_albedoTex: ";
-                if (mat && !mat->albedoTexturePath.empty())
-                    ofs << mat->albedoTexturePath;
-                ofs << "\n";
-
-                // SkinnedMesh 정보 (FBX 인스턴스)
-                ofs << "skinned_mesh: ";
-                if (skinned && !skinned->meshAssetPath.empty())
-                    ofs << skinned->meshAssetPath;
-                ofs << "\n";
-
-                ofs << "skinned_instance: ";
-                if (skinned && !skinned->instanceAssetPath.empty())
-                    ofs << skinned->instanceAssetPath;
-                ofs << "\n";
+                // RTTR 기반으로 SkinnedMesh 저장 (boneMatrices 제외)
+                if (skinned)
+                {
+                    SceneFileHelper::SaveComponent(ofs, *skinned, "skinned");
+                }
 
                 ofs << "\n";
             }
@@ -142,20 +118,12 @@ namespace Alice
             // 현재 월드 비우기
             world.Clear();
 
-            // 한 엔티티에 대한 임시 버퍼
-            DirectX::XMFLOAT3 position { 0.0f, 0.0f, 0.0f };
-            DirectX::XMFLOAT3 rotation { 0.0f, 0.0f, 0.0f };
-            DirectX::XMFLOAT3 scale    { 1.0f, 1.0f, 1.0f };
-            std::string       scriptName;
-            DirectX::XMFLOAT3 materialColor { 0.7f, 0.7f, 0.7f };
-            bool              hasMaterialColor = false;
-            float             materialRoughness = 0.5f;
-            float             materialMetalness = 0.0f;
-            std::string       materialAlbedoTex;
-            std::string       materialAsset;
-            std::string       skinnedMeshAsset;
-            std::string       skinnedInstanceAsset;
-            bool              hasAnyField      = false;
+            // 한 엔티티에 대한 임시 버퍼 (RTTR 사용)
+            TransformComponent tempTransform;
+            MaterialComponent tempMaterial;
+            SkinnedMeshComponent tempSkinnedMesh;
+            std::string scriptName;
+            bool hasAnyField = false;
 
             auto commitEntity = [&]()
             {
@@ -163,30 +131,32 @@ namespace Alice
                     return;
 
                 EntityId e = world.CreateEntity();
+                
+                // Transform 복사
                 auto& t = world.AddTransform(e);
-                t.SetPosition(position.x, position.y, position.z)
-                 .SetRotation(rotation.x, rotation.y, rotation.z)
-                 .SetScale(scale.x, scale.y, scale.z);
+                t = tempTransform;
 
+                // Script 추가
                 if (!scriptName.empty())
                 {
                     world.AddScript(e, scriptName);
                 }
 
-                if (hasMaterialColor || !materialAsset.empty())
+                // Material 추가 (color나 assetPath가 있으면)
+                if (!tempMaterial.assetPath.empty() || 
+                    tempMaterial.color.x != 0.7f || tempMaterial.color.y != 0.7f || tempMaterial.color.z != 0.7f)
                 {
-                    DirectX::XMFLOAT3 col = hasMaterialColor ? materialColor
-                                                             : DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
-                    MaterialComponent& mat = world.AddMaterial(e, col, materialAsset);
-                    mat.roughness         = materialRoughness;
-                    mat.metalness         = materialMetalness;
-                    mat.albedoTexturePath = materialAlbedoTex;
+                    MaterialComponent& mat = world.AddMaterial(e, tempMaterial.color, tempMaterial.assetPath);
+                    mat.roughness = tempMaterial.roughness;
+                    mat.metalness = tempMaterial.metalness;
+                    mat.albedoTexturePath = tempMaterial.albedoTexturePath;
                 }
 
-                if (!skinnedMeshAsset.empty())
+                // SkinnedMesh 추가
+                if (!tempSkinnedMesh.meshAssetPath.empty())
                 {
-                    SkinnedMeshComponent& sm = world.AddSkinnedMesh(e, skinnedMeshAsset);
-                    sm.instanceAssetPath = skinnedInstanceAsset;
+                    SkinnedMeshComponent& sm = world.AddSkinnedMesh(e, tempSkinnedMesh.meshAssetPath);
+                    sm.instanceAssetPath = tempSkinnedMesh.instanceAssetPath;
 
                     // 아직 애니메이션 시스템과 연결되지 않았으므로
                     // 간단히 1개짜리 항등 본 팔레트를 연결해 둡니다.
@@ -195,19 +165,11 @@ namespace Alice
                 }
 
                 // 다음 엔티티를 위해 초기화
-                position = { 0.0f, 0.0f, 0.0f };
-                rotation = { 0.0f, 0.0f, 0.0f };
-                scale    = { 1.0f, 1.0f, 1.0f };
+                tempTransform = TransformComponent();
+                tempMaterial = MaterialComponent();
+                tempSkinnedMesh = SkinnedMeshComponent();
                 scriptName.clear();
-                materialColor      = { 0.7f, 0.7f, 0.7f };
-                hasMaterialColor   = false;
-                materialRoughness  = 0.5f;
-                materialMetalness  = 0.0f;
-                materialAlbedoTex.clear();
-                materialAsset.clear();
-                skinnedMeshAsset.clear();
-                skinnedInstanceAsset.clear();
-                hasAnyField        = false;
+                hasAnyField = false;
             };
 
             std::string line;
@@ -239,71 +201,47 @@ namespace Alice
                     commitEntity();
                     hasAnyField = true;
                 }
-                else if (key == "position")
-                {
-                    std::istringstream vs(value);
-                    vs >> position.x >> position.y >> position.z;
-                    hasAnyField = true;
-                }
-                else if (key == "rotation")
-                {
-                    std::istringstream vs(value);
-                    vs >> rotation.x >> rotation.y >> rotation.z;
-                    hasAnyField = true;
-                }
-                else if (key == "scale")
-                {
-                    std::istringstream vs(value);
-                    vs >> scale.x >> scale.y >> scale.z;
-                    hasAnyField = true;
-                }
                 else if (key == "script")
                 {
                     scriptName = value;
                     hasAnyField = true;
                 }
-                else if (key == "material_color")
+                else
                 {
-                    std::istringstream vs(value);
-                    vs >> materialColor.x >> materialColor.y >> materialColor.z;
-                    hasMaterialColor = true;
-                    hasAnyField      = true;
-                }
-                else if (key == "material_asset")
-                {
-                    materialAsset = value;
-                    hasAnyField   = true;
-                }
-                else if (key == "material_roughness")
-                {
-                    materialRoughness = std::clamp(std::stof(value), 0.0f, 1.0f);
-                    hasAnyField       = true;
-                }
-                else if (key == "material_metalness")
-                {
-                    materialMetalness = std::clamp(std::stof(value), 0.0f, 1.0f);
-                    hasAnyField       = true;
-                }
-                else if (key == "material_albedoTex")
-                {
-                    materialAlbedoTex = value;
-                    hasAnyField       = true;
-                }
-                else if (key == "skinned_mesh")
-                {
-                    skinnedMeshAsset = value;
-                    hasAnyField      = true;
-
-                    ALICE_LOG_INFO("[SceneFile::Load] skinned_mesh=\"%s\"\n",
-                        skinnedMeshAsset.c_str());
-                }
-                else if (key == "skinned_instance")
-                {
-                    skinnedInstanceAsset = value;
-                    hasAnyField          = true;
-
-                    ALICE_LOG_INFO("[SceneFile::Load] skinned_instance=\"%s\"\n",
-                        skinnedInstanceAsset.c_str());
+                    // RTTR 기반으로 컴포넌트 프로퍼티 로드
+                    bool loaded = false;
+                    
+                    // Transform 프로퍼티 (기존 포맷 호환: position, rotation, scale 직접 처리)
+                    if (key == "position")
+                    {
+                        std::istringstream vs(value);
+                        vs >> tempTransform.position.x >> tempTransform.position.y >> tempTransform.position.z;
+                        loaded = true;
+                    }
+                    else if (key == "rotation")
+                    {
+                        std::istringstream vs(value);
+                        vs >> tempTransform.rotation.x >> tempTransform.rotation.y >> tempTransform.rotation.z;
+                        loaded = true;
+                    }
+                    else if (key == "scale")
+                    {
+                        std::istringstream vs(value);
+                        vs >> tempTransform.scale.x >> tempTransform.scale.y >> tempTransform.scale.z;
+                        loaded = true;
+                    }
+                    else
+                    {
+                        // Material, SkinnedMesh는 prefix로 구분하여 RTTR로 로드
+                        loaded = SceneFileHelper::LoadComponentProperty(key, value, tempMaterial, "material");
+                        if (!loaded)
+                        {
+                            loaded = SceneFileHelper::LoadComponentProperty(key, value, tempSkinnedMesh, "skinned");
+                        }
+                    }
+                    
+                    if (loaded)
+                        hasAnyField = true;
                 }
             }
 

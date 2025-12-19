@@ -252,6 +252,7 @@ namespace Alice
 
 	bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
 	{
+		LinkComponentRegistry();
 		ALICE_LOG_INFO("Engine::Initialize: begin (editorMode=%d)", pImpl->m_editorMode ? 1 : 0);
 
 		// 1) 인스턴스 핸들 보관
