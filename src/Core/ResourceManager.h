@@ -7,10 +7,19 @@
 #include <unordered_map>
 #include <mutex>
 #include <memory>
+#include <wrl/client.h>
+
+// D3D11 타입 전방 선언 (헤더에 d3d11.h 포함 방지)
+struct ID3D11Device;
+struct ID3D11ShaderResourceView;
 
 namespace Alice
 {
-    /// 매우 단순한 리소스 매니저입니다.
+    // [템플릿 확장을 위한 로더 구조체 선언]
+    // 이 구조체를 특수화하여 타입별 로딩 전략을 정의합니다.
+    template <typename T>
+    struct ResourceLoader;
+
     /// - 이후 텍스처/메시/셰이더 등을 캐싱/스트리밍하는 쪽으로 확장할 수 있습니다.
     /// - 현재는 "암호화/복호화된 바이너리 파일 입출력" 만 담당합니다.
     class ResourceManager
@@ -76,6 +85,18 @@ namespace Alice
                                       const std::filesystem::path& cookedDirAbs,
                                       std::size_t chunkBytes = 256 * 1024) const;
 
+        /// -----------------------------------------------------------------------
+        /// [템플릿 로드 함수]
+        /// 사용법: auto srv = mgr.LoadData<ID3D11ShaderResourceView>("Path", device);
+        /// -----------------------------------------------------------------------
+        template <typename T, typename... Args>
+        auto LoadData(const std::filesystem::path& logicalPath, Args&&... args) const
+        {
+            // 컴파일러는 ResourceLoader<T>의 선언을 보고 반환 타입을 추론합니다.
+            // 구현은 cpp에 있어도 링킹 시점에 해결됩니다.
+            return ResourceLoader<T>::Load(*this, logicalPath, std::forward<Args>(args)...);
+        }
+
     private:
         /// 매우 단순한 XOR 기반 스트림 암·복호화
         void XorCrypt(std::vector<std::uint8_t>& data) const;
@@ -101,6 +122,24 @@ namespace Alice
         mutable std::mutex m_cacheMutex;
         mutable std::unordered_map<std::uint64_t, std::weak_ptr<const std::vector<std::uint8_t>>> m_blobCache; // key: contentHash
         mutable std::unordered_map<std::string, std::uint64_t> m_pathToHash; // logicalPath -> contentHash
+    };
+
+    // -----------------------------------------------------------------------
+    // [특수화 선언] 
+    // 헤더에는 "이런 타입의 로더가 있다"는 것만 알리고, 구현({ ... })은 하지 않습니다.
+    // -----------------------------------------------------------------------
+
+    // ID3D11ShaderResourceView (Texture) 특수화
+    template <>
+    struct ResourceLoader<ID3D11ShaderResourceView>
+    {
+        // 리턴 타입: ComPtr
+        using ReturnType = Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>;
+
+        // Load 함수 선언 (구현은 CPP 파일에서)
+        static ReturnType Load(const ResourceManager& rm, 
+                               const std::filesystem::path& path, 
+                               ID3D11Device* device); 
     };
 }
 

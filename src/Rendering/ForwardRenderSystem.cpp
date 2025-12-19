@@ -823,90 +823,53 @@ float4 main(PSInput input) : SV_TARGET
             prefix[0] = static_cast<char>(std::tolower(prefix[0]));
         }
 
+        if (!m_resources)
+        {
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: ResourceManager is null.");
+            return false;
+        }
+
         // Diffuse IBL (Irradiance map)
         fs::path diffusePath = basePath / (prefix + "DiffuseHDR.dds");
-        if (m_resources)
+        m_iblDiffuseSRV = m_resources->LoadData<ID3D11ShaderResourceView>(diffusePath, m_device.Get());
+        if (!m_iblDiffuseSRV)
         {
-            fs::path resolved = m_resources->Resolve(diffusePath);
-            HRESULT hr = DirectX::CreateDDSTextureFromFile(
-                m_device.Get(),
-                resolved.wstring().c_str(),
-                nullptr,
-                m_iblDiffuseSRV.ReleaseAndGetAddressOf());
-            if (FAILED(hr))
-            {
-                ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Diffuse IBL \"%s\"",
-                    resolved.string().c_str());
-            }
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Diffuse IBL \"%s\"",
+                diffusePath.string().c_str());
         }
 
         // Specular IBL (Prefiltered env map)
         fs::path specularPath = basePath / (prefix + "SpecularHDR.dds");
-        if (m_resources)
+        m_iblSpecularSRV = m_resources->LoadData<ID3D11ShaderResourceView>(specularPath, m_device.Get());
+        if (!m_iblSpecularSRV)
         {
-            fs::path resolved = m_resources->Resolve(specularPath);
-            HRESULT hr = DirectX::CreateDDSTextureFromFile(
-                m_device.Get(),
-                resolved.wstring().c_str(),
-                nullptr,
-                m_iblSpecularSRV.ReleaseAndGetAddressOf());
-            if (FAILED(hr))
-            {
-                ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Specular IBL \"%s\"",
-                    resolved.string().c_str());
-            }
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Specular IBL \"%s\"",
+                specularPath.string().c_str());
         }
 
         // BRDF LUT
         fs::path brdfPath = basePath / (prefix + "Brdf.dds");
-        if (m_resources)
+        m_iblBrdfLutSRV = m_resources->LoadData<ID3D11ShaderResourceView>(brdfPath, m_device.Get());
+        if (!m_iblBrdfLutSRV)
         {
-            fs::path resolved = m_resources->Resolve(brdfPath);
-            HRESULT hr = DirectX::CreateDDSTextureFromFile(
-                m_device.Get(),
-                resolved.wstring().c_str(),
-                nullptr,
-                m_iblBrdfLutSRV.ReleaseAndGetAddressOf());
-            if (FAILED(hr))
-            {
-                ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load BRDF LUT \"%s\"",
-                    resolved.string().c_str());
-            }
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load BRDF LUT \"%s\"",
+                brdfPath.string().c_str());
         }
 
         // 스카이박스 환경맵도 함께 로드 (같은 세트 사용)
         fs::path envPath = basePath / (prefix + "EnvHDR.dds");
-        bool skyboxLoaded = false;
-        if (m_resources)
+        m_skyboxSRV = m_resources->LoadData<ID3D11ShaderResourceView>(envPath, m_device.Get());
+        if (m_skyboxSRV)
         {
-            fs::path resolved = m_resources->Resolve(envPath);
-            HRESULT hr = DirectX::CreateDDSTextureFromFile(
-                m_device.Get(),
-                resolved.wstring().c_str(),
-                nullptr,
-                m_skyboxSRV.ReleaseAndGetAddressOf());
-            if (SUCCEEDED(hr) && m_skyboxSRV)
-            {
-                m_skyboxEnabled = true;
-                skyboxLoaded = true;
-                ALICE_LOG_INFO("ForwardRenderSystem::CreateIblResources: Skybox loaded from \"%s\"",
-                    resolved.string().c_str());
-            }
-            else
-            {
-                ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Skybox \"%s\" (hr=0x%08X)",
-                    resolved.string().c_str(), hr);
-            }
+            m_skyboxEnabled = true;
+            ALICE_LOG_INFO("ForwardRenderSystem::CreateIblResources: Skybox loaded from \"%s\"",
+                envPath.string().c_str());
         }
         else
         {
-            ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: ResourceManager not set, cannot load Skybox");
-        }
-
-        // 스카이박스가 로드되지 않았으면 비활성화
-        if (!skyboxLoaded)
-        {
             m_skyboxEnabled = false;
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateIblResources: failed to load Skybox \"%s\"",
+                envPath.string().c_str());
         }
 
         m_currentIblSet = iblSetName;
@@ -1224,45 +1187,21 @@ float4 main(PSInput input) : SV_TARGET
         const std::filesystem::path normalLogical   = "Resource/Image/Bricks059_1K-JPG_NormalDX.jpg";
         const std::filesystem::path specularLogical = "Resource/Image/Bricks059_Specular.png";
 
-        auto loadTexture = [&](const std::filesystem::path& logical,
-                               Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& outSrv) -> bool
+        if (!m_resources)
         {
-            // 1) ResourceManager 가 있으면 Cooked(암호화) 우선 로드까지 자동 처리합니다.
-            if (m_resources)
-            {
-                std::vector<std::uint8_t> data;
-                if (m_resources->LoadBinaryAuto(logical, data) && !data.empty())
-                {
-                    HRESULT hr = DirectX::CreateWICTextureFromMemory(
-                        m_device.Get(),
-                        data.data(),
-                        static_cast<UINT>(data.size()),
-                        nullptr,
-                        outSrv.ReleaseAndGetAddressOf());
-                    if (SUCCEEDED(hr))
-                        return true;
-                }
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateTextures: ResourceManager is null.");
+            return false;
+        }
 
-                // gameMode에서 Cooked에 없고 원본도 없으면 경고만 찍고 넘어갑니다.
-                ALICE_LOG_WARN("ForwardRenderSystem::CreateTextures: failed to load texture \"%s\" via ResourceManager.",
-                               logical.string().c_str());
-                return false;
-            }
-
-            // 2) (예외) ResourceManager 가 없으면 파일에서 직접 로드 시도
-            const auto p = std::filesystem::path(logical);
-            HRESULT hr = DirectX::CreateWICTextureFromFile(
-                m_device.Get(),
-                p.c_str(),
-                nullptr,
-                outSrv.ReleaseAndGetAddressOf());
-            return SUCCEEDED(hr);
-        };
+        // LoadData<T> 한 줄로 끝! (경로 처리, 암호화 해독, 리소스 생성이 모두 내부에서 처리됨)
+        m_diffuseSRV  = m_resources->LoadData<ID3D11ShaderResourceView>(diffuseLogical, m_device.Get());
+        m_normalSRV   = m_resources->LoadData<ID3D11ShaderResourceView>(normalLogical, m_device.Get());
+        m_specularSRV = m_resources->LoadData<ID3D11ShaderResourceView>(specularLogical, m_device.Get());
 
         bool ok = true;
-        if (!loadTexture(diffuseLogical,  m_diffuseSRV))  ok = false;
-        if (!loadTexture(normalLogical,   m_normalSRV))   ok = false;
-        if (!loadTexture(specularLogical, m_specularSRV)) ok = false;
+        if (!m_diffuseSRV)  ok = false;
+        if (!m_normalSRV)   ok = false;
+        if (!m_specularSRV) ok = false;
 
         if (!ok)
         {
@@ -1344,8 +1283,7 @@ float4 main(PSInput input) : SV_TARGET
     }
 
     // 경로 문자열을 기반으로 머티리얼 전용 텍스처 SRV 를 가져오거나 생성합니다.
-    // - .alice 인 경우 ResourceManager 를 통해 복호화 후 메모리에서 로드합니다.
-    // - 그 외 경우는 파일에서 직접 로드합니다.
+    // - LoadData를 통해 경로 처리, 암호화 해독, 리소스 생성이 모두 내부에서 처리됩니다.
     ID3D11ShaderResourceView* ForwardRenderSystem::GetOrCreateTexture(const std::string& path)
     {
         if (path.empty())
@@ -1355,76 +1293,20 @@ float4 main(PSInput input) : SV_TARGET
         if (it != m_textureCache.end())
             return it->second.Get();
 
-        if (!m_device)
+        if (!m_device || !m_resources)
             return nullptr;
 
-        namespace fs = std::filesystem;
-        fs::path p(path);
-        // 모든 파일 접근은 ResourceManager 를 통해 "논리 경로"를 실제 경로로 해석합니다.
-        fs::path resolved = (m_resources) ? m_resources->Resolve(p) : p;
-        if (!fs::exists(resolved))
-        {
-            ALICE_LOG_WARN("[ForwardRenderSystem] Texture file not found: \"%s\" (resolved=\"%s\")",
-                           path.c_str(),
-                           resolved.string().c_str());
-            return nullptr;
-        }
+        // LoadData<T> 한 줄로 끝!
+        auto srv = m_resources->LoadData<ID3D11ShaderResourceView>(std::filesystem::path(path), m_device.Get());
 
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
-        HRESULT hr = E_FAIL;
-
-        // Cooked 안의 파일은 "확장자와 무관하게" 암호화된 바이너리일 수 있습니다.
-        // 따라서 ResourceManager 가 있으면, 먼저 LoadBinaryAuto(+복호화) → 메모리 로드를 시도하고,
-        // 실패하면 파일 로드로 폴백합니다.
-        bool loadedFromMemory = false;
-        if (m_resources)
+        if (!srv)
         {
-            std::vector<std::uint8_t> data;
-            if (m_resources->LoadBinaryAuto(p, data) && !data.empty())
-            {
-                hr = DirectX::CreateWICTextureFromMemory(
-                    m_device.Get(),
-                    data.data(),
-                    static_cast<UINT>(data.size()),
-                    nullptr,
-                    srv.ReleaseAndGetAddressOf());
-                if (SUCCEEDED(hr) && srv)
-                    loadedFromMemory = true;
-            }
-        }
-
-        if (FAILED(hr))
-        {
-            // 원본 이미지 파일에서 직접 로드 (png/jpg/tga 등)
-            hr = DirectX::CreateWICTextureFromFile(
-                m_device.Get(),
-                resolved.c_str(),
-                nullptr,
-                srv.ReleaseAndGetAddressOf());
-        }
-
-        if (FAILED(hr) || !srv)
-        {
-            char buf[256] = {};
-            std::snprintf(buf, sizeof(buf),
-                          "[ForwardRenderSystem] Texture load FAILED: \"%s\" (resolved=\"%s\")\n",
-                          path.c_str(),
-                          resolved.string().c_str());
-            OutputDebugStringA(buf);
+            ALICE_LOG_WARN("[ForwardRenderSystem] Texture load FAILED: \"%s\"", path.c_str());
             return nullptr;
         }
 
         m_textureCache.emplace(path, srv);
-
-        {
-            char buf[256] = {};
-            std::snprintf(buf, sizeof(buf),
-                          "[ForwardRenderSystem] Texture loaded: \"%s\" (resolved=\"%s\", memory=%d)\n",
-                          path.c_str(),
-                          resolved.string().c_str(),
-                          loadedFromMemory ? 1 : 0);
-            OutputDebugStringA(buf);
-        }
+        ALICE_LOG_INFO("[ForwardRenderSystem] Texture loaded: \"%s\"", path.c_str());
 
         return srv.Get();
     }
