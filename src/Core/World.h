@@ -1,4 +1,4 @@
-ï»¿#pragma once
+#pragma once
 
 #include <unordered_map>
 #include <string>
@@ -11,14 +11,14 @@
 
 namespace Alice
 {
-    /// ê°„ë‹¨í•œ ECS ìŠ¤íƒ€ì¼ì˜ ì›”ë“œ(World) êµ¬í˜„ì…ë‹ˆë‹¤.
-    /// - ì—”í‹°í‹° ìƒì„±/ì‚­ì œ ì±…ì„
-    /// - Transform / Script / Material ì»´í¬ë„ŒíŠ¸ ê´€ë¦¬ ì±…ì„
-    ///   (í•„ìš” ì‹œ ë‹¤ë¥¸ ì»´í¬ë„ŒíŠ¸ ì»¨í…Œì´ë„ˆë¥¼ ì¶”ê°€ í™•ì¥)
+    /// °£´ÜÇÑ ECS ½ºÅ¸ÀÏÀÇ ¿ùµå(World) ±¸ÇöÀÔ´Ï´Ù.
+    /// - ¿£Æ¼Æ¼ »ı¼º/»èÁ¦ Ã¥ÀÓ
+    /// - Transform / Script / Material ÄÄÆ÷³ÍÆ® °ü¸® Ã¥ÀÓ
+    ///   (ÇÊ¿ä ½Ã ´Ù¸¥ ÄÄÆ÷³ÍÆ® ÄÁÅ×ÀÌ³Ê¸¦ Ãß°¡ È®Àå)
 
     struct TransformComponent
     {
-        // ìœ„ì¹˜, íšŒì „(ë¼ë””ì•ˆ), ìŠ¤ì¼€ì¼
+        // À§Ä¡, È¸Àü(¶óµğ¾È), ½ºÄÉÀÏ
         DirectX::XMFLOAT3 position { 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 rotation { 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 scale    { 1.0f, 1.0f, 1.0f };
@@ -42,39 +42,39 @@ namespace Alice
         }
     };
 
-    /// ë¨¸í‹°ë¦¬ì–¼ ì»´í¬ë„ŒíŠ¸
-    /// - í˜„ì¬ëŠ” ë² ì´ìŠ¤ ì»¬ëŸ¬ + ëŸ¬í”„ë‹ˆìŠ¤/ë©”íƒˆë‹ˆìŠ¤ë§Œ ê°€ì§‘ë‹ˆë‹¤.
-    /// - ì¶”í›„ ë” ë§ì€ íŒŒë¼ë¯¸í„°ë¥¼ í™•ì¥í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
+    /// ¸ÓÆ¼¸®¾ó ÄÄÆ÷³ÍÆ®
+    /// - ÇöÀç´Â º£ÀÌ½º ÄÃ·¯ + ·¯ÇÁ´Ï½º/¸ŞÅ»´Ï½º¸¸ °¡Áı´Ï´Ù.
+    /// - ÃßÈÄ ´õ ¸¹Àº ÆÄ¶ó¹ÌÅÍ¸¦ È®ÀåÇÒ ¼ö ÀÖ½À´Ï´Ù.
     struct MaterialComponent
     {
-        DirectX::XMFLOAT3 color     { 0.7f, 0.7f, 0.7f };  // ë² ì´ìŠ¤ ìƒ‰ìƒ (albedo)
-        float             roughness { 0.5f };              // 0~1 ëŸ¬í”„ë‹ˆìŠ¤ (PBR)
-        float             metalness { 0.0f };              // 0~1 ë©”íƒˆë‹ˆìŠ¤ (PBR)
-        std::string       assetPath;                       // ì„ íƒëœ ë¨¸í‹°ë¦¬ì–¼ ì—ì…‹ ê²½ë¡œ (ì˜µì…˜)
-        std::string       albedoTexturePath;               // ì•Œë² ë„ í…ìŠ¤ì²˜ ê²½ë¡œ (.alice ë˜ëŠ” ì›ë³¸)
+        DirectX::XMFLOAT3 color     { 0.7f, 0.7f, 0.7f };  // º£ÀÌ½º »ö»ó (albedo)
+        float             roughness { 0.5f };              // 0~1 ·¯ÇÁ´Ï½º (PBR)
+        float             metalness { 0.0f };              // 0~1 ¸ŞÅ»´Ï½º (PBR)
+        std::string       assetPath;                       // ¼±ÅÃµÈ ¸ÓÆ¼¸®¾ó ¿¡¼Â °æ·Î (¿É¼Ç)
+        std::string       albedoTexturePath;               // ¾Ëº£µµ ÅØ½ºÃ³ °æ·Î (.alice ¶Ç´Â ¿øº»)
     };
 
-    /// Skinned FBX ë©”ì‹œì— ëŒ€í•œ ìµœì†Œ ì •ë³´ë§Œ ë‹´ëŠ” ì»´í¬ë„ŒíŠ¸ì…ë‹ˆë‹¤.
-    /// - ì‹¤ì œ FBX íŒŒì‹±/ì• ë‹ˆë©”ì´ì…˜ì€ ê²Œì„(ìƒ˜í”Œ) ë ˆë²¨ì—ì„œ ì²˜ë¦¬í•©ë‹ˆë‹¤.
-    /// - ì—”ì§„ì€ bone í–‰ë ¬ ë°°ì—´ê³¼ ë³¸ ê°œìˆ˜ë§Œ ì‚¬ìš©í•©ë‹ˆë‹¤.
+    /// Skinned FBX ¸Ş½Ã¿¡ ´ëÇÑ ÃÖ¼Ò Á¤º¸¸¸ ´ã´Â ÄÄÆ÷³ÍÆ®ÀÔ´Ï´Ù.
+    /// - ½ÇÁ¦ FBX ÆÄ½Ì/¾Ö´Ï¸ŞÀÌ¼ÇÀº °ÔÀÓ(»ùÇÃ) ·¹º§¿¡¼­ Ã³¸®ÇÕ´Ï´Ù.
+    /// - ¿£ÁøÀº bone Çà·Ä ¹è¿­°ú º» °³¼ö¸¸ »ç¿ëÇÕ´Ï´Ù.
     struct SkinnedMeshComponent
     {
-        std::string meshAssetPath;                         // FBX/ë©”ì‹œ ì—ì…‹ ê²½ë¡œ (SkinnedMeshRegistry í‚¤)
-        std::string instanceAssetPath;                     // .fbxasset ì¸ìŠ¤í„´ìŠ¤ ì—ì…‹ ê²½ë¡œ (ì”¬/í”„ë¡œì íŠ¸ ì €ì¥ìš©)
-        const DirectX::XMFLOAT4X4* boneMatrices { nullptr }; // ì™¸ë¶€ì—ì„œ ê´€ë¦¬í•˜ëŠ” ë³¸ í–‰ë ¬ ë°°ì—´
-        std::uint32_t              boneCount    { 0 };       // ì‚¬ìš© ì¤‘ì¸ ë³¸ ê°œìˆ˜
+        std::string meshAssetPath;                         // FBX/¸Ş½Ã ¿¡¼Â °æ·Î (SkinnedMeshRegistry Å°)
+        std::string instanceAssetPath;                     // .fbxasset ÀÎ½ºÅÏ½º ¿¡¼Â °æ·Î (¾À/ÇÁ·ÎÁ§Æ® ÀúÀå¿ë)
+        const DirectX::XMFLOAT4X4* boneMatrices { nullptr }; // ¿ÜºÎ¿¡¼­ °ü¸®ÇÏ´Â º» Çà·Ä ¹è¿­
+        std::uint32_t              boneCount    { 0 };       // »ç¿ë ÁßÀÎ º» °³¼ö
     };
 
-    /// ìŠ¤í‚¤ë‹ ì• ë‹ˆë©”ì´ì…˜ ì¬ìƒ ìƒíƒœ(ì—”í‹°í‹° ë‹¨ìœ„)
-    /// - ì‹¤ì œ í‰ê°€/íŒ”ë ˆíŠ¸ ê³„ì‚°ì€ SkinnedAnimationSystem ì´ ìˆ˜í–‰í•©ë‹ˆë‹¤.
+    /// ½ºÅ°´× ¾Ö´Ï¸ŞÀÌ¼Ç Àç»ı »óÅÂ(¿£Æ¼Æ¼ ´ÜÀ§)
+    /// - ½ÇÁ¦ Æò°¡/ÆÈ·¹Æ® °è»êÀº SkinnedAnimationSystem ÀÌ ¼öÇàÇÕ´Ï´Ù.
     struct SkinnedAnimationComponent
     {
-        int   clipIndex { 0 };   // í˜„ì¬ ì¬ìƒ í´ë¦½ ì¸ë±ìŠ¤
+        int   clipIndex { 0 };   // ÇöÀç Àç»ı Å¬¸³ ÀÎµ¦½º
         bool  playing   { true };
-        float speed     { 1.0f }; // ë°°ì†(1.0 = ì •ìƒ)
-        double timeSec  { 0.0 };  // í˜„ì¬ ì‹œê°„(ì´ˆ)
+        float speed     { 1.0f }; // ¹è¼Ó(1.0 = Á¤»ó)
+        double timeSec  { 0.0 };  // ÇöÀç ½Ã°£(ÃÊ)
 
-        // CPU ë³¸ íŒ”ë ˆíŠ¸(ForwardRenderSystemì´ ì—¬ê¸°ì„œ ì½ì–´ VS CBë¡œ ì—…ë¡œë“œ)
+        // CPU º» ÆÈ·¹Æ®(ForwardRenderSystemÀÌ ¿©±â¼­ ÀĞ¾î VS CB·Î ¾÷·Îµå)
         std::vector<DirectX::XMFLOAT4X4> palette;
     };
 
@@ -85,81 +85,81 @@ namespace Alice
 
         void Clear();
 
-        /// ìƒˆë¡œìš´ ì—”í‹°í‹°ë¥¼ ìƒì„±í•©ë‹ˆë‹¤.
+        /// »õ·Î¿î ¿£Æ¼Æ¼¸¦ »ı¼ºÇÕ´Ï´Ù.
         EntityId CreateEntity();
 
-        /// ì—”í‹°í‹°ë¥¼ ì œê±°í•˜ê³ , ì—°ê²°ëœ ì»´í¬ë„ŒíŠ¸ë„ ì •ë¦¬í•©ë‹ˆë‹¤.
+        /// ¿£Æ¼Æ¼¸¦ Á¦°ÅÇÏ°í, ¿¬°áµÈ ÄÄÆ÷³ÍÆ®µµ Á¤¸®ÇÕ´Ï´Ù.
         void DestroyEntity(EntityId id);
 
-        /// Transform ì»´í¬ë„ŒíŠ¸ë¥¼ ì¶”ê°€í•©ë‹ˆë‹¤.
+        /// Transform ÄÄÆ÷³ÍÆ®¸¦ Ãß°¡ÇÕ´Ï´Ù.
         TransformComponent& AddTransform(EntityId id);
 
-        /// Transform ì»´í¬ë„ŒíŠ¸ë¥¼ ê°€ì ¸ì˜µë‹ˆë‹¤. (ì—†ìœ¼ë©´ nullptr)
+        /// Transform ÄÄÆ÷³ÍÆ®¸¦ °¡Á®¿É´Ï´Ù. (¾øÀ¸¸é nullptr)
         TransformComponent* GetTransform(EntityId id);
 
-        /// Transform ì»´í¬ë„ŒíŠ¸ì˜ ì½ê¸° ì „ìš© í¬ì¸í„°ë¥¼ ê°€ì ¸ì˜µë‹ˆë‹¤.
+        /// Transform ÄÄÆ÷³ÍÆ®ÀÇ ÀĞ±â Àü¿ë Æ÷ÀÎÅÍ¸¦ °¡Á®¿É´Ï´Ù.
         const TransformComponent* GetTransform(EntityId id) const;
 
-        /// í˜„ì¬ ë“±ë¡ëœ Transform ì»´í¬ë„ŒíŠ¸ ëª©ë¡ì„ ì½ê¸° ì „ìš©ìœ¼ë¡œ ë°˜í™˜í•©ë‹ˆë‹¤.
-        /// - ì—ë””í„° í•˜ì´ëŸ¬í‚¤ ë·°ì—ì„œ ì—”í‹°í‹°ë¥¼ ë‚˜ì—´í•  ë•Œ ì‚¬ìš©í•©ë‹ˆë‹¤.
+        /// ÇöÀç µî·ÏµÈ Transform ÄÄÆ÷³ÍÆ® ¸ñ·ÏÀ» ÀĞ±â Àü¿ëÀ¸·Î ¹İÈ¯ÇÕ´Ï´Ù.
+        /// - ¿¡µğÅÍ ÇÏÀÌ·¯Å° ºä¿¡¼­ ¿£Æ¼Æ¼¸¦ ³ª¿­ÇÒ ¶§ »ç¿ëÇÕ´Ï´Ù.
         const std::unordered_map<EntityId, TransformComponent>& GetTransforms() const { return m_transforms; }
 
-        // ==== Script ì»´í¬ë„ŒíŠ¸ ê´€ë ¨ ====
+        // ==== Script ÄÄÆ÷³ÍÆ® °ü·Ã ====
 
-        /// Script ì»´í¬ë„ŒíŠ¸ë¥¼ ì¶”ê°€í•©ë‹ˆë‹¤.
-        /// \param id         ëŒ€ìƒ ì—”í‹°í‹° ID
-        /// \param scriptName ScriptFactory ì— ë“±ë¡ëœ ìŠ¤í¬ë¦½íŠ¸ ì´ë¦„
+        /// Script ÄÄÆ÷³ÍÆ®¸¦ Ãß°¡ÇÕ´Ï´Ù.
+        /// \param id         ´ë»ó ¿£Æ¼Æ¼ ID
+        /// \param scriptName ScriptFactory ¿¡ µî·ÏµÈ ½ºÅ©¸³Æ® ÀÌ¸§
         ScriptComponent& AddScript(EntityId id, const std::string& scriptName);
 
-        /// Script ì»´í¬ë„ŒíŠ¸ë¥¼ ê°€ì ¸ì˜µë‹ˆë‹¤. (ì—†ìœ¼ë©´ nullptr)
+        /// Script ÄÄÆ÷³ÍÆ®¸¦ °¡Á®¿É´Ï´Ù. (¾øÀ¸¸é nullptr)
         ScriptComponent* GetScript(EntityId id);
         const ScriptComponent* GetScript(EntityId id) const;
 
-        /// ì „ì²´ Script ì»´í¬ë„ŒíŠ¸ ì»¨í…Œì´ë„ˆ (ScriptSystem ì´ ì‚¬ìš©)
+        /// ÀüÃ¼ Script ÄÄÆ÷³ÍÆ® ÄÁÅ×ÀÌ³Ê (ScriptSystem ÀÌ »ç¿ë)
         const std::unordered_map<EntityId, ScriptComponent>& GetScripts() const { return m_scripts; }
         std::unordered_map<EntityId, ScriptComponent>& GetScripts() { return m_scripts; }
 
-        /// Script ì»´í¬ë„ŒíŠ¸ë¥¼ ì œê±°í•©ë‹ˆë‹¤.
+        /// Script ÄÄÆ÷³ÍÆ®¸¦ Á¦°ÅÇÕ´Ï´Ù.
         void RemoveScript(EntityId id);
 
         void RemoveAllScript();
 
-        // ==== Material ì»´í¬ë„ŒíŠ¸ ê´€ë ¨ ====
+        // ==== Material ÄÄÆ÷³ÍÆ® °ü·Ã ====
 
-        /// ë¨¸í‹°ë¦¬ì–¼ ì»´í¬ë„ŒíŠ¸ë¥¼ ì¶”ê°€í•©ë‹ˆë‹¤.
-        /// \param id        ëŒ€ìƒ ì—”í‹°í‹° ID
-        /// \param color     ê¸°ë³¸ ë² ì´ìŠ¤ ì»¬ëŸ¬
-        /// \param assetPath ì´ ë¨¸í‹°ë¦¬ì–¼ì´ ì°¸ì¡°í•˜ëŠ” ì—ì…‹ ê²½ë¡œ(ì„ íƒ ì‚¬í•­)
+        /// ¸ÓÆ¼¸®¾ó ÄÄÆ÷³ÍÆ®¸¦ Ãß°¡ÇÕ´Ï´Ù.
+        /// \param id        ´ë»ó ¿£Æ¼Æ¼ ID
+        /// \param color     ±âº» º£ÀÌ½º ÄÃ·¯
+        /// \param assetPath ÀÌ ¸ÓÆ¼¸®¾óÀÌ ÂüÁ¶ÇÏ´Â ¿¡¼Â °æ·Î(¼±ÅÃ »çÇ×)
         MaterialComponent& AddMaterial(EntityId id,
                                        const DirectX::XMFLOAT3& color,
                                        const std::string& assetPath = {});
 
-        /// ë¨¸í‹°ë¦¬ì–¼ ì»´í¬ë„ŒíŠ¸ë¥¼ ê°€ì ¸ì˜µë‹ˆë‹¤. (ì—†ìœ¼ë©´ nullptr)
+        /// ¸ÓÆ¼¸®¾ó ÄÄÆ÷³ÍÆ®¸¦ °¡Á®¿É´Ï´Ù. (¾øÀ¸¸é nullptr)
         MaterialComponent* GetMaterial(EntityId id);
         const MaterialComponent* GetMaterial(EntityId id) const;
 
-        /// ì „ì²´ ë¨¸í‹°ë¦¬ì–¼ ì»´í¬ë„ŒíŠ¸ ì»¨í…Œì´ë„ˆ (ë Œë”ë§/ì—ë””í„°ì—ì„œ ì‚¬ìš©)
+        /// ÀüÃ¼ ¸ÓÆ¼¸®¾ó ÄÄÆ÷³ÍÆ® ÄÁÅ×ÀÌ³Ê (·»´õ¸µ/¿¡µğÅÍ¿¡¼­ »ç¿ë)
         const std::unordered_map<EntityId, MaterialComponent>& GetMaterials() const { return m_materials; }
 
-        /// ë¨¸í‹°ë¦¬ì–¼ ì»´í¬ë„ŒíŠ¸ë¥¼ ì œê±°í•©ë‹ˆë‹¤.
+        /// ¸ÓÆ¼¸®¾ó ÄÄÆ÷³ÍÆ®¸¦ Á¦°ÅÇÕ´Ï´Ù.
         void RemoveMaterial(EntityId id);
 
-        // ==== Skinned Mesh ì»´í¬ë„ŒíŠ¸ ê´€ë ¨ ====
+        // ==== Skinned Mesh ÄÄÆ÷³ÍÆ® °ü·Ã ====
 
-        /// ìŠ¤í‚¤ë‹ ë©”ì‹œ ì»´í¬ë„ŒíŠ¸ë¥¼ ì¶”ê°€í•©ë‹ˆë‹¤.
+        /// ½ºÅ°´× ¸Ş½Ã ÄÄÆ÷³ÍÆ®¸¦ Ãß°¡ÇÕ´Ï´Ù.
         SkinnedMeshComponent& AddSkinnedMesh(EntityId id, const std::string& meshAssetPath);
 
-        /// ìŠ¤í‚¤ë‹ ë©”ì‹œ ì»´í¬ë„ŒíŠ¸ë¥¼ ê°€ì ¸ì˜µë‹ˆë‹¤. (ì—†ìœ¼ë©´ nullptr)
+        /// ½ºÅ°´× ¸Ş½Ã ÄÄÆ÷³ÍÆ®¸¦ °¡Á®¿É´Ï´Ù. (¾øÀ¸¸é nullptr)
         SkinnedMeshComponent* GetSkinnedMesh(EntityId id);
         const SkinnedMeshComponent* GetSkinnedMesh(EntityId id) const;
 
-        /// ì „ì²´ ìŠ¤í‚¤ë‹ ë©”ì‹œ ì»¨í…Œì´ë„ˆ (ë Œë”ë§/ì—ë””í„°ì—ì„œ ì‚¬ìš©)
+        /// ÀüÃ¼ ½ºÅ°´× ¸Ş½Ã ÄÁÅ×ÀÌ³Ê (·»´õ¸µ/¿¡µğÅÍ¿¡¼­ »ç¿ë)
         const std::unordered_map<EntityId, SkinnedMeshComponent>& GetSkinnedMeshes() const { return m_skinnedMeshes; }
 
-        /// ìŠ¤í‚¤ë‹ ë©”ì‹œ ì»´í¬ë„ŒíŠ¸ë¥¼ ì œê±°í•©ë‹ˆë‹¤.
+        /// ½ºÅ°´× ¸Ş½Ã ÄÄÆ÷³ÍÆ®¸¦ Á¦°ÅÇÕ´Ï´Ù.
         void RemoveSkinnedMesh(EntityId id);
 
-        // ==== Skinned Animation ì»´í¬ë„ŒíŠ¸ ê´€ë ¨ ====
+        // ==== Skinned Animation ÄÄÆ÷³ÍÆ® °ü·Ã ====
 
         SkinnedAnimationComponent& AddSkinnedAnimation(EntityId id);
         SkinnedAnimationComponent* GetSkinnedAnimation(EntityId id);

@@ -1,4 +1,6 @@
 #include "Core/Prefab.h"
+#include "Core/ReflectionSerializer.h"
+#include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 
 #include <fstream>
 #include <sstream>
@@ -22,65 +24,51 @@ namespace Alice
             if (!std::filesystem::exists(path))
                 return InvalidEntityId;
 
-            std::ifstream file(path);
-            if (!file.is_open())
+            TransformComponent transform;
+            std::string scriptName;
+
+            // RTTR 기반으로 Transform 로드
+            if (!ReflectionSerializer::Load(path, transform))
                 return InvalidEntityId;
 
-            DirectX::XMFLOAT3 position { 0.0f, 0.0f, 0.0f };
-            DirectX::XMFLOAT3 rotation { 0.0f, 0.0f, 0.0f };
-            DirectX::XMFLOAT3 scale    { 1.0f, 1.0f, 1.0f };
-            std::string       scriptName;
-
-            std::string line;
-            while (std::getline(file, line))
+            // Script는 별도로 처리 (문자열만)
+            std::ifstream file(path);
+            if (file.is_open())
             {
-                std::istringstream iss(line);
-                std::string key;
-                if (!std::getline(iss, key, ':'))
-                    continue;
+                std::string line;
+                while (std::getline(file, line))
+                {
+                    std::istringstream iss(line);
+                    std::string key;
+                    if (!std::getline(iss, key, ':'))
+                        continue;
 
-                std::string value;
-                std::getline(iss, value);
+                    std::string value;
+                    std::getline(iss, value);
 
-                auto trim = [](std::string& s)
-                {
-                    const char* ws = " \t\r\n";
-                    const auto  b  = s.find_first_not_of(ws);
-                    const auto  e  = s.find_last_not_of(ws);
-                    if (b == std::string::npos) { s.clear(); return; }
-                    s = s.substr(b, e - b + 1);
-                };
+                    auto trim = [](std::string& s)
+                    {
+                        const char* ws = " \t\r\n";
+                        const auto  b  = s.find_first_not_of(ws);
+                        const auto  e  = s.find_last_not_of(ws);
+                        if (b == std::string::npos) { s.clear(); return; }
+                        s = s.substr(b, e - b + 1);
+                    };
 
-                trim(key);
-                trim(value);
+                    trim(key);
+                    trim(value);
 
-                if (key == "position")
-                {
-                    std::istringstream vs(value);
-                    vs >> position.x >> position.y >> position.z;
-                }
-                else if (key == "rotation")
-                {
-                    std::istringstream vs(value);
-                    vs >> rotation.x >> rotation.y >> rotation.z;
-                }
-                else if (key == "scale")
-                {
-                    std::istringstream vs(value);
-                    vs >> scale.x >> scale.y >> scale.z;
-                }
-                else if (key == "script")
-                {
-                    scriptName = value;
+                    if (key == "script")
+                    {
+                        scriptName = value;
+                        break;
+                    }
                 }
             }
 
             // 엔티티 생성 및 Transform / Script 부착
             EntityId entity = world.CreateEntity();
-            auto& t = world.AddTransform(entity);
-            t.SetPosition(position.x, position.y, position.z)
-             .SetRotation(rotation.x, rotation.y, rotation.z)
-             .SetScale(scale.x, scale.y, scale.z);
+            world.AddTransform(entity) = transform;
 
             if (!scriptName.empty())
             {
@@ -104,41 +92,21 @@ namespace Alice
                 return false;
             }
 
+            // RTTR 기반으로 Transform 저장
+            bool result = ReflectionSerializer::Save(path, *transform);
+            if (!result)
+                return false;
+
+            // Script는 별도로 추가 (문자열만)
             const ScriptComponent* script = world.GetScript(entity);
-            std::string scriptName;
-            if (script)
+            if (script && !script->scriptName.empty())
             {
-                scriptName = script->scriptName;
+                std::ofstream ofs(path, std::ios::app);
+                if (ofs.is_open())
+                {
+                    ofs << "script: " << script->scriptName << "\n";
+                }
             }
-
-            // 부모 디렉터리가 없다면 생성합니다.
-            const auto parent = path.parent_path();
-            if (!parent.empty() && !std::filesystem::exists(parent))
-            {
-                std::error_code ec;
-                std::filesystem::create_directories(parent, ec);
-            }
-
-            std::ofstream ofs(path);
-            if (!ofs.is_open()) return false;
-
-            // name 은 파일 이름(확장자 제외)로 저장합니다.
-            ofs << "name: " << path.stem().string() << "\n";
-            ofs << "position: "
-                << transform->position.x << " "
-                << transform->position.y << " "
-                << transform->position.z << "\n";
-            ofs << "rotation: "
-                << transform->rotation.x << " "
-                << transform->rotation.y << " "
-                << transform->rotation.z << "\n";
-            ofs << "scale: "
-                << transform->scale.x << " "
-                << transform->scale.y << " "
-                << transform->scale.z << "\n";
-
-            // 스크립트 이름 (없으면 빈 문자열)
-            ofs << "script: " << scriptName << "\n";
 
             return true;
         }

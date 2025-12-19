@@ -8,6 +8,8 @@
 #include "Game/FbxImporter.h"
 #include "3Dmodel/FbxModel.h"
 #include "Core/Logger.h"
+#include "Core/ReflectionUI.h"
+#include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 
 // ImGui
 #include "imgui.h"
@@ -1049,8 +1051,6 @@ namespace Alice
 
                 for (const auto& [entityId, transform] : transforms)
                 {
-                    (void)transform;
-
                     const bool isSelected = (selectedEntity == entityId);
                     const std::string label = "Entity " + std::to_string(static_cast<std::uint32_t>(entityId));
 
@@ -1125,13 +1125,16 @@ namespace Alice
                 ImGui::Text("Entity %u", static_cast<std::uint32_t>(selectedEntity));
                 ImGui::Separator();
 
-                // Transform 편집
+                // Transform 편집 (RTTR 기반, Rotation만 특별 처리)
                 if (auto* transform = world.GetTransform(selectedEntity))
                 {
                     ImGui::Text("Transform");
-                    ImGui::DragFloat3("Position", &transform->position.x, 0.1f);
-                    // 내부 저장은 라디안, UI는 도(deg)로 표시/편집합니다.
-                    // - 기존 "정수처럼 보인다" 문제(라디안 값이 작아 보이는 문제)를 해결
+                    bool changed = false;
+                    
+                    // Position과 Scale은 RTTR 기반으로 렌더링
+                    changed |= ReflectionUI::RenderProperty(*transform, "position", "Position");
+                    
+                    // Rotation은 특별 처리 (라디안 <-> 도 변환)
                     DirectX::XMFLOAT3 rotDeg = {
                         DirectX::XMConvertToDegrees(transform->rotation.x),
                         DirectX::XMConvertToDegrees(transform->rotation.y),
@@ -1144,9 +1147,13 @@ namespace Alice
                             DirectX::XMConvertToRadians(rotDeg.y),
                             DirectX::XMConvertToRadians(rotDeg.z),
                         };
+                        changed = true;
                     }
-                    ImGui::DragFloat3("Scale", &transform->scale.x, 0.1f);
-                    g_SceneDirty = true;
+                    
+                    changed |= ReflectionUI::RenderProperty(*transform, "scale", "Scale");
+                    
+                    if (changed)
+                        g_SceneDirty = true;
                 }
                 else
                 {
@@ -1211,7 +1218,7 @@ namespace Alice
 
                 ImGui::Separator();
 
-                // Material 컴포넌트 섹션
+                // Material 컴포넌트 섹션 (RTTR 기반)
                 ImGui::Text("Material");
                 if (MaterialComponent* mat = world.GetMaterial(selectedEntity))
                 {
@@ -1223,12 +1230,12 @@ namespace Alice
 
                     bool changed = false;
 
-                    // 인스턴스 또는 에셋 색 편집
-                    changed |= ImGui::ColorEdit3("Base Color", &mat->color.x);
-
-                    // PBR 파라미터 (0~1 범위)
-                    changed |= ImGui::SliderFloat("Roughness", &mat->roughness, 0.0f, 1.0f);
-                    changed |= ImGui::SliderFloat("Metalness", &mat->metalness, 0.0f, 1.0f);
+                    // RTTR 기반으로 Material 프로퍼티 렌더링
+                    // (roughness, metalness는 자동으로 SliderFloat로 처리됨)
+                    changed |= ReflectionUI::RenderInspector(*mat, [](const std::string& propName) {
+                        // assetPath와 albedoTexturePath는 특별 UI 처리하므로 제외
+                        return propName != "assetPath" && propName != "albedoTexturePath";
+                    });
 
                     // 알베도 텍스처 경로 표시 & 선택
                     ImGui::Separator();

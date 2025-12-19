@@ -1,5 +1,9 @@
 #pragma once
 
+// Windows.h의 min/max 매크로 충돌 방지 (RTTR 헤더와의 충돌 방지)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
