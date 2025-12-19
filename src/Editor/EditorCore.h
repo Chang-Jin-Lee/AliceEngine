@@ -17,6 +17,7 @@
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
+#include "Core/InputSystem.h"
 
 namespace Alice
 {
@@ -67,6 +68,7 @@ namespace Alice
     public:
         void SetResourceManager(ResourceManager* resources) { m_resources = resources; }
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
+        void SetInputSystem(InputSystem* inputSystem) { m_inputSystem = inputSystem; }
 
     private:
         /// 씬을 로드한 뒤, World 에 존재하는 SkinnedMeshComponent 들이
@@ -82,6 +84,7 @@ namespace Alice
         ID3D11RenderDevice* m_renderDevice = nullptr;
         ResourceManager*    m_resources    = nullptr;
         SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
+        InputSystem*        m_inputSystem = nullptr;
     };
 }
 
