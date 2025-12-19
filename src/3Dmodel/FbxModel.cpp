@@ -225,7 +225,6 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			}
 
 			// === Debug: 스키닝 인덱스/가중치가 정상 범위인지 빠르게 확인 ===
-			// - "부챗살/폭발"은 대개 boneIdx가 비정상(범위 밖)일 때 발생합니다.
 			{
 				const auto& boneNamesDbg = m_->skeleton.GetBoneNames();
 				unsigned short maxIdx = 0;

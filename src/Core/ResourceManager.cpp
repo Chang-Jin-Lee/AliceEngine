@@ -1,5 +1,10 @@
 #include "Core/ResourceManager.h"
 
+// 구현부에서만 필요한 무거운 헤더들
+#include <d3d11.h>
+#include <DirectXTK/WICTextureLoader.h>
+#include <DirectXTK/DDSTextureLoader.h>
+
 #include <fstream>
 #include <system_error>
 #include <cstdint>
@@ -615,6 +620,72 @@ namespace Alice
         {
             data[i] ^= static_cast<std::uint8_t>(m_key[i % keyLen]);
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // [Template Specialization 구현]
+    // -----------------------------------------------------------------------
+
+    // ID3D11ShaderResourceView 로드 구현
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> 
+    ResourceLoader<ID3D11ShaderResourceView>::Load(const ResourceManager& rm, 
+                                                   const std::filesystem::path& path, 
+                                                   ID3D11Device* device)
+    {
+        if (!device)
+        {
+            ALICE_LOG_ERRORF("ResourceLoader<SRV>: Device is null. \"%s\"", path.string().c_str());
+            return nullptr;
+        }
+
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> outSrv = nullptr;
+
+        // 1. ResourceManager의 자동 로드(암호화/경로 처리) 기능을 사용하여 바이너리 확보
+        std::vector<std::uint8_t> data;
+        if (!rm.LoadBinaryAuto(path, data) || data.empty())
+        {
+            ALICE_LOG_ERRORF("ResourceLoader<SRV>: Failed to load binary. \"%s\"", path.string().c_str());
+            return nullptr;
+        }
+
+        // 2. 확장자를 확인하여 WIC 또는 DDS 로드 시도
+        std::filesystem::path ext = path.extension();
+        std::string extLower = ext.string();
+        for (auto& c : extLower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        HRESULT hr = E_FAIL;
+
+        // DDS 파일인 경우
+        if (extLower == ".dds")
+        {
+            hr = DirectX::CreateDDSTextureFromMemory(
+                device,
+                data.data(),
+                static_cast<size_t>(data.size()),
+                nullptr, // texture resource 필요시 인자 추가
+                outSrv.GetAddressOf()
+            );
+        }
+        else
+        {
+            // WIC로 로드 시도 (JPG, PNG, TGA 등)
+            hr = DirectX::CreateWICTextureFromMemory(
+                device,
+                data.data(),
+                static_cast<size_t>(data.size()),
+                nullptr, // texture resource 필요시 인자 추가
+                outSrv.GetAddressOf()
+            );
+        }
+
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ResourceLoader<SRV>: Failed to create texture from memory. \"%s\" HRESULT=0x%08X", 
+                path.string().c_str(), static_cast<unsigned int>(hr));
+            return nullptr;
+        }
+
+        return outSrv;
     }
 }
 
