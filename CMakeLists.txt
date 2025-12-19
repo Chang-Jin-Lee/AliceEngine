@@ -48,6 +48,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Prefab.cpp
     ${ALICE_SRC_DIR}/Core/Material.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
+    ${ALICE_SRC_DIR}/Core/ComponentRegistry.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
     ${ALICE_SRC_DIR}/Core/TimeSystem.cpp
@@ -88,6 +89,10 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Material.h
     ${ALICE_SRC_DIR}/Core/Logger.h
     ${ALICE_SRC_DIR}/Core/SceneFile.h
+    ${ALICE_SRC_DIR}/Core/SceneFileHelper.h
+    ${ALICE_SRC_DIR}/Core/ReflectionSerializer.h
+    ${ALICE_SRC_DIR}/Core/ReflectionUI.h
+    ${ALICE_SRC_DIR}/Core/ComponentRegistry.h
     ${ALICE_SRC_DIR}/Core/Component.h
     ${ALICE_SRC_DIR}/Core/Entity.h
     ${ALICE_SRC_DIR}/Core/System.h
@@ -174,6 +179,7 @@ target_include_directories(Engine
         ${ALICE_SRC_DIR}
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
+        ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR 헤더 경로
 )
 
 # ImGui 정적 라이브러리
