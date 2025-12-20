@@ -33,8 +33,10 @@ set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-# 정적 라이브러리(.lib)로 빌드하여 DLL 복사 과정 생략
-set(BUILD_STATIC ON CACHE BOOL "" FORCE)
+# RTTR은 shared로 빌드해야 Launch.exe, AliceScripts.dll 사이에서
+# 등록된 프로퍼티가 같은 registry로 합쳐집니다.
+set(BUILD_STATIC OFF CACHE BOOL "" FORCE)
+set(BUILD_RTTR_DYNAMIC ON CACHE BOOL "" FORCE)
 
 # 런타임 라이브러리 설정 (vcpkg 및 엔진과 맞추기 위해 Static Runtime 끔 -> MD/MDd 사용)
 set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
@@ -49,6 +51,8 @@ message(STATUS "-----------------------------------------------------------")
 # 유저 스크립트 소스 (에디터에서 생성되는 C++ 스크립트들)
 file(GLOB_RECURSE USER_SCRIPT_SOURCES CONFIGURE_DEPENDS
     "${ALICE_ROOT}/Assets/Scripts/*.cpp"
+    "${ALICE_ROOT}/Assets/Scripts/*.h"
+    "${ALICE_ROOT}/Assets/Scripts/*.hpp"
 )
 
 if(NOT USER_SCRIPT_SOURCES)
@@ -110,7 +114,7 @@ endif()
 target_link_libraries(AliceScripts
     PRIVATE
 	"${ALICE_ROOT}/build/$<CONFIG>/Engine.lib"
-        RTTR::Core_Lib
+        RTTR::Core
 
         d3d11
         dxgi
