@@ -6,6 +6,9 @@
 #include <DirectXTK/DDSTextureLoader.h>
 #include <filesystem>
 #include <vector>
+#include <cmath>
+#include <cfloat>
+#include <algorithm>
 
 #include <Core/ResourceManager.h>
 #include <Core/Logger.h>
@@ -218,9 +221,13 @@ cbuffer CBLighting : register(b1)
     int3   gPad2;
 
     float4x4 gLightViewProj;   // 섀도우 맵 계산용 라이트 뷰-프로젝션
-};
 
-static const float2 gShadowTexelSize = float2(1.0f / 2048.0f, 1.0f / 2048.0f);
+    // Shadow params (34_ToneMapping 방식)
+    float  gShadowBias;
+    float  gShadowMapSize;
+    float  gShadowPCFRadius;
+    int    gShadowEnabled;
+};
 
 struct PSInput
 {
@@ -313,6 +320,8 @@ float4 main(PSInput input) : SV_TARGET
     // 섀도우 팩터 (PCF)
     float shadow = 1.0f;
     {
+        if (gShadowEnabled != 0)
+        {
         float4 shadowPos = mul(float4(input.WorldPos, 1.0f), gLightViewProj);
         shadowPos.xyz /= shadowPos.w;
 
@@ -321,8 +330,9 @@ float4 main(PSInput input) : SV_TARGET
         shadowTex.y = -shadowPos.y * 0.5f + 0.5f;
         float depth = shadowPos.z;
 
-        // 간단한 바이어스
-        const float bias = 0.001f;
+        // Shadow map texel 크기 및 PCF 반경(텍셀 단위)
+        const float2 texelSize = float2(1.0f, 1.0f) / max(gShadowMapSize, 1.0f);
+        const float2 pcfStep = max(gShadowPCFRadius, 0.0f) * texelSize;
 
         if (shadowTex.x >= 0.0f && shadowTex.x <= 1.0f &&
             shadowTex.y >= 0.0f && shadowTex.y <= 1.0f)
@@ -332,14 +342,15 @@ float4 main(PSInput input) : SV_TARGET
             {
                 [unroll] for (int x = -1; x <= 1; ++x)
                 {
-                    float2 offset = float2(x, y) * gShadowTexelSize;
+                    float2 offset = float2(x, y) * pcfStep;
                     sum += gShadowMap.SampleCmpLevelZero(
                         gShadowSampler,
                         shadowTex + offset,
-                        depth - bias);
+                        depth - gShadowBias);
                 }
             }
             shadow = sum / 9.0f;
+        }
         }
     }
 
@@ -657,7 +668,7 @@ float4 main(PSInput input) : SV_TARGET
     bool ForwardRenderSystem::CreateShadowMapResources()
     {
         // 단일 Directional Light 용 섀도우 맵 (고정 해상도)
-        const UINT shadowSize = 2048;
+        const UINT shadowSize = static_cast<UINT>(m_shadowSettings.mapSizePx);
 
         D3D11_TEXTURE2D_DESC texDesc = {};
         texDesc.Width              = shadowSize;
@@ -1263,20 +1274,39 @@ float4 main(PSInput input) : SV_TARGET
 
     bool ForwardRenderSystem::CreateRasterizerStates()
     {
-        // 기본: CCW를 앞면으로 간주, 뒷면 컬링
+        // "CCW = Front" 로 통일합니다.
         D3D11_RASTERIZER_DESC desc = {};
         desc.FillMode              = D3D11_FILL_SOLID;
         desc.CullMode              = D3D11_CULL_BACK;
-        desc.FrontCounterClockwise = FALSE;
+        desc.FrontCounterClockwise = TRUE;
         desc.DepthClipEnable       = TRUE;
 
         HRESULT hr = m_device->CreateRasterizerState(&desc, m_rasterizerState.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return false;
 
         // 음수 스케일(거울 반전)일 때는 정점의 와인딩이 뒤집히므로
-        // FrontCounterClockwise 를 TRUE 로 줘서 "반대 와인딩"을 앞면으로 간주한다.
-        desc.FrontCounterClockwise = TRUE;
+        // FrontCounterClockwise 를 반대로 줘서 "반대 와인딩"을 앞면으로 간주한다.
+        desc.FrontCounterClockwise = FALSE;
         hr = m_device->CreateRasterizerState(&desc, m_rasterizerStateReversed.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        // Shadow pass 전용 RS (DepthBias)
+        // - 34_ToneMapping과 동일: DepthBias=1000, SlopeScaled=1.0
+        D3D11_RASTERIZER_DESC shadowDesc = desc;
+        shadowDesc.CullMode = D3D11_CULL_BACK;
+        shadowDesc.DepthBias = 1000;
+        shadowDesc.SlopeScaledDepthBias = 1.0f;
+        shadowDesc.DepthBiasClamp = 0.0f;
+
+        // 현재 desc는 "Reversed(FrontCounterClockwise = FALSE)" 상태이므로,
+        // 먼저 기본(FrontCounterClockwise = TRUE) 섀도우 RS를 만든 뒤,
+        // 다음으로 reversed 섀도우 RS를 만듭니다.
+        shadowDesc.FrontCounterClockwise = TRUE;
+        hr = m_device->CreateRasterizerState(&shadowDesc, m_shadowRasterizerState.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) return false;
+
+        shadowDesc.FrontCounterClockwise = FALSE;
+        hr = m_device->CreateRasterizerState(&shadowDesc, m_shadowRasterizerStateReversed.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return false;
 
         return true;
@@ -1439,8 +1469,14 @@ float4 main(PSInput input) : SV_TARGET
 
         data.shadingMode   = shadingMode;
         data.lightViewProj = XMMatrixTranspose(lightViewProj);
+        data.shadowBias      = m_shadowSettings.bias;
+        data.shadowMapSize   = static_cast<float>(m_shadowSettings.mapSizePx);
+        data.shadowPcfRadius = m_shadowSettings.pcfRadius;
+        data.shadowEnabled   = m_shadowSettings.enabled ? 1 : 0;
 
         m_context->UpdateSubresource(m_cbLighting.Get(), 0, nullptr, &data, 0, 0);
+        // b1은 VS/PS 모두에서 사용합니다. (VS에서 섀도우 좌표 계산할 수 있게)
+        m_context->VSSetConstantBuffers(1, 1, m_cbLighting.GetAddressOf());
         m_context->PSSetConstantBuffers(1, 1, m_cbLighting.GetAddressOf());
     }
 
@@ -1535,7 +1571,6 @@ float4 main(PSInput input) : SV_TARGET
     {
         if (commands.empty())
         {
-            ALICE_LOG_INFO("[ForwardRenderSystem] RenderSkinnedMeshes: commands empty");
             return;
         }
 
@@ -1544,9 +1579,6 @@ float4 main(PSInput input) : SV_TARGET
             ALICE_LOG_ERRORF("[ForwardRenderSystem] RenderSkinnedMeshes: missing shaders/layout");
             return;
         }
-
-        ALICE_LOG_INFO("[ForwardRenderSystem] RenderSkinnedMeshes: commands=%zu",
-                       commands.size());
 
         // 카메라 행렬
         XMMATRIX view = camera.GetViewMatrix();
@@ -1558,17 +1590,30 @@ float4 main(PSInput input) : SV_TARGET
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_context->IASetInputLayout(m_inputLayoutSkinned.Get());
 
-        // FBX 스키닝 메시에서는 큐브용 "반전 컬링" 로직을 사용하지 않고,
-        // 항상 기본 래스터라이저 상태(뒷면 컬링)를 사용합니다.
-        if (m_rasterizerState)
-        {
-            m_context->RSSetState(m_rasterizerState.Get());
-        }
-
         for (const auto& cmd : commands)
         {
             if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0)
                 continue;
+
+            // [FBX 컬링 수정]
+            // 많은 FBX(특히 DCC/임포터 설정)에선 기본 와인딩이 CW(=FrontCounterClockwise = FALSE)로 들어오는 케이스가 있습니다.
+            // 엔진 기본은 CCW(FrontCounterClockwise = TRUE)이므로, 스키닝 메시에서는 기본/반전을 서로 바꿔 적용합니다.
+            // - det < 0 이면 월드 변환에서 와인딩이 한 번 뒤집히므로, 그에 맞춰 RS도 함께 뒤집어 줍니다.
+            {
+                const float det = XMVectorGetX(XMMatrixDeterminant(cmd.world));
+                const bool flipped = (det < 0.0f);
+
+                // skinned mesh base winding: CW front
+                const bool useCWFront = !flipped;
+                if (useCWFront && m_rasterizerStateReversed)
+                {
+                    m_context->RSSetState(m_rasterizerStateReversed.Get()); // FrontCounterClockwise = FALSE
+                }
+                else if (m_rasterizerState)
+                {
+                    m_context->RSSetState(m_rasterizerState.Get()); // FrontCounterClockwise = TRUE
+                }
+            }
 
             // 정점/인덱스 버퍼 설정
             UINT stride = cmd.stride;
@@ -1612,12 +1657,13 @@ float4 main(PSInput input) : SV_TARGET
                     }
                 }
 
-                // 스키닝 메시 렌더링 시에도 IBL 텍스처를 바인딩
+                // 스키닝 메시 렌더링 시에도 IBL/Shadow 텍스처를 바인딩
                 ID3D11ShaderResourceView* srvs[8] = {};
                 srvs[0] = diffuseSrv;
                 srvs[1] = m_flatNormalSRV ? m_flatNormalSRV.Get() : m_normalSRV.Get();
                 srvs[2] = m_specularSRV.Get();
                 srvs[3] = m_skyboxSRV.Get();
+                srvs[4] = m_shadowSRV.Get(); // 섀도우 맵 (t4)
                 srvs[5] = m_iblDiffuseSRV.Get();
                 srvs[6] = m_iblSpecularSRV.Get();
                 srvs[7] = m_iblBrdfLutSRV.Get();
@@ -1654,12 +1700,13 @@ float4 main(PSInput input) : SV_TARGET
                     normalSrv = mesh->normalSRVs[subset.materialIndex].Get();
                 }
 
-                // 서브셋별 렌더링 시에도 IBL 텍스처를 바인딩
+                // 서브셋별 렌더링 시에도 IBL/Shadow 텍스처를 바인딩
                 ID3D11ShaderResourceView* srvs[8] = {};
                 srvs[0] = diffuseSrv;
                 srvs[1] = normalSrv;
                 srvs[2] = m_specularSRV.Get();
                 srvs[3] = m_skyboxSRV.Get();
+                srvs[4] = m_shadowSRV.Get(); // 섀도우 맵 (t4)
                 srvs[5] = m_iblDiffuseSRV.Get();
                 srvs[6] = m_iblSpecularSRV.Get();
                 srvs[7] = m_iblBrdfLutSRV.Get();
@@ -1712,19 +1759,96 @@ float4 main(PSInput input) : SV_TARGET
         }
         lightDir = XMVector3Normalize(lightDir);
 
-        // 간단한 정방향 라이트 뷰/투영 (씬 중심(0,0,0)을 바라보는 정사영)
-        const float lightDist   = 20.0f;
-        const float orthoWidth  = 20.0f;
-        const float orthoHeight = 20.0f;
-        const float nearZ       = 1.0f;
-        const float farZ        = 60.0f;
+        // - Directional + Ortho
+        // - 씬 포커스(대략적인 중심)를 기준으로 near/far 를 동적으로 잡고
+        // - 텍셀 스냅으로 shimmering 을 줄입니다.
+        const auto& transforms = world.GetTransforms();
+        XMFLOAT3 focusF{ 0.0f, 0.0f, 0.0f };
+        XMFLOAT3 minP{  FLT_MAX,  FLT_MAX,  FLT_MAX };
+        XMFLOAT3 maxP{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
+        int focusCount = 0;
+        for (const auto& [id, tr] : transforms)
+        {
+            (void)id;
+            focusF.x += tr.position.x;
+            focusF.y += tr.position.y;
+            focusF.z += tr.position.z;
+            minP.x = (tr.position.x < minP.x) ? tr.position.x : minP.x;
+            minP.y = (tr.position.y < minP.y) ? tr.position.y : minP.y;
+            minP.z = (tr.position.z < minP.z) ? tr.position.z : minP.z;
+            maxP.x = (tr.position.x > maxP.x) ? tr.position.x : maxP.x;
+            maxP.y = (tr.position.y > maxP.y) ? tr.position.y : maxP.y;
+            maxP.z = (tr.position.z > maxP.z) ? tr.position.z : maxP.z;
+            ++focusCount;
+        }
+        if (focusCount > 0)
+        {
+            const float inv = 1.0f / static_cast<float>(focusCount);
+            focusF.x *= inv;
+            focusF.y *= inv;
+            focusF.z *= inv;
+        }
 
-        XMVECTOR lightPos = XMVectorScale(-lightDir, lightDist);
-        XMVECTOR target   = XMVectorZero();
-        XMVECTOR up       = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+        // Ortho radius는 기본값을 유지하되, 현재 씬의 대략적인 크기(Transform 위치 범위)에 맞춰 자동 확장합니다.
+        float r = m_shadowSettings.orthoRadius;
+        if (focusCount > 0)
+        {
+            const float ex = maxP.x - minP.x;
+            const float ey = maxP.y - minP.y;
+            const float ez = maxP.z - minP.z;
+            const float maxExtent = (std::max)((std::max)(ex, ey), ez);
+            r = (std::max)(r, maxExtent * 0.5f + 5.0f);
+        }
+        const float backDist = r;
+        XMVECTOR focus = XMLoadFloat3(&focusF);
+        XMVECTOR fwd = lightDir; // keyDirection 자체를 '광선 방향'으로 사용 (튜토리얼과 동일)
+        XMVECTOR lightPos = XMVectorSubtract(focus, XMVectorScale(fwd, backDist));
+        XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+        if (fabsf(XMVectorGetX(XMVector3Dot(up, fwd))) > 0.99f)
+        {
+            up = XMVectorSet(0, 0, 1, 0);
+        }
 
-        XMMATRIX lightView = XMMatrixLookAtLH(lightPos, target, up);
-        XMMATRIX lightProj = XMMatrixOrthographicLH(orthoWidth, orthoHeight, nearZ, farZ);
+        XMMATRIX lightView = XMMatrixLookToLH(lightPos, fwd, up);
+
+        // focus 주변 AABB(±r)를 light space 로 변환하여 near/far 를 계산합니다.
+        float minZ = 1e9f, maxZ = -1e9f;
+        for (int sx = -1; sx <= 1; sx += 2)
+        {
+            for (int sy = -1; sy <= 1; sy += 2)
+            {
+                for (int sz = -1; sz <= 1; sz += 2)
+                {
+                    XMVECTOR cornerWS = XMVectorSet(
+                        focusF.x + static_cast<float>(sx) * r,
+                        focusF.y + static_cast<float>(sy) * r,
+                        focusF.z + static_cast<float>(sz) * r,
+                        1.0f);
+                    XMVECTOR cornerLS = XMVector3TransformCoord(cornerWS, lightView);
+                    const float z = XMVectorGetZ(cornerLS);
+                    minZ = (z < minZ) ? z : minZ;
+                    maxZ = (z > maxZ) ? z : maxZ;
+                }
+            }
+        }
+        const float zPad = r * 0.05f;
+        float nearZ = (minZ - zPad);
+        if (nearZ < 0.01f) nearZ = 0.01f;
+        float farZ = (maxZ + zPad);
+        if (farZ <= nearZ) farZ = nearZ + 0.01f;
+
+        XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(-r, r, -r, r, nearZ, farZ);
+
+        // 텍셀 스냅(라이트 뷰 공간 XY를 섀도우맵 텍셀 그리드에 정렬)
+        XMVECTOR focusLS = XMVector3TransformCoord(focus, lightView);
+        const float texelWorld = (2.0f * r) / static_cast<float>(m_shadowSettings.mapSizePx);
+        const float fx = XMVectorGetX(focusLS);
+        const float fy = XMVectorGetY(focusLS);
+        const float snapX = floorf(fx / texelWorld) * texelWorld;
+        const float snapY = floorf(fy / texelWorld) * texelWorld;
+        const XMMATRIX snap = XMMatrixTranslation(snapX - fx, snapY - fy, 0.0f);
+        lightView = snap * lightView;
+
         XMMATRIX lightViewProj = lightView * lightProj;
 
         // 섀도우 맵 뷰포트/DSV 설정
@@ -1751,7 +1875,12 @@ float4 main(PSInput input) : SV_TARGET
             m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
             m_context->PSSetShader(nullptr, nullptr, 0); // 깊이만 기록
 
-            const auto& transforms = world.GetTransforms();
+            // Shadow Depth Bias + 컬링 상태 적용
+            if (m_shadowRasterizerState)
+            {
+                m_context->RSSetState(m_shadowRasterizerState.Get());
+            }
+
             for (const auto& [id, transform] : transforms)
             {
                 // 스키닝 메시가 붙은 엔티티는 여기서 큐브 지오메트리로 그리지 않습니다.
@@ -1759,10 +1888,63 @@ float4 main(PSInput input) : SV_TARGET
                     continue;
 
                 XMMATRIX worldM = BuildWorldMatrix(transform);
+
+                // 음수 스케일 처리(섀도우 RS)
+                {
+                    const float det = XMVectorGetX(XMMatrixDeterminant(worldM));
+                    const bool flipped = (det < 0.0f);
+                    if (flipped && m_shadowRasterizerStateReversed)
+                        m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
+                    else if (m_shadowRasterizerState)
+                        m_context->RSSetState(m_shadowRasterizerState.Get());
+                }
+
                 // 머티리얼 색은 섀도우 패스에선 사용되지 않습니다.
-            XMFLOAT4 dummyColor(1.0f, 1.0f, 1.0f, 1.0f);
-            UpdatePerObjectCB(worldM, lightView, lightProj, dummyColor, 1.0f, 0.0f, false, false);
+                XMFLOAT4 dummyColor(1.0f, 1.0f, 1.0f, 1.0f);
+                UpdatePerObjectCB(worldM, lightView, lightProj, dummyColor, 1.0f, 0.0f, false, false);
                 m_context->DrawIndexed(m_indexCount, 0, 0);
+            }
+
+            // 스키닝 메시도 섀도우를 캐스팅해야 합니다.
+            if (!skinnedCommands.empty() && m_skinnedVertexShader && m_inputLayoutSkinned)
+            {
+                m_context->IASetInputLayout(m_inputLayoutSkinned.Get());
+                m_context->VSSetShader(m_skinnedVertexShader.Get(), nullptr, 0);
+                m_context->PSSetShader(nullptr, nullptr, 0);
+
+                for (const auto& cmd : skinnedCommands)
+                {
+                    if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0)
+                        continue;
+
+                    // [FBX 컬링 수정 - Shadow]
+                    // 메인 패스와 동일하게 스키닝 메시 기본 와인딩(CW)을 기준으로 섀도우 RS도 선택합니다.
+                    {
+                        const float det = XMVectorGetX(XMMatrixDeterminant(cmd.world));
+                        const bool flipped = (det < 0.0f);
+
+                        const bool useCWFront = !flipped;
+                        if (useCWFront && m_shadowRasterizerStateReversed)
+                            m_context->RSSetState(m_shadowRasterizerStateReversed.Get()); // CW front + bias
+                        else if (m_shadowRasterizerState)
+                            m_context->RSSetState(m_shadowRasterizerState.Get()); // CCW front + bias
+                    }
+
+                    UINT stride = cmd.stride;
+                    UINT offset = 0;
+                    ID3D11Buffer* vb = cmd.vertexBuffer;
+                    m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+                    m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                    UpdateBonesCB(cmd.bones, cmd.boneCount);
+                    const XMFLOAT4 dummyColor(1.0f, 1.0f, 1.0f, 1.0f);
+                    UpdatePerObjectCB(cmd.world, lightView, lightProj, dummyColor, 1.0f, 0.0f, false, false);
+
+                    m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                }
+
+                // 입력 레이아웃 원복(메인 패스에서 큐브를 그리므로)
+                m_context->IASetInputLayout(m_inputLayout.Get());
             }
         }
 
@@ -1813,31 +1995,29 @@ float4 main(PSInput input) : SV_TARGET
         m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
         m_context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
 
-        // 섀도우 맵/샘플러 바인딩 (있는 경우에만)
-        if (m_shadowSRV && m_shadowSampler)
-        {
-            ID3D11ShaderResourceView* shadowSrv = m_shadowSRV.Get();
-            m_context->PSSetShaderResources(4, 1, &shadowSrv);
-            ID3D11SamplerState* shadowSampler = m_shadowSampler.Get();
-            m_context->PSSetSamplers(1, 1, &shadowSampler);
-        }
-
         // 텍스처 SRV 바인딩 (t0~t7)
-        // 주의: 스카이박스(t3)는 스카이박스 렌더링 후에도 유지되어야 하므로 여기서도 바인딩합니다.
+        // - 주의: t4(섀도우 맵)는 별도로 바인딩해두고 PSSetShaderResources(0, 8, ...)를 호출하면
+        //   srvs[4]가 nullptr인 순간 실수로 언바인드됩니다.
+        // - 따라서 한 번에 같이 바인딩합니다.
         ID3D11ShaderResourceView* srvs[8] = {};
         srvs[0] = m_diffuseSRV.Get();
         srvs[1] = m_normalSRV.Get();
         srvs[2] = m_specularSRV.Get();
         srvs[3] = m_skyboxSRV.Get(); // 스카이박스 (t3) - 스카이박스 렌더링 후에도 유지
-        // t4는 섀도우 맵 (이미 바인딩됨)
+        srvs[4] = m_shadowSRV.Get(); // 섀도우 맵 (t4)
         srvs[5] = m_iblDiffuseSRV.Get();  // IBL Diffuse (t5)
         srvs[6] = m_iblSpecularSRV.Get(); // IBL Specular (t6)
         srvs[7] = m_iblBrdfLutSRV.Get();  // IBL BRDF LUT (t7)
         m_context->PSSetShaderResources(0, 8, srvs);
-        ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
-        m_context->PSSetSamplers(0, 1, samplers);
+        // 샘플러 바인딩: s0(일반), s1(섀도우)
+        {
+            ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
+            m_context->PSSetSamplers(0, 1, samplers);
 
-        const auto& transforms = world.GetTransforms();
+            ID3D11SamplerState* shadowSampler = m_shadowSampler.Get();
+            m_context->PSSetSamplers(1, 1, &shadowSampler);
+        }
+
         for (const auto& [id, transform] : transforms)
         {
             // 스키닝 메시가 붙은 엔티티는 여기서 큐브 지오메트리로 그리지 않습니다.
@@ -1864,13 +2044,12 @@ float4 main(PSInput input) : SV_TARGET
             }
 
             // 월드 행렬 determinant 가 음수면(축이 한 번 이상 반전됨) 와인딩이 뒤집힌다.
-            // 이 경우 전/후면 컬링 기준을 반대로 적용해서 뒷면 컬링이 항상 올바르게 되도록 한다.
-            // (현재 큐브의 인덱스/와인딩 정의에 맞추기 위해, determinant >= 0 일 때 "반전 컬링"을 사용한다)
+            // 이 경우 FrontCounterClockwise 를 반대로 한 RS 를 적용해 뒷면 컬링이 안정적으로 동작하게 합니다.
             {
                 const float det = XMVectorGetX(XMMatrixDeterminant(worldM));
+                const bool flipped = (det < 0.0f);
 
-                // det >= 0 : 기본 와인딩, 하지만 현재 메쉬 정의상 이때 반전 컬링 상태를 쓰는 것이 맞다.
-                if (det >= 0.0f && m_rasterizerStateReversed)
+                if (flipped && m_rasterizerStateReversed)
                 {
                     m_context->RSSetState(m_rasterizerStateReversed.Get());
                 }
