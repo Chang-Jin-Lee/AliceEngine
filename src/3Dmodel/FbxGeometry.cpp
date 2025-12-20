@@ -42,126 +42,206 @@ void FbxGeometryBuilder::Clear()
 	m_->owningNode.clear();
 }
 
+// bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
+// {
+// 	if (!device || !scene || !scene->HasMeshes()) return false;
+// 	Clear();
+
+// 	// 부모 자식 위상 정렬로 모든 메쉬를 나열하고, 레벨 단위 병렬 처리
+// 	struct MeshEntry
+// 	{
+// 		const aiNode* node;
+// 		const aiMesh* mesh;
+// 		uint32_t materialIndex;
+// 		uint32_t vertexCount;
+// 		uint32_t indexCount; // 삼각형만 집계(3의 배수)
+// 		size_t vertexOffset;
+// 		size_t indexOffset;
+// 		size_t entryIndex;
+// 	};
+
+// 	std::vector<MeshEntry> entries;
+// 	std::vector<std::pair<size_t,size_t>> levelRanges; // {start, count}
+// 	std::queue<const aiNode*> q;
+// 	q.push(scene->mRootNode);
+// 	size_t totalVertices = 0;
+// 	size_t totalIndices = 0;
+// 	while (!q.empty())
+// 	{
+// 		size_t levelSize = q.size();
+// 		size_t start = entries.size();
+// 		for (size_t li = 0; li < levelSize; ++li)
+// 		{
+// 			const aiNode* node = q.front(); q.pop();
+// 			for (unsigned mi = 0; mi < node->mNumMeshes; ++mi)
+// 			{
+// 				const aiMesh* mesh = scene->mMeshes[node->mMeshes[mi]];
+// 				uint32_t vtx = mesh->mNumVertices;
+// 				uint32_t idx = mesh->mNumFaces * 3; // 단순 곱셈으로 진행
+
+// 				size_t entryIndex = entries.size();
+// 				entries.push_back({ node, mesh, mesh->mMaterialIndex, vtx, idx, 0, 0, entryIndex });
+// 				totalVertices += vtx;
+// 				totalIndices += idx;
+// 			}
+// 			for (unsigned ci = 0; ci < node->mNumChildren; ++ci) q.push(node->mChildren[ci]);
+// 		}
+// 		size_t count = entries.size() - start;
+// 		levelRanges.push_back({ start, count });
+// 	}
+
+// 	// 오프셋 확정(프리픽스 합)
+// 	size_t vOff = 0, iOff = 0;
+// 	for (size_t i = 0; i < entries.size(); ++i)
+// 	{
+// 		entries[i].vertexOffset = vOff;
+// 		entries[i].indexOffset = iOff;
+// 		entries[i].entryIndex = i;
+// 		vOff += entries[i].vertexCount;
+// 		iOff += entries[i].indexCount;
+// 	}
+
+// 	// 공유 버퍼 사전 할당 후, 각 엔트리가 자기 구간을 병렬로 채움
+// 	m_->bindVertices.clear();
+// 	m_->indices.clear();
+// 	m_->owningNode.clear();
+// 	m_->subsets.clear();
+// 	m_->bindVertices.resize(totalVertices);
+// 	m_->owningNode.resize(totalVertices);
+// 	m_->indices.resize(totalIndices);
+// 	m_->subsets.resize(entries.size());
+
+// 	auto processEntry = [&](const MeshEntry& e)
+// 	{
+// 		const aiMesh* mesh = e.mesh;
+// 		size_t vBase = e.vertexOffset;
+// 		for (unsigned i = 0; i < mesh->mNumVertices; ++i)
+// 		{
+// 			aiVector3D p = mesh->mVertices[i];
+// 			aiVector3D n = mesh->HasNormals() ? mesh->mNormals[i] : aiVector3D(0,1,0);
+// 			aiVector3D uv = mesh->HasTextureCoords(0) ? mesh->mTextureCoords[0][i] : aiVector3D(0,0,0);
+// 			aiVector3D tg = mesh->HasTangentsAndBitangents() ? mesh->mTangents[i]   : aiVector3D(1,0,0);
+// 			aiVector3D bt = mesh->HasTangentsAndBitangents() ? mesh->mBitangents[i] : aiVector3D(0,1,0);
+// 			VertexSkinnedTBN v{};
+// 			v.pos = {p.x,p.y,p.z}; v.n = {n.x,n.y,n.z}; v.t = {tg.x,tg.y,tg.z}; v.b = {bt.x,bt.y,bt.z};
+// 			v.color = {1,1,1,1}; v.uv = {uv.x,uv.y};
+// 			v.boneIdx[0]=v.boneIdx[1]=v.boneIdx[2]=v.boneIdx[3]=0; v.boneWeight = {0,0,0,0};
+// 			m_->bindVertices[vBase + i] = v;
+// 			m_->owningNode[vBase + i] = e.node->mName.C_Str();
+// 		}
+// 		size_t iBase = e.indexOffset;
+// 		for (unsigned f = 0; f < mesh->mNumFaces; ++f)
+// 		{
+// 			const aiFace& face = mesh->mFaces[f];
+// 			// Face는 항상 3개의 인덱스를 가집니다. 인덱스 버퍼에 바로 기록
+// 			m_->indices[iBase + (f * 3) + 0] = (uint32_t)(vBase + face.mIndices[0]);
+// 			m_->indices[iBase + (f * 3) + 1] = (uint32_t)(vBase + face.mIndices[1]);
+// 			m_->indices[iBase + (f * 3) + 2] = (uint32_t)(vBase + face.mIndices[2]);
+// 		}
+// 		m_->subsets[e.entryIndex] = { (uint32_t)e.indexOffset, (uint32_t)e.indexCount, e.materialIndex };
+// 	};
+
+// 	for (const auto& range : levelRanges)
+// 	{
+// #if FBX_HAS_EXECUTION
+// 		std::for_each(std::execution::par, entries.begin(), entries.end(), processEntry);
+// #else
+// 		std::for_each(entries.begin(), entries.end(), processEntry);
+// #endif
+// 	}
+
+// 	if (m_->bindVertices.empty() || m_->indices.empty()) return false;
+
+// 	D3D11_BUFFER_DESC vb{}; vb.BindFlags = D3D11_BIND_VERTEX_BUFFER; vb.Usage = D3D11_USAGE_DEFAULT;
+// 	vb.ByteWidth = (UINT)(m_->bindVertices.size() * sizeof(VertexSkinnedTBN));
+// 	D3D11_SUBRESOURCE_DATA vbd{}; vbd.pSysMem = m_->bindVertices.data();
+// 	HR_T(device->CreateBuffer(&vb, &vbd, &m_->vb));
+
+// 	m_->indexCount = (int)m_->indices.size();
+// 	D3D11_BUFFER_DESC ib{}; ib.BindFlags = D3D11_BIND_INDEX_BUFFER; ib.Usage = D3D11_USAGE_DEFAULT; ib.ByteWidth = (UINT)(m_->indices.size() * sizeof(uint32_t));
+// 	D3D11_SUBRESOURCE_DATA ibd{}; ibd.pSysMem = m_->indices.data();
+// 	HR_T(device->CreateBuffer(&ib, &ibd, &m_->ib));
+// 	return true;
+// }
+// 멀티스레드 써서 더 빠르게 한 코드. 오류나면 위 코드로 변경하셈
 bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
 {
-	if (!device || !scene || !scene->HasMeshes()) return false;
-	Clear();
+    if (!device || !scene || !scene->HasMeshes()) return false;
+    Clear();
 
-	// 부모→자식 위상 정렬로 모든 메쉬를 나열하고, 레벨 단위 병렬 처리
-	struct MeshEntry
-	{
-		const aiNode* node;
-		const aiMesh* mesh;
-		uint32_t materialIndex;
-		uint32_t vertexCount;
-		uint32_t indexCount; // 삼각형만 집계(3의 배수)
-		size_t vertexOffset;
-		size_t indexOffset;
-		size_t entryIndex;
-	};
+    struct Entry { const aiNode* n; const aiMesh* m; size_t vOff, iOff, id; };
+    std::vector<Entry> tasks;
+    // scene 그래프가 클 경우를 대비해 적당량 예약 (선택사항)
+    tasks.reserve(scene->mNumMeshes * 2); 
 
-	std::vector<MeshEntry> entries;
-	std::vector<std::pair<size_t,size_t>> levelRanges; // {start, count}
-	std::queue<const aiNode*> q;
-	q.push(scene->mRootNode);
-	size_t totalVertices = 0;
-	size_t totalIndices = 0;
-	while (!q.empty())
-	{
-		size_t levelSize = q.size();
-		size_t start = entries.size();
-		for (size_t li = 0; li < levelSize; ++li)
-		{
-			const aiNode* node = q.front(); q.pop();
-			for (unsigned mi = 0; mi < node->mNumMeshes; ++mi)
-			{
-				const aiMesh* mesh = scene->mMeshes[node->mMeshes[mi]];
-				uint32_t vtx = mesh->mNumVertices;
-				uint32_t idx = mesh->mNumFaces * 3; // 단순 곱셈으로 진행
+    size_t totalV = 0, totalI = 0;
 
-				size_t entryIndex = entries.size();
-				entries.push_back({ node, mesh, mesh->mMaterialIndex, vtx, idx, 0, 0, entryIndex });
-				totalVertices += vtx;
-				totalIndices += idx;
-			}
-			for (unsigned ci = 0; ci < node->mNumChildren; ++ci) q.push(node->mChildren[ci]);
-		}
-		size_t count = entries.size() - start;
-		levelRanges.push_back({ start, count });
-	}
+    // [1] 트리 순회 (Flattening) & 오프셋 계산: 재귀 람다로 코드 압축
+    auto Traverse = [&](auto&& self, const aiNode* node) -> void {
+        for (unsigned i = 0; i < node->mNumMeshes; ++i) {
+            const aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+            tasks.push_back({ node, mesh, totalV, totalI, tasks.size() });
+            totalV += mesh->mNumVertices;
+            totalI += mesh->mNumFaces * 3;
+        }
+        for (unsigned i = 0; i < node->mNumChildren; ++i) self(self, node->mChildren[i]);
+    };
+    Traverse(Traverse, scene->mRootNode);
 
-	// 오프셋 확정(프리픽스 합)
-	size_t vOff = 0, iOff = 0;
-	for (size_t i = 0; i < entries.size(); ++i)
-	{
-		entries[i].vertexOffset = vOff;
-		entries[i].indexOffset = iOff;
-		entries[i].entryIndex = i;
-		vOff += entries[i].vertexCount;
-		iOff += entries[i].indexCount;
-	}
+    if (tasks.empty()) return false;
 
-	// 공유 버퍼 사전 할당 후, 각 엔트리가 자기 구간을 병렬로 채움
-	m_->bindVertices.clear();
-	m_->indices.clear();
-	m_->owningNode.clear();
-	m_->subsets.clear();
-	m_->bindVertices.resize(totalVertices);
-	m_->owningNode.resize(totalVertices);
-	m_->indices.resize(totalIndices);
-	m_->subsets.resize(entries.size());
+    // [2] 버퍼 일괄 할당
+    m_->bindVertices.resize(totalV);
+    m_->owningNode.resize(totalV);
+    m_->indices.resize(totalI);
+    m_->subsets.resize(tasks.size());
 
-	auto processEntry = [&](const MeshEntry& e)
-	{
-		const aiMesh* mesh = e.mesh;
-		size_t vBase = e.vertexOffset;
-		for (unsigned i = 0; i < mesh->mNumVertices; ++i)
-		{
-			aiVector3D p = mesh->mVertices[i];
-			aiVector3D n = mesh->HasNormals() ? mesh->mNormals[i] : aiVector3D(0,1,0);
-			aiVector3D uv = mesh->HasTextureCoords(0) ? mesh->mTextureCoords[0][i] : aiVector3D(0,0,0);
-			aiVector3D tg = mesh->HasTangentsAndBitangents() ? mesh->mTangents[i]   : aiVector3D(1,0,0);
-			aiVector3D bt = mesh->HasTangentsAndBitangents() ? mesh->mBitangents[i] : aiVector3D(0,1,0);
-			VertexSkinnedTBN v{};
-			v.pos = {p.x,p.y,p.z}; v.n = {n.x,n.y,n.z}; v.t = {tg.x,tg.y,tg.z}; v.b = {bt.x,bt.y,bt.z};
-			v.color = {1,1,1,1}; v.uv = {uv.x,uv.y};
-			v.boneIdx[0]=v.boneIdx[1]=v.boneIdx[2]=v.boneIdx[3]=0; v.boneWeight = {0,0,0,0};
-			m_->bindVertices[vBase + i] = v;
-			m_->owningNode[vBase + i] = e.node->mName.C_Str();
-		}
-		size_t iBase = e.indexOffset;
-		for (unsigned f = 0; f < mesh->mNumFaces; ++f)
-		{
-			const aiFace& face = mesh->mFaces[f];
-			// Face는 항상 3개의 인덱스를 가집니다. 인덱스 버퍼에 바로 기록
-			m_->indices[iBase + (f * 3) + 0] = (uint32_t)(vBase + face.mIndices[0]);
-			m_->indices[iBase + (f * 3) + 1] = (uint32_t)(vBase + face.mIndices[1]);
-			m_->indices[iBase + (f * 3) + 2] = (uint32_t)(vBase + face.mIndices[2]);
-		}
-		m_->subsets[e.entryIndex] = { (uint32_t)e.indexOffset, (uint32_t)e.indexCount, e.materialIndex };
-	};
+    // [3] 병렬 처리 (SIMD랑 Multi-threading 써서)
+    std::for_each(std::execution::par_unseq, tasks.begin(), tasks.end(), [&](const Entry& e) {
+        const aiMesh* mesh = e.m;
+        
+        // Subset 정보 등록
+        m_->subsets[e.id] = { (uint32_t)e.iOff, (uint32_t)(mesh->mNumFaces * 3), mesh->mMaterialIndex };
 
-	for (const auto& range : levelRanges)
-	{
-#if FBX_HAS_EXECUTION
-		std::for_each(std::execution::par, entries.begin(), entries.end(), processEntry);
-#else
-		std::for_each(entries.begin(), entries.end(), processEntry);
-#endif
-	}
+        // Vertex 복사
+        for (unsigned i = 0; i < mesh->mNumVertices; ++i) {
+            auto& d = m_->bindVertices[e.vOff + i];
+            const auto& p = mesh->mVertices[i];
+            const auto& n = mesh->HasNormals() ? mesh->mNormals[i] : aiVector3D(0,1,0);
+            const auto& t = mesh->HasTangentsAndBitangents() ? mesh->mTangents[i] : aiVector3D(1,0,0);
+            const auto& b = mesh->HasTangentsAndBitangents() ? mesh->mBitangents[i] : aiVector3D(0,1,0);
+            const auto& uv = mesh->HasTextureCoords(0) ? mesh->mTextureCoords[0][i] : aiVector3D(0,0,0);
 
-	if (m_->bindVertices.empty() || m_->indices.empty()) return false;
+            d.pos = {p.x, p.y, p.z}; d.n = {n.x, n.y, n.z}; d.t = {t.x, t.y, t.z}; d.b = {b.x, b.y, b.z};
+            d.uv = {uv.x, uv.y}; d.color = {1,1,1,1};
+            d.boneWeight = {0,0,0,0}; // memset(d.boneIdx, 0, sizeof(d.boneIdx)); 로 대체 가능
+            
+            // 주의: Vertex마다 string 복사는 매우 무거운 작업이나 요청에 의해 유지
+            m_->owningNode[e.vOff + i] = e.n->mName.C_Str();
+        }
 
-	D3D11_BUFFER_DESC vb{}; vb.BindFlags = D3D11_BIND_VERTEX_BUFFER; vb.Usage = D3D11_USAGE_DEFAULT;
-	vb.ByteWidth = (UINT)(m_->bindVertices.size() * sizeof(VertexSkinnedTBN));
-	D3D11_SUBRESOURCE_DATA vbd{}; vbd.pSysMem = m_->bindVertices.data();
-	HR_T(device->CreateBuffer(&vb, &vbd, &m_->vb));
+        // Index 복사
+        for (unsigned f = 0; f < mesh->mNumFaces; ++f) {
+            const auto& face = mesh->mFaces[f];
+            uint32_t offset = (uint32_t)e.vOff;
+            m_->indices[e.iOff + f * 3 + 0] = offset + face.mIndices[0];
+            m_->indices[e.iOff + f * 3 + 1] = offset + face.mIndices[1];
+            m_->indices[e.iOff + f * 3 + 2] = offset + face.mIndices[2];
+        }
+    });
 
-	m_->indexCount = (int)m_->indices.size();
-	D3D11_BUFFER_DESC ib{}; ib.BindFlags = D3D11_BIND_INDEX_BUFFER; ib.Usage = D3D11_USAGE_DEFAULT; ib.ByteWidth = (UINT)(m_->indices.size() * sizeof(uint32_t));
-	D3D11_SUBRESOURCE_DATA ibd{}; ibd.pSysMem = m_->indices.data();
-	HR_T(device->CreateBuffer(&ib, &ibd, &m_->ib));
-	return true;
+    // [4] GPU 버퍼 생성
+    auto CreateBuf = [&](const void* data, UINT size, UINT bind, ID3D11Buffer** out) {
+        D3D11_BUFFER_DESC bd{ size, D3D11_USAGE_DEFAULT, bind, 0, 0, 0 };
+        D3D11_SUBRESOURCE_DATA sd{ data, 0, 0 };
+        return device->CreateBuffer(&bd, &sd, out);
+    };
+
+    m_->indexCount = (int)m_->indices.size();
+    if (FAILED(CreateBuf(m_->bindVertices.data(), (UINT)(totalV * sizeof(VertexSkinnedTBN)), D3D11_BIND_VERTEX_BUFFER, &m_->vb))) return false;
+    if (FAILED(CreateBuf(m_->indices.data(), (UINT)(totalI * sizeof(uint32_t)), D3D11_BIND_INDEX_BUFFER, &m_->ib))) return false;
+
+    return true;
 }
 
 ID3D11Buffer* FbxGeometryBuilder::GetVB() const { return m_->vb; }
