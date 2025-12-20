@@ -26,8 +26,10 @@ set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-# 정적 라이브러리(.lib)로 빌드하여 DLL 복사 과정 생략
-set(BUILD_STATIC ON CACHE BOOL "" FORCE)
+# RTTR은 shared로 빌드해야 Launch.exe, AliceScripts.dll 사이에서
+# 등록된 프로퍼티가 같은 registry로 합쳐집니다.
+set(BUILD_STATIC OFF CACHE BOOL "" FORCE)
+set(BUILD_RTTR_DYNAMIC ON CACHE BOOL "" FORCE)
 
 # 런타임 라이브러리 설정 (vcpkg 및 엔진과 맞추기 위해 Static Runtime 끔 -> MD/MDd 사용)
 set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
@@ -84,6 +86,7 @@ set(ENGINE_HEADERS
 
     # 코어
     ${ALICE_SRC_DIR}/Core/World.h
+    ${ALICE_SRC_DIR}/Core/GameObject.h
     ${ALICE_SRC_DIR}/Core/Delegate.h
     ${ALICE_SRC_DIR}/Core/Script.h
     ${ALICE_SRC_DIR}/Core/ScriptAPI.h
@@ -140,7 +143,7 @@ add_library(Engine STATIC
 )
 
 # [설정] Engine에 RTTR 연결 (PUBLIC: 엔진을 쓰는 프로젝트도 RTTR 사용 가능)
-target_link_libraries(Engine PUBLIC RTTR::Core_Lib)
+target_link_libraries(Engine PUBLIC RTTR::Core)
 
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
@@ -359,6 +362,10 @@ endforeach()
 # [변경] Launch와 AlicePlayer 타겟 모두에 DLL 복사 수행
 foreach(target Launch AlicePlayer)
     add_custom_command(TARGET ${target} POST_BUILD
+        # RTTR shared 스크립트 DLL과 registry 공유
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:rttr_core>" "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:rttr_core>"
+
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${THIRDPARTY_3DMODEL_DIR}/zlib1.dll"       "$<TARGET_FILE_DIR:${target}>/zlib1.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
