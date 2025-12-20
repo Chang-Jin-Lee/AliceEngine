@@ -1,0 +1,133 @@
+{
+    "entities": [
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.13899612426757813,
+                    "y": 0.13899612426757813,
+                    "z": 0.13899612426757813
+                },
+                "metalness": 0.0,
+                "roughness": 1.0
+            },
+            "Transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": -3.166192054748535,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 20.978595733642578,
+                    "y": 1.0,
+                    "z": 18.419097900390625
+                }
+            },
+            "id": 1
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Script": {
+                "enabled": true,
+                "name": "SceneSwitchExample"
+            },
+            "Transform": {
+                "position": {
+                    "x": -3.0585641860961914,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 2
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 1.0,
+                "roughness": 0.0
+            },
+            "Transform": {
+                "position": {
+                    "x": 3.2148566246032715,
+                    "y": 0.0,
+                    "z": 1.8878896236419678
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 3
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Transform": {
+                "position": {
+                    "x": 1.9052592515945435,
+                    "y": 0.0,
+                    "z": -2.9928627014160156
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 4
+        }
+    ],
+    "version": 1
+}
