@@ -2,6 +2,8 @@
 
 #include <fstream>
 
+#include "json/json.hpp"
+
 namespace Alice
 {
     bool LoadFbxInstanceAsset(const std::filesystem::path& path,
@@ -13,25 +15,57 @@ namespace Alice
         if (!ifs.is_open())
             return false;
 
-        std::string line;
-        while (std::getline(ifs, line))
+        nlohmann::json j;
+        try
         {
-            if (line.rfind("source_fbx=", 0) == 0)
+            ifs >> j;
+        }
+        catch (...)
+        {
+            return false;
+        }
+
+        out.sourceFbx = j.value("source_fbx", std::string{});
+        out.meshAssetPath = j.value("mesh", std::string{});
+        out.materialAssetPaths.clear();
+
+        auto it = j.find("materials");
+        if (it != j.end() && it->is_array())
+        {
+            for (const auto& v : *it)
             {
-                out.sourceFbx = line.substr(std::string("source_fbx=").size());
-            }
-            else if (line.rfind("mesh=", 0) == 0)
-            {
-                out.meshAssetPath = line.substr(std::string("mesh=").size());
-            }
-            else if (line.rfind("mat=", 0) == 0)
-            {
-                out.materialAssetPaths.push_back(
-                    line.substr(std::string("mat=").size()));
+                if (v.is_string())
+                    out.materialAssetPaths.push_back(v.get<std::string>());
             }
         }
 
-        return !out.meshAssetPath.empty();
+        if (out.meshAssetPath.empty())
+            return false;
+
+        return true;
+    }
+
+    bool SaveFbxInstanceAsset(const std::filesystem::path& path,
+                              const FbxInstanceAsset& asset)
+    {
+        auto parent = path.parent_path();
+        if (!parent.empty() && !std::filesystem::exists(parent))
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(parent, ec);
+        }
+
+        std::ofstream ofs(path);
+        if (!ofs.is_open())
+            return false;
+
+        nlohmann::json j;
+        j["source_fbx"] = asset.sourceFbx;
+        j["mesh"] = asset.meshAssetPath;
+        j["materials"] = asset.materialAssetPaths;
+
+        ofs << j.dump(4);
+        return true;
     }
 }
 
