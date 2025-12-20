@@ -117,125 +117,68 @@ namespace Alice
 		{
 			namespace fs = std::filesystem;
 
-			fs::path cfgPath = exeDir / "BuildSettings.txt";
-			if (!fs::exists(cfgPath))
-			{
-				// 에디터에서 기본으로 저장하는 위치 (프로젝트 루트/Build) 도 한 번 더 시도
-				fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Release → 프로젝트 루트
-				cfgPath = projectRoot / "Build/BuildSettings.txt";
-				if (!fs::exists(cfgPath))
-					return false;
-			}
+			// 경로 설정 (상수 없이 바로 대입)
+			fs::path cfg = exeDir / "BuildSettings.txt";
+			if (!fs::exists(cfg)) // 빌드 경로 없으면 프로젝트 루트 확인
+				cfg = exeDir.parent_path().parent_path().parent_path() / "Build/BuildSettings.txt";
 
-			std::ifstream ifs(cfgPath);
-			if (!ifs.is_open())
-				return false;
+			std::ifstream ifs(cfg);
+			if (!ifs.is_open()) return false;
 
-			auto trim = [](std::string& s)
-				{
-					const char* ws = " \t\r\n";
-					const auto  b = s.find_first_not_of(ws);
-					const auto  e = s.find_last_not_of(ws);
-					if (b == std::string::npos)
-					{
-						s.clear();
-						return;
-					}
-					s = s.substr(b, e - b + 1);
-				};
-
-			bool inScenes = false;
+			std::string line, target;
 			std::vector<std::string> scenes;
-			std::string defaultScene;
-			std::string line;
+			bool inScenes = false;
+
 			while (std::getline(ifs, line))
 			{
-				trim(line);
-				if (line.empty() || line[0] == '#')
-					continue;
+				// 인라인 Trim & Empty 체크
+				auto s = line.find_first_not_of(" \t\r\n");
+				if (s == std::string::npos) continue; // 공백 라인 스킵
+				line = line.substr(s, line.find_last_not_of(" \t\r\n") - s + 1);
 
-				// default: 행은 어디에 있어도 처리
-				if (line.rfind("default:", 0) == 0)
+				if (line.starts_with('#')) continue;
+
+				if (line.starts_with("default:"))
 				{
-					std::string path = line.substr(std::strlen("default:"));
-					trim(path);
-					if (!path.empty())
-					{
-						defaultScene = path;
-					}
-					continue;
+					target = line.substr(8);
+					// 값 부분만 다시 Trim
+					if (auto v = target.find_first_not_of(" \t\r\n"); v != std::string::npos)
+						target = target.substr(v);
 				}
-
-				if (!inScenes)
+				else if (line.starts_with("scenes:"))
 				{
-					if (line.rfind("scenes:", 0) == 0)
-					{
-						inScenes = true;
-					}
-					continue;
+					inScenes = true;
 				}
-
-				// "- path" 형식의 씬 목록
-				if (!line.empty() && line[0] == '-')
+				else if (inScenes && line.starts_with('-'))
 				{
 					std::string path = line.substr(1);
-					trim(path);
-					if (!path.empty())
-					{
-						scenes.push_back(path);
-					}
-					continue;
+					if (auto v = path.find_first_not_of(" \t\r\n"); v != std::string::npos)
+						scenes.push_back(path.substr(v));
 				}
 			}
 
-			if (defaultScene.empty())
+			// 씬 결정 및 경로 보정
+			if (target.empty() && !scenes.empty()) target = scenes[0];
+			if (target.empty()) return false;
+
+			fs::path finalPath = target;
+			if (!finalPath.is_absolute())
 			{
-				if (!scenes.empty())
-					defaultScene = scenes.front();
+				// Exe 기준 -> 실패시 루트 기준 (간결한 삼항 연산자 대체 패턴)
+				if (fs::exists(exeDir / finalPath)) finalPath = exeDir / finalPath;
+				else finalPath = exeDir.parent_path().parent_path().parent_path() / finalPath;
 			}
 
-			if (defaultScene.empty())
+			ALICE_LOG_INFO("Loading Startup Scene: %s", finalPath.string().c_str());
+
+			// FAILED 검사 후 true 리턴
+			if (!SceneFile::Load(world, finalPath))
+			{
+				ALICE_LOG_ERRORF("Scene Load Failed: %s", finalPath.string().c_str());
 				return false;
-
-			const std::string& scenePathStr = defaultScene;
-			fs::path scenePath = scenePathStr;
-
-			// 상대 경로는 exeDir 기준으로 해석
-			if (!scenePath.is_absolute())
-			{
-				// 1) exeDir 기준으로 시도
-				fs::path candidate = exeDir / scenePath;
-				if (fs::exists(candidate))
-				{
-					scenePath = candidate;
-				}
-				else
-				{
-					// 2) exeDir 상위(프로젝트 루트) 기준으로도 시도
-					fs::path projectRoot = exeDir.parent_path().parent_path().parent_path();
-					candidate = projectRoot / scenePath;
-					if (fs::exists(candidate))
-					{
-						scenePath = candidate;
-					}
-					else
-					{
-						// 그래도 없으면 exeDir 기준 상대 경로로 둠
-						scenePath = exeDir / scenePath;
-					}
-				}
 			}
 
-			ALICE_LOG_INFO("LoadStartupSceneFromBuildSettings: loading scene \"%s\"",
-				scenePath.string().c_str());
-
-			bool ok = SceneFile::Load(world, scenePath);
-			if (!ok)
-			{
-				ALICE_LOG_ERRORF("LoadStartupSceneFromBuildSettings: SceneFile::Load failed for \"%s\"",
-					scenePath.string().c_str());
-			}
-			return ok;
+			return true;
 		}
 	}
 
@@ -380,7 +323,7 @@ namespace Alice
 		// ScriptSystem 에 서비스 연결 (입력/씬/리소스/스키닝 레지스트리)
 		pImpl->m_scriptSystem.SetServices(&pImpl->m_inputSystem, pImpl->m_sceneManager.get(), &pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
-		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::UpdateIblForScene);
+		//pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::UpdateIblForScene);
 		pImpl->m_scriptSystem.onTrimVideoMemory.BindObject(this, &Engine::TrimVideoMemory);
 
 		const auto& transforms = pImpl->m_world.GetTransforms();
