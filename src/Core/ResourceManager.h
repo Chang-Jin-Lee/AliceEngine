@@ -43,6 +43,7 @@ namespace Alice
         /// 루트 디렉터리들(디버그/로그/툴에서 사용)
         const std::filesystem::path& RootDir()   const { return m_rootDir; }
         std::filesystem::path        AssetsDir() const { return m_rootDir / "Assets"; }
+        std::filesystem::path        MetasDir() const { return m_rootDir / "Metas"; }
         std::filesystem::path        ResourceDir() const { return m_rootDir / "Resource"; }
         std::filesystem::path        CookedDir() const { return m_rootDir / "Cooked"; }
 
@@ -111,6 +112,9 @@ namespace Alice
 
         std::shared_ptr<const std::vector<std::uint8_t>> LoadResourceChunksByRel(std::string_view resourceRel) const;
         std::filesystem::path Chunk0PathForResourceRel(std::string_view resourceRel) const;
+
+        std::shared_ptr<const std::vector<std::uint8_t>> LoadMetasChunksByRel(std::string_view assetsRel) const;
+        std::filesystem::path Chunk0PathForMetasRel(std::string_view assetsRel) const;
 
         // 필요하면 나중에 키를 외부에서 주입받을 수 있게 바꿀 수 있습니다.
         const std::string m_key = "AliceRendererSimpleKey";

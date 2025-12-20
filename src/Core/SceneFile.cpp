@@ -1,6 +1,8 @@
 #include "Core/SceneFile.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/JsonRttr.h"
+#include "Core/ResourceManager.h"
+#include "Core/Logger.h"
 
 #include <fstream>
 #include <string>
@@ -136,6 +138,46 @@ namespace Alice
 
             return true;
         }
+
+        static bool LoadFromRoot(World& world, const JsonRttr::json& root)
+        {
+            auto itEntities = root.find("entities");
+            if (itEntities == root.end() || !itEntities->is_array())
+                return false;
+
+            world.Clear();
+
+            for (const auto& e : *itEntities)
+                if (!ApplyEntity(world, e))
+                    return false;
+
+            return true;
+        }
+
+        static bool LoadFromBytes(World& world,
+                                  const std::uint8_t* bytes,
+                                  std::size_t size,
+                                  const std::string& debugName)
+        {
+            if (!bytes || size == 0)
+            {
+                ALICE_LOG_ERRORF("[SceneFile] LoadFromBytes FAILED: empty buffer. name=\"%s\"", debugName.c_str());
+                return false;
+            }
+
+            JsonRttr::json root;
+            try
+            {
+                root = JsonRttr::json::parse(bytes, bytes + size);
+            }
+            catch (...)
+            {
+                ALICE_LOG_ERRORF("[SceneFile] JSON parse FAILED. name=\"%s\" bytes=%zu", debugName.c_str(), size);
+                return false;
+            }
+
+            return LoadFromRoot(world, root);
+        }
     }
 
     namespace SceneFile
@@ -184,18 +226,40 @@ namespace Alice
 
             JsonRttr::json root;
             if (!JsonRttr::LoadJsonFile(path, root)) return false;
+            return LoadFromRoot(world, root);
+        }
 
-            auto itEntities = root.find("entities");
-            if (itEntities == root.end() || !itEntities->is_array()) return false;
+        bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath)
+        {
+            // (1) 에디터: 실제 파일
+            // (2) 게임  : Assets/... 는 Metas/Chunks 로 패킹되어 있으므로, 바이트 로드 후 JSON 파싱
+            const std::filesystem::path resolved = resources.Resolve(logicalPath);
+            const std::string resolvedStr = resolved.generic_string();
 
-            // 현재 월드 비우기
-            world.Clear();
-
-            for (const auto& e : *itEntities)
-                if (!ApplyEntity(world, e)) 
+            // Metas/Chunks 로 매핑된 경우: chunk 파일(.alice)이므로 직접 파일 파싱하면 안 됨
+            if (resolved.extension() == ".alice")
+            {
+                auto sp = resources.LoadSharedBinaryAuto(logicalPath);
+                if (!sp)
+                {
+                    ALICE_LOG_ERRORF("[SceneFile] LoadAuto FAILED: chunk load failed. logical=\"%s\" resolved=\"%s\"",
+                                     logicalPath.generic_string().c_str(),
+                                     resolvedStr.c_str());
                     return false;
+                }
 
-            return true;
+                ALICE_LOG_INFO("[SceneFile] LoadAuto: metas bytes loaded. logical=\"%s\" bytes=%zu resolved=\"%s\"",
+                               logicalPath.generic_string().c_str(),
+                               sp->size(),
+                               resolvedStr.c_str());
+                return LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string());
+            }
+
+            // 일반 파일: resolved 경로로 로드
+            ALICE_LOG_INFO("[SceneFile] LoadAuto: file load. logical=\"%s\" resolved=\"%s\"",
+                           logicalPath.generic_string().c_str(),
+                           resolvedStr.c_str());
+            return Load(world, resolved);
         }
     }
 }

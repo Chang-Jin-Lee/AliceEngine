@@ -146,9 +146,22 @@ namespace Alice
         p = NormalizeResourcePathAbsoluteToLogical(p);
         const std::string s = p.generic_string();
 
-        // 논리 루트 3종을 지원합니다.
-        if (StartsWith(s, "Assets/") || s == "Assets")
+        // Assets:
+        // - editorMode: Assets/<rel> 를 실제 파일로
+        // - gameMode  : Assets/<rel> 는 Metas/Chunks 로 매핑(폴더 구조 숨김)
+        if (StartsWith(s, "Assets/"))
+        {
+            if (m_gameMode)
+            {
+                const std::string rest = s.substr(std::string_view("Assets/").size());
+                return Chunk0PathForMetasRel(rest);
+            }
             return (m_rootDir / p).lexically_normal();
+        }
+        if (s == "Assets")
+        {
+            return (m_rootDir / (m_gameMode ? std::filesystem::path("Metas") : std::filesystem::path("Assets"))).lexically_normal();
+        }
 
         // gameMode에서는 Resource/... 원본을 들고 있지 않으므로,
         // Resource/<rel> 요청은 Cooked/Chunks/<hash>/c0000.alice 로 매핑합니다.
@@ -239,6 +252,20 @@ namespace Alice
         if (m_gameMode)
         {
             const std::string s = normalized.generic_string();
+            if (StartsWith(s, "Assets/"))
+            {
+                const std::string rel = s.substr(std::string_view("Assets/").size());
+                auto sp = LoadMetasChunksByRel(rel);
+                if (sp)
+                {
+                    const auto h = ComputeBufferHashSampled(*sp);
+                    std::lock_guard<std::mutex> lock(m_cacheMutex);
+                    m_blobCache[h] = sp;
+                    m_pathToHash[logicalKey] = h;
+                    return sp;
+                }
+                return nullptr;
+            }
             if (StartsWith(s, "Resource/"))
             {
                 const std::string rel = s.substr(std::string_view("Resource/").size());
@@ -304,6 +331,104 @@ namespace Alice
 
         const std::filesystem::path dir = CookedDir() / "Chunks" / hexStr.substr(0, 2) / hexStr;
         return (dir / "c0000.alice").lexically_normal();
+    }
+
+    std::filesystem::path ResourceManager::Chunk0PathForMetasRel(std::string_view assetsRel) const
+    {
+        const std::uint64_t fileId = HashString64(assetsRel);
+
+        char hex[17] = {};
+        std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(fileId));
+        const std::string hexStr = hex;
+
+        const std::filesystem::path dir = MetasDir() / "Chunks" / hexStr.substr(0, 2) / hexStr;
+        return (dir / "c0000.alice").lexically_normal();
+    }
+
+    std::shared_ptr<const std::vector<std::uint8_t>> ResourceManager::LoadMetasChunksByRel(std::string_view assetsRel) const
+    {
+        namespace fs = std::filesystem;
+
+        const std::uint64_t fileId = HashString64(assetsRel);
+        fs::path c0 = Chunk0PathForMetasRel(assetsRel);
+        if (!fs::exists(c0))
+        {
+            ALICE_LOG_ERRORF("ResourceManager: missing metas chunk0 for Assets/%s -> \"%s\"",
+                             std::string(assetsRel).c_str(), c0.string().c_str());
+            return nullptr;
+        }
+
+        struct ChunkReader
+        {
+            const ResourceManager& rm;
+            std::uint64_t          fileId;
+            fs::path              baseDir;
+
+            bool Read(std::uint32_t idx, AliceChunkHeader& outHdr, std::vector<std::uint8_t>& outPayload) const
+            {
+                char hex[17] = {};
+                std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(fileId));
+                const std::string hexStr = hex;
+                const fs::path dir = baseDir / "Chunks" / hexStr.substr(0, 2) / hexStr;
+
+                char name[32] = {};
+                std::snprintf(name, sizeof(name), "c%04u.alice", static_cast<unsigned>(idx));
+                const fs::path p = dir / name;
+
+                std::vector<std::uint8_t> raw;
+                if (!rm.LoadBinary(p, raw, false))
+                    return false;
+                if (raw.size() < sizeof(AliceChunkHeader))
+                    return false;
+
+                std::memcpy(&outHdr, raw.data(), sizeof(AliceChunkHeader));
+                if (std::memcmp(outHdr.magic, "ALIC", 4) != 0 || outHdr.version != 1 || outHdr.fileId != fileId)
+                    return false;
+
+                const std::size_t payloadOff = sizeof(AliceChunkHeader);
+                const std::size_t payloadSize = static_cast<std::size_t>(outHdr.payloadSize);
+                if (payloadOff + payloadSize > raw.size())
+                    return false;
+
+                outPayload.assign(raw.begin() + payloadOff, raw.begin() + payloadOff + payloadSize);
+                rm.XorCrypt(outPayload);
+                return true;
+            }
+        };
+
+        const ChunkReader reader{ *this, fileId, MetasDir() };
+
+        AliceChunkHeader h0{};
+        std::vector<std::uint8_t> p0;
+        if (!reader.Read(0, h0, p0))
+        {
+            ALICE_LOG_ERRORF("ResourceManager: failed to read/decrypt metas chunk0. \"%s\"", c0.string().c_str());
+            return nullptr;
+        }
+
+        ALICE_LOG_INFO("ResourceManager: chunked load Assets/%s -> chunks=%u size=%llu",
+                       std::string(assetsRel).c_str(),
+                       static_cast<unsigned>(h0.chunkCount),
+                       static_cast<unsigned long long>(h0.originalSize));
+
+        auto out = std::make_shared<std::vector<std::uint8_t>>();
+        out->reserve(static_cast<std::size_t>(h0.originalSize));
+        out->insert(out->end(), p0.begin(), p0.end());
+
+        for (std::uint32_t i = 1; i < h0.chunkCount; ++i)
+        {
+            AliceChunkHeader hi{};
+            std::vector<std::uint8_t> pi;
+            if (!reader.Read(i, hi, pi))
+            {
+                ALICE_LOG_ERRORF("ResourceManager: failed to read/decrypt metas chunk%u for Assets/%s",
+                                 static_cast<unsigned>(i), std::string(assetsRel).c_str());
+                return nullptr;
+            }
+            out->insert(out->end(), pi.begin(), pi.end());
+        }
+
+        return out;
     }
 
     std::shared_ptr<const std::vector<std::uint8_t>> ResourceManager::LoadResourceChunksByRel(std::string_view resourceRel) const
