@@ -12,6 +12,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
+set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
+set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 
 # ==========================================
 # [설정] RTTR 라이브러리 (Engine에 통합)
@@ -123,6 +126,10 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
+
+    # json
+    ${ALICE_SRC_DIR}/json/json.hpp
+    ${ALICE_SRC_DIR}/json/json_fwd.hpp
 )
 
 # [변경] AliceEngine -> Engine
@@ -183,7 +190,6 @@ source_group(TREE ${ALICE_SRC_DIR} FILES ${LAUNCH_MAIN} ${PLAYER_MAIN} ${APP_COM
 # ==========================================
 # [ThirdParty] ImGui
 # ==========================================
-set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
 
 # Engine이 ImGui 헤더를 찾을 수 있도록 설정
 target_include_directories(Engine
@@ -232,7 +238,6 @@ endforeach()
 # ==========================================
 # [ThirdParty] ImGuizmo
 # ==========================================
-set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
 
 # Engine이 ImGuizmo 헤더를 찾을 수 있도록 설정
 target_include_directories(Engine
@@ -349,7 +354,6 @@ endforeach()
 # ==========================================
 # [Post-Build] DLL 복사
 # ==========================================
-set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 
 # [변경] Launch와 AlicePlayer 타겟 모두에 DLL 복사 수행
 foreach(target Launch AlicePlayer)
