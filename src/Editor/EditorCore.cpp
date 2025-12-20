@@ -1,3 +1,7 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "Editor/EditorCore.h"
 
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
@@ -10,6 +14,7 @@
 #include "Core/Logger.h"
 #include "Core/ReflectionUI.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
+#include "Core/JsonRttr.h"
 
 // ImGui
 #include "imgui.h"
@@ -130,7 +135,100 @@ namespace Alice
         /// 에디터 Reload Scripts 버튼에서 호출하는 헬퍼입니다.
         /// - ScriptsBuild CMake 프로젝트를 configure/build 해서 AliceScripts.dll 을 만들고
         ///   현재 실행 중인 exe 옆으로 복사한 뒤 ScriptHotReload_Reload 를 호출합니다.
-        void ReloadScripts_FromButton()
+        struct ScriptReloadSnap
+        {
+            std::string name;
+            bool enabled{};
+            nlohmann::json props;
+        };
+
+        struct EntityReloadSnap
+        {
+            EntityId id{};
+            std::vector<ScriptReloadSnap> scripts;
+        };
+
+        static void SnapshotAndDestroyScripts(World& world, std::vector<EntityReloadSnap>& out)
+        {
+            out.clear();
+
+            auto& map = world.GetAllScripts();
+            out.reserve(map.size());
+
+            for (auto& [id, list] : map)
+            {
+                EntityReloadSnap e{};
+                e.id = id;
+                e.scripts.reserve(list.size());
+
+                for (auto& sc : list)
+                {
+                    ScriptReloadSnap s{};
+                    s.name = sc.scriptName;
+                    s.enabled = sc.enabled;
+
+                    if (sc.instance && !sc.scriptName.empty())
+                    {
+                        rttr::type t = rttr::type::get_by_name(sc.scriptName);
+                        s.props = JsonRttr::ToJsonObject(*sc.instance, t);
+
+                        // DLL이 살아있는 동안 가상함수 호출해서 정리
+                        sc.instance->OnDisable();
+                        sc.instance->OnDestroy();
+                        sc.instance.reset();
+                    }
+
+                    sc.awoken = false;
+                    sc.started = false;
+                    sc.wasEnabled = sc.enabled;
+                    sc.defaultsApplied = false;
+
+                    e.scripts.push_back(std::move(s));
+                }
+                out.push_back(std::move(e));
+            }
+        }
+
+        static void RestoreScripts(World& world, const std::vector<EntityReloadSnap>& snaps)
+        {
+            auto& map = world.GetAllScripts();
+
+            for (const auto& e : snaps)
+            {
+                auto it = map.find(e.id);
+                if (it == map.end())
+                    continue;
+
+                std::vector<ScriptComponent> rebuilt;
+                rebuilt.reserve(e.scripts.size());
+
+                for (const auto& s : e.scripts)
+                {
+                    if (s.name.empty())
+                        continue;
+
+                    ScriptComponent sc{};
+                    sc.scriptName = s.name;
+                    sc.enabled = s.enabled;
+                    sc.instance = ScriptFactory::Create(s.name.c_str());
+                    if (!sc.instance)
+                        continue;
+
+                    rttr::instance inst = *sc.instance;
+                    rttr::type t = rttr::type::get_by_name(sc.scriptName);
+                    JsonRttr::FromJsonObject(inst, s.props, t);
+
+                    sc.defaultsApplied = true;
+                    rebuilt.push_back(std::move(sc));
+                }
+
+                it->second = std::move(rebuilt);
+                if (it->second.empty())
+                    map.erase(it);
+            }
+        }
+
+        void ReloadScripts_FromButton(World& world)
         {
             using namespace std::filesystem;
 
@@ -200,7 +298,30 @@ namespace Alice
                 return;
             }
 
-            // 새 DLL 이 정상 빌드된 것이 확인되었으므로, 이제서야 기존 DLL 을 언로드합니다.
+            // RTTR shared DLL도 같이 복사해 둡니다. (스크립트 RTTR 등록이 엔진에서 보이려면 필수)
+            // - ScriptsBuild는 자체적으로 rttr_core.dll을 빌드합니다.
+            // - 실행 파일 폴더에 하나만 존재하면, EXE/DLL이 같은 registry를 공유합니다.
+            {
+                path builtRttr = scriptsBuildDir / path(kConfig) / "rttr_core.dll";
+                if (exists(builtRttr))
+                {
+                    std::error_code ecRttr;
+                    copy_file(builtRttr, exeDir / "rttr_core.dll",
+                              copy_options::overwrite_existing,
+                              ecRttr);
+                    if (ecRttr)
+                    {
+                        ALICE_LOG_WARN("Reload Scripts: failed to copy rttr_core.dll (%s)",
+                                       ecRttr.message().c_str());
+                    }
+                }
+            }
+
+            // 기존 DLL을 언로드하기 전에, 기존 스크립트 인스턴스(가상 함수)가 남아있으면 크래시가 납니다.
+            // - 값은 스냅샷 후 새 DLL 로드 뒤에 다시 주입합니다.
+            std::vector<EntityReloadSnap> snaps;
+            SnapshotAndDestroyScripts(world, snaps);
+
             ScriptHotReload_Unload();
 
             path targetDll = exeDir / "AliceScripts.dll";
@@ -223,6 +344,9 @@ namespace Alice
 
             // 6) 새 DLL 로드
             ScriptHotReload_Reload();
+
+            // 새 DLL의 vtable/RTTR이 준비된 뒤에 인스턴스를 다시 만듭니다.
+            RestoreScripts(world, snaps);
         }
 
         // 빌드/배포용 간단 파일 유틸 (에러는 로그로 남기고, 실패는 false 반환)
@@ -913,7 +1037,7 @@ namespace Alice
             {
                 // ImGui Begin/End 짝을 깨지 않기 위해,
                 // 실제 빌드/복사/리로드 로직은 별도 헬퍼 함수에서 처리합니다.
-                ReloadScripts_FromButton();
+                ReloadScripts_FromButton(world);
             }
 
             ImGui::Separator();
@@ -1370,57 +1494,181 @@ namespace Alice
 
                 ImGui::Separator();
 
-                // Script 컴포넌트 섹션
+                // Script 컴포넌트 섹션 (엔티티당 여러 개 가능)
                 ImGui::Text("Scripts");
 
-                ScriptComponent* script = world.GetScript(selectedEntity);
-                if (!script)
+                // 등록된 스크립트 목록에서 하나를 선택해 추가할 수 있게 합니다.
+                std::vector<std::string> scriptNames = ScriptFactory::GetRegisteredScriptNames();
+                std::sort(scriptNames.begin(), scriptNames.end());
+                scriptNames.erase(std::unique(scriptNames.begin(), scriptNames.end()), scriptNames.end());
+
+                static int selectedIndex = 0;
+                if (!scriptNames.empty())
                 {
-                    Alice::ImGuiText(L"스크립트가 없습니다.");
-
-                    // 등록된 스크립트 목록에서 하나를 선택해 추가할 수 있게 합니다.
-                    std::vector<std::string> scriptNames = ScriptFactory::GetRegisteredScriptNames();
-                    // 중복 이름이 있을 수 있으므로 정렬 + unique 로 정리합니다.
-                    std::sort(scriptNames.begin(), scriptNames.end());
-                    scriptNames.erase(std::unique(scriptNames.begin(), scriptNames.end()), scriptNames.end());
-                    if (!scriptNames.empty())
+                    selectedIndex = std::clamp(selectedIndex, 0, (int)scriptNames.size() - 1);
+                    if (ImGui::BeginCombo("Add Script", scriptNames[selectedIndex].c_str()))
                     {
-                        static int selectedIndex = 0;
-                        selectedIndex = std::clamp(selectedIndex, 0, static_cast<int>(scriptNames.size()) - 1);
-
-                        if (ImGui::BeginCombo("Add Script", scriptNames[selectedIndex].c_str()))
+                        for (int i = 0; i < (int)scriptNames.size(); ++i)
                         {
-                            for (int i = 0; i < static_cast<int>(scriptNames.size()); ++i)
-                            {
-                                bool isSelected = (i == selectedIndex);
-                                if (ImGui::Selectable(scriptNames[i].c_str(), isSelected))
-                                {
-                                    selectedIndex = i;
-                                }
-                                if (isSelected)
-                                    ImGui::SetItemDefaultFocus();
-                            }
-                            ImGui::EndCombo();
+                            const bool isSelected = (i == selectedIndex);
+                            if (ImGui::Selectable(scriptNames[i].c_str(), isSelected))
+                                selectedIndex = i;
+                            if (isSelected) ImGui::SetItemDefaultFocus();
                         }
-
-                        if (ImGui::Button("Attach Script") && !scriptNames.empty())
-                        {
-                            world.AddScript(selectedEntity, scriptNames[selectedIndex]);
-                            SaveScene(world);
-                        }
+                        ImGui::EndCombo();
                     }
-                    else
+
+                    if (ImGui::Button("Attach Script"))
                     {
-                        Alice::ImGuiText(L"등록된 스크립트 타입이 없습니다.");
+                        world.AddScript(selectedEntity, scriptNames[selectedIndex]);
+                        g_SceneDirty = true;
                     }
                 }
                 else
                 {
-                    ImGui::Text("Attached Script: %s", script->scriptName.c_str());
+                    Alice::ImGuiText(L"등록된 스크립트 타입이 없습니다.");
+                }
 
-                    if (ImGui::Button("Remove Script"))
+                auto* scripts = world.GetScripts(selectedEntity);
+                if (!scripts || scripts->empty())
+                {
+                    Alice::ImGuiText(L"스크립트가 없습니다.");
+                }
+                else
+                {
+                    int removeIndex = -1;
+                    for (int i = 0; i < (int)scripts->size(); ++i)
                     {
-                        world.RemoveScript(selectedEntity);
+                        auto& sc = (*scripts)[(std::size_t)i];
+                        std::string header = sc.scriptName.empty()
+                            ? ("Script " + std::to_string(i))
+                            : (sc.scriptName + "##" + std::to_string(i));
+
+                        if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                        {
+                            ImGui::Checkbox("Enabled", &sc.enabled);
+                            ImGui::SameLine();
+                            if (ImGui::Button(("Remove##" + std::to_string(i)).c_str()))
+                                removeIndex = i;
+
+                            // 스크립트 기본값(.meta) 저장/로드
+                            if (sc.instance && !sc.scriptName.empty())
+                            {
+                                ImGui::SameLine();
+                                if (ImGui::Button(("Save Defaults##" + std::to_string(i)).c_str()))
+                                {
+                                    const std::filesystem::path metaLogical =
+                                        std::filesystem::path("Assets/Scripts") / (sc.scriptName + ".meta");
+                                    const std::filesystem::path metaAbs =
+                                        (m_resources ? m_resources->Resolve(metaLogical) : metaLogical);
+
+                                    JsonRttr::json root = JsonRttr::json::object();
+                                    root["version"] = 1;
+                                    root["props"] = JsonRttr::ToJsonObject(*sc.instance, rttr::type::get_by_name(sc.scriptName));
+                                    JsonRttr::SaveJsonFile(metaAbs, root, 4);
+                                    ALICE_LOG_INFO("[Editor] Saved script defaults: \"%s\"", metaAbs.string().c_str());
+                                }
+
+                                ImGui::SameLine();
+                                if (ImGui::Button(("Load Defaults##" + std::to_string(i)).c_str()))
+                                {
+                                    const std::filesystem::path metaLogical =
+                                        std::filesystem::path("Assets/Scripts") / (sc.scriptName + ".meta");
+                                    const std::filesystem::path metaAbs =
+                                        (m_resources ? m_resources->Resolve(metaLogical) : metaLogical);
+
+                                    JsonRttr::json root;
+                                    if (JsonRttr::LoadJsonFile(metaAbs, root))
+                                    {
+                                        auto itP = root.find("props");
+                                        if (itP != root.end() && itP->is_object())
+                                        {
+                                            rttr::instance inst = *sc.instance;
+                                            JsonRttr::FromJsonObject(inst, *itP, rttr::type::get_by_name(sc.scriptName));
+                                            sc.defaultsApplied = true;
+                                            g_SceneDirty = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (sc.instance)
+                            {
+                                // RTTR 프로퍼티를 동적으로 렌더링/수정합니다.
+                                // - public: 기본 노출
+                                // - private: RTTR 등록 + SerializeField(metadata)로 노출 가능
+                                rttr::instance inst = *sc.instance;
+                                rttr::type t = rttr::type::get_by_name(sc.scriptName);
+                                if (!t.is_valid())
+                                    t = inst.get_type();
+
+                                for (auto& prop : t.get_properties())
+                                {
+                                    // Entity 참조(UI에서 Assign):
+                                    // - 권장: ALICE_SCRIPT_ENTITY_FIELD(...)로 등록해서 EntityRef metadata를 달아줍니다.
+                                    // - 레거시: 타입이 EntityId인 경우도 지원합니다.
+                                    const bool isEntityRef =
+                                        prop.get_metadata("EntityRef").is_valid() ||
+                                        prop.get_type() == rttr::type::get<EntityId>();
+
+                                    if (isEntityRef)
+                                    {
+                                        EntityId cur = InvalidEntityId;
+                                        rttr::variant v = prop.get_value(inst);
+                                        if (v.is_valid())
+                                        {
+                                            if (v.can_convert< EntityId >())
+                                                cur = v.get_value<EntityId>();
+                                            else if (v.can_convert<std::uint32_t>())
+                                                cur = v.get_value<std::uint32_t>();
+                                        }
+
+                                        const std::string curName = (cur != InvalidEntityId)
+                                            ? world.GetEntityName(cur)
+                                            : std::string{};
+
+                                        std::string preview = curName.empty()
+                                            ? ((cur == InvalidEntityId) ? "None" : ("Entity " + std::to_string((std::uint32_t)cur)))
+                                            : curName;
+
+                                        if (ImGui::BeginCombo(prop.get_name().to_string().c_str(), preview.c_str()))
+                                        {
+                                            if (ImGui::Selectable("None", cur == InvalidEntityId))
+                                            {
+                                                prop.set_value(inst, InvalidEntityId);
+                                                g_SceneDirty = true;
+                                            }
+
+                                            for (const auto& [eid, tr] : world.GetTransforms())
+                                            {
+                                                (void)tr;
+                                                const bool selected = (eid == cur);
+                                                std::string item = world.GetEntityName(eid);
+                                                if (item.empty())
+                                                    item = "Entity " + std::to_string((std::uint32_t)eid);
+
+                                                if (ImGui::Selectable(item.c_str(), selected))
+                                                {
+                                                    prop.set_value(inst, eid);
+                                                    g_SceneDirty = true;
+                                                }
+                                            }
+                                            ImGui::EndCombo();
+                                        }
+                                        continue;
+                                    }
+
+                                    if (ReflectionUI::Detail::RenderProperty(prop, inst))
+                                        g_SceneDirty = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if (removeIndex >= 0)
+                    {
+                        world.RemoveScript(selectedEntity, (std::size_t)removeIndex);
+                        g_SceneDirty = true;
                     }
                 }
 
@@ -2516,7 +2764,7 @@ namespace Alice
 
                 if (ImGui::MenuItem("Create Prefab"))
                 {
-                    // 아주 단순한 기본 프리팹 파일 생성 (.prefab)
+                    // 기본 프리팹(JSON) 생성 (.prefab)
                     fs::path newPath = path / "NewPrefab.prefab";
                     int index = 1;
                     while (fs::exists(newPath))
@@ -2525,15 +2773,19 @@ namespace Alice
                         ++index;
                     }
 
+                    nlohmann::json j;
+                    j["version"] = 1;
+                    j["name"] = "NewPrefab";
+                    j["Transform"] = {
+                        { "position", { { "x", 0.0f }, { "y", 0.0f }, { "z", 0.0f } } },
+                        { "rotation", { { "x", 0.0f }, { "y", 0.0f }, { "z", 0.0f } } },
+                        { "scale",    { { "x", 1.0f }, { "y", 1.0f }, { "z", 1.0f } } },
+                    };
+                    j["Scripts"] = nlohmann::json::array();
+
                     std::ofstream ofs(newPath);
                     if (ofs.is_open())
-                    {
-                        ofs << "name: NewPrefab\n";
-                        ofs << "position: 0 0 0\n";
-                        ofs << "rotation: 0 0 0\n";
-                        ofs << "scale: 1 1 1\n";
-                        ofs << "script: \n";
-                    }
+                        ofs << j.dump(4);
                 }
 
                 if (ImGui::MenuItem("Create Material"))
@@ -2709,6 +2961,14 @@ namespace Alice
                 {
                     std::error_code ec;
                     fs::remove(path, ec);
+
+                    // .cpp 삭제 시 같은 폴더의 <stem>.meta 도 같이 제거합니다.
+                    if (ext == ".cpp")
+                    {
+                        std::error_code ec2;
+                        fs::path metaPath = path.parent_path() / (path.stem().string() + ".meta");
+                        fs::remove(metaPath, ec2);
+                    }
                 }
 
                 // 프리팹 파일에 대한 Instantiate 동작

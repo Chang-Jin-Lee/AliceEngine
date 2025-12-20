@@ -81,12 +81,41 @@ namespace Alice
             const rttr::type t = obj.get_type();
             for (const auto& prop : t.get_properties())
             {
+                // Unity 룰:
+                // - public  : 기본 저장/노출
+                // - private : SerializeField 메타데이터가 있을 때만 저장/노출
+                if (prop.get_access_level() != rttr::access_levels::public_access &&
+                    !prop.get_metadata("SerializeField").is_valid())
+                    continue;
+
                 rttr::variant value = prop.get_value(obj);
                 if (!value.is_valid()) continue;
 
                 j[prop.get_name().to_string()] = ToJsonVariant(value);
             }
 
+            return j;
+        }
+
+        // 타입을 "명시"해서 프로퍼티를 열거합니다.
+        // - IScript*처럼 베이스 타입으로 인스턴스를 만들면 obj.get_type()은 베이스로 나옵니다.
+        // - Editor/Serializer에서 scriptName으로 type을 알 수 있으므로 이걸 사용합니다.
+        inline json ToJsonObject(rttr::instance obj, const rttr::type& t)
+        {
+            json j = json::object();
+            if (!t.is_valid())
+                return j;
+
+            for (const auto& prop : t.get_properties())
+            {
+                if (prop.get_access_level() != rttr::access_levels::public_access &&
+                    !prop.get_metadata("SerializeField").is_valid())
+                    continue;
+
+                rttr::variant value = prop.get_value(obj);
+                if (!value.is_valid()) continue;
+                j[prop.get_name().to_string()] = ToJsonVariant(value);
+            }
             return j;
         }
 
@@ -97,6 +126,10 @@ namespace Alice
             const rttr::type t = obj.get_type();
             for (const auto& prop : t.get_properties())
             {
+                if (prop.get_access_level() != rttr::access_levels::public_access &&
+                    !prop.get_metadata("SerializeField").is_valid())
+                    continue;
+
                 const std::string key = prop.get_name().to_string();
                 auto it = j.find(key);
                 if (it == j.end())
@@ -105,6 +138,27 @@ namespace Alice
                 if (!FromJsonToProperty(obj, prop, *it)) return false;
             }
 
+            return true;
+        }
+
+        inline bool FromJsonObject(rttr::instance obj, const json& j, const rttr::type& t)
+        {
+            if (!j.is_object()) return false;
+            if (!t.is_valid()) return true;
+
+            for (const auto& prop : t.get_properties())
+            {
+                if (prop.get_access_level() != rttr::access_levels::public_access &&
+                    !prop.get_metadata("SerializeField").is_valid())
+                    continue;
+
+                const std::string key = prop.get_name().to_string();
+                auto it = j.find(key);
+                if (it == j.end())
+                    continue;
+
+                if (!FromJsonToProperty(obj, prop, *it)) return false;
+            }
             return true;
         }
 

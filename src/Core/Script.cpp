@@ -1,3 +1,7 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "Core/Script.h"
 
 #include "Core/World.h"
@@ -5,6 +9,8 @@
 #include "Core/InputSystem.h"
 #include "Core/Scene.h"
 #include "Core/SceneFile.h"
+#include "Core/JsonRttr.h"
+#include "Core/ResourceManager.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Logger.h"
 
@@ -273,29 +279,64 @@ namespace Alice
 
     void ScriptSystem::EnsureServicesBound(World& world)
     {
-        for (auto& [entityId, comp] : world.GetScripts())
+        for (auto& [entityId, list] : world.GetAllScripts())
         {
-            if (!comp.instance) continue;
-            comp.instance->SetContext(&world, entityId);
-            comp.instance->SetServices(&m_services);
+            for (auto& comp : list)
+            {
+                if (!comp.instance) continue;
+
+                // .meta 기본값 1회 주입 (씬/프리팹에서 props가 이미 들어간 경우 defaultsApplied=true로 막습니다)
+                if (!comp.defaultsApplied && m_resources && !comp.scriptName.empty())
+                {
+                    const std::filesystem::path metaLogical = std::filesystem::path("Assets/Scripts") / (comp.scriptName + ".meta");
+                    auto bytes = m_resources->LoadSharedBinaryAuto(metaLogical);
+                    if (bytes && !bytes->empty())
+                    {
+                        try
+                        {
+                            auto root = JsonRttr::json::parse(bytes->begin(), bytes->end());
+                            auto itP = root.find("props");
+                            if (itP != root.end() && itP->is_object())
+                            {
+                                rttr::instance inst = *comp.instance;
+                                const rttr::type t = rttr::type::get_by_name(comp.scriptName);
+                                JsonRttr::FromJsonObject(inst, *itP, t);
+                            }
+                        }
+                        catch (...) {}
+                    }
+                    comp.defaultsApplied = true;
+                }
+
+                comp.instance->SetContext(&world, entityId);
+                comp.instance->SetServices(&m_services);
+            }
         }
     }
 
     void ScriptSystem::CallFixedUpdate(World& world, float fixedDt)
     {
-        for (auto& [entityId, comp] : world.GetScripts())
+        for (auto& [entityId, list] : world.GetAllScripts())
         {
-            if (!comp.instance || !comp.enabled) continue;
-            comp.instance->FixedUpdate(fixedDt);
+            (void)entityId;
+            for (auto& comp : list)
+            {
+                if (!comp.instance || !comp.enabled) continue;
+                comp.instance->FixedUpdate(fixedDt);
+            }
         }
     }
 
     void ScriptSystem::CallLateUpdate(World& world, float deltaTime)
     {
-        for (auto& [entityId, comp] : world.GetScripts())
+        for (auto& [entityId, list] : world.GetAllScripts())
         {
-            if (!comp.instance || !comp.enabled) continue;
-            comp.instance->LateUpdate(deltaTime);
+            (void)entityId;
+            for (auto& comp : list)
+            {
+                if (!comp.instance || !comp.enabled) continue;
+                comp.instance->LateUpdate(deltaTime);
+            }
         }
     }
 
@@ -338,44 +379,47 @@ namespace Alice
         EnsureServicesBound(world);
 
         // Awake/OnEnable/Start/Update
-        for (auto& [entityId, comp] : world.GetScripts())
+        for (auto& [entityId, list] : world.GetAllScripts())
         {
-            if (!comp.instance)
-                continue;
-
-            comp.instance->SetContext(&world, entityId);
-            comp.instance->SetServices(&m_services);
-
-            if (!comp.awoken)
+            for (auto& comp : list)
             {
-                comp.awoken = true;
-                comp.wasEnabled = comp.enabled;
+                if (!comp.instance)
+                    continue;
 
-                comp.instance->Awake();
-                comp.instance->OnCreate(world, entityId); // 구 버전 호환
+                comp.instance->SetContext(&world, entityId);
+                comp.instance->SetServices(&m_services);
 
-                if (comp.enabled)
-                    comp.instance->OnEnable();
+                if (!comp.awoken)
+                {
+                    comp.awoken = true;
+                    comp.wasEnabled = comp.enabled;
+
+                    comp.instance->Awake();
+                    comp.instance->OnCreate(world, entityId); // 구 버전 호환
+
+                    if (comp.enabled)
+                        comp.instance->OnEnable();
+                }
+
+                if (comp.enabled != comp.wasEnabled)
+                {
+                    if (comp.enabled) comp.instance->OnEnable();
+                    else              comp.instance->OnDisable();
+                    comp.wasEnabled = comp.enabled;
+                }
+
+                if (!comp.enabled)
+                    continue;
+
+                if (!comp.started)
+                {
+                    comp.started = true;
+                    comp.instance->Start();
+                }
+
+                comp.instance->Update(deltaTime);
+                comp.instance->OnUpdate(world, entityId, deltaTime); // 구 버전 호환
             }
-
-            if (comp.enabled != comp.wasEnabled)
-            {
-                if (comp.enabled) comp.instance->OnEnable();
-                else              comp.instance->OnDisable();
-                comp.wasEnabled = comp.enabled;
-            }
-
-            if (!comp.enabled)
-                continue;
-
-            if (!comp.started)
-            {
-                comp.started = true;
-                comp.instance->Start();
-            }
-
-            comp.instance->Update(deltaTime);
-            comp.instance->OnUpdate(world, entityId, deltaTime); // 구 버전 호환
         }
 
         // FixedUpdate
@@ -396,10 +440,14 @@ namespace Alice
     void ScriptSystem::OnApplicationQuit(World& world)
     {
         EnsureServicesBound(world);
-        for (auto& [entityId, comp] : world.GetScripts())
+        for (auto& [entityId, list] : world.GetAllScripts())
         {
-            if (!comp.instance) continue;
-            comp.instance->OnApplicationQuit();
+            (void)entityId;
+            for (auto& comp : list)
+            {
+                if (!comp.instance) continue;
+                comp.instance->OnApplicationQuit();
+            }
         }
     }
 }

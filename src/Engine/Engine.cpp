@@ -299,7 +299,7 @@ namespace Alice
 
 		const auto& transforms = pImpl->m_world.GetTransforms();
 		const auto& skinnedMeshes = pImpl->m_world.GetSkinnedMeshes();
-		const auto& scripts = pImpl->m_world.GetScripts();
+		const auto& scripts = pImpl->m_world.GetAllScripts();
 		const auto& materials = pImpl->m_world.GetMaterials();
 		ALICE_LOG_INFO("Engine::Initialize: world summary: transforms=%zu, skinnedMeshes=%zu, scripts=%zu, materials=%zu",
 			transforms.size(), skinnedMeshes.size(), scripts.size(), materials.size());

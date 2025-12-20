@@ -144,6 +144,9 @@ namespace Alice
         bool awoken  { false };
         bool started { false };
         bool wasEnabled { true };
+
+        // .meta 기본값을 한 번만 주입하기 위한 플래그입니다.
+        bool defaultsApplied { false };
     };
 
     /// 모든 ScriptComponent 를 매 프레임 업데이트하는 간단한 시스템입니다.
