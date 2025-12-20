@@ -1,0 +1,71 @@
+{
+    "entities": [
+        {
+            "Script": {
+                "enabled": true,
+                "name": "SceneSwitchExample"
+            },
+            "Transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 1
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "Cooked/Textures\\Rapi\\Rapi_Diffuse_embedded0.alice",
+                "assetPath": "D:\\Github\\AliceRenderer\\Assets\\Materials\\Rapi_0.mat",
+                "color": {
+                    "x": 1.0,
+                    "y": 0.4440154433250427,
+                    "z": 0.4440154433250427
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 54.700923936557956
+            },
+            "SkinnedMesh": {
+                "boneCount": 180,
+                "instanceAssetPath": "D:\\Github\\AliceRenderer\\Assets\\Fbx\\Rapi.fbxasset",
+                "meshAssetPath": "Rapi"
+            },
+            "Transform": {
+                "position": {
+                    "x": -4.818533897399902,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05000000074505806,
+                    "y": 0.05000000074505806,
+                    "z": 0.05000000074505806
+                }
+            },
+            "id": 2
+        }
+    ],
+    "version": 1
+}
