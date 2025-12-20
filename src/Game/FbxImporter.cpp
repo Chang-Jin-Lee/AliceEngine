@@ -34,8 +34,7 @@ namespace Alice
 
         inline void ToLowerInPlace(std::string& s)
         {
-            for (char& c : s)
-                c = ToLowerChar(static_cast<unsigned char>(c));
+            for (char& c : s) c = ToLowerChar(static_cast<unsigned char>(c));
         }
 
         // 간단한 이미지 확장자 체크 함수입니다.
@@ -449,8 +448,7 @@ namespace Alice
             asset.meshAssetPath = result.meshAssetPath;
             asset.materialAssetPaths = result.materialAssetPaths;
 
-            if (!SaveFbxInstanceAsset(fbxAssetPath, asset))
-                return result;
+            if (!SaveFbxInstanceAsset(fbxAssetPath, asset)) return result;
 
             result.instanceAssetPath = fbxAssetPath.string();
         }

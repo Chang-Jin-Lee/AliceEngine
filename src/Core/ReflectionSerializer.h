@@ -42,8 +42,7 @@ namespace Alice
             rttr::instance inst = const_cast<T&>(obj);
 
             const JsonRttr::json j = JsonRttr::ToJsonObject(inst);
-            if (!JsonRttr::SaveJsonFile(path, j, 4))
-                return false;
+            if (!JsonRttr::SaveJsonFile(path, j, 4)) return false;
             return true;
         }
 
@@ -66,11 +65,10 @@ namespace Alice
             rttr::instance inst = obj;
 
             JsonRttr::json j;
-            if (!JsonRttr::LoadJsonFile(path, j))
-                return false;
+            if (!JsonRttr::LoadJsonFile(path, j)) return false;
 
-            if (!JsonRttr::FromJsonObject(inst, j))
-                return false;
+            if (!JsonRttr::FromJsonObject(inst, j)) return false;
+
             return true;
         }
 
@@ -92,18 +90,15 @@ namespace Alice
             for (const auto& prop : t.get_properties())
             {
                 std::string propName = prop.get_name().to_string();
-                if (!filter(propName))
-                    continue;
+                if (!filter(propName)) continue;
 
                 rttr::variant value = prop.get_value(inst);
-                if (!value.is_valid())
-                    continue;
+                if (!value.is_valid()) continue;
 
                 j[propName] = JsonRttr::ToJsonVariant(value);
             }
 
-            if (!JsonRttr::SaveJsonFile(path, j, 4))
-                return false;
+            if (!JsonRttr::SaveJsonFile(path, j, 4)) return false;
             return true;
         }
     }

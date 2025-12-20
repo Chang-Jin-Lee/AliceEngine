@@ -32,11 +32,9 @@ namespace Alice
         inline bool EnsureParentDir(const std::filesystem::path& path)
         {
             const auto parent = path.parent_path();
-            if (parent.empty())
-                return true;
+            if (parent.empty()) return true;
 
-            if (std::filesystem::exists(parent))
-                return true;
+            if (std::filesystem::exists(parent)) return true;
 
             std::error_code ec;
             std::filesystem::create_directories(parent, ec);
@@ -48,8 +46,7 @@ namespace Alice
             out = json{};
 
             std::ifstream ifs(path);
-            if (!ifs.is_open())
-                return false;
+            if (!ifs.is_open()) return false;
 
             try
             {
@@ -68,8 +65,7 @@ namespace Alice
             EnsureParentDir(path);
 
             std::ofstream ofs(path);
-            if (!ofs.is_open())
-                return false;
+            if (!ofs.is_open()) return false;
 
             ofs << j.dump(indent);
             return true;
@@ -86,8 +82,7 @@ namespace Alice
             for (const auto& prop : t.get_properties())
             {
                 rttr::variant value = prop.get_value(obj);
-                if (!value.is_valid())
-                    continue;
+                if (!value.is_valid()) continue;
 
                 j[prop.get_name().to_string()] = ToJsonVariant(value);
             }
@@ -97,8 +92,7 @@ namespace Alice
 
         inline bool FromJsonObject(rttr::instance obj, const json& j)
         {
-            if (!j.is_object())
-                return false;
+            if (!j.is_object()) return false;
 
             const rttr::type t = obj.get_type();
             for (const auto& prop : t.get_properties())
@@ -108,8 +102,7 @@ namespace Alice
                 if (it == j.end())
                     continue;
 
-                if (!FromJsonToProperty(obj, prop, *it))
-                    return false;
+                if (!FromJsonToProperty(obj, prop, *it)) return false;
             }
 
             return true;
@@ -154,8 +147,7 @@ namespace Alice
 
         inline json ToJsonVariant(const rttr::variant& v)
         {
-            if (!v.is_valid())
-                return nullptr;
+            if (!v.is_valid()) return nullptr;
 
             const rttr::type t = v.get_type();
 
@@ -209,8 +201,7 @@ namespace Alice
 
             if (t == rttr::type::get<bool>())
             {
-                if (!jval.is_boolean() && !jval.is_number_integer())
-                    return false;
+                if (!jval.is_boolean() && !jval.is_number_integer()) return false;
                 const bool b = jval.is_boolean() ? jval.get<bool>() : (jval.get<int>() != 0);
                 prop.set_value(obj, b);
                 return true;
@@ -218,48 +209,42 @@ namespace Alice
 
             if (t == rttr::type::get<int>())
             {
-                if (!jval.is_number_integer())
-                    return false;
+                if (!jval.is_number_integer()) return false;
                 prop.set_value(obj, jval.get<int>());
                 return true;
             }
 
             if (t == rttr::type::get<std::uint32_t>())
             {
-                if (!jval.is_number_unsigned() && !jval.is_number_integer())
-                    return false;
+                if (!jval.is_number_unsigned() && !jval.is_number_integer()) return false;
                 prop.set_value(obj, static_cast<std::uint32_t>(jval.get<std::uint64_t>()));
                 return true;
             }
 
             if (t == rttr::type::get<float>())
             {
-                if (!jval.is_number())
-                    return false;
+                if (!jval.is_number()) return false;
                 prop.set_value(obj, static_cast<float>(jval.get<double>()));
                 return true;
             }
 
             if (t == rttr::type::get<double>())
             {
-                if (!jval.is_number())
-                    return false;
+                if (!jval.is_number()) return false;
                 prop.set_value(obj, jval.get<double>());
                 return true;
             }
 
             if (t == rttr::type::get<std::int64_t>())
             {
-                if (!jval.is_number_integer())
-                    return false;
+                if (!jval.is_number_integer()) return false;
                 prop.set_value(obj, static_cast<std::int64_t>(jval.get<std::int64_t>()));
                 return true;
             }
 
             if (t == rttr::type::get<std::uint64_t>())
             {
-                if (!jval.is_number_unsigned() && !jval.is_number_integer())
-                    return false;
+                if (!jval.is_number_unsigned() && !jval.is_number_integer()) return false;
                 prop.set_value(obj, static_cast<std::uint64_t>(jval.get<std::uint64_t>()));
                 return true;
             }
@@ -271,8 +256,7 @@ namespace Alice
 
         inline bool SetString(rttr::instance obj, const rttr::property& prop, const json& jval)
         {
-            if (!jval.is_string())
-                return false;
+            if (!jval.is_string()) return false;
 
             prop.set_value(obj, jval.get<std::string>());
             return true;
@@ -280,8 +264,7 @@ namespace Alice
 
         inline bool SetEnum(rttr::instance obj, const rttr::property& prop, const json& jval)
         {
-            if (!jval.is_string() && !jval.is_number_integer())
-                return false;
+            if (!jval.is_string() && !jval.is_number_integer()) return false;
 
             const rttr::enumeration e = prop.get_type().get_enumeration();
             if (jval.is_string())
@@ -294,28 +277,24 @@ namespace Alice
             }
 
             // 숫자는 그대로 set_value()로 넣고, RTTR 변환에 맡깁니다.
-            if (!prop.set_value(obj, jval.get<int>()))
-                return false;
+            if (!prop.set_value(obj, jval.get<int>())) return false;
 
             return true;
         }
 
         inline bool SetClass(rttr::instance obj, const rttr::property& prop, const json& jval)
         {
-            if (!jval.is_object())
-                return false;
+            if (!jval.is_object())  return false;
 
             rttr::variant child = prop.get_value(obj);
             if (!child.is_valid())
             {
                 child = prop.get_type().create();
-                if (!child.is_valid())
-                    return false;
+                if (!child.is_valid()) return false;
             }
 
             rttr::instance childInst = child;
-            if (!FromJsonObject(childInst, jval))
-                return false;
+            if (!FromJsonObject(childInst, jval)) return false;
 
             prop.set_value(obj, child);
             return true;
@@ -323,8 +302,7 @@ namespace Alice
 
         inline bool FromJsonToProperty(rttr::instance obj, const rttr::property& prop, const json& jval)
         {
-            if (!prop.is_valid())
-                return false;
+            if (!prop.is_valid()) return false;
 
             const rttr::type t = prop.get_type();
 
