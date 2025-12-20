@@ -8,6 +8,7 @@ namespace Alice
 
     /// 씬(.scene) 파일 저장/로드 유틸리티입니다.
     /// - JSON 기반 저장/로드입니다.
+    // 에디터에서 씬을 만들고, 저장하는 기능에 해당하는 코드임
     namespace SceneFile
     {
         /// 현재 World 의 상태를 JSON(.scene)으로 저장합니다.

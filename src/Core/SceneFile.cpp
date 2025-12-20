@@ -31,15 +31,15 @@ namespace Alice
             outEntity = JsonRttr::json::object();
             outEntity["id"] = static_cast<std::uint32_t>(id);
 
-            const TransformComponent* transform = world.GetTransform(id);
-            if (transform)
+            
+            if (const auto* transform = world.GetTransform(id); transform)
             {
                 rttr::instance inst = const_cast<TransformComponent&>(*transform);
                 outEntity["Transform"] = JsonRttr::ToJsonObject(inst);
             }
 
-            const ScriptComponent* script = world.GetScript(id);
-            if (script)
+            
+            if (const auto* script = world.GetScript(id); script)
             {
                 JsonRttr::json s = JsonRttr::json::object();
                 s["name"] = script->scriptName;
@@ -47,22 +47,22 @@ namespace Alice
                 outEntity["Script"] = s;
             }
 
-            const MaterialComponent* mat = world.GetMaterial(id);
-            if (mat)
+            
+            if (const auto* mat = world.GetMaterial(id); mat)
             {
                 rttr::instance inst = const_cast<MaterialComponent&>(*mat);
                 outEntity["Material"] = JsonRttr::ToJsonObject(inst);
             }
 
-            const SkinnedMeshComponent* skinned = world.GetSkinnedMesh(id);
-            if (skinned)
+            
+            if (const auto* skinned = world.GetSkinnedMesh(id); skinned)
             {
                 rttr::instance inst = const_cast<SkinnedMeshComponent&>(*skinned);
                 outEntity["SkinnedMesh"] = JsonRttr::ToJsonObject(inst);
             }
 
-            const SkinnedAnimationComponent* anim = world.GetSkinnedAnimation(id);
-            if (anim)
+            
+            if (const auto* anim = world.GetSkinnedAnimation(id); anim)
             {
                 rttr::instance inst = const_cast<SkinnedAnimationComponent&>(*anim);
                 outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
@@ -73,19 +73,17 @@ namespace Alice
 
         static bool ApplyEntity(World& world, const JsonRttr::json& e)
         {
-            if (!e.is_object())
-                return false;
+            if (!e.is_object()) return false;
 
             const EntityId id = world.CreateEntity();
 
-            // Transform (필수에 가깝게 취급)
+            // Transform
             TransformComponent& t = world.AddTransform(id);
             auto itT = e.find("Transform");
             if (itT != e.end())
             {
                 rttr::instance inst = t;
-                if (!JsonRttr::FromJsonObject(inst, *itT))
-                    return false;
+                if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
             }
 
             // Script
@@ -107,8 +105,7 @@ namespace Alice
             {
                 MaterialComponent& mc = world.AddMaterial(id, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f), {});
                 rttr::instance inst = mc;
-                if (!JsonRttr::FromJsonObject(inst, *itM))
-                    return false;
+                if (!JsonRttr::FromJsonObject(inst, *itM)) return false;
             }
 
             // SkinnedMesh
@@ -117,8 +114,7 @@ namespace Alice
             {
                 SkinnedMeshComponent tmp;
                 rttr::instance instTmp = tmp;
-                if (!JsonRttr::FromJsonObject(instTmp, *itSM))
-                    return false;
+                if (!JsonRttr::FromJsonObject(instTmp, *itSM)) return false;
 
                 if (!tmp.meshAssetPath.empty())
                 {
@@ -135,8 +131,7 @@ namespace Alice
             {
                 SkinnedAnimationComponent& sa = world.AddSkinnedAnimation(id);
                 rttr::instance inst = sa;
-                if (!JsonRttr::FromJsonObject(inst, *itSA))
-                    return false;
+                if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
             }
 
             return true;
@@ -156,13 +151,11 @@ namespace Alice
             {
                 (void)transform;
                 JsonRttr::json e;
-                if (!WriteEntity(e, world, id))
-                    return false;
+                if (!WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);
             }
 
-            if (!JsonRttr::SaveJsonFile(path, root, 4))
-                return false;
+            if (!JsonRttr::SaveJsonFile(path, root, 4)) return false;
 
             return true;
         }
@@ -174,8 +167,7 @@ namespace Alice
             // - 이 경우 기본 엔티티 1개를 넣어 JSON 씬으로 즉시 업그레이드합니다.
             {
                 std::ifstream ifs(path);
-                if (!ifs.is_open())
-                    return false;
+                if (!ifs.is_open()) return false;
 
                 std::string firstLine;
                 std::getline(ifs, firstLine);
@@ -191,21 +183,17 @@ namespace Alice
             }
 
             JsonRttr::json root;
-            if (!JsonRttr::LoadJsonFile(path, root))
-                return false;
+            if (!JsonRttr::LoadJsonFile(path, root)) return false;
 
             auto itEntities = root.find("entities");
-            if (itEntities == root.end() || !itEntities->is_array())
-                return false;
+            if (itEntities == root.end() || !itEntities->is_array()) return false;
 
             // 현재 월드 비우기
             world.Clear();
 
             for (const auto& e : *itEntities)
-            {
-                if (!ApplyEntity(world, e))
+                if (!ApplyEntity(world, e)) 
                     return false;
-            }
 
             return true;
         }

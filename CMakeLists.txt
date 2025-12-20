@@ -109,6 +109,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Singleton.h
     ${ALICE_SRC_DIR}/Core/Helper.h
     ${ALICE_SRC_DIR}/Core/Vertex.h
+    ${ALICE_SRC_DIR}/Core/JsonRttr.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
