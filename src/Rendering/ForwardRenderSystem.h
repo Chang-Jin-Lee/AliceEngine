@@ -166,7 +166,7 @@ namespace Alice
             float             shininess     { 32.0f };
 
             // PBR 재질 파라미터
-            DirectX::XMFLOAT3 baseColor     { 1.0f, 1.0f, 1.0f };  // PBR Base Color (Albedo)
+            DirectX::XMFLOAT3 baseColor     { 0.3f, 0.3f, 0.3f };  // PBR Base Color (Albedo)
             float             metalness    { 0.0f };                // 0.0 = 비금속, 1.0 = 금속
             float             roughness    { 0.5f };                // 0.0 = 거울, 1.0 = 거친 표면
             float             ambientOcclusion { 1.0f };            // AO (0.0 ~ 1.0)
@@ -192,9 +192,7 @@ namespace Alice
         bool CreateIblResources(const std::string& iblSetName = "Sample");
         bool CreateSkinnedResources();
 
-        void RenderSkybox(const Camera& camera,
-                          const DirectX::XMMATRIX& view,
-                          const DirectX::XMMATRIX& projection);
+        void RenderSkybox(const Camera& camera);
 
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
                                const DirectX::XMMATRIX& view,
@@ -214,6 +212,16 @@ namespace Alice
                            std::uint32_t boneCount);
 
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
+
+        void GetSceneBounds(const World& world, DirectX::XMVECTOR& outFocus, float& outRadius);
+
+        void SetCullState(DirectX::CXMMATRIX worldM, bool isShadowPass);
+
+        DirectX::XMMATRIX RenderShadowPass(const World& world, const std::vector<SkinnedDrawCommand>& skinnedCommands);
+        void RenderMainPass(const World& world, const Camera& camera, int shadingMode, bool enableFillLight, DirectX::CXMMATRIX lightViewProj);
+
+        bool IsValidPipeline() const;
+        void RestoreBackBuffer();
 
         ID3D11ShaderResourceView* GetOrCreateTexture(const std::string& path);
 
