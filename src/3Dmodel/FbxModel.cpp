@@ -225,33 +225,33 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			}
 
 			// === Debug: 스키닝 인덱스/가중치가 정상 범위인지 빠르게 확인 ===
-			{
-				const auto& boneNamesDbg = m_->skeleton.GetBoneNames();
-				unsigned short maxIdx = 0;
-				double maxWeightSum = 0.0;
-				size_t zeroWeightVerts = 0;
-				for (size_t i = 0; i < verts.size(); ++i)
-				{
-					const auto& v = verts[i];
-					maxIdx = (std::max)(maxIdx, v.boneIdx[0]);
-					maxIdx = (std::max)(maxIdx, v.boneIdx[1]);
-					maxIdx = (std::max)(maxIdx, v.boneIdx[2]);
-					maxIdx = (std::max)(maxIdx, v.boneIdx[3]);
-					const double ws = (double)v.boneWeight.x + (double)v.boneWeight.y + (double)v.boneWeight.z + (double)v.boneWeight.w;
-					maxWeightSum = (std::max)(maxWeightSum, ws);
-					if (ws < 1e-6) ++zeroWeightVerts;
-				}
-				ALICE_LOG_INFO("[FbxModel] SkinWeights: verts=%zu bones=%zu maxBoneIdx=%u zeroWeightVerts=%zu maxWeightSum=%.4f",
-					verts.size(), boneNamesDbg.size(), (unsigned)maxIdx, zeroWeightVerts, maxWeightSum);
-				for (size_t i = 0; i < (std::min<size_t>)(5, verts.size()); ++i)
-				{
-					const auto& v = verts[i];
-					ALICE_LOG_INFO("[FbxModel] v%zu idx=(%u,%u,%u,%u) w=(%.3f,%.3f,%.3f,%.3f)",
-						i,
-						(unsigned)v.boneIdx[0], (unsigned)v.boneIdx[1], (unsigned)v.boneIdx[2], (unsigned)v.boneIdx[3],
-						v.boneWeight.x, v.boneWeight.y, v.boneWeight.z, v.boneWeight.w);
-				}
-			}
+			// {
+			// 	const auto& boneNamesDbg = m_->skeleton.GetBoneNames();
+			// 	unsigned short maxIdx = 0;
+			// 	double maxWeightSum = 0.0;
+			// 	size_t zeroWeightVerts = 0;
+			// 	for (size_t i = 0; i < verts.size(); ++i)
+			// 	{
+			// 		const auto& v = verts[i];
+			// 		maxIdx = (std::max)(maxIdx, v.boneIdx[0]);
+			// 		maxIdx = (std::max)(maxIdx, v.boneIdx[1]);
+			// 		maxIdx = (std::max)(maxIdx, v.boneIdx[2]);
+			// 		maxIdx = (std::max)(maxIdx, v.boneIdx[3]);
+			// 		const double ws = (double)v.boneWeight.x + (double)v.boneWeight.y + (double)v.boneWeight.z + (double)v.boneWeight.w;
+			// 		maxWeightSum = (std::max)(maxWeightSum, ws);
+			// 		if (ws < 1e-6) ++zeroWeightVerts;
+			// 	}
+			// 	ALICE_LOG_INFO("[FbxModel] SkinWeights: verts=%zu bones=%zu maxBoneIdx=%u zeroWeightVerts=%zu maxWeightSum=%.4f",
+			// 		verts.size(), boneNamesDbg.size(), (unsigned)maxIdx, zeroWeightVerts, maxWeightSum);
+			// 	for (size_t i = 0; i < (std::min<size_t>)(5, verts.size()); ++i)
+			// 	{
+			// 		const auto& v = verts[i];
+			// 		ALICE_LOG_INFO("[FbxModel] v%zu idx=(%u,%u,%u,%u) w=(%.3f,%.3f,%.3f,%.3f)",
+			// 			i,
+			// 			(unsigned)v.boneIdx[0], (unsigned)v.boneIdx[1], (unsigned)v.boneIdx[2], (unsigned)v.boneIdx[3],
+			// 			v.boneWeight.x, v.boneWeight.y, v.boneWeight.z, v.boneWeight.w);
+			// 	}
+			// }
 
 			m_->geometry.RebuildVBFromCPU(device);
 		}
