@@ -1,25 +1,28 @@
 {
     "entities": [
         {
-            "Script": {
-                "enabled": true,
-                "name": "SceneSwitchExample"
-            },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SceneSwitchExample",
+                    "props": {}
+                }
+            ],
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
+                    "x": -10.624564170837402,
+                    "y": 7.713817119598389,
+                    "z": -1.2783443927764893
                 },
                 "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
+                    "x": -0.0,
+                    "y": 38.2738151550293,
                     "z": 0.0
                 },
                 "scale": {
                     "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
+                    "y": 0.9999999403953552,
+                    "z": 0.9999999403953552
                 }
             },
             "id": 1
@@ -36,11 +39,18 @@
                 "metalness": 0.0,
                 "roughness": 0.5
             },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "CharacterMovement",
+                    "props": {}
+                }
+            ],
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 54.700923936557956
+                "timeSec": 27.732333074556664
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -49,13 +59,13 @@
             },
             "Transform": {
                 "position": {
-                    "x": -4.818533897399902,
+                    "x": -0.043284785002470016,
                     "y": 0.0,
-                    "z": 0.0
+                    "z": -1.987143635749817
                 },
                 "rotation": {
-                    "x": -0.0,
-                    "y": 0.0,
+                    "x": 0.0,
+                    "y": 6.2831854820251465,
                     "z": 0.0
                 },
                 "scale": {
@@ -64,7 +74,129 @@
                     "z": 0.05000000074505806
                 }
             },
-            "id": 2
+            "id": 2,
+            "name": "Rapi"
+        },
+        {
+            "Camera": {
+                "farPlane": 5000.0,
+                "fovYRad": 0.7853981852531433,
+                "nearPlane": 0.10000000149011612,
+                "primary": true
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 1.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "CameraManager",
+                    "props": {}
+                },
+                {
+                    "enabled": true,
+                    "name": "CameraFollow",
+                    "props": {}
+                }
+            ],
+            "Transform": {
+                "position": {
+                    "x": -0.043284785002470016,
+                    "y": 28.0,
+                    "z": -14.987143516540527
+                },
+                "rotation": {
+                    "x": 1.136126160621643,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 3,
+            "name": "Camera1"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.05791503190994263,
+                    "y": 0.05791503190994263,
+                    "z": 0.05791503190994263
+                },
+                "metalness": 0.0,
+                "roughness": 0.1550000011920929
+            },
+            "Transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": -0.973606288433075,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 150.4550018310547,
+                    "y": 1.0,
+                    "z": 118.77100372314453
+                }
+            },
+            "id": 4,
+            "name": "Ground"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "metalness": 1.0,
+                "roughness": 0.0
+            },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "RotateAndScale",
+                    "props": {}
+                }
+            ],
+            "Transform": {
+                "position": {
+                    "x": 4.098037242889404,
+                    "y": 8.976366996765137,
+                    "z": 12.8917236328125
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 5,
+            "name": "Entity5"
         }
     ],
     "version": 1
