@@ -2078,13 +2078,13 @@ namespace Alice
                     switch (skyboxChoice)
                     {
                     case 1: // Bridge
-                        forward.SetIblSet("Bridge");
+                        forward.SetIblSet("Bridge", "bridge");
                         break;
                     case 2: // Indoor
-                        forward.SetIblSet("Indoor");
+                        forward.SetIblSet("Indoor", "indoor");
                         break;
                     case 3: // Baker (Sample)
-                        forward.SetIblSet("Sample");
+                        forward.SetIblSet("Sample", "BakerSample");
                         break;
                     default:
                         break;
