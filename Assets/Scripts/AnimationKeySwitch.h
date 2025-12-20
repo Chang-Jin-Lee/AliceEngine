@@ -12,6 +12,14 @@ namespace Alice
 
         void Start() override;
         void Update(float deltaTime) override;
+
+        // 애니메이션 노티파이(몽타주) 예시
+        void OnFootstep();
+        void OnHit();
+
+    private:
+        void UpdateNotifies();
+        double m_prevTime = 0.0;
     };
 }
 
