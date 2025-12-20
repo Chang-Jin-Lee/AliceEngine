@@ -1551,7 +1551,13 @@ namespace Alice
                                         tex.GetAddressOf(),
                                         srv.GetAddressOf());
 
-                                    if (SUCCEEDED(hr) && srv)
+                                    if (FAILED(hr) || !srv)
+                                    {
+                                        ALICE_LOG_WARN("[Editor] FAILED to load texture for override: \"%s\" (hr=0x%08X)\n",
+                                                       src.string().c_str(),
+                                                       static_cast<unsigned>(hr));
+                                    }
+                                    else
                                     {
                                         if (matIndex < mesh->materialSRVs.size())
                                         {
@@ -2440,14 +2446,14 @@ namespace Alice
                         ++index;
                     }
 
-                    std::ofstream ofs(newPath);
-                    if (ofs.is_open())
-                    {
-                        ofs << "name: " << newPath.stem().string() << "\n";
-                        ofs << "color: 0.7 0.7 0.7\n";
-                        ofs << "roughness: 0.5\n";
-                        ofs << "metalness: 0.0\n";
-                    }
+                    // JSON(.mat)로 저장 (RTTR + ReflectionSerializer 내부 사용)
+                    MaterialComponent mat;
+                    mat.color = DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
+                    mat.roughness = 0.5f;
+                    mat.metalness = 0.0f;
+                    mat.assetPath = newPath.string();
+                    mat.albedoTexturePath.clear();
+                    MaterialFile::Save(newPath, mat);
                 }
 
                 if (ImGui::MenuItem("Create Scene"))
@@ -2460,11 +2466,13 @@ namespace Alice
                         ++index;
                     }
 
-                    std::ofstream ofs(newPath);
-                    if (ofs.is_open())
-                    {
-                        ofs << "# AliceRenderer scene\n";
-                    }
+                    // 기본 씬: 큐브(Transform 1개) + 기본 Material 1개
+                    // ForwardRenderSystem은 Transform만 있어도 기본 큐브를 그립니다.
+                    World temp;
+                    const EntityId e = temp.CreateEntity();
+                    temp.AddTransform(e);
+                    temp.AddMaterial(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f), {});
+                    SceneFile::Save(temp, newPath);
                 }
 
                 // 디렉터리 삭제 (Assets 안에서만 사용)
@@ -2732,94 +2740,133 @@ namespace Alice
         }
     }
 
+    // BuildSettings.txt 파싱 및 시작 씬 로드
+    bool LoadStartupSceneFromBuildSettings(World& world, const std::filesystem::path& exeDir)
+    {
+        // 1. 설정 파일 경로 확보 (Exe위치 -> 프로젝트 루트 순)
+        std::filesystem::path cfg = exeDir / "BuildSettings.txt";
+        if (!std::filesystem::exists(cfg))
+            cfg = exeDir.parent_path().parent_path().parent_path() / "Build/BuildSettings.txt";
+
+        std::ifstream ifs(cfg);
+        if (!ifs.is_open()) return false;
+
+        std::string line, target;
+        std::vector<std::string> scenes;
+        bool inScenes = false;
+
+        // 2. 파싱 (C++20 starts_with 활용)
+        while (std::getline(ifs, line))
+        {
+            // 공백 제거 (Trim)
+            auto s = line.find_first_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            line = line.substr(s, line.find_last_not_of(" \t\r\n") - s + 1);
+
+            if (line.starts_with('#')) continue;
+
+            if (line.starts_with("default:"))
+            {
+                target = line.substr(8);
+                if (auto v = target.find_first_not_of(" \t\r\n"); v != std::string::npos)
+                    target = target.substr(v);
+            }
+            else if (line.starts_with("scenes:")) inScenes = true;
+            else if (inScenes && line.starts_with('-'))
+            {
+                std::string path = line.substr(1);
+                if (auto v = path.find_first_not_of(" \t\r\n"); v != std::string::npos)
+                    scenes.push_back(path.substr(v));
+            }
+        }
+
+        // 3. 타겟 씬 결정 및 경로 보정
+        if (target.empty() && !scenes.empty()) target = scenes.front();
+        if (target.empty()) return false;
+
+        std::filesystem::path finalPath = target;
+        if (!finalPath.is_absolute())
+        {
+            // Exe 기준 존재 여부 확인 후, 없으면 루트 기준 적용
+            if (std::filesystem::exists(exeDir / finalPath)) finalPath = exeDir / finalPath;
+            else finalPath = exeDir.parent_path().parent_path().parent_path() / finalPath;
+        }
+
+        ALICE_LOG_INFO("Loading Startup Scene: %s", finalPath.string().c_str());
+
+        // 4. 로드 실패 검사
+        if (!SceneFile::Load(world, finalPath))
+        {
+            ALICE_LOG_ERRORF("Scene Load Failed: %s", finalPath.string().c_str());
+            return false;
+        }
+
+        return true;
+    }
+
+    // 스킨 메쉬 등록 보장
     void EditorCore::EnsureSkinnedMeshesRegistered(World& world)
     {
-        if (!m_skinnedRegistry || !m_resources || !m_renderDevice)
+        if (!m_skinnedRegistry || !m_resources || !m_renderDevice || world.GetSkinnedMeshes().empty())
             return;
 
-        const auto& skinnedMap = world.GetSkinnedMeshes();
-        if (skinnedMap.empty())
-            return;
-
-        auto* device = m_renderDevice->GetDevice();
-
-        for (const auto& [entityId, comp] : skinnedMap)
+        for (const auto& [entityId, comp] : world.GetSkinnedMeshes())
         {
-            if (comp.meshAssetPath.empty())
+            if (comp.meshAssetPath.empty() || m_skinnedRegistry->Find(comp.meshAssetPath))
                 continue;
 
-            if (m_skinnedRegistry->Find(comp.meshAssetPath))
-                continue; // 이미 등록됨
-
-            // .fbxasset 경로를 우선 사용, 없으면 관례적으로 Assets/Fbx/<mesh>.fbxasset 시도
-            std::filesystem::path fbxAssetPath;
-            if (!comp.instanceAssetPath.empty())
-            {
-                fbxAssetPath = comp.instanceAssetPath;
-            }
-            else
-            {
-                fbxAssetPath = std::filesystem::path("Assets/Fbx")
-                             / (comp.meshAssetPath + ".fbxasset");
-            }
+            // 경로 결정 (.fbxasset 우선, 없으면 관례 경로)
+            std::filesystem::path fbxPath = comp.instanceAssetPath.empty()
+                ? std::filesystem::path("Assets/Fbx") / (comp.meshAssetPath + ".fbxasset")
+                : std::filesystem::path(comp.instanceAssetPath);
 
             Alice::FbxInstanceAsset instance{};
-            const std::filesystem::path fbxAssetAbs = m_resources->Resolve(fbxAssetPath);
-            if (!Alice::LoadFbxInstanceAsset(fbxAssetAbs, instance))
+            std::filesystem::path absPath = m_resources->Resolve(fbxPath);
+
+            // 로드 실패 검사
+            if (!Alice::LoadFbxInstanceAsset(absPath, instance) || instance.sourceFbx.empty())
             {
-                ALICE_LOG_WARN("[Editor] EnsureSkinnedMeshesRegistered: failed to load .fbxasset \"%s\" for meshKey=\"%s\"\n",
-                              fbxAssetAbs.string().c_str(),
-                              comp.meshAssetPath.c_str());
+                ALICE_LOG_WARN("[Editor] Failed loading fbxasset: %s", absPath.string().c_str());
                 continue;
             }
 
-            if (instance.sourceFbx.empty())
-            {
-                ALICE_LOG_INFO("[Editor] EnsureSkinnedMeshesRegistered: .fbxasset has empty source_fbx for \"%s\"\n",
-                              fbxAssetPath.string().c_str());
-                continue;
-            }
-
-            // 원본 FBX 를 다시 임포트해서 SkinnedMeshRegistry 에 등록
-            FbxImportOptions opt{};
+            // 재임포트 및 등록
             FbxImporter importer(*m_resources, m_skinnedRegistry);
+            FbxImportResult res = importer.Import(m_renderDevice->GetDevice(), m_resources->Resolve(instance.sourceFbx), {});
 
-            std::filesystem::path srcFbxPath = m_resources->Resolve(instance.sourceFbx);
-            FbxImportResult result = importer.Import(device, srcFbxPath, opt);
-
-            ALICE_LOG_INFO("[Editor] EnsureSkinnedMeshesRegistered: re-import FBX \"%s\" -> meshKey=\"%s\" result.mesh=\"%s\"\n",
-                          srcFbxPath.string().c_str(),
-                          comp.meshAssetPath.c_str(),
-                          result.meshAssetPath.c_str());
+            ALICE_LOG_INFO("[Editor] Re-imported FBX: %s -> %s", instance.sourceFbx.c_str(), res.meshAssetPath.c_str());
         }
     }
+
+    // 씬 저장
     void EditorCore::SaveScene(World& world)
     {
-		std::filesystem::path savePath = g_CurrentScenePath;
-		if (savePath.empty())
-		{
-			savePath = "Assets/AutoSaved.scene";
-		}
-		ALICE_LOG_INFO("[Editor] SceneFile::Save: \"%s\"\n",
-			savePath.string().c_str());
-		const std::filesystem::path saveAbs = (m_resources ? m_resources->Resolve(savePath) : savePath);
-		SceneFile::Save(world, saveAbs);
-		g_CurrentScenePath = savePath; // 논리 경로로 유지
-		g_HasCurrentScenePath = true;
-		g_SceneDirty = false;
+        std::filesystem::path savePath = g_CurrentScenePath.empty() ? "Assets/AutoSaved.scene" : g_CurrentScenePath;
 
+        ALICE_LOG_INFO("[Editor] Saving Scene: %s", savePath.string().c_str());
+
+        // 저장 실행 (실패 처리는 내부 로직에 맡김)
+        SceneFile::Save(world, m_resources ? m_resources->Resolve(savePath) : savePath);
+
+        // 상태 갱신
+        g_CurrentScenePath = savePath;
+        g_HasCurrentScenePath = true;
+        g_SceneDirty = false;
     }
+
+    // 씬 로드
     void EditorCore::LoadScene(World& world)
     {
-		ALICE_LOG_INFO("[Editor] SceneFile::Load (after save): \"%s\"\n",
-			g_NextScenePath.string().c_str());
-		const std::filesystem::path loadAbs = (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
-		SceneFile::Load(world, loadAbs);
-		EnsureSkinnedMeshesRegistered(world);
-		g_CurrentScenePath = g_NextScenePath; // 논리 경로
-		g_HasCurrentScenePath = true;
-		g_SceneDirty = false;
+        ALICE_LOG_INFO("[Editor] Loading Scene: %s", g_NextScenePath.string().c_str());
 
+        // 로드 실행
+        SceneFile::Load(world, m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+
+        // 후처리 및 상태 갱신
+        EnsureSkinnedMeshesRegistered(world);
+        g_CurrentScenePath = g_NextScenePath;
+        g_HasCurrentScenePath = true;
+        g_SceneDirty = false;
     }
 }
 
