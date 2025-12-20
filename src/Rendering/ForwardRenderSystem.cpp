@@ -861,8 +861,17 @@ float4 main(PSInput input) : SV_TARGET
 
         ComPtr<ID3D11Texture2D> tex;
         // 2번째 인자에 nullptr를 넣으면 텍스처의 포맷과 전체 범위를 사용하는 기본 뷰가 생성됨
-        if (SUCCEEDED(m_device->CreateTexture2D(&desc, &sd, tex.GetAddressOf())))
-            m_device->CreateShaderResourceView(tex.Get(), nullptr, m_flatNormalSRV.ReleaseAndGetAddressOf());
+        {
+            const HRESULT hr = m_device->CreateTexture2D(&desc, &sd, tex.GetAddressOf());
+            if (FAILED(hr))
+            {
+                ALICE_LOG_WARN("[ForwardRenderSystem] FAILED to create flat normal texture. (hr=0x%08X)", static_cast<unsigned>(hr));
+            }
+            else
+            {
+                m_device->CreateShaderResourceView(tex.Get(), nullptr, m_flatNormalSRV.ReleaseAndGetAddressOf());
+            }
+        }
 
         return true;
     }
@@ -891,21 +900,27 @@ float4 main(PSInput input) : SV_TARGET
         desc.CullMode = D3D11_CULL_BACK;
         desc.DepthClipEnable = TRUE;
 
-        // 생성 헬퍼: 와인딩, 바이어스 설정 후 생성 및 결과 반환
-        auto Create = [&](BOOL ccw, INT bias, FLOAT slope, auto& dest) {
-            desc.FrontCounterClockwise = ccw;
-            desc.DepthBias = bias;
-            desc.SlopeScaledDepthBias = slope;
-            return SUCCEEDED(m_device->CreateRasterizerState(&desc, dest.ReleaseAndGetAddressOf()));
-        };
-
         // 1. 일반 렌더링 (CCW: 기본, CW: 반전/거울)
-        if (!Create(TRUE, 0, 0.0f, m_rasterizerState)) return false;
-        if (!Create(FALSE, 0, 0.0f, m_rasterizerStateReversed)) return false;
+        desc.FrontCounterClockwise = TRUE;
+        desc.DepthBias = 0;
+        desc.SlopeScaledDepthBias = 0.0f;
+        if (FAILED(m_device->CreateRasterizerState(&desc, m_rasterizerState.ReleaseAndGetAddressOf()))) return false;
+
+        desc.FrontCounterClockwise = FALSE;
+        desc.DepthBias = 0;
+        desc.SlopeScaledDepthBias = 0.0f;
+        if (FAILED(m_device->CreateRasterizerState(&desc, m_rasterizerStateReversed.ReleaseAndGetAddressOf()))) return false;
 
         // 2. 섀도우 패스 (DepthBias 적용)
-        if (!Create(TRUE, 1000, 1.0f, m_shadowRasterizerState)) return false;
-        if (!Create(FALSE, 1000, 1.0f, m_shadowRasterizerStateReversed)) return false;
+        desc.FrontCounterClockwise = TRUE;
+        desc.DepthBias = 1000;
+        desc.SlopeScaledDepthBias = 1.0f;
+        if (FAILED(m_device->CreateRasterizerState(&desc, m_shadowRasterizerState.ReleaseAndGetAddressOf()))) return false;
+
+        desc.FrontCounterClockwise = FALSE;
+        desc.DepthBias = 1000;
+        desc.SlopeScaledDepthBias = 1.0f;
+        if (FAILED(m_device->CreateRasterizerState(&desc, m_shadowRasterizerStateReversed.ReleaseAndGetAddressOf()))) return false;
 
         return true;
     }
@@ -1064,10 +1079,12 @@ float4 main(PSInput input) : SV_TARGET
         XMMATRIX wvpT = XMMatrixTranspose(view * camera.GetProjectionMatrix());
 
         D3D11_MAPPED_SUBRESOURCE map;
-        if (SUCCEEDED(m_context->Map(m_cbSkybox.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
-            memcpy(map.pData, &wvpT, sizeof(XMMATRIX));
-            m_context->Unmap(m_cbSkybox.Get(), 0);
-        }
+        const HRESULT hr = m_context->Map(m_cbSkybox.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &map);
+        if (FAILED(hr))
+            return;
+
+        memcpy(map.pData, &wvpT, sizeof(XMMATRIX));
+        m_context->Unmap(m_cbSkybox.Get(), 0);
 
         // 리소스 바인딩 및 드로우
         ID3D11Buffer* cb = m_cbSkybox.Get();
@@ -1220,9 +1237,6 @@ float4 main(PSInput input) : SV_TARGET
             ? XMVectorSet(0, 0, 1, 0) : XMVectorSet(0, 1, 0, 0);
         XMMATRIX lightView = XMMatrixLookToLH(lightPos, lightDir, up);
 
-        // Near/Far 자동 계산 (AABB Transform)
-        float minZ = 1e9f, maxZ = -1e9f;
-        // ... (8코너 루프 생략: 원본 코드의 로직 그대로 사용) ...
         float nearZ = 0.01f; float farZ = r * 2.0f;
 
         XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(-r, r, -r, r, nearZ, farZ);
