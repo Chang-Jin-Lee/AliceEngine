@@ -31,6 +31,7 @@
 #include <commdlg.h>
 #include <ShlObj.h>   // 폴더 선택 다이얼로그 (SHBrowseForFolderW)
 #include <Game/FbxAsset.h>
+#include "json/json.hpp"
 
 // 텍스처 로딩용 DirectXTK
 #include <DirectXTK/WICTextureLoader.h>
@@ -41,6 +42,17 @@ namespace Alice
 {
     namespace
     {
+        // Build Game 진행 상황 전역 (아래쪽에서 정의됨)
+        extern std::atomic<bool>  g_BuildInProgress;
+        extern std::atomic<float> g_BuildProgress;
+        extern std::atomic<long>  g_BuildExitCode;
+
+        inline bool MaterialInspectorFilter(const std::string& propName)
+        {
+            // assetPath와 albedoTexturePath는 특별 UI 처리하므로 제외
+            return propName != "assetPath" && propName != "albedoTexturePath";
+        }
+
         struct ScopedHandle
         {
             HANDLE h = nullptr;
@@ -347,44 +359,59 @@ namespace Alice
             const size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
             std::vector<std::thread> workers;
 
-            auto worker = [&]()
+            struct WorkerCtx
             {
-                Alice::ResourceManager rm; // 스레드별 별도 생성
-                while (true)
+                std::vector<Job>* jobs{};
+                std::atomic<size_t>* nextIdx{};
+                std::atomic<bool>* success{};
+                std::mutex* logMutex{};
+            };
+
+            struct WorkerProc
+            {
+                static void Run(WorkerCtx ctx)
                 {
-                    size_t idx = nextIdx.fetch_add(1);
-                    if (idx >= jobs.size()) break;
-
-                    const Job& job = jobs[idx];
-                    bool result = false;
-
-                    if (job.alreadyEncrypted)
+                    Alice::ResourceManager rm;
+                    while (true)
                     {
-                        result = CopyFileOver(job.inPath, job.outPath);
-                    }
-                    else
-                    {
-                        {
-                            std::lock_guard<std::mutex> lock(logMutex);
-                            ALICE_LOG_INFO("CookFile: in=\"%s\" -> out=\"%s\"",
-                                           job.inPath.string().c_str(),
-                                           job.outPath.string().c_str());
-                        }
-                        result = rm.CookAndSave(job.inPath, job.outPath);
-                        if (!result)
-                        {
-                            std::lock_guard<std::mutex> lock(logMutex);
-                            ALICE_LOG_ERRORF("BuildGame: CookAndSave failed. in=\"%s\" out=\"%s\"",
-                                             job.inPath.string().c_str(), job.outPath.string().c_str());
-                        }
-                    }
+                        const size_t idx = ctx.nextIdx->fetch_add(1);
+                        if (idx >= ctx.jobs->size())
+                            break;
 
-                    if (!result) success = false;
+                        const Job& job = (*ctx.jobs)[idx];
+                        bool ok = false;
+
+                        if (job.alreadyEncrypted)
+                        {
+                            ok = CopyFileOver(job.inPath, job.outPath);
+                        }
+                        else
+                        {
+                            {
+                                std::lock_guard<std::mutex> lock(*ctx.logMutex);
+                                ALICE_LOG_INFO("CookFile: in=\"%s\" -> out=\"%s\"",
+                                               job.inPath.string().c_str(),
+                                               job.outPath.string().c_str());
+                            }
+                            ok = rm.CookAndSave(job.inPath, job.outPath);
+                            if (!ok)
+                            {
+                                std::lock_guard<std::mutex> lock(*ctx.logMutex);
+                                ALICE_LOG_ERRORF("BuildGame: CookAndSave failed. in=\"%s\" out=\"%s\"",
+                                                 job.inPath.string().c_str(), job.outPath.string().c_str());
+                            }
+                        }
+
+                        if (!ok)
+                            ctx.success->store(false);
+                    }
                 }
             };
 
+            const WorkerCtx ctx{ &jobs, &nextIdx, &success, &logMutex };
+
             for (size_t i = 0; i < numThreads; ++i)
-                workers.emplace_back(worker);
+                workers.emplace_back(&WorkerProc::Run, ctx);
 
             for (auto& t : workers)
                 t.join();
@@ -423,22 +450,213 @@ namespace Alice
             const size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
             std::vector<std::thread> workers;
 
-            auto worker = [&]()
+            struct CopyCtx
             {
-                while (true)
+                std::vector<fs::path>* dllFiles{};
+                std::atomic<size_t>* nextIdx{};
+                fs::path toDir{};
+            };
+
+            struct CopyProc
+            {
+                static void Run(CopyCtx ctx)
                 {
-                    size_t idx = nextIdx.fetch_add(1);
-                    if (idx >= dllFiles.size()) break;
-                    CopyFileOver(dllFiles[idx], toDir / dllFiles[idx].filename());
+                    while (true)
+                    {
+                        const size_t idx = ctx.nextIdx->fetch_add(1);
+                        if (idx >= ctx.dllFiles->size())
+                            break;
+                        CopyFileOver((*ctx.dllFiles)[idx], ctx.toDir / (*ctx.dllFiles)[idx].filename());
+                    }
                 }
             };
 
+            const CopyCtx ctx{ &dllFiles, &nextIdx, toDir };
+
             for (size_t i = 0; i < numThreads; ++i)
-                workers.emplace_back(worker);
+                workers.emplace_back(&CopyProc::Run, ctx);
 
             for (auto& t : workers)
                 t.join();
         }
+
+        struct BuildGameTaskArgs
+        {
+            std::filesystem::path projectRoot;
+            std::filesystem::path cfgPath;
+            std::string           exportPathStr;
+        };
+
+        struct BuildGameTask
+        {
+            static void Run(BuildGameTaskArgs args)
+            {
+                namespace fs2 = std::filesystem;
+
+#ifdef _DEBUG
+                const std::wstring cmd = L"cmake --build build --config Debug --target AlicePlayer";
+                const fs2::path releaseBinDir = args.projectRoot / "build/bin/Debug";
+#else
+                const std::wstring cmd = L"cmake --build build --config Release --target AlicePlayer";
+                const fs2::path releaseBinDir = args.projectRoot / "build/bin/Release";
+#endif
+
+                STARTUPINFOW        si{};
+                PROCESS_INFORMATION pi{};
+                si.cb = sizeof(si);
+                si.dwFlags = STARTF_USESHOWWINDOW;
+                si.wShowWindow = SW_HIDE;
+
+                BOOL ok = CreateProcessW(
+                    nullptr,
+                    const_cast<wchar_t*>(cmd.c_str()),
+                    nullptr,
+                    nullptr,
+                    FALSE,
+                    CREATE_NO_WINDOW,
+                    nullptr,
+                    args.projectRoot.wstring().c_str(),
+                    &si,
+                    &pi);
+
+                if (!ok)
+                {
+                    ALICE_LOG_ERRORF("Build Game: failed to start CMake process.");
+                    g_BuildInProgress.store(false);
+                    g_BuildProgress.store(0.0f);
+                    g_BuildExitCode.store(1);
+                    return;
+                }
+
+                ScopedHandle hProcess(pi.hProcess);
+                ScopedHandle hThread(pi.hThread);
+
+                float p = 0.0f;
+                for (;;)
+                {
+                    DWORD wait = WaitForSingleObject(hProcess.h, 50);
+                    if (wait == WAIT_TIMEOUT)
+                    {
+                        p += 0.005f;
+                        if (p > 0.9f) p = 0.9f;
+                        g_BuildProgress.store(p);
+                        continue;
+                    }
+                    break;
+                }
+
+                DWORD exitCode = 0;
+                GetExitCodeProcess(hProcess.h, &exitCode);
+                ALICE_LOG_INFO("Build Game: CMake build finished with exitCode=%lu",
+                               static_cast<unsigned long>(exitCode));
+
+                if (exitCode != 0)
+                {
+                    g_BuildProgress.store(1.0f);
+                    g_BuildExitCode.store(static_cast<long>(exitCode));
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+
+                // (1) Metas: Assets를 청크로 패킹 (폴더구조 숨김, 256KB)
+                const fs2::path stageMetas = releaseBinDir / "Metas";
+                if (!MakeCleanDir(stageMetas))
+                {
+                    g_BuildExitCode.store(2);
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+                {
+                    Alice::ResourceManager rm;
+                    if (!rm.CookResourceToChunkStore(args.projectRoot / "Assets", stageMetas, 256 * 1024))
+                    {
+                        ALICE_LOG_ERRORF("Build Game: failed to cook Assets -> Metas/Chunks.");
+                        g_BuildExitCode.store(3);
+                        g_BuildInProgress.store(false);
+                        return;
+                    }
+                }
+
+                // (2) Cooked: 항상 새로 생성 + 전부 .alice 암호화
+                const fs2::path stageCooked = releaseBinDir / "Cooked";
+                if (!MakeCleanDir(stageCooked))
+                {
+                    g_BuildExitCode.store(4);
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+                if (!CookAllIntoCookedRoot(args.projectRoot / "Cooked", stageCooked, "Resource/"))
+                {
+                    g_BuildExitCode.store(5);
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+
+                // (3) Resource: 원본 폴더를 넣지 않고 Cooked/Chunks로 패킹
+                {
+                    Alice::ResourceManager rm;
+                    if (!rm.CookResourceToChunkStore(args.projectRoot / "Resource", stageCooked))
+                    {
+                        ALICE_LOG_ERRORF("Build Game: failed to cook Resource -> Cooked/Chunks (stage).");
+                        g_BuildExitCode.store(6);
+                        g_BuildInProgress.store(false);
+                        return;
+                    }
+                }
+
+                // (4) BuildSettings 복사 (exe 옆)
+                if (!CopyFileOver(args.cfgPath, releaseBinDir / "BuildSettings.json"))
+                {
+                    g_BuildExitCode.store(7);
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+
+                // (5) Export: Bin 아래로 정리 (exe/dll/buildsettings/cooked/metas)
+                fs2::path exportRoot = args.exportPathStr;
+                if (!exportRoot.is_absolute())
+                    exportRoot = args.projectRoot / exportRoot;
+
+                const fs2::path exportBin = exportRoot / "Bin";
+                if (!MakeCleanDir(exportBin))
+                {
+                    g_BuildExitCode.store(8);
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+
+                if (!CopyFileOver(releaseBinDir / "AlicePlayer.exe", exportBin / "AlicePlayer.exe"))
+                {
+                    g_BuildExitCode.store(9);
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+
+                CopyAllDlls(releaseBinDir, exportBin);
+
+                if (!CopyDirTree(releaseBinDir / "Cooked", exportBin / "Cooked") ||
+                    !CopyDirTree(releaseBinDir / "Metas", exportBin / "Metas"))
+                {
+                    g_BuildExitCode.store(10);
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+
+                if (!CopyFileOver(releaseBinDir / "BuildSettings.json", exportBin / "BuildSettings.json"))
+                {
+                    g_BuildExitCode.store(11);
+                    g_BuildInProgress.store(false);
+                    return;
+                }
+
+                ALICE_LOG_INFO("Build Game: exported to \"%s\" (run: Bin/AlicePlayer.exe)",
+                               exportRoot.string().c_str());
+
+                g_BuildProgress.store(1.0f);
+                g_BuildExitCode.store(static_cast<long>(exitCode));
+                g_BuildInProgress.store(false);
+            }
+        };
     }
 
     namespace
@@ -880,7 +1098,7 @@ namespace Alice
                 {
                     if (ImGui::Button("Build Game"))
                     {
-                        // 1) 빌드 설정 파일 저장 (간단한 텍스트 포맷)
+                        // 1) 빌드 설정 파일 저장 (JSON)
                         wchar_t exePathW[MAX_PATH] = {};
                         GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
                         fs::path exePath = exePathW;
@@ -891,17 +1109,15 @@ namespace Alice
                         std::error_code fec;
                         fs::create_directories(buildDir, fec);
 
-                        fs::path cfgPath = buildDir / "BuildSettings.txt";
+                        fs::path cfgPath = buildDir / "BuildSettings.json";
                         {
                             std::ofstream ofs(cfgPath);
                             if (ofs.is_open())
                             {
-                                ofs << "# AliceRenderer build settings\n";
-                                ofs << "width: "  << s_Width  << "\n";
-                                ofs << "height: " << s_Height << "\n";
+                                nlohmann::json j;
+                                j["width"] = s_Width;
+                                j["height"] = s_Height;
 
-                                // 포함할 씬 목록
-                                ofs << "scenes:\n";
                                 std::vector<fs::path> includedScenes;
                                 includedScenes.reserve(s_ScenePaths.size());
                                 for (std::size_t i = 0; i < s_ScenePaths.size(); ++i)
@@ -909,10 +1125,7 @@ namespace Alice
                                     if (i >= s_SceneSelected.size()) continue;
                                     if (!s_SceneSelected[i]) continue;
 
-                                    //ofs << "  - " << s_ScenePaths[i].string() << "\n";
 									fs::path relScene = fs::relative(s_ScenePaths[i], projectRoot);  // 프로젝트 루트 기준으로 상대 경로 (예: "Assets/Stage1/Stage1.scene")
-									ofs << "  - " << relScene.string() << "\n";
-
                                     includedScenes.push_back(relScene);
                                 }
 
@@ -935,8 +1148,16 @@ namespace Alice
 
                                 if (!defaultScenePath.empty())
                                 {
-                                    ofs << "default: " << defaultScenePath.string() << "\n";
+                                    j["default"] = defaultScenePath.string();
                                 }
+
+                                std::vector<std::string> sceneStrings;
+                                sceneStrings.reserve(includedScenes.size());
+                                for (const auto& p : includedScenes)
+                                    sceneStrings.push_back(p.string());
+                                j["scenes"] = sceneStrings;
+
+                                ofs << j.dump(4);
                             }
                         }
 
@@ -950,189 +1171,8 @@ namespace Alice
                         // Export 경로 문자열은 스레드 시작 시점에 복사해 둡니다.
                         std::string exportPathStr = s_ExportPath;
 
-                        std::thread([projectRoot, cfgPath, exportPathStr]()
-                        {
-                            // CMake 빌드 프로세스 시작
-#ifdef _DEBUG
-                            std::wstring cmd = L"cmake --build build --config Debug --target AlicePlayer";
-#else
-                            std::wstring cmd = L"cmake --build build --config Release --target AlicePlayer";
-#endif
-
-                            STARTUPINFOW        si{};
-                            PROCESS_INFORMATION pi{};
-                            si.cb = sizeof(si);
-                            si.dwFlags = STARTF_USESHOWWINDOW;
-                            si.wShowWindow = SW_HIDE;
-
-                            BOOL ok = CreateProcessW(
-                                nullptr,
-                                cmd.data(),
-                                nullptr,
-                                nullptr,
-                                FALSE,
-                                CREATE_NO_WINDOW,
-                                nullptr,
-                                projectRoot.wstring().c_str(),
-                                &si,
-                                &pi);
-
-                            if (!ok)
-                            {
-                                ALICE_LOG_ERRORF("Build Game: failed to start CMake process.");
-                                g_BuildInProgress.store(false);
-                                g_BuildProgress.store(0.0f);
-                                g_BuildExitCode.store(1);
-                                return;
-                            }
-
-                            ScopedHandle hProcess(pi.hProcess);
-                            ScopedHandle hThread(pi.hThread);
-
-                            // 프로세스가 끝날 때까지 기다리면서 간단한 진행률 애니메이션
-                            float p = 0.0f;
-                            for (;;)
-                            {
-                                DWORD wait = WaitForSingleObject(hProcess.h, 50);
-                                if (wait == WAIT_TIMEOUT)
-                                {
-                                    p += 0.005f;
-                                    if (p > 0.9f) p = 0.9f;
-                                    g_BuildProgress.store(p);
-                                }
-                                else
-                                {
-                                    break;
-                                }
-                            }
-
-                            DWORD exitCode = 0;
-                            GetExitCodeProcess(hProcess.h, &exitCode);
-
-                            ALICE_LOG_INFO("Build Game: CMake build finished with exitCode=%lu",
-                                           static_cast<unsigned long>(exitCode));
-
-                            if (exitCode == 0)
-                            {
-                                // 3) Release 실행 파일 폴더(= exe 옆)로 필요한 디렉터리 배치
-                                namespace fs2 = std::filesystem;
-#ifdef _DEBUG
-                                fs2::path releaseBinDir = projectRoot / "build/bin/Debug";
-#else
-                                fs2::path releaseBinDir = projectRoot / "build/bin/Release";
-#endif
-                                //fs2::path releaseBinDir = projectRoot / "build/bin/Release";
-
-                                // 이제는 exe 와 같은 폴더에 Assets/Cooked 가 존재하도록 합니다.
-                                // (기존처럼 build/bin 에 복사하고 ../ 로 접근하는 방식은 제거)
-
-                                // Assets 는 그대로 복사
-                                if (!CopyDirTree(projectRoot / "Assets", releaseBinDir / "Assets"))
-                                {
-                                    g_BuildExitCode.store(2);
-                                    g_BuildInProgress.store(false);
-                                    return;
-                                }
-
-                                // Cooked 는 "항상 새로 생성"합니다.
-                                // - 구버전 Cooked/Resource 같은 폴더가 절대 따라오지 않게 삭제 후 재생성
-                                // - Cooked 안의 모든 파일은 암호화된 바이너리여야 함(확장자 유지)
-                                const fs2::path stageCooked = releaseBinDir / "Cooked";
-                                if (!MakeCleanDir(stageCooked))
-                                {
-                                    g_BuildExitCode.store(3);
-                                    g_BuildInProgress.store(false);
-                                    return;
-                                }
-
-                                // (A) 기존 Cooked 산출물도 가져오되, 모든 파일을 암호화 상태로 보장합니다.
-                                //     - .alice 는 이미 암호화되어 있으므로 그대로 복사
-                                //     - 나머지는 암호화 저장
-                                //     - 그리고 "Cooked/Resource" 하위는 완전히 제외(재발 방지)
-                                if (!CookAllIntoCookedRoot(projectRoot / "Cooked", stageCooked, "Resource/"))
-                                {
-                                    g_BuildExitCode.store(4);
-                                    g_BuildInProgress.store(false);
-                                    return;
-                                }
-
-                                // (B) Resource 는 원본 폴더를 배포에 넣지 않고,
-                                //     폴더구조를 숨긴 청크 파일들로 Cooked/Chunks 아래에 패킹합니다.
-                                {
-                                    Alice::ResourceManager rm;
-                                    if (!rm.CookResourceToChunkStore(projectRoot / "Resource", stageCooked))
-                                    {
-                                        ALICE_LOG_ERRORF("Build Game: failed to cook Resource -> Cooked/Chunks (stage).");
-                                        g_BuildExitCode.store(5);
-                                        g_BuildInProgress.store(false);
-                                        return;
-                                    }
-                                }
-
-                                // 기존 방식(Resource→Cooked/<rel>.alice)은 제거되었습니다. Resource는 Cooked/Chunks로만 저장합니다.
-
-                                // BuildSettings 도 Release 폴더에 복사
-                                if (!CopyFileOver(cfgPath, releaseBinDir / "BuildSettings.txt"))
-                                {
-                                    g_BuildExitCode.store(6);
-                                    g_BuildInProgress.store(false);
-                                    return;
-                                }
-
-                                ALICE_LOG_INFO("Build Game: staged content next to exe. dir=\"%s\"",
-                                               releaseBinDir.string().c_str());
-
-                                // 4) 사용자가 지정한 Export 폴더로 배포용 파일 복사
-                                fs2::path exportRoot = exportPathStr;
-                                if (!exportRoot.is_absolute())
-                                {
-                                    exportRoot = projectRoot / exportRoot;
-                                }
-
-                                std::error_code ec2;
-                                fs2::create_directories(exportRoot, ec2);
-
-                                // 실행 파일 복사
-                                if (!CopyFileOver(releaseBinDir / "AlicePlayer.exe", exportRoot / "AlicePlayer.exe"))
-                                {
-                                    g_BuildExitCode.store(7);
-                                    g_BuildInProgress.store(false);
-                                    return;
-                                }
-
-                                // 필요한 DLL 들 복사 (assimp, AliceScripts 등)
-                                CopyAllDlls(releaseBinDir, exportRoot);
-
-                                // 배포용 폴더: exe 옆에 Assets/Cooked 를 두고, Resource 원본은 넣지 않습니다.
-                                if (!CopyDirTree(releaseBinDir / "Assets", exportRoot / "Assets") ||
-                                    !CopyDirTree(releaseBinDir / "Cooked", exportRoot / "Cooked"))
-                                {
-                                    g_BuildExitCode.store(8);
-                                    g_BuildInProgress.store(false);
-                                    return;
-                                }
-
-                                // BuildSettings 복사
-                                if (!CopyFileOver(releaseBinDir / "BuildSettings.txt", exportRoot / "BuildSettings.txt"))
-                                {
-                                    g_BuildExitCode.store(9);
-                                    g_BuildInProgress.store(false);
-                                    return;
-                                }
-
-                                ALICE_LOG_INFO("Build Game: exported player to \"%s\"",
-                                               exportRoot.string().c_str());
-
-                                g_BuildProgress.store(1.0f);
-                            }
-                            else
-                            {
-                                g_BuildProgress.store(1.0f);
-                            }
-
-                            g_BuildExitCode.store(static_cast<long>(exitCode));
-                            g_BuildInProgress.store(false);
-                        }).detach();
+                        const BuildGameTaskArgs args{ projectRoot, cfgPath, exportPathStr };
+                        std::thread(&BuildGameTask::Run, args).detach();
                     }
                 }
             }
@@ -1337,10 +1377,7 @@ namespace Alice
 
                     // RTTR 기반으로 Material 프로퍼티 렌더링
                     // (roughness, metalness는 자동으로 SliderFloat로 처리됨)
-                    changed |= ReflectionUI::RenderInspector(*mat, [](const std::string& propName) {
-                        // assetPath와 albedoTexturePath는 특별 UI 처리하므로 제외
-                        return propName != "assetPath" && propName != "albedoTexturePath";
-                    });
+                    changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter);
 
                     // 알베도 텍스처 경로 표시 & 선택
                     ImGui::Separator();
@@ -2740,44 +2777,27 @@ namespace Alice
         }
     }
 
-    // BuildSettings.txt 파싱 및 시작 씬 로드
+    // BuildSettings.json 파싱 및 시작 씬 로드
     bool LoadStartupSceneFromBuildSettings(World& world, const std::filesystem::path& exeDir)
     {
         // 1. 설정 파일 경로 확보 (Exe위치 -> 프로젝트 루트 순)
-        std::filesystem::path cfg = exeDir / "BuildSettings.txt";
+        std::filesystem::path cfg = exeDir / "BuildSettings.json";
         if (!std::filesystem::exists(cfg))
-            cfg = exeDir.parent_path().parent_path().parent_path() / "Build/BuildSettings.txt";
+            cfg = exeDir.parent_path().parent_path().parent_path() / "Build/BuildSettings.json";
 
         std::ifstream ifs(cfg);
         if (!ifs.is_open()) return false;
 
-        std::string line, target;
+        nlohmann::json j;
+        try { ifs >> j; }
+        catch (...) { return false; }
+
+        std::string target = j.value("default", std::string{});
         std::vector<std::string> scenes;
-        bool inScenes = false;
-
-        // 2. 파싱 (C++20 starts_with 활용)
-        while (std::getline(ifs, line))
+        if (j.contains("scenes") && j["scenes"].is_array())
         {
-            // 공백 제거 (Trim)
-            auto s = line.find_first_not_of(" \t\r\n");
-            if (s == std::string::npos) continue;
-            line = line.substr(s, line.find_last_not_of(" \t\r\n") - s + 1);
-
-            if (line.starts_with('#')) continue;
-
-            if (line.starts_with("default:"))
-            {
-                target = line.substr(8);
-                if (auto v = target.find_first_not_of(" \t\r\n"); v != std::string::npos)
-                    target = target.substr(v);
-            }
-            else if (line.starts_with("scenes:")) inScenes = true;
-            else if (inScenes && line.starts_with('-'))
-            {
-                std::string path = line.substr(1);
-                if (auto v = path.find_first_not_of(" \t\r\n"); v != std::string::npos)
-                    scenes.push_back(path.substr(v));
-            }
+            for (const auto& v : j["scenes"])
+                if (v.is_string()) scenes.push_back(v.get<std::string>());
         }
 
         // 3. 타겟 씬 결정 및 경로 보정

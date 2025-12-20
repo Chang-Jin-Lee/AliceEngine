@@ -6,6 +6,8 @@
 
 namespace Alice
 {
+    class ResourceManager;
+
     struct FbxInstanceAsset
     {
         std::string              sourceFbx;
@@ -20,6 +22,13 @@ namespace Alice
 
     bool SaveFbxInstanceAsset(const std::filesystem::path& path,
                               const FbxInstanceAsset& asset);
+
+    /// 에디터/최종빌드 모두에서 동작하는 자동 로더입니다.
+    /// - editorMode: 실제 파일(Assets/...)을 읽습니다.
+    /// - gameMode  : ResourceManager를 통해 Metas/Chunks에서 바이트를 로드해서 JSON으로 파싱합니다.
+    bool LoadFbxInstanceAssetAuto(const ResourceManager& resources,
+                                  const std::filesystem::path& logicalPath,
+                                  FbxInstanceAsset& out);
 }
 
 
