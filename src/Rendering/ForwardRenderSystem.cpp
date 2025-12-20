@@ -580,7 +580,7 @@ float4 main(PSInput input) : SV_TARGET
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateSkyboxResources failed.");
             return false;
         }
-        if (!CreateIblResources("Sample"))
+        if (!CreateIblResources())
         {
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateIblResources failed.");
             return false;
@@ -676,41 +676,33 @@ float4 main(PSInput input) : SV_TARGET
         return true;
     }
 
-    bool ForwardRenderSystem::CreateIblResources(const std::string& name)
+    bool ForwardRenderSystem::CreateIblResources(const std::string& iblDir, const std::string& iblName)
     {
         if (!m_resources) return false;
 
         namespace fs = std::filesystem;
         // 경로 및 이름 설정 (Sample -> BakerSample, 그 외 소문자 변환)
-        std::string prefix = (name == "Sample") ? "BakerSample" : name;
-        if (name != "Sample") prefix[0] = std::tolower(prefix[0]);
-
-        fs::path base = fs::path("Resource/Skybox") / name;
-
-        // 리소스 로드 (실패 시 로그만 출력하고 계속 진행)
-        auto Load = [&](const char* suffix, auto& target) { // 람다 안 쓰기로 했지만 반복 줄이려면 사실 헬퍼 함수가 낫긴 함. 요청대로 그냥 풀어서 씀.
-            /* 반복 코드 인라인 처리 */
-        };
+        fs::path base = fs::path("Resource/Skybox") / iblDir;
 
         // Diffuse, Specular, Brdf 로드
-        if (!(m_iblDiffuseSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (prefix + "DiffuseHDR.dds"), m_device.Get())))
-            ALICE_LOG_WARN("Failed IBL Diffuse: %s", (base / prefix).string().c_str());
+        if (!(m_iblDiffuseSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "DiffuseHDR.dds"), m_device.Get())))
+            ALICE_LOG_WARN("Failed IBL Diffuse: %s", (base / iblName).string().c_str());
 
-        if (!(m_iblSpecularSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (prefix + "SpecularHDR.dds"), m_device.Get())))
-            ALICE_LOG_WARN("Failed IBL Specular");
+        if (!(m_iblSpecularSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "SpecularHDR.dds"), m_device.Get())))
+            ALICE_LOG_WARN("Failed IBL Specular %s", (base / iblName).string().c_str());
 
-        if (!(m_iblBrdfLutSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (prefix + "Brdf.dds"), m_device.Get())))
-            ALICE_LOG_WARN("Failed IBL BRDF");
+        if (!(m_iblBrdfLutSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "Brdf.dds"), m_device.Get())))
+            ALICE_LOG_WARN("Failed IBL BRDF %s", (base / iblName).string().c_str());
 
         // Skybox Env 로드 및 상태 설정
-        m_skyboxEnabled = (m_skyboxSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (prefix + "EnvHDR.dds"), m_device.Get())) != nullptr;
+        m_skyboxEnabled = (m_skyboxSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "EnvHDR.dds"), m_device.Get())) != nullptr;
         if (!m_skyboxEnabled) ALICE_LOG_WARN("Failed Skybox Env");
 
-        m_currentIblSet = name;
+        m_currentIblSet = iblName;
         return true;
     }
 
-    bool ForwardRenderSystem::SetIblSet(const std::string& iblSetName)
+    bool ForwardRenderSystem::SetIblSet(const std::string& iblDir, const std::string& iblName)
     {
         // 기존 리소스 해제
         m_iblDiffuseSRV.Reset();
@@ -719,7 +711,7 @@ float4 main(PSInput input) : SV_TARGET
         m_skyboxSRV.Reset();
 
         // 새 IBL 세트 로드
-        return CreateIblResources(iblSetName);
+        return CreateIblResources(iblDir, iblName);
     }
 
     void ForwardRenderSystem::SetSkyboxEnabled(bool enabled)

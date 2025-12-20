@@ -317,9 +317,6 @@ namespace Alice
 		// SkinnedMeshRegistry 에 모두 등록되어 있는지 확인합니다.
 		EnsureSkinnedMeshesRegisteredForWorld();
 
-		// 초기 씬에 대한 IBL 설정
-		UpdateIblForScene();
-
 		// ScriptSystem 에 서비스 연결 (입력/씬/리소스/스키닝 레지스트리)
 		pImpl->m_scriptSystem.SetServices(&pImpl->m_inputSystem, pImpl->m_sceneManager.get(), &pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
@@ -660,21 +657,12 @@ namespace Alice
 
 	void Engine::UpdateIblForScene()
 	{
-		if (!pImpl->m_forwardRenderSystem)
-			return;
+		if (!pImpl->m_forwardRenderSystem) return;
 
 		// 씬 파일에서 IBL 세트 정보를 읽어올 수 있도록 확장 가능하지만,
-		// 현재는 기본적으로 "Sample" IBL 세트를 사용합니다.
+		// 현재는 기본적으로 "Bridge" IBL 세트를 사용합니다.
 		// 향후 씬 파일에 IBL 세트 정보를 추가하면 여기서 읽어올 수 있습니다.
-		const std::string defaultIblSet = "Sample";
-		if (!pImpl->m_forwardRenderSystem->SetIblSet(defaultIblSet))
-		{
-			ALICE_LOG_WARN("Engine::UpdateIblForScene: failed to set IBL set \"%s\"", defaultIblSet.c_str());
-		}
-		else
-		{
-			ALICE_LOG_INFO("Engine::UpdateIblForScene: IBL set updated to \"%s\"", defaultIblSet.c_str());
-		}
+		pImpl->m_forwardRenderSystem->SetIblSet();
 	}
 
 	bool Engine::CreateMainWindow(int nCmdShow)
