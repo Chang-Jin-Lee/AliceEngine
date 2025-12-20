@@ -32,7 +32,17 @@ namespace Alice
 
         m_names.erase(id);
         m_transforms.erase(id);
-        RemoveScript(id);
+        auto it = m_scripts.find(id);
+        if (it != m_scripts.end())
+        {
+            for (auto& sc : it->second)
+            {
+                if (!sc.instance) continue;
+                sc.instance->OnDisable();
+                sc.instance->OnDestroy();
+            }
+            m_scripts.erase(it);
+        }
         m_materials.erase(id);
         m_skinnedMeshes.erase(id);
         m_skinnedAnimations.erase(id);
@@ -81,50 +91,63 @@ namespace Alice
 
     ScriptComponent& World::AddScript(EntityId id, const std::string& scriptName)
     {
-        ScriptComponent& comp = m_scripts[id];
+        auto& list = m_scripts[id];
+        ScriptComponent comp{};
         comp.scriptName = scriptName;
-        comp.instance   = ScriptFactory::Create(scriptName.c_str());
-
+        comp.instance = ScriptFactory::Create(scriptName.c_str());
         if (comp.instance)
             comp.instance->SetContext(this, id);
 
-        return comp;
+        list.push_back(std::move(comp));
+        return list.back();
     }
 
-    ScriptComponent* World::GetScript(EntityId id)
+    std::vector<ScriptComponent>* World::GetScripts(EntityId id)
     {
         auto it = m_scripts.find(id);
-        if (it == m_scripts.end()) return nullptr;
+        if (it == m_scripts.end())
+            return nullptr;
         return &it->second;
     }
 
-    const ScriptComponent* World::GetScript(EntityId id) const
+    const std::vector<ScriptComponent>* World::GetScripts(EntityId id) const
     {
         auto it = m_scripts.find(id);
-        if (it == m_scripts.end()) return nullptr;
+        if (it == m_scripts.end())
+            return nullptr;
         return &it->second;
     }
 
-    void World::RemoveScript(EntityId id)
+    void World::RemoveScript(EntityId id, std::size_t index)
     {
         auto it = m_scripts.find(id);
         if (it == m_scripts.end())
             return;
 
-        if (it->second.instance)
+        auto& list = it->second;
+        if (index >= list.size())
+            return;
+
+        if (list[index].instance)
         {
-            it->second.instance->OnDisable();
-            it->second.instance->OnDestroy();
+            list[index].instance->OnDisable();
+            list[index].instance->OnDestroy();
         }
-        m_scripts.erase(it);
+
+        list.erase(list.begin() + (std::ptrdiff_t)index);
+        if (list.empty())
+            m_scripts.erase(it);
     }
 
     void World::RemoveAllScript()
     {
-        for (auto& [id, scriptComp] : m_scripts)
+        for (auto& [id, list] : m_scripts)
         {
-            if (scriptComp.instance)
+            (void)id;
+            for (auto& scriptComp : list)
             {
+                if (!scriptComp.instance)
+                    continue;
                 scriptComp.instance->OnDisable();
                 scriptComp.instance->OnDestroy();
             }

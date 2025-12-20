@@ -1,3 +1,7 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "Core/SceneFile.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/JsonRttr.h"
@@ -44,12 +48,25 @@ namespace Alice
             }
 
             
-            if (const auto* script = world.GetScript(id); script)
+            if (const auto* scripts = world.GetScripts(id); scripts && !scripts->empty())
             {
-                JsonRttr::json s = JsonRttr::json::object();
-                s["name"] = script->scriptName;
-                s["enabled"] = script->enabled;
-                outEntity["Script"] = s;
+                JsonRttr::json arr = JsonRttr::json::array();
+                for (const auto& sc : *scripts)
+                {
+                    JsonRttr::json s = JsonRttr::json::object();
+                    s["name"] = sc.scriptName;
+                    s["enabled"] = sc.enabled;
+
+                    if (sc.instance)
+                    {
+                        rttr::instance inst = *sc.instance;
+                        const rttr::type t = rttr::type::get_by_name(sc.scriptName);
+                        s["props"] = JsonRttr::ToJsonObject(inst, t);
+                    }
+
+                    arr.push_back(s);
+                }
+                outEntity["Scripts"] = arr;
             }
 
             
@@ -101,16 +118,42 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
             }
 
-            // Script
-            auto itS = e.find("Script");
-            if (itS != e.end() && itS->is_object())
+            // Scripts (여러 개)
+            auto itS = e.find("Scripts");
+            if (itS != e.end() && itS->is_array())
             {
-                const std::string name = itS->value("name", std::string{});
-                const bool enabled = itS->value("enabled", true);
-                if (!name.empty())
+                for (const auto& s : *itS)
                 {
+                    if (!s.is_object()) continue;
+                    const std::string name = s.value("name", std::string{});
+                    if (name.empty()) continue;
+
                     ScriptComponent& sc = world.AddScript(id, name);
-                    sc.enabled = enabled;
+                    sc.enabled = s.value("enabled", true);
+
+                    auto itP = s.find("props");
+                    if (itP != s.end() && itP->is_object() && sc.instance)
+                    {
+                        rttr::instance inst = *sc.instance;
+                        const rttr::type t = rttr::type::get_by_name(sc.scriptName);
+                        if (!JsonRttr::FromJsonObject(inst, *itP, t)) return false;
+                        sc.defaultsApplied = true; // 씬이 값 주입 완료
+                    }
+                }
+            }
+            else
+            {
+                // Script (레거시 단일)
+                auto itLegacy = e.find("Script");
+                if (itLegacy != e.end() && itLegacy->is_object())
+                {
+                    const std::string name = itLegacy->value("name", std::string{});
+                    const bool enabled = itLegacy->value("enabled", true);
+                    if (!name.empty())
+                    {
+                        ScriptComponent& sc = world.AddScript(id, name);
+                        sc.enabled = enabled;
+                    }
                 }
             }
 

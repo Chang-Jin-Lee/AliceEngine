@@ -121,6 +121,17 @@ namespace Alice
                 if (a) a->playing = true;
             }
 
+            void Play(int idx, bool forceRestart = false)
+            {
+                auto* a = AnimComp(true);
+                if (!a) return;
+
+                // 이미 재생 중이고, 요청한 클립이 현재 클립과 같으며, 강제 재시작이 아니라면 아무것도 하지 않고 리턴 (애니메이션 끊김 방지)
+                if (a->playing && a->clipIndex == idx && !forceRestart) return;
+                SetClip(idx);
+                a->playing = true;
+            }
+
             void Stop()
             {
                 auto* a = AnimComp(true);

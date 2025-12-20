@@ -9,7 +9,7 @@ namespace Alice
     class World;
 
     /// 프리팹 로더/인스턴시에이터 및 저장 유틸입니다.
-    /// - 텍스트 파일에서 Transform + Script 이름 한 개만 읽어오거나 저장합니다.
+    /// - JSON 파일에서 Transform + Scripts[](+프로퍼티) 를 읽어오거나 저장합니다.
     /// - Unity 의 Prefab / Instantiate 개념을 간단하게 흉내내기 위한 용도입니다.
     namespace Prefab
     {

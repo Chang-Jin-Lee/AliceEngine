@@ -37,7 +37,7 @@ namespace Alice
 
         TransformComponent& SetRotation(float x, float y, float z)
         {
-            rotation = DirectX::XMFLOAT3(x, y, z);
+            rotation = DirectX::XMFLOAT3(DirectX::XMConvertToRadians(x), DirectX::XMConvertToRadians(y), DirectX::XMConvertToRadians(z));
             return *this;
         }
     };
@@ -120,21 +120,19 @@ namespace Alice
 
         // ==== Script 컴포넌트 관련 ====
 
-        /// Script 컴포넌트를 추가합니다.
-        /// \param id         대상 엔티티 ID
-        /// \param scriptName ScriptFactory 에 등록된 스크립트 이름
+        /// Script 컴포넌트를 추가합니다. (엔티티당 여러 개 가능)
         ScriptComponent& AddScript(EntityId id, const std::string& scriptName);
 
-        /// Script 컴포넌트를 가져옵니다. (없으면 nullptr)
-        ScriptComponent* GetScript(EntityId id);
-        const ScriptComponent* GetScript(EntityId id) const;
+        /// Script 컴포넌트 목록을 가져옵니다. (없으면 nullptr)
+        std::vector<ScriptComponent>* GetScripts(EntityId id);
+        const std::vector<ScriptComponent>* GetScripts(EntityId id) const;
 
-        /// 전체 Script 컴포넌트 컨테이너 (ScriptSystem 이 사용)
-        const std::unordered_map<EntityId, ScriptComponent>& GetScripts() const { return m_scripts; }
-        std::unordered_map<EntityId, ScriptComponent>& GetScripts() { return m_scripts; }
+        /// 전체 Script 컨테이너 (ScriptSystem 이 사용)
+        const std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() const { return m_scripts; }
+        std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() { return m_scripts; }
 
-        /// Script 컴포넌트를 제거합니다.
-        void RemoveScript(EntityId id);
+        /// 지정 인덱스의 Script 컴포넌트를 제거합니다.
+        void RemoveScript(EntityId id, std::size_t index);
 
         void RemoveAllScript();
 
@@ -194,7 +192,7 @@ namespace Alice
         std::unordered_map<EntityId, std::string> m_names;
 
         std::unordered_map<EntityId, TransformComponent> m_transforms;
-        std::unordered_map<EntityId, ScriptComponent>    m_scripts;
+        std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
         std::unordered_map<EntityId, MaterialComponent>  m_materials;
         std::unordered_map<EntityId, SkinnedMeshComponent> m_skinnedMeshes;
         std::unordered_map<EntityId, SkinnedAnimationComponent> m_skinnedAnimations;
