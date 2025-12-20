@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include <unordered_map>
 #include <wrl/client.h>
 #include <d3d11.h>
 #include <DirectXMath.h>
@@ -42,6 +43,16 @@ namespace Alice
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
 
     private:
+        struct ShadowSettings
+        {
+            // 튜토리얼(34_ToneMapping)과 동일한 기본값 스케일
+            std::uint32_t mapSizePx  = 2048;   // 섀도우맵 해상도(한 변)
+            float         bias       = 0.0015f;
+            float         pcfRadius  = 1.0f;   // texel 단위(0~3 권장)
+            float         orthoRadius = 20.0f; // 월드 단위(씬 크기에 맞게 조절)
+            bool          enabled    = true;
+        };
+
         struct SimpleVertex
         {
             DirectX::XMFLOAT3 position;
@@ -87,6 +98,12 @@ namespace Alice
             int               pad2[3];           // 16바이트 정렬
 
             DirectX::XMMATRIX lightViewProj;     // 섀도우 맵 계산용 라이트 뷰-프로젝션
+
+            // Shadow params (34_ToneMapping 방식)
+            float             shadowBias;        // 깊이 바이어스(0~)
+            float             shadowMapSize;     // 섀도우맵 한 변(px)
+            float             shadowPcfRadius;   // PCF 반경(texel)
+            int               shadowEnabled;     // 0/1
         };
 
         // 스키닝용 본 행렬 상수 버퍼
@@ -230,6 +247,9 @@ namespace Alice
         // 음수 스케일(반전 스케일)을 위한 컬링 모드 제어용 래스터라이저 상태
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerStateReversed;
+        // 섀도우 맵 깊이 바이어스 전용 RS
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_shadowRasterizerState;
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_shadowRasterizerStateReversed;
 
         // 머티리얼 전용 텍스처 캐시 (경로 -> SRV)
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> m_textureCache;
@@ -276,6 +296,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_shadowSRV;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_shadowSampler;
         D3D11_VIEWPORT                                  m_shadowViewport {};
+        ShadowSettings                                  m_shadowSettings {};
 
         bool CreateShadowMapResources();
 
