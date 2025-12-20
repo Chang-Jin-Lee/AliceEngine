@@ -351,74 +351,94 @@ namespace Alice
 
 		using namespace DirectX;
 
-		// 1) 카메라 이동 (WASD + Q/E) - 오른쪽 마우스 버튼을 누르고 있을 때만 동작
-		const bool canControlCamera = pImpl->m_inputSystem.IsRightButtonDown(); // 우클릭 상태에서만 이동/회전
-
-		XMVECTOR moveDir = XMVectorZero();
-
-		if (canControlCamera)
+		// 에디터 모드:
+		// - Play 전  : 기존 프리 카메라 조작(뷰포트 편집용)
+		// - Play 중  : 게임 모드처럼 씬의 CameraComponent(메인 카메라)로 갱신
+		// 게임 모드  : 항상 씬의 CameraComponent 기반
+		if (pImpl->m_editorMode && !pImpl->m_isPlaying)
 		{
-			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::W))
+			const bool canControlCamera = pImpl->m_inputSystem.IsRightButtonDown();
+			XMVECTOR moveDir = XMVectorZero();
+
+			if (canControlCamera)
 			{
-				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
-			}
-			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::S))
-			{
-				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f));
-			}
-			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::D))
-			{
-				moveDir = XMVectorAdd(moveDir, XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
-			}
-			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::A))
-			{
-				moveDir = XMVectorAdd(moveDir, XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f));
-			}
-			// E: 위로, Q: 아래로 이동
-			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::E))
-			{
-				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
-			}
-			if (pImpl->m_inputSystem.IsKeyDown(Keyboard::Q))
-			{
-				moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f));
+				if (pImpl->m_inputSystem.IsKeyDown(Keyboard::W)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+				if (pImpl->m_inputSystem.IsKeyDown(Keyboard::S)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f));
+				if (pImpl->m_inputSystem.IsKeyDown(Keyboard::D)) moveDir = XMVectorAdd(moveDir, XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
+				if (pImpl->m_inputSystem.IsKeyDown(Keyboard::A)) moveDir = XMVectorAdd(moveDir, XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f));
+				if (pImpl->m_inputSystem.IsKeyDown(Keyboard::E)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+				if (pImpl->m_inputSystem.IsKeyDown(Keyboard::Q)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f));
+
+				if (!XMVector3Equal(moveDir, XMVectorZero()))
+				{
+					XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
+					XMVECTOR worldMoveDir = XMVector3TransformNormal(moveDir, rotMatrix);
+					worldMoveDir = XMVector3Normalize(worldMoveDir);
+
+					XMVECTOR pos = XMLoadFloat3(&pImpl->m_cameraPosition);
+					pos = XMVectorAdd(pos, XMVectorScale(worldMoveDir, pImpl->m_cameraMoveSpeed * pImpl->m_timer.DeltaTime()));
+					XMStoreFloat3(&pImpl->m_cameraPosition, pos);
+				}
+
+				POINT mouseDelta = pImpl->m_inputSystem.GetMouseDelta();
+				pImpl->m_cameraYawRadians += static_cast<float>(mouseDelta.x) * pImpl->m_cameraMouseSensitivity;
+				pImpl->m_cameraPitchRadians += static_cast<float>(mouseDelta.y) * pImpl->m_cameraMouseSensitivity;
 			}
 
-			if (!XMVector3Equal(moveDir, XMVectorZero()))
-			{
-				// 카메라의 현재 회전에 맞춰 이동 벡터를 회전
-				XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
-				XMVECTOR worldMoveDir = XMVector3TransformNormal(moveDir, rotMatrix);
-				worldMoveDir = XMVector3Normalize(worldMoveDir);
+			const float pitchLimit = XMConvertToRadians(89.0f);
+			if (pImpl->m_cameraPitchRadians > pitchLimit)  pImpl->m_cameraPitchRadians = pitchLimit;
+			if (pImpl->m_cameraPitchRadians < -pitchLimit) pImpl->m_cameraPitchRadians = -pitchLimit;
 
-				XMVECTOR pos = XMLoadFloat3(&pImpl->m_cameraPosition);
-				pos = XMVectorAdd(pos, XMVectorScale(worldMoveDir, pImpl->m_cameraMoveSpeed * pImpl->m_timer.DeltaTime()));
-				XMStoreFloat3(&pImpl->m_cameraPosition, pos);
-			}
+			XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
+			XMVECTOR forward = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), rotMatrix);
 
-			// 2) 마우스 이동으로 카메라 회전 (우클릭 상태에서만)
-			POINT mouseDelta = pImpl->m_inputSystem.GetMouseDelta();
-			pImpl->m_cameraYawRadians += static_cast<float>(mouseDelta.x) * pImpl->m_cameraMouseSensitivity;
-			// 마우스를 아래로 내리면 화면도 아래를 보도록 Y축 회전을 반대로 적용합니다.
-			pImpl->m_cameraPitchRadians += static_cast<float>(mouseDelta.y) * pImpl->m_cameraMouseSensitivity;
+			XMVECTOR pos = XMLoadFloat3(&pImpl->m_cameraPosition);
+			XMVECTOR target = XMVectorAdd(pos, forward);
+
+			XMFLOAT3 targetFloat3;
+			XMStoreFloat3(&targetFloat3, target);
+
+			pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
 		}
+		else
+		{
+			EntityId camEntity = InvalidEntityId;
+			for (const auto& [id, cam] : pImpl->m_world.GetCameras())
+			{
+				if (cam.primary) { camEntity = id; break; }
+				if (camEntity == InvalidEntityId) camEntity = id;
+			}
 
-		// 피치 각도는 -89 ~ 89도 사이로 제한
-		const float pitchLimit = XMConvertToRadians(89.0f);
-		if (pImpl->m_cameraPitchRadians > pitchLimit)  pImpl->m_cameraPitchRadians = pitchLimit;
-		if (pImpl->m_cameraPitchRadians < -pitchLimit) pImpl->m_cameraPitchRadians = -pitchLimit;
+			if (camEntity != InvalidEntityId)
+			{
+				const auto* t = pImpl->m_world.GetTransform(camEntity);
+				const auto* c = pImpl->m_world.GetCamera(camEntity);
+				if (t && c)
+				{
+					pImpl->m_cameraPosition = t->position;
 
-		// 3) 카메라 LookAt 갱신
-		XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
-		XMVECTOR forward = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), rotMatrix);
+					// Transform.rotation(라디안)을 yaw/pitch로 사용 (y=Yaw, x=Pitch)
+					pImpl->m_cameraYawRadians = t->rotation.y;
+					pImpl->m_cameraPitchRadians = t->rotation.x;
 
-		XMVECTOR pos = XMLoadFloat3(&pImpl->m_cameraPosition);
-		XMVECTOR target = XMVectorAdd(pos, forward);
+					const float pitchLimit = XMConvertToRadians(89.0f);
+					if (pImpl->m_cameraPitchRadians > pitchLimit)  pImpl->m_cameraPitchRadians = pitchLimit;
+					if (pImpl->m_cameraPitchRadians < -pitchLimit) pImpl->m_cameraPitchRadians = -pitchLimit;
 
-		XMFLOAT3 targetFloat3;
-		XMStoreFloat3(&targetFloat3, target);
+					const float aspect = static_cast<float>(pImpl->m_width) / static_cast<float>(pImpl->m_height);
+					pImpl->m_camera.SetPerspective(c->fovYRad, aspect, c->nearPlane, c->farPlane);
 
-		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
+					XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
+					XMVECTOR forward = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), rotMatrix);
+					XMVECTOR pos = XMLoadFloat3(&pImpl->m_cameraPosition);
+					XMVECTOR target = XMVectorAdd(pos, forward);
+					XMFLOAT3 targetFloat3;
+					XMStoreFloat3(&targetFloat3, target);
+
+					pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetFloat3, XMFLOAT3(0.0f, 1.0f, 0.0f));
+				}
+			}
+		}
 
 		// 4) 현재 씬 및 스크립트 업데이트
 		//    - 에디터 모드: Play 버튼이 눌렸을 때만 진행

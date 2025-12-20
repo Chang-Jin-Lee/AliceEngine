@@ -878,8 +878,29 @@ namespace Alice
                     // 기본 회색 머티리얼을 함께 추가합니다.
                     DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                     world.AddMaterial(e, defaultColor);
+                    world.SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
                     selectedEntity = e;
                     g_SceneDirty   = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Camera"))
+                {
+                    const bool hasCamera = !world.GetCameras().empty();
+                    const int camIndex = (int)world.GetCameras().size() + 1;
+
+                    EntityId e = world.CreateEntity();
+                    auto& t = world.AddTransform(e);
+                    t.position = { 0.0f, 2.0f, -5.0f };
+                    t.rotation = { 0.0f, 0.0f, 0.0f };
+                    t.scale = { 1.0f, 1.0f, 1.0f };
+
+                    auto& c = world.AddCamera(e);
+                    c.primary = !hasCamera;
+
+                    world.SetEntityName(e, "Camera" + std::to_string(camIndex));
+
+                    selectedEntity = e;
+                    g_SceneDirty = true;
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndPopup();
@@ -1193,12 +1214,20 @@ namespace Alice
             else
             {
                 EntityId entityToDelete = InvalidEntityId;
+                static EntityId s_renameTarget = InvalidEntityId;
+                static char s_renameBuf[128]{};
+                bool openRenamePopup = false;
 
                 for (const auto& [entityId, transform] : transforms)
                 {
+                    (void)transform;
                     const bool isSelected = (selectedEntity == entityId);
-                    const std::string label = "Entity " + std::to_string(static_cast<std::uint32_t>(entityId));
+                    const std::string name = world.GetEntityName(entityId);
+                    const std::string label = !name.empty()
+                        ? name
+                        : ("Entity " + std::to_string(static_cast<std::uint32_t>(entityId)));
 
+                    ImGui::PushID((int)entityId);
                     if (ImGui::Selectable(label.c_str(), isSelected))
                     {
                         selectedEntity = entityId;
@@ -1207,6 +1236,19 @@ namespace Alice
                     // 항목 우클릭 시 컨텍스트 메뉴 표시
                     if (ImGui::BeginPopupContextItem())
                     {
+                        if (ImGui::MenuItem("Change Name"))
+                        {
+                            s_renameTarget = entityId;
+                            openRenamePopup = true;
+
+                            const std::string cur = world.GetEntityName(entityId);
+                            const std::string init = cur.empty()
+                                ? ("Entity " + std::to_string((std::uint32_t)entityId))
+                                : cur;
+                            std::memset(s_renameBuf, 0, sizeof(s_renameBuf));
+                            strncpy_s(s_renameBuf, init.c_str(), sizeof(s_renameBuf) - 1);
+                        }
+
                         if (ImGui::MenuItem("Delete"))
                         {
                             entityToDelete = entityId;
@@ -1242,6 +1284,27 @@ namespace Alice
 
                         ImGui::EndPopup();
                     }
+                    ImGui::PopID();
+                }
+
+                if (openRenamePopup)
+                    ImGui::OpenPopup("Change Name");
+
+                if (ImGui::BeginPopupModal("Change Name", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+                {
+                    ImGui::InputText("Name", s_renameBuf, sizeof(s_renameBuf));
+                    if (ImGui::Button("OK"))
+                    {
+                        world.SetEntityName(s_renameTarget, s_renameBuf);
+                        g_SceneDirty = true;
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Cancel"))
+                    {
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::EndPopup();
                 }
 
                 // 루프가 끝난 뒤에 실제 삭제를 수행합니다. (반복 중 컨테이너 수정 방지)

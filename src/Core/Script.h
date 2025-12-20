@@ -5,11 +5,13 @@
 #include <unordered_map>
 #include <vector>
 #include <functional>
+#include <array>
 
 #include "Delegate.h"
 #include "Core/Entity.h"
 #include "Core/ScriptAPI.h"
 #include "Logger.h"
+#include <directXTK/Keyboard.h>
 
 namespace Alice
 {
@@ -174,6 +176,8 @@ namespace Alice
         void SetEditorMode(const bool& isEditor) { m_editorMode = isEditor; }
 
     private:
+        static DirectX::Keyboard::Keys ToDxKey(KeyCode k);
+
         void BeginInputFrame();
         void EnsureServicesBound(World& world);
         void CallLateUpdate(World& world, float deltaTime);
@@ -193,10 +197,9 @@ namespace Alice
 
         ScriptServices m_services{};
 
-        // input snapshot (필요 키만)
-        struct KeySnap { bool k1{}, k2{}, k3{}, f1{}, f2{}, sp{}; };
-        KeySnap m_prevKeys{};
-        KeySnap m_currKeys{};
+        // input snapshot (KeyCode 전체)
+        std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_prevKeys{};
+        std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_currKeys{};
 
         // scene requests
         std::string m_pendingSwitch;

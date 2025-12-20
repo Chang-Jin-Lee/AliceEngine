@@ -77,5 +77,13 @@ namespace Alice
             .property("timeSec", &SkinnedAnimationComponent::timeSec);
         
         // palette는 팔레트를 나타내는 프로퍼티
+
+        // === CameraComponent 등록 ===
+        rttr::registration::class_<CameraComponent>("CameraComponent")
+            .constructor<>()
+            .property("primary", &CameraComponent::primary)
+            .property("fovYRad", &CameraComponent::fovYRad)
+            .property("nearPlane", &CameraComponent::nearPlane)
+            .property("farPlane", &CameraComponent::farPlane);
     }
 }

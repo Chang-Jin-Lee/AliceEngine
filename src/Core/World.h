@@ -78,6 +78,16 @@ namespace Alice
         std::vector<DirectX::XMFLOAT4X4> palette;
     };
 
+    /// 씬 내 카메라(유니티의 Main Camera 느낌)
+    /// - 게임 모드에서는 "첫번째(primary 우선)" 카메라 엔티티를 따라 Camera(view/proj)를 갱신합니다.
+    struct CameraComponent
+    {
+        bool  primary   { true };
+        float fovYRad   { DirectX::XM_PIDIV4 };
+        float nearPlane { 0.1f };
+        float farPlane  { 5000.0f };
+    };
+
     class World
     {
     public:
@@ -90,6 +100,10 @@ namespace Alice
 
         /// 엔티티를 제거하고, 연결된 컴포넌트도 정리합니다.
         void DestroyEntity(EntityId id);
+
+        // ==== Entity Name (에디터 하이라리키 표시용) ====
+        void SetEntityName(EntityId id, const std::string& name);
+        std::string GetEntityName(EntityId id) const;
 
         /// Transform 컴포넌트를 추가합니다.
         TransformComponent& AddTransform(EntityId id);
@@ -167,14 +181,24 @@ namespace Alice
         const std::unordered_map<EntityId, SkinnedAnimationComponent>& GetSkinnedAnimations() const { return m_skinnedAnimations; }
         void RemoveSkinnedAnimation(EntityId id);
 
+        // ==== Camera 컴포넌트 관련 ====
+        CameraComponent& AddCamera(EntityId id);
+        CameraComponent* GetCamera(EntityId id);
+        const CameraComponent* GetCamera(EntityId id) const;
+        const std::unordered_map<EntityId, CameraComponent>& GetCameras() const { return m_cameras; }
+        void RemoveCamera(EntityId id);
+
     private:
         EntityId m_nextEntityId { 1 };
+
+        std::unordered_map<EntityId, std::string> m_names;
 
         std::unordered_map<EntityId, TransformComponent> m_transforms;
         std::unordered_map<EntityId, ScriptComponent>    m_scripts;
         std::unordered_map<EntityId, MaterialComponent>  m_materials;
         std::unordered_map<EntityId, SkinnedMeshComponent> m_skinnedMeshes;
         std::unordered_map<EntityId, SkinnedAnimationComponent> m_skinnedAnimations;
+        std::unordered_map<EntityId, CameraComponent> m_cameras;
     };
 }
 
