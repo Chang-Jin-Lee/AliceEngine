@@ -40,6 +40,8 @@ namespace Alice
                 return m_world->GetSkinnedMesh(m_id);
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>)
                 return m_world->GetSkinnedAnimation(m_id);
+            else if constexpr (std::is_same_v<T, CameraComponent>)
+                return m_world->GetCamera(m_id);
             else
             {
                 static_assert(sizeof(T) == 0, "GetComponent<T>: unsupported component type.");
@@ -186,6 +188,21 @@ namespace Alice
         };
 
         Animator GetAnimator() const { return Animator(m_world, m_id, m_services); }
+
+        /// 씬에서 "첫번째 SkinnedMesh" 엔티티를 찾습니다. (캐릭터 1인 게임용 간단 유틸)
+        GameObject FindFirstSkinnedMesh() const
+        {
+            if (!m_world)
+                return {};
+
+            for (const auto& [id, comp] : m_world->GetSkinnedMeshes())
+            {
+                if (id == InvalidEntityId) continue;
+                if (comp.meshAssetPath.empty()) continue;
+                return GameObject(m_world, id, m_services);
+            }
+            return {};
+        }
 
     private:
         World* m_world = nullptr;

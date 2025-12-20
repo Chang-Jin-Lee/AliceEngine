@@ -33,6 +33,9 @@ namespace Alice
             outEntity = JsonRttr::json::object();
             outEntity["id"] = static_cast<std::uint32_t>(id);
 
+            const std::string name = world.GetEntityName(id);
+            if (!name.empty())
+                outEntity["name"] = name;
             
             if (const auto* transform = world.GetTransform(id); transform)
             {
@@ -70,6 +73,12 @@ namespace Alice
                 outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* cam = world.GetCamera(id); cam)
+            {
+                rttr::instance inst = const_cast<CameraComponent&>(*cam);
+                outEntity["Camera"] = JsonRttr::ToJsonObject(inst);
+            }
+
             return true;
         }
 
@@ -78,6 +87,10 @@ namespace Alice
             if (!e.is_object()) return false;
 
             const EntityId id = world.CreateEntity();
+
+            const std::string name = e.value("name", std::string{});
+            if (!name.empty())
+                world.SetEntityName(id, name);
 
             // Transform
             TransformComponent& t = world.AddTransform(id);
@@ -134,6 +147,15 @@ namespace Alice
                 SkinnedAnimationComponent& sa = world.AddSkinnedAnimation(id);
                 rttr::instance inst = sa;
                 if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
+            }
+
+            // Camera (¼±ÅÃ)
+            auto itC = e.find("Camera");
+            if (itC != e.end() && itC->is_object())
+            {
+                CameraComponent& cc = world.AddCamera(id);
+                rttr::instance inst = cc;
+                if (!JsonRttr::FromJsonObject(inst, *itC)) return false;
             }
 
             return true;

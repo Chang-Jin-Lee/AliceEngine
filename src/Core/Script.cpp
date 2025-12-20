@@ -138,83 +138,103 @@ namespace Alice
     void ScriptSystem::BeginInputFrame()
     {
         m_prevKeys = m_currKeys;
-        m_currKeys = {};
+        m_currKeys.fill(false);
 
-        auto toDx = [](KeyCode k) -> DirectX::Keyboard::Keys
+        if (!m_input)
+            return;
+
+        for (std::size_t i = 0; i < m_currKeys.size(); ++i)
         {
-            using K = DirectX::Keyboard::Keys;
-            switch (k)
-            {
-            case KeyCode::Alpha1: return K::D1;
-            case KeyCode::Alpha2: return K::D2;
-            case KeyCode::Alpha3: return K::D3;
-            case KeyCode::F1:     return K::F1;
-            case KeyCode::F2:     return K::F2;
-            case KeyCode::Space:  return K::Space;
-            default:              return K::None;
-            }
-        };
+            const auto key = static_cast<KeyCode>(i);
+            const auto dx = ToDxKey(key);
+            if (dx == DirectX::Keyboard::Keys::None)
+                continue;
+            m_currKeys[i] = m_input->IsKeyDown(dx);
+        }
+    }
 
-        auto snap = [&](KeyCode k, bool& out)
+    DirectX::Keyboard::Keys ScriptSystem::ToDxKey(KeyCode k)
+    {
+        using K = DirectX::Keyboard::Keys;
+        switch (k)
         {
-            if (!m_input) { out = false; return; }
-            const auto dx = toDx(k);
-            out = (dx != DirectX::Keyboard::Keys::None) ? m_input->IsKeyDown(dx) : false;
-        };
+        case KeyCode::Alpha0: return K::D0;
+        case KeyCode::Alpha1: return K::D1;
+        case KeyCode::Alpha2: return K::D2;
+        case KeyCode::Alpha3: return K::D3;
+        case KeyCode::Alpha4: return K::D4;
+        case KeyCode::Alpha5: return K::D5;
+        case KeyCode::Alpha6: return K::D6;
+        case KeyCode::Alpha7: return K::D7;
+        case KeyCode::Alpha8: return K::D8;
+        case KeyCode::Alpha9: return K::D9;
 
-        snap(KeyCode::Alpha1, m_currKeys.k1);
-        snap(KeyCode::Alpha2, m_currKeys.k2);
-        snap(KeyCode::Alpha3, m_currKeys.k3);
-        snap(KeyCode::F1,     m_currKeys.f1);
-        snap(KeyCode::F2,     m_currKeys.f2);
-        snap(KeyCode::Space,  m_currKeys.sp);
+        case KeyCode::A: return K::A; case KeyCode::B: return K::B; case KeyCode::C: return K::C;
+        case KeyCode::D: return K::D; case KeyCode::E: return K::E; case KeyCode::F: return K::F;
+        case KeyCode::G: return K::G; case KeyCode::H: return K::H; case KeyCode::I: return K::I;
+        case KeyCode::J: return K::J; case KeyCode::K: return K::K; case KeyCode::L: return K::L;
+        case KeyCode::M: return K::M; case KeyCode::N: return K::N; case KeyCode::O: return K::O;
+        case KeyCode::P: return K::P; case KeyCode::Q: return K::Q; case KeyCode::R: return K::R;
+        case KeyCode::S: return K::S; case KeyCode::T: return K::T; case KeyCode::U: return K::U;
+        case KeyCode::V: return K::V; case KeyCode::W: return K::W; case KeyCode::X: return K::X;
+        case KeyCode::Y: return K::Y; case KeyCode::Z: return K::Z;
+
+        case KeyCode::Up: return K::Up;
+        case KeyCode::Down: return K::Down;
+        case KeyCode::Left: return K::Left;
+        case KeyCode::Right: return K::Right;
+
+        case KeyCode::Space: return K::Space;
+        case KeyCode::Enter: return K::Enter;
+        case KeyCode::Escape: return K::Escape;
+        case KeyCode::Tab: return K::Tab;
+        case KeyCode::Backspace: return K::Back;
+
+        case KeyCode::LeftShift: return K::LeftShift;
+        case KeyCode::RightShift: return K::RightShift;
+        case KeyCode::LeftCtrl: return K::LeftControl;
+        case KeyCode::RightCtrl: return K::RightControl;
+        case KeyCode::LeftAlt: return K::LeftAlt;
+        case KeyCode::RightAlt: return K::RightAlt;
+
+        case KeyCode::F1: return K::F1;
+        case KeyCode::F2: return K::F2;
+        case KeyCode::F3: return K::F3;
+        case KeyCode::F4: return K::F4;
+        case KeyCode::F5: return K::F5;
+        case KeyCode::F6: return K::F6;
+        case KeyCode::F7: return K::F7;
+        case KeyCode::F8: return K::F8;
+        case KeyCode::F9: return K::F9;
+        case KeyCode::F10: return K::F10;
+        case KeyCode::F11: return K::F11;
+        case KeyCode::F12: return K::F12;
+
+        default: return K::None;
+        }
     }
 
     bool ScriptSystem::GetKeyInternal(KeyCode key) const
     {
-        switch (key)
-        {
-        case KeyCode::Alpha1: return m_currKeys.k1;
-        case KeyCode::Alpha2: return m_currKeys.k2;
-        case KeyCode::Alpha3: return m_currKeys.k3;
-        case KeyCode::F1:     return m_currKeys.f1;
-        case KeyCode::F2:     return m_currKeys.f2;
-        case KeyCode::Space:  return m_currKeys.sp;
-        default:              return false;
-        }
+        const std::size_t i = static_cast<std::size_t>(key);
+        if (i >= m_currKeys.size())
+            return false;
+        return m_currKeys[i];
     }
 
     bool ScriptSystem::GetKey(KeyCode key) const { return GetKeyInternal(key); }
     bool ScriptSystem::GetKeyDown(KeyCode key) const
     {
         const bool now = GetKeyInternal(key);
-        bool prev = false;
-        switch (key)
-        {
-        case KeyCode::Alpha1: prev = m_prevKeys.k1; break;
-        case KeyCode::Alpha2: prev = m_prevKeys.k2; break;
-        case KeyCode::Alpha3: prev = m_prevKeys.k3; break;
-        case KeyCode::F1:     prev = m_prevKeys.f1; break;
-        case KeyCode::F2:     prev = m_prevKeys.f2; break;
-        case KeyCode::Space:  prev = m_prevKeys.sp; break;
-        default:              prev = false; break;
-        }
+        const std::size_t i = static_cast<std::size_t>(key);
+        const bool prev = (i < m_prevKeys.size()) ? m_prevKeys[i] : false;
         return now && !prev;
     }
     bool ScriptSystem::GetKeyUp(KeyCode key) const
     {
         const bool now = GetKeyInternal(key);
-        bool prev = false;
-        switch (key)
-        {
-        case KeyCode::Alpha1: prev = m_prevKeys.k1; break;
-        case KeyCode::Alpha2: prev = m_prevKeys.k2; break;
-        case KeyCode::Alpha3: prev = m_prevKeys.k3; break;
-        case KeyCode::F1:     prev = m_prevKeys.f1; break;
-        case KeyCode::F2:     prev = m_prevKeys.f2; break;
-        case KeyCode::Space:  prev = m_prevKeys.sp; break;
-        default:              prev = false; break;
-        }
+        const std::size_t i = static_cast<std::size_t>(key);
+        const bool prev = (i < m_prevKeys.size()) ? m_prevKeys[i] : false;
         return !now && prev;
     }
 
@@ -300,7 +320,9 @@ namespace Alice
             if (!m_pendingSceneFile.empty())
             {
                 const std::string path = std::exchange(m_pendingSceneFile, {});
-                const bool ok = SceneFile::Load(world, std::filesystem::path(path));
+                const bool ok = (m_resources)
+                    ? SceneFile::LoadAuto(world, *m_resources, std::filesystem::path(path))
+                    : SceneFile::Load(world, std::filesystem::path(path));
                 onTrimVideoMemory.Execute();
                 if (!ok)
                     ALICE_LOG_ERRORF("ScriptSystem: SceneFile::Load failed. path=\"%s\"", path.c_str());
