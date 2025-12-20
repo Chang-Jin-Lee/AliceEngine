@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Script.h"
+#include "Core/ScriptReflection.h"
 
 namespace Alice
 {
@@ -13,14 +14,15 @@ namespace Alice
     public:
         const char* GetName() const override { return "CharacterMovement"; }
 
-        void FixedUpdate(float fixedDeltaTime) override;
+        void Update(float DeltaTime) override;
 
     private:
-        float m_moveSpeed = 4.0f;
-        float m_jumpSpeed = 6.5f;
-        float m_gravity   = 18.0f;
+        // private + SerializeField 처럼 쓰고 싶으면 이 매크로로 선언합니다.
+        ALICE_SERIALIZE_FIELD(float, m_moveSpeed, 10.0f);
+        ALICE_SERIALIZE_FIELD(float, m_jumpSpeed, 6.5f);
+        ALICE_SERIALIZE_FIELD(float, m_gravity,   18.0f);
 
-        float m_velY = 0.0f;
+        float m_velY = 0.0f; // 런타임 상태(저장/노출 X)
     };
 }
 

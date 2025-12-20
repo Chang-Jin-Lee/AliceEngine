@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Script.h"
+#include "Core/ScriptReflection.h"
 
 namespace Alice
 {
@@ -12,13 +13,17 @@ namespace Alice
     public:
         const char* GetName() const override { return "CameraFollow"; }
 
-        void FixedUpdate(float fixedDeltaTime) override;
+        void MoveDirectly();
+        void MoveLerp(const float& lateDeltaTime);
+
+        void LateUpdate(float lateDeltaTime) override;
 
     private:
         // 간단 오프셋 (유니티의 third-person 카메라 느낌)
-        float m_offsetX = 0.0f;
-        float m_offsetY = 2.0f;
-        float m_offsetZ = -5.0f;
+        ALICE_SERIALIZE_FIELD(float, m_offsetX, 0.0f);
+        ALICE_SERIALIZE_FIELD(float, m_offsetY, 28.0f);
+        ALICE_SERIALIZE_FIELD(float, m_offsetZ, -13.0f);
+        ALICE_SERIALIZE_FIELD(float, m_smoothSpeed, 0.0f);
     };
 }
 

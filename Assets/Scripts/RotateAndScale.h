@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Script.h"
+#include "Core/ScriptReflection.h"
 
 namespace Alice
 {
@@ -16,7 +17,12 @@ namespace Alice
         void Update(float deltaTime) override;
 
     private:
-        float m_timeSeconds = 0.0f; // 누적 시간
-        float m_baseScale   = 1.0f; // 기준 스케일 (OnCreate 시점의 scale.x)
+        // 노출/저장하고 싶은 값은 SerializeField로 선언합니다.
+        ALICE_SERIALIZE_FIELD(float, m_spinSpeed, 1.0f);
+        ALICE_SERIALIZE_FIELD(float, m_pulseSpeed, 2.0f);
+        ALICE_SERIALIZE_FIELD(float, m_pulseAmplitude, 0.25f);
+
+        float m_timeSeconds = 0.0f; // 런타임 상태
+        float m_baseScale   = 1.0f; // 런타임 상태
     };
 }

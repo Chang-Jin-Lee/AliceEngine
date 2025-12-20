@@ -9,6 +9,12 @@ namespace Alice
     // 이 스크립트를 리플렉션/팩토리 시스템에 등록합니다.
     REGISTER_SCRIPT(RotateAndScale);
 
+    ALICE_SCRIPT_REFLECT_BEGIN(RotateAndScale)
+        ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_spinSpeed)
+        ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_pulseSpeed)
+        ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_pulseAmplitude)
+    ALICE_SCRIPT_REFLECT_END()
+
     void RotateAndScale::Start()
     {
         // Transform 이 없으면 하나 추가합니다.
@@ -34,11 +40,10 @@ namespace Alice
         if (auto* t = transform())
         {
             // (1) Y 축으로 초당 약 1라디안씩 회전
-            t->rotation.y += 1.0f * deltaTime;
+            t->rotation.y += Get_m_spinSpeed() * deltaTime;
 
             // (2) 시간에 따라 스케일이 0.75 ~ 1.25 배 사이에서 천천히 진동
-            const float amplitude = 0.25f;     // 스케일 변동 폭 (25%)
-            float s = m_baseScale * (1.0f + amplitude * std::sin(m_timeSeconds * 2.0f));
+            float s = m_baseScale * (1.0f + Get_m_pulseAmplitude() * std::sin(m_timeSeconds * Get_m_pulseSpeed()));
             t->scale.x = s;
             t->scale.y = s;
             t->scale.z = s;
