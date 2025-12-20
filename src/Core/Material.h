@@ -7,8 +7,7 @@ namespace Alice
     struct MaterialComponent;
 
     /// 간단한 머티리얼 파일 입출력 유틸리티입니다.
-    /// - 현재는 색상만 저장/로드합니다.
-    /// - 포맷은 인위적으로 단순한 텍스트 형식입니다.
+    /// - RTTR + JSON 기반 저장/로드입니다.
     namespace MaterialFile
     {
         /// .mat 파일에서 머티리얼을 읽어와 MaterialComponent 에 채웁니다.

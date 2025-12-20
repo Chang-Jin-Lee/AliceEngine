@@ -1,9 +1,9 @@
 #include "Core/SceneFile.h"
-#include "Core/SceneFileHelper.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
+#include "Core/JsonRttr.h"
 
 #include <fstream>
-#include <sstream>
+#include <string>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -18,19 +18,6 @@ namespace Alice
 {
     namespace
     {
-        inline void Trim(std::string& s)
-        {
-            const char* ws = " \t\r\n";
-            const auto  b  = s.find_first_not_of(ws);
-            const auto  e  = s.find_last_not_of(ws);
-            if (b == std::string::npos)
-            {
-                s.clear();
-                return;
-            }
-            s = s.substr(b, e - b + 1);
-        }
-
         // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
         // 1개짜리 항등 본 팔레트입니다. (정적인 메시처럼 렌더링되도록 함)
         static DirectX::XMFLOAT4X4 g_IdentityBone(
@@ -38,215 +25,187 @@ namespace Alice
             0, 1, 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1);
+
+        static bool WriteEntity(JsonRttr::json& outEntity, const World& world, EntityId id)
+        {
+            outEntity = JsonRttr::json::object();
+            outEntity["id"] = static_cast<std::uint32_t>(id);
+
+            const TransformComponent* transform = world.GetTransform(id);
+            if (transform)
+            {
+                rttr::instance inst = const_cast<TransformComponent&>(*transform);
+                outEntity["Transform"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            const ScriptComponent* script = world.GetScript(id);
+            if (script)
+            {
+                JsonRttr::json s = JsonRttr::json::object();
+                s["name"] = script->scriptName;
+                s["enabled"] = script->enabled;
+                outEntity["Script"] = s;
+            }
+
+            const MaterialComponent* mat = world.GetMaterial(id);
+            if (mat)
+            {
+                rttr::instance inst = const_cast<MaterialComponent&>(*mat);
+                outEntity["Material"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            const SkinnedMeshComponent* skinned = world.GetSkinnedMesh(id);
+            if (skinned)
+            {
+                rttr::instance inst = const_cast<SkinnedMeshComponent&>(*skinned);
+                outEntity["SkinnedMesh"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            const SkinnedAnimationComponent* anim = world.GetSkinnedAnimation(id);
+            if (anim)
+            {
+                rttr::instance inst = const_cast<SkinnedAnimationComponent&>(*anim);
+                outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            return true;
+        }
+
+        static bool ApplyEntity(World& world, const JsonRttr::json& e)
+        {
+            if (!e.is_object())
+                return false;
+
+            const EntityId id = world.CreateEntity();
+
+            // Transform (필수에 가깝게 취급)
+            TransformComponent& t = world.AddTransform(id);
+            auto itT = e.find("Transform");
+            if (itT != e.end())
+            {
+                rttr::instance inst = t;
+                if (!JsonRttr::FromJsonObject(inst, *itT))
+                    return false;
+            }
+
+            // Script
+            auto itS = e.find("Script");
+            if (itS != e.end() && itS->is_object())
+            {
+                const std::string name = itS->value("name", std::string{});
+                const bool enabled = itS->value("enabled", true);
+                if (!name.empty())
+                {
+                    ScriptComponent& sc = world.AddScript(id, name);
+                    sc.enabled = enabled;
+                }
+            }
+
+            // Material
+            auto itM = e.find("Material");
+            if (itM != e.end() && itM->is_object())
+            {
+                MaterialComponent& mc = world.AddMaterial(id, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f), {});
+                rttr::instance inst = mc;
+                if (!JsonRttr::FromJsonObject(inst, *itM))
+                    return false;
+            }
+
+            // SkinnedMesh
+            auto itSM = e.find("SkinnedMesh");
+            if (itSM != e.end() && itSM->is_object())
+            {
+                SkinnedMeshComponent tmp;
+                rttr::instance instTmp = tmp;
+                if (!JsonRttr::FromJsonObject(instTmp, *itSM))
+                    return false;
+
+                if (!tmp.meshAssetPath.empty())
+                {
+                    SkinnedMeshComponent& sm = world.AddSkinnedMesh(id, tmp.meshAssetPath);
+                    sm.instanceAssetPath = tmp.instanceAssetPath;
+                    sm.boneMatrices = &g_IdentityBone;
+                    sm.boneCount = 1;
+                }
+            }
+
+            // SkinnedAnimation (선택)
+            auto itSA = e.find("SkinnedAnimation");
+            if (itSA != e.end() && itSA->is_object())
+            {
+                SkinnedAnimationComponent& sa = world.AddSkinnedAnimation(id);
+                rttr::instance inst = sa;
+                if (!JsonRttr::FromJsonObject(inst, *itSA))
+                    return false;
+            }
+
+            return true;
+        }
     }
 
     namespace SceneFile
     {
         bool Save(const World& world, const std::filesystem::path& path)
         {
-            auto parent = path.parent_path();
-            if (!parent.empty() && !std::filesystem::exists(parent))
-            {
-                std::error_code ec;
-                std::filesystem::create_directories(parent, ec);
-            }
-
-            std::ofstream ofs(path);
-            if (!ofs.is_open())
-                return false;
-
-            ofs << "# AliceRenderer scene\n";
+            JsonRttr::json root = JsonRttr::json::object();
+            root["version"] = 1;
+            root["entities"] = JsonRttr::json::array();
 
             const auto& transforms = world.GetTransforms();
             for (const auto& [id, transform] : transforms)
             {
-                const ScriptComponent*     script = world.GetScript(id);
-                const MaterialComponent*   mat    = world.GetMaterial(id);
-                const SkinnedMeshComponent* skinned = world.GetSkinnedMesh(id);
-
-                ofs << "entity: " << static_cast<std::uint32_t>(id) << "\n";
-                
-                // Transform 저장 (기존 포맷 호환: position, rotation, scale 직접)
-                ofs << "position: "
-                    << transform.position.x << " "
-                    << transform.position.y << " "
-                    << transform.position.z << "\n";
-                ofs << "rotation: "
-                    << transform.rotation.x << " "
-                    << transform.rotation.y << " "
-                    << transform.rotation.z << "\n";
-                ofs << "scale: "
-                    << transform.scale.x << " "
-                    << transform.scale.y << " "
-                    << transform.scale.z << "\n";
-
-                // Script는 특별 처리 (문자열만)
-                ofs << "script: ";
-                if (script)
-                    ofs << script->scriptName;
-                ofs << "\n";
-
-                // RTTR 기반으로 Material 저장
-                if (mat)
-                {
-                    SceneFileHelper::SaveComponent(ofs, *mat, "material");
-                }
-
-                // RTTR 기반으로 SkinnedMesh 저장 (boneMatrices 제외)
-                if (skinned)
-                {
-                    SceneFileHelper::SaveComponent(ofs, *skinned, "skinned");
-                }
-
-                ofs << "\n";
+                (void)transform;
+                JsonRttr::json e;
+                if (!WriteEntity(e, world, id))
+                    return false;
+                root["entities"].push_back(e);
             }
+
+            if (!JsonRttr::SaveJsonFile(path, root, 4))
+                return false;
 
             return true;
         }
 
         bool Load(World& world, const std::filesystem::path& path)
         {
-            // 1. 현재 프로그램의 작업 디렉토리(CWD) 확인
-            std::filesystem::path cwd = std::filesystem::current_path();
-            // 2. 입력된 상대 경로가 실제로 가리키는 절대 경로 확인
-            std::filesystem::path absPath = std::filesystem::absolute(path);
+            // 레거시 빈 씬(텍스트 헤더만 존재) 자동 처리:
+            // - 예전 포맷으로 생성된 "# AliceRenderer scene" 파일은 JSON이 아니므로 파싱에 실패합니다.
+            // - 이 경우 기본 엔티티 1개를 넣어 JSON 씬으로 즉시 업그레이드합니다.
+            {
+                std::ifstream ifs(path);
+                if (!ifs.is_open())
+                    return false;
 
-            std::ifstream ifs(path);
-            if (!ifs.is_open())
+                std::string firstLine;
+                std::getline(ifs, firstLine);
+                if (firstLine.rfind("# AliceRenderer scene", 0) == 0)
+                {
+                    world.Clear();
+                    const EntityId e = world.CreateEntity();
+                    world.AddTransform(e);
+                    world.AddMaterial(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f), {});
+                    Save(world, path);
+                    return true;
+                }
+            }
+
+            JsonRttr::json root;
+            if (!JsonRttr::LoadJsonFile(path, root))
+                return false;
+
+            auto itEntities = root.find("entities");
+            if (itEntities == root.end() || !itEntities->is_array())
                 return false;
 
             // 현재 월드 비우기
             world.Clear();
 
-            // 한 엔티티에 대한 임시 버퍼 (RTTR 사용)
-            TransformComponent tempTransform;
-            MaterialComponent tempMaterial;
-            SkinnedMeshComponent tempSkinnedMesh;
-            std::string scriptName;
-            bool hasAnyField = false;
-
-            auto commitEntity = [&]()
+            for (const auto& e : *itEntities)
             {
-                if (!hasAnyField)
-                    return;
-
-                EntityId e = world.CreateEntity();
-                
-                // Transform 복사
-                auto& t = world.AddTransform(e);
-                t = tempTransform;
-
-                // Script 추가
-                if (!scriptName.empty())
-                {
-                    world.AddScript(e, scriptName);
-                }
-
-                // Material 추가 (color나 assetPath가 있으면)
-                if (!tempMaterial.assetPath.empty() || 
-                    tempMaterial.color.x != 0.7f || tempMaterial.color.y != 0.7f || tempMaterial.color.z != 0.7f)
-                {
-                    MaterialComponent& mat = world.AddMaterial(e, tempMaterial.color, tempMaterial.assetPath);
-                    mat.roughness = tempMaterial.roughness;
-                    mat.metalness = tempMaterial.metalness;
-                    mat.albedoTexturePath = tempMaterial.albedoTexturePath;
-                }
-
-                // SkinnedMesh 추가
-                if (!tempSkinnedMesh.meshAssetPath.empty())
-                {
-                    SkinnedMeshComponent& sm = world.AddSkinnedMesh(e, tempSkinnedMesh.meshAssetPath);
-                    sm.instanceAssetPath = tempSkinnedMesh.instanceAssetPath;
-
-                    // 아직 애니메이션 시스템과 연결되지 않았으므로
-                    // 간단히 1개짜리 항등 본 팔레트를 연결해 둡니다.
-                    sm.boneMatrices = &g_IdentityBone;
-                    sm.boneCount    = 1;
-                }
-
-                // 다음 엔티티를 위해 초기화
-                tempTransform = TransformComponent();
-                tempMaterial = MaterialComponent();
-                tempSkinnedMesh = SkinnedMeshComponent();
-                scriptName.clear();
-                hasAnyField = false;
-            };
-
-            std::string line;
-            while (std::getline(ifs, line))
-            {
-                if (line.empty())
-                {
-                    commitEntity();
-                    continue;
-                }
-
-                if (!line.empty() && line[0] == '#')
-                    continue;
-
-                std::istringstream iss(line);
-                std::string key;
-                if (!std::getline(iss, key, ':'))
-                    continue;
-
-                std::string value;
-                std::getline(iss, value);
-
-                Trim(key);
-                Trim(value);
-
-                if (key == "entity")
-                {
-                    // 새 엔티티 시작: 이전 엔티티를 커밋
-                    commitEntity();
-                    hasAnyField = true;
-                }
-                else if (key == "script")
-                {
-                    scriptName = value;
-                    hasAnyField = true;
-                }
-                else
-                {
-                    // RTTR 기반으로 컴포넌트 프로퍼티 로드
-                    bool loaded = false;
-                    
-                    // Transform 프로퍼티 (기존 포맷 호환: position, rotation, scale 직접 처리)
-                    if (key == "position")
-                    {
-                        std::istringstream vs(value);
-                        vs >> tempTransform.position.x >> tempTransform.position.y >> tempTransform.position.z;
-                        loaded = true;
-                    }
-                    else if (key == "rotation")
-                    {
-                        std::istringstream vs(value);
-                        vs >> tempTransform.rotation.x >> tempTransform.rotation.y >> tempTransform.rotation.z;
-                        loaded = true;
-                    }
-                    else if (key == "scale")
-                    {
-                        std::istringstream vs(value);
-                        vs >> tempTransform.scale.x >> tempTransform.scale.y >> tempTransform.scale.z;
-                        loaded = true;
-                    }
-                    else
-                    {
-                        // Material, SkinnedMesh는 prefix로 구분하여 RTTR로 로드
-                        loaded = SceneFileHelper::LoadComponentProperty(key, value, tempMaterial, "material");
-                        if (!loaded)
-                        {
-                            loaded = SceneFileHelper::LoadComponentProperty(key, value, tempSkinnedMesh, "skinned");
-                        }
-                    }
-                    
-                    if (loaded)
-                        hasAnyField = true;
-                }
+                if (!ApplyEntity(world, e))
+                    return false;
             }
-
-            // 마지막 엔티티 커밋
-            commitEntity();
 
             return true;
         }

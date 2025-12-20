@@ -11,6 +11,20 @@
 #include <cstring>
 #include "Core/Logger.h"
 
+namespace
+{
+    struct AliceChunkHeader
+    {
+        char     magic[4];      // "ALIC"
+        std::uint32_t version;  // 1
+        std::uint64_t fileId;
+        std::uint32_t chunkIndex;
+        std::uint32_t chunkCount;
+        std::uint64_t originalSize;
+        std::uint32_t payloadSize;
+    };
+}
+
 namespace Alice
 {
     bool ResourceManager::StartsWith(std::string_view s, std::string_view prefix)
@@ -296,17 +310,6 @@ namespace Alice
     {
         namespace fs = std::filesystem;
 
-        struct ChunkHeader
-        {
-            char     magic[4];      // "ALIC"
-            std::uint32_t version;  // 1
-            std::uint64_t fileId;
-            std::uint32_t chunkIndex;
-            std::uint32_t chunkCount;
-            std::uint64_t originalSize;
-            std::uint32_t payloadSize;
-        };
-
         const std::uint64_t fileId = HashString64(resourceRel);
         fs::path c0 = Chunk0PathForResourceRel(resourceRel);
         if (!fs::exists(c0))
@@ -316,41 +319,50 @@ namespace Alice
             return nullptr;
         }
 
-        auto readChunk = [&](std::uint32_t idx, ChunkHeader& outHdr, std::vector<std::uint8_t>& outPayload) -> bool
+        struct ChunkReader
         {
-            char hex[17] = {};
-            std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(fileId));
-            const std::string hexStr = hex;
-            const fs::path dir = CookedDir() / "Chunks" / hexStr.substr(0, 2) / hexStr;
+            const ResourceManager& rm;
+            std::uint64_t          fileId;
 
-            char name[32] = {};
-            std::snprintf(name, sizeof(name), "c%04u.alice", static_cast<unsigned>(idx));
-            const fs::path p = dir / name;
+            bool Read(std::uint32_t idx, AliceChunkHeader& outHdr, std::vector<std::uint8_t>& outPayload) const
+            {
+                namespace fs2 = std::filesystem;
 
-            std::vector<std::uint8_t> raw;
-            if (!LoadBinary(p, raw, false)) // 파일 자체는 "헤더+암호화 payload" 이므로 raw는 그대로 읽음
-                return false;
-            if (raw.size() < sizeof(ChunkHeader))
-                return false;
+                char hex[17] = {};
+                std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(fileId));
+                const std::string hexStr = hex;
+                const fs2::path dir = rm.CookedDir() / "Chunks" / hexStr.substr(0, 2) / hexStr;
 
-            std::memcpy(&outHdr, raw.data(), sizeof(ChunkHeader));
-            if (std::memcmp(outHdr.magic, "ALIC", 4) != 0 || outHdr.version != 1 || outHdr.fileId != fileId)
-                return false;
+                char name[32] = {};
+                std::snprintf(name, sizeof(name), "c%04u.alice", static_cast<unsigned>(idx));
+                const fs2::path p = dir / name;
 
-            const std::size_t payloadOff = sizeof(ChunkHeader);
-            const std::size_t payloadSize = static_cast<std::size_t>(outHdr.payloadSize);
-            if (payloadOff + payloadSize > raw.size())
-                return false;
+                std::vector<std::uint8_t> raw;
+                if (!rm.LoadBinary(p, raw, false))
+                    return false;
+                if (raw.size() < sizeof(AliceChunkHeader))
+                    return false;
 
-            outPayload.assign(raw.begin() + payloadOff, raw.begin() + payloadOff + payloadSize);
-            // payload만 XOR 복호화
-            XorCrypt(outPayload);
-            return true;
+                std::memcpy(&outHdr, raw.data(), sizeof(AliceChunkHeader));
+                if (std::memcmp(outHdr.magic, "ALIC", 4) != 0 || outHdr.version != 1 || outHdr.fileId != fileId)
+                    return false;
+
+                const std::size_t payloadOff = sizeof(AliceChunkHeader);
+                const std::size_t payloadSize = static_cast<std::size_t>(outHdr.payloadSize);
+                if (payloadOff + payloadSize > raw.size())
+                    return false;
+
+                outPayload.assign(raw.begin() + payloadOff, raw.begin() + payloadOff + payloadSize);
+                rm.XorCrypt(outPayload);
+                return true;
+            }
         };
 
-        ChunkHeader h0{};
+        const ChunkReader reader{ *this, fileId };
+
+        AliceChunkHeader h0{};
         std::vector<std::uint8_t> p0;
-        if (!readChunk(0, h0, p0))
+        if (!reader.Read(0, h0, p0))
         {
             ALICE_LOG_ERRORF("ResourceManager: failed to read/decrypt chunk0. \"%s\"", c0.string().c_str());
             return nullptr;
@@ -367,9 +379,9 @@ namespace Alice
 
         for (std::uint32_t i = 1; i < h0.chunkCount; ++i)
         {
-            ChunkHeader hi{};
+            AliceChunkHeader hi{};
             std::vector<std::uint8_t> pi;
-            if (!readChunk(i, hi, pi))
+            if (!reader.Read(i, hi, pi))
             {
                 ALICE_LOG_ERRORF("ResourceManager: failed to read/decrypt chunk%u for Resource/%s",
                                  static_cast<unsigned>(i), std::string(resourceRel).c_str());
