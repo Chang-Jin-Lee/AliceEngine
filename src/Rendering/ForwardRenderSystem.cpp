@@ -1200,77 +1200,94 @@ float4 main(PSInput input) : SV_TARGET
     {
         if (!m_sceneRTV || !m_sceneDSV) return XMMatrixIdentity();
 
-        // --- 조명 뷰/프로젝션 계산 (Focusing & Ortho Sizing) ---
+        // 1. 조명 방향 설정
         XMVECTOR lightDir = XMLoadFloat3(&m_lightingParameters.keyDirection);
         if (XMVector3Equal(lightDir, XMVectorZero())) lightDir = XMVectorSet(0.5f, -1.0f, 0.5f, 0.0f);
         lightDir = XMVector3Normalize(lightDir);
 
-        // 씬의 중심(Focus)과 범위(Min/Max) 계산
-        XMFLOAT3 focusF{ 0,0,0 };
+        // 2. 씬 바운딩 박스 계산 (Set을 이용한 O(1) 제외 처리)
         XMFLOAT3 minP{ FLT_MAX, FLT_MAX, FLT_MAX };
         XMFLOAT3 maxP{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
-        int focusCount = 0;
+        bool hasObjects = false;
 
         const auto& transforms = world.GetTransforms();
         for (const auto& [id, tr] : transforms)
         {
-			if (cameraEntities.contains(id)) continue; // 카메라 큐브는 섀도우 맵에 포함하지 않음
-            focusF.x += tr.position.x; focusF.y += tr.position.y; focusF.z += tr.position.z;
+            if (cameraEntities.contains(id)) continue;
+
+            hasObjects = true;
             minP.x = (std::min)(minP.x, tr.position.x); minP.y = (std::min)(minP.y, tr.position.y); minP.z = (std::min)(minP.z, tr.position.z);
             maxP.x = (std::max)(maxP.x, tr.position.x); maxP.y = (std::max)(maxP.y, tr.position.y); maxP.z = (std::max)(maxP.z, tr.position.z);
-            focusCount++;
-        }
-        if (focusCount > 0) {
-            float inv = 1.0f / (float)focusCount;
-            focusF = { focusF.x * inv, focusF.y * inv, focusF.z * inv };
         }
 
-        // Ortho Radius 자동 확장
-        float r = m_shadowSettings.orthoRadius;
-        if (focusCount > 0) 
+        // 오브젝트가 없으면 기본값 처리
+        if (!hasObjects)
         {
-            float maxExtent = (std::max)({ maxP.x - minP.x, maxP.y - minP.y, maxP.z - minP.z });
-            r = (std::max)(r, maxExtent * 0.5f + 5.0f);
+            minP = { -10.0f, -10.0f, -10.0f };
+            maxP = { 10.0f, 10.0f, 10.0f };
         }
 
-        // Light View Matrix 생성
-        XMVECTOR focus = XMLoadFloat3(&focusF);
-        XMVECTOR lightPos = focus - lightDir * r;
+        // 3. 씬의 중심(Focus) 계산
+        XMVECTOR vMin = XMLoadFloat3(&minP);
+        XMVECTOR vMax = XMLoadFloat3(&maxP);
+        XMVECTOR focus = (vMin + vMax) * 0.5f;
+
+        // 4. 그림자 범위(Radius)를 더 크게 만듬
+        // 씬의 대각선 길이를 구해서 회전해도 잘리지 않도록 함
+        XMVECTOR diagonal = XMVector3Length(vMax - vMin);
+        float sceneRadius = XMVectorGetX(diagonal) * 0.5f;
+
+        // 설정값과 계산된 반지름 중 큰 값을 사용하고, 추가 여유분(Multiplier)을 줌
+        float r = (std::max)(m_shadowSettings.orthoRadius, sceneRadius);
+        r *= 1.5f; // 1.5배 여유를 둬서 경계면 그림자 잘림을 방지
+
+        // 5. 뷰 행렬 생성 (가상의 광원 위치를 멀리 이동)
+        // 조명을 반지름의 3배만큼 뒤로 당겨서, 중심 앞쪽의 물체도 Near Plane에 안 잘리게 함
+        float distFromCenter = r * 3.0f;
+        XMVECTOR lightPos = focus - lightDir * distFromCenter;
+
+        // Up 벡터 보정
         XMVECTOR up = (fabsf(XMVectorGetX(XMVector3Dot(XMVectorSet(0, 1, 0, 0), lightDir))) > 0.99f)
             ? XMVectorSet(0, 0, 1, 0) : XMVectorSet(0, 1, 0, 0);
         XMMATRIX lightView = XMMatrixLookToLH(lightPos, lightDir, up);
 
-        float nearZ = 0.01f; float farZ = r * 2.0f;
+        // 6. 투영 행렬 생성 (Z 범위 대폭 확장)
+        // Near는 0에 가깝게, Far는 광원 거리 + 반지름 뒤쪽까지 커버
+        float nearZ = 0.01f;
+        float farZ = distFromCenter + r * 2.0f; // Far Plane을 충분히 깊게 설정
 
         XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(-r, r, -r, r, nearZ, farZ);
 
-        // 텍셀 스냅 (Texel Snapping)
+        // 7. 텍셀 스냅 (Texel Snapping) - 깜빡임 방지
         XMVECTOR focusLS = XMVector3TransformCoord(focus, lightView);
-        float texelWorld = (2.0f * r) / (float)m_shadowSettings.mapSizePx;
+        float texelWorld = (2.0f * r) / static_cast<float>(m_shadowSettings.mapSizePx);
+
         float snapX = floorf(XMVectorGetX(focusLS) / texelWorld) * texelWorld;
         float snapY = floorf(XMVectorGetY(focusLS) / texelWorld) * texelWorld;
+
+        // 스냅 적용을 위해 뷰 행렬 미세 조정
         lightView = XMMatrixTranslation(snapX - XMVectorGetX(focusLS), snapY - XMVectorGetY(focusLS), 0.0f) * lightView;
 
         XMMATRIX lightViewProj = lightView * lightProj;
 
-        // --- 섀도우 맵 렌더링 설정 ---
+        // --- 렌더링 파이프라인 설정 ---
         if (m_shadowDSV)
         {
             ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
-            m_context->PSSetShaderResources(4, 1, nullSRV); // t4 해제
+            m_context->PSSetShaderResources(4, 1, nullSRV);
 
             m_context->RSSetViewports(1, &m_shadowViewport);
             m_context->OMSetRenderTargets(0, nullptr, m_shadowDSV.Get());
             m_context->ClearDepthStencilView(m_shadowDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-            // Pipeline State: Depth Only
             m_context->IASetInputLayout(m_inputLayout.Get());
             m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
             m_context->PSSetShader(nullptr, nullptr, 0);
+
             if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
 
-            // --- 정적 메시 그리기 (Shadow) ---
+            // 정적 메시 그리기
             UINT stride = sizeof(SimpleVertex), offset = 0;
             ID3D11Buffer* vb = m_vertexBuffer.Get();
             m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
@@ -1278,22 +1295,25 @@ float4 main(PSInput input) : SV_TARGET
 
             for (const auto& [id, transform] : transforms)
             {
-                if (cameraEntities.contains(id)) continue; // 카메라 큐브는 그림자 맵에 그리지 않음
-                if (world.GetSkinnedMesh(id)) continue; // 스키닝 메시는 별도 처리
+                if (cameraEntities.contains(id)) continue;
+                if (world.GetSkinnedMesh(id)) continue;
 
                 XMMATRIX worldM = BuildWorldMatrix(transform);
 
-                // Rasterizer State 결정 (Culling)
+                // 그림자 맵은 보통 Back-Face Culling을 하거나, Peter Panning 방지를 위해 Front-Face Culling을 하기도 함
+                // 설정에 따라 상태 변경
                 bool flipped = XMVectorGetX(XMMatrixDeterminant(worldM)) < 0.0f;
-                if (flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
-                else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
+                if (flipped && m_shadowRasterizerStateReversed)
+                    m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
+                else if (m_shadowRasterizerState)
+                    m_context->RSSetState(m_shadowRasterizerState.Get());
 
                 XMFLOAT4 dummy(1, 1, 1, 1);
                 UpdatePerObjectCB(worldM, lightView, lightProj, dummy, 1, 0, false, false);
                 m_context->DrawIndexed(m_indexCount, 0, 0);
             }
 
-            // --- 스키닝 메시 그리기 (Shadow) ---
+            // 스키닝 메시 그리기
             if (!skinnedCommands.empty() && m_skinnedVertexShader && m_inputLayoutSkinned)
             {
                 m_context->IASetInputLayout(m_inputLayoutSkinned.Get());
@@ -1301,15 +1321,6 @@ float4 main(PSInput input) : SV_TARGET
 
                 for (const auto& cmd : skinnedCommands)
                 {
-                    if (!cmd.vertexBuffer || !cmd.indexBuffer) continue;
-
-                    // RS State
-                    bool flipped = XMVectorGetX(XMMatrixDeterminant(cmd.world)) < 0.0f;
-                    if (flipped && m_shadowRasterizerStateReversed)
-                        m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
-                    else if (m_shadowRasterizerState)
-                        m_context->RSSetState(m_shadowRasterizerState.Get());
-
                     UINT sStride = cmd.stride;
                     m_context->IASetVertexBuffers(0, 1, &cmd.vertexBuffer, &sStride, &offset);
                     m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
@@ -1320,8 +1331,6 @@ float4 main(PSInput input) : SV_TARGET
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 }
             }
-
-            // 복원함
             m_context->IASetInputLayout(m_inputLayout.Get());
         }
 
@@ -1439,23 +1448,19 @@ float4 main(PSInput input) : SV_TARGET
         // 0. 초기화 및 유효성 검사
         if (!IsValidPipeline()) return;
 
-        // 1. 섀도우 맵 패스 (Shadow Map Generation)
-        //    - 반환값: Main Pass에서 사용할 Light View-Projection 행렬
+        // 1. 섀도우 맵 패스 (Shadow Map Generation) - 반환값: Main Pass에서 사용할 Light View-Projection 행렬
         XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities);
 
-        // 2. 메인 컬러 패스 & 정적 메시 렌더링 (Main Color Pass & Static Meshes)
-        //    - 씬 RTV 클리어, 공통 리소스 바인딩, 정적 오브젝트 그리기
+        // 2. 메인 컬러 패스 & 정적 메시 렌더링 (Main Color Pass & Static Meshes) - 씬 RTV 클리어, 공통 리소스 바인딩, 정적 오브젝트 그리기
         RenderMainPass(world, camera, shadingMode, enableFillLight, lightViewProj);
 
-        // 3. 스키닝 메시 패스 (Skinned Meshes)
-        //    - 이미 Main Pass에서 RTV가 설정되어 있으므로 바로 그립니다.
+        // 3. 스키닝 메시 패스 (Skinned Meshes) - 이미 Main Pass에서 RTV가 설정되어 있으므로 바로 그립니다.
         if (!skinnedCommands.empty()) RenderSkinnedMeshes(camera, skinnedCommands);
 
         // 4. 스카이박스 렌더링 (Skybox)
         RenderSkybox(camera);
 
-        // 5. 최종 백버퍼 복귀 (Finalize)
-        //    - ImGui 등 후처리를 위해 백버퍼로 타겟을 돌려놓습니다.
+        // 5. 최종 백버퍼 복귀 (Finalize) - ImGui 등 후처리를 위해 백버퍼로 타겟을 돌려놓습니다.
         RestoreBackBuffer();
     }
 }
