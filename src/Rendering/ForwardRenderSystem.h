@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <wrl/client.h>
 #include <d3d11.h>
 #include <DirectXMath.h>
@@ -152,6 +153,7 @@ namespace Alice
         void Render(const World& world,
                     const Camera& camera,
                     EntityId entity,
+                    const std::unordered_set<EntityId>& cameraEntities,
                     int shadingMode,
                     bool enableFillLight,
                     const std::vector<SkinnedDrawCommand>& skinnedCommands);
@@ -217,7 +219,7 @@ namespace Alice
 
         void SetCullState(DirectX::CXMMATRIX worldM, bool isShadowPass);
 
-        DirectX::XMMATRIX RenderShadowPass(const World& world, const std::vector<SkinnedDrawCommand>& skinnedCommands);
+        DirectX::XMMATRIX RenderShadowPass(const World& world, const std::vector<SkinnedDrawCommand>& skinnedCommands, const std::unordered_set<EntityId>& cameraEntities);
         void RenderMainPass(const World& world, const Camera& camera, int shadingMode, bool enableFillLight, DirectX::CXMMATRIX lightViewProj);
 
         bool IsValidPipeline() const;

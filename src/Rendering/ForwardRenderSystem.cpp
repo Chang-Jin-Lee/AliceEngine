@@ -13,6 +13,8 @@
 #include <Core/ResourceManager.h>
 #include <Core/Logger.h>
 
+#include <unordered_set>
+
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
 
@@ -1194,7 +1196,7 @@ float4 main(PSInput input) : SV_TARGET
         return S * R * T;
     }
 
-    XMMATRIX ForwardRenderSystem::RenderShadowPass(const World& world, const std::vector<SkinnedDrawCommand>& skinnedCommands)
+    XMMATRIX ForwardRenderSystem::RenderShadowPass(const World& world, const std::vector<SkinnedDrawCommand>& skinnedCommands, const std::unordered_set<EntityId>& cameraEntities)
     {
         if (!m_sceneRTV || !m_sceneDSV) return XMMatrixIdentity();
 
@@ -1212,6 +1214,7 @@ float4 main(PSInput input) : SV_TARGET
         const auto& transforms = world.GetTransforms();
         for (const auto& [id, tr] : transforms)
         {
+			if (cameraEntities.contains(id)) continue; // 카메라 큐브는 섀도우 맵에 포함하지 않음
             focusF.x += tr.position.x; focusF.y += tr.position.y; focusF.z += tr.position.z;
             minP.x = (std::min)(minP.x, tr.position.x); minP.y = (std::min)(minP.y, tr.position.y); minP.z = (std::min)(minP.z, tr.position.z);
             maxP.x = (std::max)(maxP.x, tr.position.x); maxP.y = (std::max)(maxP.y, tr.position.y); maxP.z = (std::max)(maxP.z, tr.position.z);
@@ -1275,6 +1278,7 @@ float4 main(PSInput input) : SV_TARGET
 
             for (const auto& [id, transform] : transforms)
             {
+                if (cameraEntities.contains(id)) continue; // 카메라 큐브는 그림자 맵에 그리지 않음
                 if (world.GetSkinnedMesh(id)) continue; // 스키닝 메시는 별도 처리
 
                 XMMATRIX worldM = BuildWorldMatrix(transform);
@@ -1427,6 +1431,7 @@ float4 main(PSInput input) : SV_TARGET
     void ForwardRenderSystem::Render(const World& world,
                                      const Camera& camera,
                                      EntityId /*entity*/,
+                                     const std::unordered_set<EntityId>& cameraEntities,
                                      int shadingMode,
                                      bool enableFillLight,
                                      const std::vector<SkinnedDrawCommand>& skinnedCommands)
@@ -1436,7 +1441,7 @@ float4 main(PSInput input) : SV_TARGET
 
         // 1. 섀도우 맵 패스 (Shadow Map Generation)
         //    - 반환값: Main Pass에서 사용할 Light View-Projection 행렬
-        XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands);
+        XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities);
 
         // 2. 메인 컬러 패스 & 정적 메시 렌더링 (Main Color Pass & Static Meshes)
         //    - 씬 RTV 클리어, 공통 리소스 바인딩, 정적 오브젝트 그리기

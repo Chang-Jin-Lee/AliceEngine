@@ -47,6 +47,7 @@
 #include "Game/FbxImporter.h"
 #include "Game/FbxAsset.h"
 #include <dxgi1_3.h>
+#include <unordered_set>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -522,21 +523,21 @@ namespace Alice
 
 		// 간단한 Forward 렌더링 (큐브 + 스키닝 메시)
 		EntityId renderEntity = InvalidEntityId;
-		if (pImpl->m_sceneManager)
-		{
-			renderEntity = pImpl->m_sceneManager->GetPrimaryRenderableEntity();
-		}
+		if (pImpl->m_sceneManager) renderEntity = pImpl->m_sceneManager->GetPrimaryRenderableEntity();
 
 		// 게임 모드에서는 PBR을 고정으로 사용
 		int shadingModeValue2 = static_cast<int>(pImpl->m_shadingMode);
-		if (!pImpl->m_editorMode)
-		{
-			shadingModeValue2 = static_cast<int>(Impl::ShadingMode::PBR); // 4
-		}
+		if (!pImpl->m_editorMode) shadingModeValue2 = static_cast<int>(Impl::ShadingMode::PBR); // 4
+
+		auto cameras = pImpl->m_world.GetCameras();
+		std::unordered_set<EntityId> cameraEntities;
+		for (const auto& [id, _] : cameras) cameraEntities.insert(id);
+
 		pImpl->m_forwardRenderSystem->Render(
 			pImpl->m_world,
 			pImpl->m_camera,
 			renderEntity,
+			cameraEntities,
 			shadingModeValue2,
 			pImpl->m_useFillLight,
 			pImpl->m_skinnedDrawCommands);
