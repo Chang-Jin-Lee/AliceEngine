@@ -1,270 +1,254 @@
 ﻿#include "Core/World.h"
 
-namespace Alice
-{
-    void World::Clear()
-    {
-        // 1. 스크립트 컴포넌트들의 정리(Cleanup) 함수 호출
-        RemoveAllScript();
-        // 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
-        m_names.clear();
-        m_transforms.clear();
-        m_scripts.clear();
-        m_materials.clear();
-        m_skinnedMeshes.clear();
-        m_skinnedAnimations.clear();
-        m_cameras.clear();
+namespace Alice {
+	void World::Clear()
+	{
+		// 1. 스크립트 컴포넌트들의 정리(Cleanup) 함수 호출
+		RemoveAllScript();
+		// 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
+		m_names.clear();
+		m_transforms.clear();
+		m_scripts.clear();
+		m_materials.clear();
+		m_skinnedMeshes.clear();
+		m_skinnedAnimations.clear();
+		m_cameras.clear();
 
-        // 3. 엔티티 ID 카운터 초기화 (선택 사항이지만 권장)
-        //    새 씬을 로드할 때 ID가 1번부터 다시 시작하도록 함.
-        m_nextEntityId = 1;
-    }
-    EntityId World::CreateEntity()
-    {
-        // 간단한 증가형 ID를 사용합니다.
-        const EntityId newId = m_nextEntityId++;
-        return newId;
-    }
-
-    void World::DestroyEntity(EntityId id)
-    {
-        if (id == InvalidEntityId) return;
-
-        m_names.erase(id);
-        m_transforms.erase(id);
-        auto it = m_scripts.find(id);
-        if (it != m_scripts.end())
-        {
-            for (auto& sc : it->second)
-            {
-                if (!sc.instance) continue;
-                sc.instance->OnDisable();
-                sc.instance->OnDestroy();
-            }
-            m_scripts.erase(it);
-        }
-        m_materials.erase(id);
-        m_skinnedMeshes.erase(id);
-        m_skinnedAnimations.erase(id);
-        m_cameras.erase(id);
-    }
-
-    void World::SetEntityName(EntityId id, const std::string& name)
-    {
-        if (id == InvalidEntityId)
-            return;
-        if (name.empty())
-        {
-            m_names.erase(id);
-            return;
-        }
-        m_names[id] = name;
-    }
-
-    std::string World::GetEntityName(EntityId id) const
-    {
-        auto it = m_names.find(id);
-        if (it == m_names.end())
-            return {};
-        return it->second;
-    }
-
-    TransformComponent& World::AddTransform(EntityId id)
-    {
-        // 없는 키일 경우 기본 값으로 새로 생성됩니다.
-        return m_transforms[id];
-    }
-
-    TransformComponent* World::GetTransform(EntityId id)
-    {
-        auto it = m_transforms.find(id);
-        if (it == m_transforms.end()) return nullptr;
-        return &it->second;
-    }
-
-    const TransformComponent* World::GetTransform(EntityId id) const
-    {
-        auto it = m_transforms.find(id);
-        if (it == m_transforms.end()) return nullptr;
-        return &it->second;
-    }
-
-    ScriptComponent& World::AddScript(EntityId id, const std::string& scriptName)
-    {
-        auto& list = m_scripts[id];
-        ScriptComponent comp{};
-        comp.scriptName = scriptName;
-        comp.instance = ScriptFactory::Create(scriptName.c_str());
-        if (comp.instance)
-            comp.instance->SetContext(this, id);
-
-        list.push_back(std::move(comp));
-        return list.back();
-    }
-
-    std::vector<ScriptComponent>* World::GetScripts(EntityId id)
-    {
-        auto it = m_scripts.find(id);
-        if (it == m_scripts.end())
-            return nullptr;
-        return &it->second;
-    }
-
-    const std::vector<ScriptComponent>* World::GetScripts(EntityId id) const
-    {
-        auto it = m_scripts.find(id);
-        if (it == m_scripts.end())
-            return nullptr;
-        return &it->second;
-    }
-
-    void World::RemoveScript(EntityId id, std::size_t index)
-    {
-        auto it = m_scripts.find(id);
-        if (it == m_scripts.end())
-            return;
-
-        auto& list = it->second;
-        if (index >= list.size())
-            return;
-
-        if (list[index].instance)
-        {
-            list[index].instance->OnDisable();
-            list[index].instance->OnDestroy();
-        }
-
-        list.erase(list.begin() + (std::ptrdiff_t)index);
-        if (list.empty())
-            m_scripts.erase(it);
-    }
-
-    void World::RemoveAllScript()
-    {
-        for (auto& [id, list] : m_scripts)
-        {
-            (void)id;
-            for (auto& scriptComp : list)
-            {
-                if (!scriptComp.instance)
-                    continue;
-                scriptComp.instance->OnDisable();
-                scriptComp.instance->OnDestroy();
-            }
-        }
-        m_scripts.clear();
+		// 3. 엔티티 ID 카운터 초기화 (선택 사항이지만 권장)
+		//    새 씬을 로드할 때 ID가 1번부터 다시 시작하도록 함.
+		m_nextEntityId = 1;
+	}
+	EntityId World::CreateEntity()
+	{
+		// 간단한 증가형 ID를 사용합니다.
+		const EntityId newId = m_nextEntityId++;
+		return newId;
 	}
 
-    MaterialComponent& World::AddMaterial(EntityId id,
-                                          const DirectX::XMFLOAT3& color,
-                                          const std::string& assetPath)
-    {
-        MaterialComponent& mat = m_materials[id];
-        mat.color     = color;
-        mat.assetPath = assetPath;
-        return mat;
-    }
+	void World::DestroyEntity(EntityId id)
+	{
+		if (id == InvalidEntityId)
+			return;
 
-    MaterialComponent* World::GetMaterial(EntityId id)
-    {
-        auto it = m_materials.find(id);
-        if (it == m_materials.end())
-            return nullptr;
-        return &it->second;
-    }
+		m_names.erase(id);
+		m_transforms.erase(id);
+		auto it = m_scripts.find(id);
+		if (it != m_scripts.end()) {
+			for (auto& sc : it->second)
+			{
+				if (!sc.instance)
+					continue;
+				sc.instance->OnDisable();
+				sc.instance->OnDestroy();
+			}
+			m_scripts.erase(it);
+		}
+		m_materials.erase(id);
+		m_skinnedMeshes.erase(id);
+		m_skinnedAnimations.erase(id);
+		m_cameras.erase(id);
+	}
 
-    const MaterialComponent* World::GetMaterial(EntityId id) const
-    {
-        auto it = m_materials.find(id);
-        if (it == m_materials.end())
-            return nullptr;
-        return &it->second;
-    }
+	void World::SetEntityName(EntityId id, const std::string& name)
+	{
+		if (id == InvalidEntityId)
+			return;
+		if (name.empty()) {
+			m_names.erase(id);
+			return;
+		}
+		m_names[id] = name;
+	}
 
-    void World::RemoveMaterial(EntityId id)
-    {
-        m_materials.erase(id);
-    }
+	std::string World::GetEntityName(EntityId id) const
+	{
+		auto it = m_names.find(id);
+		if (it == m_names.end())
+			return {};
+		return it->second;
+	}
 
-    SkinnedMeshComponent& World::AddSkinnedMesh(EntityId id, const std::string& meshAssetPath)
-    {
-        SkinnedMeshComponent& comp = m_skinnedMeshes[id];
-        comp.meshAssetPath = meshAssetPath;
-        return comp;
-    }
+	TransformComponent& World::AddTransform(EntityId id)
+	{
+		// 없는 키일 경우 기본 값으로 새로 생성됩니다.
+		return m_transforms[id];
+	}
 
-    SkinnedMeshComponent* World::GetSkinnedMesh(EntityId id)
-    {
-        auto it = m_skinnedMeshes.find(id);
-        if (it == m_skinnedMeshes.end())
-            return nullptr;
-        return &it->second;
-    }
+	TransformComponent* World::GetTransform(EntityId id)
+	{
+		auto it = m_transforms.find(id);
+		if (it == m_transforms.end())
+			return nullptr;
+		return &it->second;
+	}
 
-    const SkinnedMeshComponent* World::GetSkinnedMesh(EntityId id) const
-    {
-        auto it = m_skinnedMeshes.find(id);
-        if (it == m_skinnedMeshes.end())
-            return nullptr;
-        return &it->second;
-    }
+	const TransformComponent* World::GetTransform(EntityId id) const
+	{
+		auto it = m_transforms.find(id);
+		if (it == m_transforms.end())
+			return nullptr;
+		return &it->second;
+	}
 
-    void World::RemoveSkinnedMesh(EntityId id)
-    {
-        m_skinnedMeshes.erase(id);
-    }
+	ScriptComponent& World::AddScript(EntityId id, const std::string& scriptName)
+	{
+		auto& list = m_scripts[id];
+		ScriptComponent comp{};
+		comp.scriptName = scriptName;
+		comp.instance = ScriptFactory::Create(scriptName.c_str());
+		if (comp.instance)
+			comp.instance->SetContext(this, id);
 
-    SkinnedAnimationComponent& World::AddSkinnedAnimation(EntityId id)
-    {
-        return m_skinnedAnimations[id];
-    }
+		list.push_back(std::move(comp));
+		return list.back();
+	}
 
-    SkinnedAnimationComponent* World::GetSkinnedAnimation(EntityId id)
-    {
-        auto it = m_skinnedAnimations.find(id);
-        if (it == m_skinnedAnimations.end())
-            return nullptr;
-        return &it->second;
-    }
+	std::vector<ScriptComponent>* World::GetScripts(EntityId id)
+	{
+		auto it = m_scripts.find(id);
+		if (it == m_scripts.end())
+			return nullptr;
+		return &it->second;
+	}
 
-    const SkinnedAnimationComponent* World::GetSkinnedAnimation(EntityId id) const
-    {
-        auto it = m_skinnedAnimations.find(id);
-        if (it == m_skinnedAnimations.end())
-            return nullptr;
-        return &it->second;
-    }
+	const std::vector<ScriptComponent>* World::GetScripts(EntityId id) const
+	{
+		auto it = m_scripts.find(id);
+		if (it == m_scripts.end())
+			return nullptr;
+		return &it->second;
+	}
 
-    void World::RemoveSkinnedAnimation(EntityId id)
-    {
-        m_skinnedAnimations.erase(id);
-    }
+	void World::RemoveScript(EntityId id, std::size_t index)
+	{
+		auto it = m_scripts.find(id);
+		if (it == m_scripts.end())
+			return;
 
-    CameraComponent& World::AddCamera(EntityId id)
-    {
-        return m_cameras[id];
-    }
+		auto& list = it->second;
+		if (index >= list.size())
+			return;
 
-    CameraComponent* World::GetCamera(EntityId id)
-    {
-        auto it = m_cameras.find(id);
-        if (it == m_cameras.end())
-            return nullptr;
-        return &it->second;
-    }
+		if (list[index].instance) {
+			list[index].instance->OnDisable();
+			list[index].instance->OnDestroy();
+		}
 
-    const CameraComponent* World::GetCamera(EntityId id) const
-    {
-        auto it = m_cameras.find(id);
-        if (it == m_cameras.end())
-            return nullptr;
-        return &it->second;
-    }
+		list.erase(list.begin() + (std::ptrdiff_t)index);
+		if (list.empty())
+			m_scripts.erase(it);
+	}
 
-    void World::RemoveCamera(EntityId id)
-    {
-        m_cameras.erase(id);
-    }
-}
+	void World::RemoveAllScript() {
+		for (auto& [id, list] : m_scripts) {
+			(void)id;
+			for (auto& scriptComp : list) {
+				if (!scriptComp.instance)
+					continue;
+				scriptComp.instance->OnDisable();
+				scriptComp.instance->OnDestroy();
+			}
+		}
+		m_scripts.clear();
+	}
 
+	MaterialComponent& World::AddMaterial(EntityId id,
+		const DirectX::XMFLOAT3& color,
+		const std::string& assetPath) {
+		MaterialComponent& mat = m_materials[id];
+		mat.color = color;
+		mat.assetPath = assetPath;
+		return mat;
+	}
 
+	MaterialComponent* World::GetMaterial(EntityId id) {
+		auto it = m_materials.find(id);
+		if (it == m_materials.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	const MaterialComponent* World::GetMaterial(EntityId id) const {
+		auto it = m_materials.find(id);
+		if (it == m_materials.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	void World::RemoveMaterial(EntityId id) { m_materials.erase(id); }
+
+	SkinnedMeshComponent& World::AddSkinnedMesh(EntityId id,
+		const std::string& meshAssetPath) {
+		SkinnedMeshComponent& comp = m_skinnedMeshes[id];
+		comp.meshAssetPath = meshAssetPath;
+		return comp;
+	}
+
+	SkinnedMeshComponent* World::GetSkinnedMesh(EntityId id) {
+		auto it = m_skinnedMeshes.find(id);
+		if (it == m_skinnedMeshes.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	const SkinnedMeshComponent* World::GetSkinnedMesh(EntityId id) const {
+		auto it = m_skinnedMeshes.find(id);
+		if (it == m_skinnedMeshes.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	void World::RemoveSkinnedMesh(EntityId id) { m_skinnedMeshes.erase(id); }
+
+	SkinnedAnimationComponent& World::AddSkinnedAnimation(EntityId id) {
+		return m_skinnedAnimations[id];
+	}
+
+	SkinnedAnimationComponent* World::GetSkinnedAnimation(EntityId id) {
+		auto it = m_skinnedAnimations.find(id);
+		if (it == m_skinnedAnimations.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	const SkinnedAnimationComponent* World::GetSkinnedAnimation(EntityId id) const {
+		auto it = m_skinnedAnimations.find(id);
+		if (it == m_skinnedAnimations.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	void World::RemoveSkinnedAnimation(EntityId id) {
+		m_skinnedAnimations.erase(id);
+	}
+
+	CameraComponent& World::AddCamera(EntityId id) { return m_cameras[id]; }
+
+	CameraComponent* World::GetCamera(EntityId id) {
+		auto it = m_cameras.find(id);
+		if (it == m_cameras.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	CameraComponent* World::GetCamera() {
+		if (m_cameras.empty())
+			return nullptr;
+		return &m_cameras.begin()->second;
+	}
+
+	EntityId World::GetMainCameraEntityId() {
+		if (m_cameras.empty())
+			return InvalidEntityId;
+		return m_cameras.begin()->first;
+	}
+
+	const CameraComponent* World::GetCamera(EntityId id) const {
+		auto it = m_cameras.find(id);
+		if (it == m_cameras.end())
+			return nullptr;
+		return &it->second;
+	}
+
+	void World::RemoveCamera(EntityId id) { m_cameras.erase(id); }
+} // namespace Alice
