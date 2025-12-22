@@ -250,44 +250,44 @@ namespace Alice
             }
 
 #ifdef _DEBUG
-            constexpr const wchar_t* kConfig = L"Debug";
+			constexpr const wchar_t* kConfig = L"Debug";
 #else
-            constexpr const wchar_t* kConfig = L"Release";
+			constexpr const wchar_t* kConfig = L"Release";
 #endif
 
-            std::wstring cmdConfig = L"cmake -S \"";
-            cmdConfig += scriptsRoot.wstring();
-            cmdConfig += L"\" -B \"";
-            cmdConfig += scriptsBuildDir.wstring();
-            cmdConfig += L"\"";
+			// ----------------------------------------------------------------------
+			// 1: Configure 명령어 수정
+			// cmd /C "cmake -S "..." -B "..." || pause"
+			// ----------------------------------------------------------------------
+			std::wstring cmdConfig = L"cmd /C \"cmake -S \"";
+			cmdConfig += scriptsRoot.wstring();
+			cmdConfig += L"\" -B \"";
+			cmdConfig += scriptsBuildDir.wstring();
+			cmdConfig += L"\" || pause\""; 
 
-            // ----------------------------------------------------------------------
-            // 1단계: CMake Configure (프로젝트 파일 생성)
-            // 명령: cmake -S "소스경로(scriptsRoot)" -B "빌드경로(scriptsBuildDir)"
-            // ----------------------------------------------------------------------
-            // Configure 실행 (실패 시 중단)
-            if (ExecuteCommandWithConsole(cmdConfig.c_str()) != 0)
-            {
-                ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed.");
-                return;
-            }
+			// Configure 실행
+			if (ExecuteCommandWithConsole(cmdConfig.c_str()) != 0)
+			{
+				ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed.");
+				return;
+			}
 
-            // ----------------------------------------------------------------------
-            // 2단계: CMake Build (컴파일)
-            // 명령: cmake --build "빌드경로" --config Debug --target AliceScripts
-            // ----------------------------------------------------------------------
-            std::wstring cmdBuild = L"cmake --build \"";
-            cmdBuild += scriptsBuildDir.wstring(); // <-- 여기가 핵심: 빌드 폴더를 지정
-            cmdBuild += L"\" --config ";
-            cmdBuild += kConfig;
-            cmdBuild += L" --target AliceScripts"; // <-- 특정 타겟만 빌드
+			// ----------------------------------------------------------------------
+			// 2: Build 명령어 수정
+			// cmd /C "cmake --build "..." --config ... || pause"
+			// ----------------------------------------------------------------------
+			std::wstring cmdBuild = L"cmd /C \"cmake --build \"";
+			cmdBuild += scriptsBuildDir.wstring();
+			cmdBuild += L"\" --config ";
+			cmdBuild += kConfig;
+			cmdBuild += L" --target AliceScripts || pause\"";
 
-            // Build 실행
-            if (ExecuteCommandWithConsole(cmdBuild.c_str()) != 0)
-            {
-                ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed.");
-                return;
-            }
+			// Build 실행
+			if (ExecuteCommandWithConsole(cmdBuild.c_str()) != 0)
+			{
+				ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed.");
+				return;
+			}
 
             // 4) ScriptsBuild/build/<Config>/AliceScripts.dll 을 실행 파일 옆으로 복사
             path builtDll = scriptsBuildDir / path(kConfig) / "AliceScripts.dll";
