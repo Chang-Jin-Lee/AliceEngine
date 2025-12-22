@@ -62,6 +62,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Singleton.cpp
     ${ALICE_SRC_DIR}/Core/Helper.cpp
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
+    ${ALICE_SRC_DIR}/Core/Input.cpp
 
     # FBX/3D ¸ðµ¨ ·Î´õ
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
@@ -113,6 +114,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Helper.h
     ${ALICE_SRC_DIR}/Core/Vertex.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
+    ${ALICE_SRC_DIR}/Core/InputTypes.h
 
     # FBX/3D ¸ðµ¨ ·Î´õ Çì´õ
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
