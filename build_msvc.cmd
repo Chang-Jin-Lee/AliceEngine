@@ -1,17 +1,21 @@
 @echo off
 setlocal
 
-rem Visual Studio 2022용 솔루션 생성 (모든 빌드 산출물은 build/ 폴더 안에 생성)
-
+rem 1. 메인 프로젝트 생성
 cmake -S . -B build -G "Visual Studio 17 2022"
-if errorlevel 1 (
-    echo [CMake] 프로젝트 생성 실패.
-    exit /b 1
-)
+if errorlevel 1 goto :Error
 
-echo [OK] build\AliceRenderer.sln 이(가) 생성되었습니다. 이 파일을 열어 사용하세요.
+rem 2. ScriptsBuild 하위 프로젝트 생성
+cmake -S ScriptsBuild -B ScriptsBuild/build -G "Visual Studio 17 2022"
+if errorlevel 1 goto :Error
 
+echo [OK] 모든 솔루션 생성이 완료되었습니다.
+goto :End
+
+:Error
+echo.
+echo [FAIL] 프로젝트 생성 중 오류가 발생했습니다. 위 로그를 확인하세요.
+
+:End
 endlocal
 pause
-
-
