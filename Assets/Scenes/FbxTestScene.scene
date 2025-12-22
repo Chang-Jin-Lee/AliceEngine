@@ -32,9 +32,9 @@
                 "albedoTexturePath": "Cooked/Textures\\Rapi\\Rapi_Diffuse_embedded0.alice",
                 "assetPath": "D:\\Github\\AliceRenderer\\Assets\\Materials\\Rapi_0.mat",
                 "color": {
-                    "x": 1.0,
-                    "y": 0.4440154433250427,
-                    "z": 0.4440154433250427
+                    "x": 0.8957529067993164,
+                    "y": 0.8957529067993164,
+                    "z": 0.8957529067993164
                 },
                 "metalness": 0.0,
                 "roughness": 0.5
@@ -50,7 +50,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 27.732333074556664
+                "timeSec": 55.740797891514376
             },
             "SkinnedMesh": {
                 "boneCount": 180,
