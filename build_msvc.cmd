@@ -1,11 +1,15 @@
 @echo off
 setlocal
 
-rem 1. 메인 프로젝트 생성
+rem 1. 서브모듈 업데이트
+git submodule update --init --recursive
+if errorlevel 1 goto :Error
+
+rem 2. 메인 프로젝트 생성
 cmake -S . -B build -G "Visual Studio 17 2022"
 if errorlevel 1 goto :Error
 
-rem 2. ScriptsBuild 하위 프로젝트 생성
+rem 3. ScriptsBuild 하위 프로젝트 생성
 cmake -S ScriptsBuild -B ScriptsBuild/build -G "Visual Studio 17 2022"
 if errorlevel 1 goto :Error
 
