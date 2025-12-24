@@ -35,32 +35,32 @@ namespace Alice
             }
 
             {
-                ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: skinnedComponents=%zu",
-                               skinnedMap.size());
+               //ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: skinnedComponents=%zu",
+               //               skinnedMap.size());
             }
 
             for (const auto& [entityId, comp] : skinnedMap)
             {
                 if (!comp.boneMatrices || comp.boneCount == 0)
                 {
-                    ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no bones",
-                                   static_cast<unsigned>(entityId));
+                    //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no bones",
+                    //               static_cast<unsigned>(entityId));
                     continue;
                 }
 
                 auto mesh = m_registry.Find(comp.meshAssetPath);
                 if (!mesh)
                 {
-                    ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: mesh not found for key=\"%s\"",
-                                   comp.meshAssetPath.c_str());
+                    //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: mesh not found for key=\"%s\"",
+                    //               comp.meshAssetPath.c_str());
                     continue;
                 }
 
                 const TransformComponent* t = world.GetTransform(entityId);
                 if (!t)
                 {
-                    ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no Transform",
-                                   static_cast<unsigned>(entityId));
+                    //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no Transform",
+                    //               static_cast<unsigned>(entityId));
                     continue;
                 }
 
@@ -92,22 +92,22 @@ namespace Alice
 
                     if (!mat->albedoTexturePath.empty())
                     {
-                        ALICE_LOG_INFO("[SkinnedMeshSystem] entity=%u mesh=\"%s\" albedoTex=\"%s\"",
-                                       static_cast<unsigned>(entityId),
-                                       comp.meshAssetPath.c_str(),
-                                       mat->albedoTexturePath.c_str());
+                        //ALICE_LOG_INFO("[SkinnedMeshSystem] entity=%u mesh=\"%s\" albedoTex=\"%s\"",
+                        //               static_cast<unsigned>(entityId),
+                        //               comp.meshAssetPath.c_str(),
+                        //               mat->albedoTexturePath.c_str());
                     }
                 }
 
                 outCommands.push_back(cmd);
             }
 
-            if (!outCommands.empty())
-            {
-                // 실제로 드로우 커맨드가 생겼을 때만 1회 로그를 남깁니다.
-                ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: commands=%zu",
-                               outCommands.size());
-            }
+            //if (!outCommands.empty())
+            //{
+            //    // 실제로 드로우 커맨드가 생겼을 때만 1회 로그를 남깁니다.
+            //    ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: commands=%zu",
+            //                   outCommands.size());
+            //}
         }
 
     private:

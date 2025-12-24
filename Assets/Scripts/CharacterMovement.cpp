@@ -105,102 +105,133 @@
 //} // namespace Alice
 
 // 캐릭터를 그냥 단순히 앞뒤좌우로 움직이게 하는 스크립트
- #include "CharacterMovement.h"
- #include "Core/GameObject.h"
- #include <cmath> // sqrt, atan2
+#include "CharacterMovement.h"
+#include "Core/GameObject.h"
+#include "Core/Input.h"
+#include <cmath>
 
-// PI 상수가 없다면 정의 (보통 math 헤더에 M_PI로 있습니다)
- #ifndef M_PI
- #define M_PI 3.14159265358979323846
- #endif
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace Alice
 {
     REGISTER_SCRIPT(CharacterMovement);
 
-    void CharacterMovement::Attack() {
-        // 공격 로직 구현 (로그 출력 등)
-    }
-
-    void CharacterMovement::SetSpeed(float newSpeed) {
-        Set_m_moveSpeed(newSpeed);
-    }
-
+    void CharacterMovement::Attack() { /* 공격 로직 */ }
 
     void CharacterMovement::Update(float DeltaTime)
     {
         auto* input = Input();
-        if (!input) return;
-
         auto go = gameObject();
-        auto* t = go.GetComponent<TransformComponent>();
-        if (!t) return;
+        if (!input || !go.IsValid()) return;
 
+        auto* t = go.GetComponent<TransformComponent>();
         auto anim = go.GetAnimator();
-        if (!anim.IsValid()) return;
+        if (!t || !anim.IsValid()) return;
 
         // --- 1. 입력 수집 ---
-        float mx = 0.0f;
-        float mz = 0.0f;
+        float inputX = 0.0f; // A, D
+        float inputZ = 0.0f; // W, S
 
-        // 기존 코드: 여기서 rotationY를 직접 대입해서 덮어씌워지는 문제가 있었음
-        // 수정 코드: 입력 벡터(mx, mz)만 수집함
-        if (input->GetKey(KeyCode::W)) { mz += 1.0f; }
-        if (input->GetKey(KeyCode::S)) { mz -= 1.0f; }
-        if (input->GetKey(KeyCode::D)) { mx += 1.0f; }
-        if (input->GetKey(KeyCode::A)) { mx -= 1.0f; }
+        if (input->GetKey(KeyCode::W)) inputZ += 1.0f;
+        if (input->GetKey(KeyCode::S)) inputZ -= 1.0f;
+        if (input->GetKey(KeyCode::D)) inputX += 1.0f;
+        if (input->GetKey(KeyCode::A)) inputX -= 1.0f;
 
-        // --- 2. 이동 여부 및 정규화 ---
-        const float len = std::sqrt(mx * mx + mz * mz);
-        bool isMoving = (len > 0.0001f);
+        // 입력이 없으면 이동 계산 건너뛰고 중력만 처리
+        bool hasInput = (inputX != 0.0f || inputZ != 0.0f);
 
-        if (isMoving)
+        // --- 2. 카메라 기준 방향 계산 (핵심 로직) ---
+        float moveX = 0.0f;
+        float moveZ = 0.0f;
+
+        // 메인 카메라 찾기 (태그나 이름으로 검색 가정)
+        auto mainCamObj = GetWorld()->FindGameObject("MainCamera");
+        ALICE_LOG_INFO("TEST");
+
+
+        if (hasInput && mainCamObj.IsValid())
         {
-            // 대각선 이동 시 속도가 빨라지는 것 방지 (정규화)
-            mx /= len;
-            mz /= len;
+            auto* camT = mainCamObj.GetComponent<TransformComponent>();
+            if (camT)
+            {
+                ALICE_LOG_INFO("Camera Position: x={0}, y={1}, z={2}",
+					camT->position.x, camT->position.y, camT->position.z);
+                // Forward: 나(Target) - 카메라(Eye) = 화면 깊이 방향
+                float fwdX = t->position.x - camT->position.x;
+                float fwdZ = t->position.z - camT->position.z;
 
-            // --- 3. 회전 계산 ---
-            // atan2(x, z)는 (0,0)에서 (x,z)를 바라보는 각도를 라디안으로 반환합니다.
-            float radian = std::atan2(mx, mz);
+                // Y축 제거 및 정규화
+                float lenFwd = std::sqrt(fwdX * fwdX + fwdZ * fwdZ);
+                if (lenFwd > 0.0001f)
+                {
+                    fwdX /= lenFwd;
+                    fwdZ /= lenFwd;
+                }
 
-            // 라디안 -> 디그리 변환
+                // Right: Forward의 수직 벡터 (z, -x)
+                float rightX = fwdZ;
+                float rightZ = -fwdX;
+
+                // 최종 이동 벡터 합성
+                moveX = (fwdX * inputZ) + (rightX * inputX);
+                moveZ = (fwdZ * inputZ) + (rightZ * inputX);
+            }
+        }
+        else if (hasInput)
+        {
+            // 카메라를 못 찾았을 경우 비상용 (절대좌표 이동)
+            moveX = inputX;
+            moveZ = inputZ;
+        }
+
+        float moveLen = std::sqrt(moveX * moveX + moveZ * moveZ);
+
+        if (moveLen > 0.0001f)
+        {
+            // 정규화
+            moveX /= moveLen;
+            moveZ /= moveLen;
+
+            // [위치 이동]
+            t->position.x += moveX * Get_m_moveSpeed() * DeltaTime;
+            t->position.z += moveZ * Get_m_moveSpeed() * DeltaTime;
+
+            // [회전] 이동하는 방향 바라보기
+            float radian = std::atan2(moveX, moveZ);
             float degree = radian * (180.0f / static_cast<float>(M_PI));
 
-            // 오프셋 보정
-            // atan2(0, 1) = 0도 (보통 북쪽/전방)
-            // 작성하신 코드에서 W(전방)일 때 180도를 주고 있으므로, +180도 보정
+            // [수정] 모델이 반대로 보이면 180도를 더해서 뒤집어 줍니다.
+            // 만약 90도로 꺾여서 달린다면 90.0f나 -90.0f를 더해보세요.
             t->SetRotation(0.0f, degree + 180.0f, 0.0f);
 
-            // 걷기 애니메이션 스마트 재생
+            // [애니메이션] 걷기
             anim.Play(2);
         }
         else
         {
-            // 대기 애니메이션 스마트 재생
+            // [애니메이션] 대기
             anim.Play(0);
         }
 
-        // --- 4. 위치 적용 ---
-        t->position.x += mx * Get_m_moveSpeed() * DeltaTime;
-        t->position.z += mz * Get_m_moveSpeed() * DeltaTime;
-
-        // --- 5. 점프/중력 로직 ---
+        // --- 4. 점프 및 중력 로직 (기존 유지) ---
         const bool grounded = (t->position.y <= 0.0f);
         if (grounded)
         {
             t->position.y = 0.0f;
             if (m_velY < 0.0f) m_velY = 0.0f;
+
             if (input->GetKeyDown(KeyCode::Space))
             {
                 m_velY = Get_m_jumpSpeed();
-                // anim.Play(3, true); // 점프 예시
+                // anim.Play(3, true); // 점프
             }
         }
 
         m_velY -= Get_m_gravity() * DeltaTime;
         t->position.y += m_velY * DeltaTime;
-        if (t->position.y < 0.0f)
-            t->position.y = 0.0f;
+
+        if (t->position.y < 0.0f) t->position.y = 0.0f;
     }
 }

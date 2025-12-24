@@ -10,6 +10,9 @@
 #include "Core/Script.h"
 
 namespace Alice {
+    // 전방 선언
+    class GameObject;
+
     /// 간단한 ECS 스타일의 월드(World) 구현입니다.
     /// - 엔티티 생성/삭제 책임
     /// - Transform / Script / Material 컴포넌트 관리 책임
@@ -104,6 +107,12 @@ namespace Alice {
 
         /// 엔티티를 제거하고, 연결된 컴포넌트도 정리합니다.
         void DestroyEntity(EntityId id);
+
+        // ==== GameObject 검색 기능 ====
+        /// 이름을 이용해 GameObject를 찾아 반환합니다.
+        /// - 이름이 일치하는 엔티티를 찾아 GameObject 래퍼를 반환합니다.
+        /// - 없으면 빈 GameObject(IsValid() == false)를 반환합니다.
+        GameObject FindGameObject(const std::string& name);
 
         // ==== Entity Name (에디터 하이라리키 표시용) ====
         void SetEntityName(EntityId id, const std::string& name);

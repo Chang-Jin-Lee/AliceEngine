@@ -6,6 +6,7 @@
 #include <vector>
 #include <functional>
 #include <array>
+#include <typeinfo>
 
 #include "Delegate.h"
 #include "Core/Entity.h"
@@ -37,8 +38,9 @@ namespace Alice
     public:
         virtual ~IScript() = default;
 
-        /// 스크립트 이름 (디버깅용, 필요 시 오버라이드)
-        virtual const char* GetName() const { return "IScript"; }
+        /// 스크립트 이름 (디버깅용, typeid로 자동 추출)
+        /// - typeid를 사용하여 실제 클래스 이름을 자동으로 반환합니다.
+        virtual const char* GetName() const { return typeid(*this).name(); }
 
         // ==== Component lifecycle ====
         virtual void Awake() {}
@@ -169,6 +171,15 @@ namespace Alice
         bool GetKeyDown(KeyCode key) const override;
         bool GetKeyUp(KeyCode key) const override;
 
+        // 마우스 함수들
+        bool GetMouseButton(MouseCode button) const override;
+        bool GetMouseButtonDown(MouseCode button) const override;
+        bool GetMouseButtonUp(MouseCode button) const override;
+        std::pair<float, float> GetMousePosition() const override;
+        float GetMouseDeltaX() const override;
+        float GetMouseDeltaY() const override;
+        float GetMouseScrollDelta() const override;
+
         std::string GetResolvedPath(const char* originalPath) const;
 
         // === IScriptScene ===
@@ -187,6 +198,7 @@ namespace Alice
         void CallFixedUpdate(World& world, float fixedDt);
         void ProcessSceneRequests(World& world);
         bool GetKeyInternal(KeyCode key) const;
+        bool GetMouseButtonInternal(MouseCode button) const;
 
         float m_fixedDt = 0.02f;
         float m_fixedAcc = 0.0f;
@@ -203,6 +215,10 @@ namespace Alice
         // input snapshot (KeyCode 전체)
         std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_prevKeys{};
         std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_currKeys{};
+
+        // input snapshot (MouseCode 전체)
+        std::array<bool, static_cast<std::size_t>(MouseCode::Count)> m_prevMouseButtons{};
+        std::array<bool, static_cast<std::size_t>(MouseCode::Count)> m_currMouseButtons{};
 
         // scene requests
         std::string m_pendingSwitch;
