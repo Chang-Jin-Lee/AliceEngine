@@ -11,7 +11,7 @@
 namespace Alice
 {
 
-    // 엔진에 스크립트 등록
+    //// 엔진에 스크립트 등록
     REGISTER_SCRIPT(CameraMovement);
 
     void CameraMovement::Start() {  }
