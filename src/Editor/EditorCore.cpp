@@ -2723,16 +2723,22 @@ namespace Alice
                         if (hfs.is_open())
                         {
                             hfs << "#pragma once\n\n";
-                            hfs << "#include \"Core/Script.h\"\n\n";
+                            hfs << "#include \"Core/Script.h\"\n";
+                            hfs << "#include \"Core/ScriptReflection.h\"\n\n";
                             hfs << "namespace Alice\n";
                             hfs << "{\n";
                             hfs << "    // 간단한 예제 스크립트입니다. 필요에 맞게 수정해서 사용하세요.\n";
                             hfs << "    class " << className << " : public IScript\n";
                             hfs << "    {\n";
+                            hfs << "        ALICE_BODY(" << className << ");\n\n";
                             hfs << "    public:\n";
-                            hfs << "        const char* GetName() const override { return \"" << className << "\"; }\n\n";
                             hfs << "        void Start() override;\n";
-                            hfs << "        void Update(float deltaTime) override;\n";
+                            hfs << "        void Update(float deltaTime) override;\n\n";
+                            hfs << "        // --- 변수 리플렉션 예시 (에디터에서 수정 가능) ---\n";
+                            hfs << "        ALICE_PROPERTY(float, m_exampleValue, 1.0f);\n\n";
+                            hfs << "        // --- 함수 리플렉션 예시 ---\n";
+                            hfs << "        void ExampleFunction();\n";
+                            hfs << "        ALICE_FUNC(ExampleFunction);\n";
                             hfs << "    };\n";
                             hfs << "}\n";
                         }
@@ -2756,6 +2762,10 @@ namespace Alice
                             cfs << "    void " << className << "::Update(float deltaTime)\n";
                             cfs << "    {\n";
                             cfs << "        // 매 프레임 호출되는 로직을 여기에 작성하세요.\n";
+                            cfs << "    }\n\n";
+                            cfs << "    void " << className << "::ExampleFunction()\n";
+                            cfs << "    {\n";
+                            cfs << "        // 리플렉션으로 등록된 함수 예시입니다.\n";
                             cfs << "    }\n";
                             cfs << "}\n";
                         }
