@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Script.h"
+#include "Core/ScriptReflection.h"
 
 namespace Alice
 {
@@ -9,6 +10,8 @@ namespace Alice
     /// - primary=true로 만들어 엔진이 이 카메라를 사용하게 합니다.
     class CameraManager : public IScript
     {
+        ALICE_BODY(CameraManager);
+
     public:
         const char* GetName() const override { return "CameraManager"; }
 

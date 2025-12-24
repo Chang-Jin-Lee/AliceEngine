@@ -84,11 +84,11 @@ namespace Alice
 {
     REGISTER_SCRIPT(CameraFollow);
 
-    ALICE_SCRIPT_REFLECT_BEGIN(CameraFollow)
+    /*ALICE_SCRIPT_REFLECT_BEGIN(CameraFollow)
         ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_offsetX)
         ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_offsetY)
         ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_offsetZ)
-    ALICE_SCRIPT_REFLECT_END()
+    ALICE_SCRIPT_REFLECT_END()*/
 
     // 헬퍼 함수: 선형 보간 (a에서 b로 t만큼 이동)
     float Lerp(float a, float b, float t)
