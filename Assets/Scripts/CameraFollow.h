@@ -56,7 +56,6 @@
 //
 
 
-
 #pragma once
 
 #include "Core/Script.h"
@@ -64,27 +63,38 @@
 
 namespace Alice
 {
-    /// 유니티 느낌의 간단한 카메라 팔로우 스크립트
     class CameraFollow : public IScript
     {
-        // 리플렉션 설정 (생성자, 타입정보 등록)
         ALICE_BODY(CameraFollow);
 
     public:
-        // 메인 로직 (엔진이 호출하므로 별도 등록 불필요)
         void LateUpdate(float lateDeltaTime) override;
 
-        // [2] 에디터에서 테스트할 수 있게 함수 등록
+        // 고정 오프셋 이동
         void MoveDirectly();
-        ALICE_FUNC(MoveDirectly); // 버튼으로 노출됨
+        ALICE_FUNC(MoveDirectly);
 
         void MoveLerp(const float& lateDeltaTime);
-        ALICE_FUNC(MoveLerp);     // 인자가 있는 함수도 등록 가능
+        ALICE_FUNC(MoveLerp);
 
-        // [3] 변수 선언 + 직렬화 + Getter/Setter 자동 생성
+        // 마우스 드래그로 캐릭터 주변 회전
+        void MoveOrbit();
+        ALICE_FUNC(MoveOrbit);
+
+        // MoveDirectly 변수
         ALICE_PROPERTY(float, m_offsetX, 0.0f);
         ALICE_PROPERTY(float, m_offsetY, 28.0f);
         ALICE_PROPERTY(float, m_offsetZ, -13.0f);
         ALICE_PROPERTY(float, m_smoothSpeed, 0.0f);
+
+        // MoveOrbit 변수
+        ALICE_PROPERTY(float, m_distance, 35.0f);      // 캐릭터와의 거리 (Arm Length)
+        ALICE_PROPERTY(float, m_heightOffset, 1.5f);  // 회전 중심점 높이 (머리/가슴)
+        ALICE_PROPERTY(float, m_sensitivity, 0.2f);   // 마우스 감도
+        ALICE_PROPERTY(float, m_currentYaw, 0.0f);    // 현재 좌우 각도
+        ALICE_PROPERTY(float, m_currentPitch, 20.0f); // 현재 상하 각도
+        ALICE_PROPERTY(float, m_minDistance, 10.0f);   // 최소 거리 (너무 가까워짐 방지)
+        ALICE_PROPERTY(float, m_maxDistance, 55.0f);  // 최대 거리
+        ALICE_PROPERTY(float, m_zoomSpeed, 0.01f);     // 휠 줌 속도
     };
 }

@@ -2,6 +2,7 @@
 #include "CameraMovement.h"
 #include "Core/GameObject.h"
 #include "Core/Input.h" // Input 클래스가 있다고 가정
+#include "Core/InputTypes.h" // MouseCode 사용을 위해
 #include <cmath>
 
 #ifndef M_PI
@@ -25,7 +26,7 @@ namespace Alice
         auto go = gameObject();
         auto* t = go.GetComponent<TransformComponent>();
         if (!t)
-            return;
+            return;     
 
         // --- 1. 입력 수집 (방향키) ---
         float inputX = 0.0f; // Left, Right
@@ -40,6 +41,13 @@ namespace Alice
             inputX += 1.0f;
         if (input->GetKey(KeyCode::Left))
             inputX -= 1.0f;
+
+        // --- 마우스 왼쪽 클릭 감지 및 카메라 위로 이동 ---
+        if (input->GetMouseButtonDown(MouseCode::Left))
+        {
+            // 카메라 position을 위로 이동 (Y축 증가)
+            t->position.y += 1.0f;
+        }
 
 		ALICE_LOG_INFO("CameraMovement Input: X={0}, Z={1}", inputX, inputZ);
 
