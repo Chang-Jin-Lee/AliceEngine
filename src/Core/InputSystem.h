@@ -41,8 +41,27 @@ namespace Alice
         /// 왼쪽 마우스 버튼이 눌려 있는지 여부를 반환합니다.
         bool IsLeftButtonDown() const;
 
+        /// 중간 마우스 버튼이 눌려 있는지 여부를 반환합니다.
+        bool IsMiddleButtonDown() const;
+
+        /// 지정한 마우스 버튼이 눌려 있는지 여부를 반환합니다.
+        bool IsMouseButtonDown(int buttonIndex) const;
+
+        /// 지정한 마우스 버튼이 이번 프레임에 눌렸는지 여부를 반환합니다 (이전 프레임에는 눌리지 않았고 이번 프레임에 눌림).
+        bool IsMouseButtonPressed(int buttonIndex) const;
+
+        /// 지정한 마우스 버튼이 이번 프레임에 떼졌는지 여부를 반환합니다 (이전 프레임에는 눌려있었고 이번 프레임에 떼짐).
+        bool IsMouseButtonReleased(int buttonIndex) const;
+
+        /// 마우스 현재 위치를 반환합니다 (클라이언트 좌표 기준).
+        POINT GetMousePosition() const;
+
         /// 직전 프레임 이후 누적된 마우스 이동량을 반환합니다.
         POINT GetMouseDelta() const { return m_mouseDelta; }
+
+        /// 직전 프레임 이후 누적된 마우스 스크롤 델타를 반환합니다.
+        /// - 양수: 위로 스크롤, 음수: 아래로 스크롤
+        float GetMouseScrollDelta() const { return m_mouseScrollDelta; }
 
     private:
         std::unique_ptr<DirectX::Keyboard> m_keyboard;
@@ -57,6 +76,9 @@ namespace Alice
         POINT m_prevMousePos{ 0, 0 };
         POINT m_mouseDelta{ 0, 0 };
         bool  m_hasPrevMousePos = false;
+
+        int   m_prevScrollWheelValue{ 0 };
+        float m_mouseScrollDelta{ 0.0f };
     };
 }
 

@@ -143,12 +143,18 @@ namespace Alice
 
     void ScriptSystem::BeginInputFrame()
     {
+        // 키보드 상태 갱신
         m_prevKeys = m_currKeys;
         m_currKeys.fill(false);
+
+        // 마우스 버튼 상태 갱신
+        m_prevMouseButtons = m_currMouseButtons;
+        m_currMouseButtons.fill(false);
 
         if (!m_input)
             return;
 
+        // 키보드 상태 읽기
         for (std::size_t i = 0; i < m_currKeys.size(); ++i)
         {
             const auto key = static_cast<KeyCode>(i);
@@ -156,6 +162,12 @@ namespace Alice
             if (dx == DirectX::Keyboard::Keys::None)
                 continue;
             m_currKeys[i] = m_input->IsKeyDown(dx);
+        }
+
+        // 마우스 버튼 상태 읽기
+        for (std::size_t i = 0; i < m_currMouseButtons.size(); ++i)
+        {
+            m_currMouseButtons[i] = m_input->IsMouseButtonDown(static_cast<int>(i));
         }
     }
 
@@ -242,6 +254,71 @@ namespace Alice
         const std::size_t i = static_cast<std::size_t>(key);
         const bool prev = (i < m_prevKeys.size()) ? m_prevKeys[i] : false;
         return !now && prev;
+    }
+
+    // 마우스 버튼 상태 확인 (내부 헬퍼)
+    bool ScriptSystem::GetMouseButtonInternal(MouseCode button) const
+    {
+        const std::size_t i = static_cast<std::size_t>(button);
+        if (i >= m_currMouseButtons.size())
+            return false;
+        return m_currMouseButtons[i];
+    }
+
+    bool ScriptSystem::GetMouseButton(MouseCode button) const
+    {
+        return GetMouseButtonInternal(button);
+    }
+
+    bool ScriptSystem::GetMouseButtonDown(MouseCode button) const
+    {
+        const bool now = GetMouseButtonInternal(button);
+        const std::size_t i = static_cast<std::size_t>(button);
+        const bool prev = (i < m_prevMouseButtons.size()) ? m_prevMouseButtons[i] : false;
+        return now && !prev;
+    }
+
+    bool ScriptSystem::GetMouseButtonUp(MouseCode button) const
+    {
+        const bool now = GetMouseButtonInternal(button);
+        const std::size_t i = static_cast<std::size_t>(button);
+        const bool prev = (i < m_prevMouseButtons.size()) ? m_prevMouseButtons[i] : false;
+        return !now && prev;
+    }
+
+    std::pair<float, float> ScriptSystem::GetMousePosition() const
+    {
+        if (!m_input)
+            return std::make_pair(0.0f, 0.0f);
+
+        POINT pos = m_input->GetMousePosition();
+        return std::make_pair(static_cast<float>(pos.x), static_cast<float>(pos.y));
+    }
+
+    float ScriptSystem::GetMouseDeltaX() const
+    {
+        if (!m_input)
+            return 0.0f;
+
+        POINT delta = m_input->GetMouseDelta();
+        return static_cast<float>(delta.x);
+    }
+
+    float ScriptSystem::GetMouseDeltaY() const
+    {
+        if (!m_input)
+            return 0.0f;
+
+        POINT delta = m_input->GetMouseDelta();
+        return static_cast<float>(delta.y);
+    }
+
+    float ScriptSystem::GetMouseScrollDelta() const
+    {
+        if (!m_input)
+            return 0.0f;
+
+        return m_input->GetMouseScrollDelta();
     }
 
     std::string ScriptSystem::GetResolvedPath(const char* filename) const
