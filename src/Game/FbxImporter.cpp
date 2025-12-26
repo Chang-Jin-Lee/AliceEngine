@@ -115,6 +115,14 @@ namespace Alice
 
             const std::string t = texPath.C_Str();
 
+            // fbmDir이 유효한지 확인
+            std::error_code ec;
+            if (!fs::exists(fbmDir, ec) || !fs::is_directory(fbmDir, ec))
+            {
+                ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: fbmDir does not exist or is not a directory: \"%s\"", fbmDir.string().c_str());
+                return;
+            }
+
             // 임베디드 텍스처
             const aiTexture* at = scene->GetEmbeddedTexture(t.c_str());
             if (at)
@@ -125,38 +133,85 @@ namespace Alice
                 if (ext.empty())
                     ext = (at->mHeight == 0) ? "bin" : "dds";
 
-                fs::path outPath = fbmDir / (baseName + "_" + tag + "_embedded" + std::to_string(embeddedIndex++) + "." + ext);
-                std::ofstream ofs(outPath, std::ios::binary);
-                if (!ofs.is_open())
-                    return;
-
-                if (at->mHeight == 0)
+                try
                 {
-                    ofs.write(reinterpret_cast<const char*>(at->pcData), at->mWidth);
-                }
-                else
-                {
-                    ofs.write(reinterpret_cast<const char*>(at->pcData),
-                              at->mWidth * at->mHeight * sizeof(aiTexel));
-                }
+                    fs::path outPath = fbmDir / (baseName + "_" + tag + "_embedded" + std::to_string(embeddedIndex++) + "." + ext);
+                    std::ofstream ofs(outPath, std::ios::binary);
+                    if (!ofs.is_open())
+                    {
+                        ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: failed to open output file: \"%s\"", outPath.string().c_str());
+                        return;
+                    }
 
-                extractedTextures.push_back(outPath);
+                    if (at->mHeight == 0)
+                    {
+                        if (at->mWidth > 0)
+                            ofs.write(reinterpret_cast<const char*>(at->pcData), static_cast<std::streamsize>(at->mWidth));
+                    }
+                    else
+                    {
+                        const std::size_t dataSize = static_cast<std::size_t>(at->mWidth) * static_cast<std::size_t>(at->mHeight) * sizeof(aiTexel);
+                        if (dataSize > 0)
+                            ofs.write(reinterpret_cast<const char*>(at->pcData), static_cast<std::streamsize>(dataSize));
+                    }
+
+                    if (ofs.good())
+                        extractedTextures.push_back(outPath);
+                }
+                catch (const std::exception& e)
+                {
+                    ALICE_LOG_ERRORF("[FbxImporter] ExtractTexture_FileMode: exception while writing embedded texture: %s", e.what());
+                }
                 return;
             }
 
             // 외부 파일 텍스처 → .fbm 으로 복사
-            fs::path srcTex = t;
-            if (!srcTex.is_absolute())
-                srcTex = fbxDir / srcTex;
+            try
+            {
+                fs::path srcTex = t;
+                if (!srcTex.is_absolute())
+                {
+                    // fbxDir이 유효한지 확인
+                    if (fbxDir.empty() || !fs::exists(fbxDir, ec) || !fs::is_directory(fbxDir, ec))
+                    {
+                        ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: invalid fbxDir: \"%s\"", fbxDir.string().c_str());
+                        return;
+                    }
+                    srcTex = fbxDir / srcTex;
+                }
 
-            if (!fs::exists(srcTex))
-                return;
+                // srcTex 정규화해봄 (.. 또는 . 제거)
+                srcTex = srcTex.lexically_normal();
 
-            fs::path dstTex = fbmDir / srcTex.filename();
-            std::error_code ec;
-            fs::copy_file(srcTex, dstTex, fs::copy_options::overwrite_existing, ec);
-            if (!ec)
-                extractedTextures.push_back(dstTex);
+                if (!fs::exists(srcTex, ec))
+                {
+                    ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: source texture does not exist: \"%s\"", srcTex.string().c_str());
+                    return;
+                }
+
+                if (!fs::is_regular_file(srcTex, ec))
+                {
+                    ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: source is not a regular file: \"%s\"", srcTex.string().c_str());
+                    return;
+                }
+
+                fs::path dstTex = fbmDir / srcTex.filename();
+                ec.clear();
+                fs::copy_file(srcTex, dstTex, fs::copy_options::overwrite_existing, ec);
+                if (!ec)
+                {
+                    extractedTextures.push_back(dstTex);
+                }
+                else
+                {
+                    ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: failed to copy texture \"%s\" -> \"%s\": %s", 
+                                   srcTex.string().c_str(), dstTex.string().c_str(), ec.message().c_str());
+                }
+            }
+            catch (const std::exception& e)
+            {
+                ALICE_LOG_ERRORF("[FbxImporter] ExtractTexture_FileMode: exception while copying texture: %s", e.what());
+            }
         }
 
         static void ExtractTexture_NoFileMode(ResourceManager& resources,

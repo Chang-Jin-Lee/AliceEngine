@@ -90,6 +90,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 
 	// Decide animation mode and prepare
 	bool hasBones = m_->skeleton.HasBones();
+	// 본은 없는데 애니메이션이 있는경우. 즉 리지드 애니메이션일때
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{
 		m_->animType = AnimationType::Rigid;
@@ -133,6 +134,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			}
 		}
 	}
+	// 본도 있고 애니메이션도 있는 경우. Skinned 애니메이션 일때.
 	else if (hasBones)
 	{
 		m_->animType = AnimationType::Skinned;
@@ -256,9 +258,30 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			m_->geometry.RebuildVBFromCPU(device);
 		}
 	}
+	// 본도 없고 애니메이션도 없을때. 즉 Static한 모델일때.
 	else
 	{
 		m_->animType = AnimationType::None;
+		// 스키닝 셰이더를 재사용하기 위해, 모든 정점을 0번 본(Identity)에 고정함
+		// 가중치(Weight)가 0이면 화면에 그려지지 않으므로 1.0으로 설정해야 함.
+		auto& verts = m_->geometry.GetCPUVertices();
+		if (!verts.empty())
+		{
+			for (auto& v : verts)
+			{
+				// 0번 본 인덱스 사용 Identity 행렬
+				v.boneIdx[0] = 0;
+				v.boneIdx[1] = 0;
+				v.boneIdx[2] = 0;
+				v.boneIdx[3] = 0;
+
+				// 첫 번째 본에 가중치 100% 할당
+				v.boneWeight = DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
+			}
+		}
+
+		// 변경된 정점 데이터를 GPU 버퍼에 다시 업로드
+		m_->geometry.RebuildVBFromCPU(device);
 	}
 
 	// Init animation metadata and ensure CB

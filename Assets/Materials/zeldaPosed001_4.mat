@@ -1,0 +1,11 @@
+{
+    "albedoTexturePath": "Cooked/Textures\\zeldaPosed001\\fire_diff.alice",
+    "assetPath": "D:\\Github\\AliceRenderer\\Assets\\Materials\\zeldaPosed001_4.mat",
+    "color": {
+        "x": 0.699999988079071,
+        "y": 0.699999988079071,
+        "z": 0.699999988079071
+    },
+    "metalness": 0.0,
+    "roughness": 0.5
+}
