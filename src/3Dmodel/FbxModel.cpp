@@ -448,6 +448,27 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 	else
 	{
 		m_->animType = AnimationType::None;
+
+		// 스키닝 셰이더를 재사용하기 위해, 모든 정점을 0번 본(Identity)에 고정함
+		// 가중치(Weight)가 0이면 화면에 그려지지 않으므로 1.0으로 설정해야 함.
+		auto& verts = m_->geometry.GetCPUVertices();
+		if (!verts.empty())
+		{
+			for (auto& v : verts)
+			{
+				// 0번 본 인덱스 사용 Identity 행렬
+				v.boneIdx[0] = 0;
+				v.boneIdx[1] = 0;
+				v.boneIdx[2] = 0;
+				v.boneIdx[3] = 0;
+
+				// 첫 번째 본에 가중치 100% 할당
+				v.boneWeight = DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
+			}
+		}
+
+		// 변경된 정점 데이터를 GPU 버퍼에 다시 업로드
+		m_->geometry.RebuildVBFromCPU(device);
 	}
 
 	m_->anim.InitMetadata(m_->scene);

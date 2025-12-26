@@ -16,7 +16,7 @@
                 },
                 "rotation": {
                     "x": -0.0,
-                    "y": 109.96638488769531,
+                    "y": 125.37767028808594,
                     "z": 0.0
                 },
                 "scale": {
@@ -29,8 +29,8 @@
         },
         {
             "Material": {
-                "albedoTexturePath": "Cooked/Textures\\Rapi\\Rapi_Diffuse_embedded0.alice",
-                "assetPath": "D:\\Github\\AliceRenderer\\Assets\\Materials\\Rapi_0.mat",
+                "albedoTexturePath": "Cooked/Textures/Rapi/Rapi_Diffuse_embedded0.alice",
+                "assetPath": "Assets/Materials/Rapi_0.mat",
                 "color": {
                     "x": 0.8957529067993164,
                     "y": 0.8957529067993164,
@@ -50,22 +50,22 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 122.87171989539638
+                "timeSec": 5.878222202882171
             },
             "SkinnedMesh": {
                 "boneCount": 180,
-                "instanceAssetPath": "D:\\Github\\AliceRenderer\\Assets\\Fbx\\Rapi.fbxasset",
+                "instanceAssetPath": "Assets/Fbx/Rapi.fbxasset",
                 "meshAssetPath": "Rapi"
             },
             "Transform": {
                 "position": {
-                    "x": 2.919450044631958,
+                    "x": 1.7001844644546509,
                     "y": 0.0,
-                    "z": 6.449628829956055
+                    "z": 0.05795396864414215
                 },
                 "rotation": {
                     "x": 0.0,
-                    "y": 4.468041896820068,
+                    "y": 4.457570552825928,
                     "z": 0.0
                 },
                 "scale": {
@@ -109,13 +109,13 @@
             ],
             "Transform": {
                 "position": {
-                    "x": 26.680267333984375,
-                    "y": 26.506534576416016,
-                    "z": 12.373883247375488
+                    "x": 8.08913803100586,
+                    "y": 25.636682510375977,
+                    "z": -24.46961784362793
                 },
                 "rotation": {
-                    "x": 0.795869767665863,
-                    "y": -1.81514310836792,
+                    "x": 0.760963499546051,
+                    "y": -0.25481805205345154,
                     "z": 0.0
                 },
                 "scale": {
@@ -142,7 +142,7 @@
             "Transform": {
                 "position": {
                     "x": 0.18812775611877441,
-                    "y": -1.1781715154647827,
+                    "y": -1.5509624481201172,
                     "z": 0.0
                 },
                 "rotation": {
@@ -186,13 +186,13 @@
                 },
                 "rotation": {
                     "x": -0.0,
-                    "y": 71.69282531738281,
+                    "y": 87.10411071777344,
                     "z": 0.0
                 },
                 "scale": {
-                    "x": 0.42216163873672485,
-                    "y": 0.42216163873672485,
-                    "z": 0.42216163873672485
+                    "x": 0.3630249798297882,
+                    "y": 0.3630249798297882,
+                    "z": 0.3630249798297882
                 }
             },
             "id": 5,
@@ -200,8 +200,8 @@
         },
         {
             "Material": {
-                "albedoTexturePath": "Cooked/Textures\\Zombie_Run\\Zombie_Run_Diffuse_embedded5.alice",
-                "assetPath": "D:\\Github\\AliceRenderer\\Assets\\Materials\\Zombie_Run_0.mat",
+                "albedoTexturePath": "Cooked/Textures/Zombie_Run/Zombie_Run_Diffuse_embedded5.alice",
+                "assetPath": "Assets/Materials/Zombie_Run_0.mat",
                 "color": {
                     "x": 0.699999988079071,
                     "y": 0.699999988079071,
@@ -214,11 +214,11 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 116.02371688606218
+                "timeSec": 1138.9785755964695
             },
             "SkinnedMesh": {
                 "boneCount": 67,
-                "instanceAssetPath": "D:\\Github\\AliceRenderer\\Assets\\Fbx\\Zombie_Run.fbxasset",
+                "instanceAssetPath": "Assets/Fbx/Zombie_Run.fbxasset",
                 "meshAssetPath": "Zombie_Run"
             },
             "Transform": {
@@ -242,8 +242,8 @@
         },
         {
             "Material": {
-                "albedoTexturePath": "Cooked/Textures\\Tree\\Tree_Diffuse_embedded7.alice",
-                "assetPath": "D:\\Github\\AliceRenderer\\Assets\\Materials\\Tree_0.mat",
+                "albedoTexturePath": "Cooked/Textures/Tree/Tree_Diffuse_embedded7.alice",
+                "assetPath": "Assets/Materials/Tree_0.mat",
                 "color": {
                     "x": 0.699999988079071,
                     "y": 0.699999988079071,
@@ -260,7 +260,7 @@
             },
             "SkinnedMesh": {
                 "boneCount": 1,
-                "instanceAssetPath": "D:\\Github\\AliceRenderer\\Assets\\Fbx\\Tree.fbxasset",
+                "instanceAssetPath": "Assets/Fbx/Tree.fbxasset",
                 "meshAssetPath": "Tree"
             },
             "Transform": {
@@ -291,7 +291,7 @@
             },
             "SkinnedMesh": {
                 "boneCount": 1,
-                "instanceAssetPath": "D:\\Github\\AliceRenderer\\Assets\\Fbx\\zeldaPosed001.fbxasset",
+                "instanceAssetPath": "Assets/Fbx/zeldaPosed001.fbxasset",
                 "meshAssetPath": "zeldaPosed001"
             },
             "Transform": {
@@ -318,11 +318,11 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 20.817368091084063
+                "timeSec": 1043.7722268014913
             },
             "SkinnedMesh": {
                 "boneCount": 16,
-                "instanceAssetPath": "D:\\Github\\AliceRenderer\\Assets\\Fbx\\BoxHuman.fbxasset",
+                "instanceAssetPath": "Assets/Fbx/BoxHuman.fbxasset",
                 "meshAssetPath": "BoxHuman"
             },
             "Transform": {

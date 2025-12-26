@@ -1,8 +1,8 @@
 {
     "materials": [
-        "D:\\Github\\AliceRenderer\\Assets\\Materials\\Tree_0.mat",
-        "D:\\Github\\AliceRenderer\\Assets\\Materials\\Tree_1.mat",
-        "D:\\Github\\AliceRenderer\\Assets\\Materials\\Tree_2.mat"
+        "Assets/Materials/Tree_0.mat",
+        "Assets/Materials/Tree_1.mat",
+        "Assets/Materials/Tree_2.mat"
     ],
     "mesh": "Tree",
     "source_fbx": "Resource/fbx/Study/Tree.fbx"

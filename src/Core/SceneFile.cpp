@@ -32,6 +32,59 @@ namespace Alice
             0, 0, 1, 0,
             0, 0, 0, 1);
 
+        // 프로젝트 루트 경로를 구하는 헬퍼 함수
+        static std::filesystem::path GetProjectRoot()
+        {
+            wchar_t exePathW[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+            std::filesystem::path exePath = exePathW;
+            std::filesystem::path exeDir = exePath.parent_path();
+            // build/bin/Debug 또는 build/bin/Release 가 나옴. 프로젝트 루트임
+            return exeDir.parent_path().parent_path().parent_path();
+        }
+
+        // 절대 경로를 상대 경로로 변환하는 헬퍼 함수
+        // Assets/ 또는 Resource/로 시작하는 경로는 그대로 유지함
+        static std::string NormalizePathToRelative(const std::string& path)
+        {
+            if (path.empty())
+                return path;
+
+            std::filesystem::path p(path);
+            
+            // 이미 상대 경로이거나 Assets/ 또는 Resource/로 시작하면 그대로 반환
+            if (!p.is_absolute())
+            {
+                const std::string s = p.generic_string();
+                if (s.find("Assets/") == 0 || s.find("Resource/") == 0 || s.find("Cooked/") == 0)
+                    return s;
+            }
+
+            // 절대 경로인 경우 프로젝트 루트 기준 상대 경로로 변환
+            if (p.is_absolute())
+            {
+                const std::filesystem::path projectRoot = GetProjectRoot();
+                try
+                {
+                    std::filesystem::path relative = std::filesystem::relative(p, projectRoot);
+                    if (!relative.empty())
+                    {
+                        const std::string result = relative.generic_string();
+                        // Assets/ 또는 Resource/로 시작하는지 확인
+                        if (result.find("Assets/") == 0 || result.find("Resource/") == 0 || result.find("Cooked/") == 0)
+                            return result;
+                        // 상대 경로 변환이 실패하거나 예상과 다른 경우 원본 반환
+                    }
+                }
+                catch (...)
+                {
+                    // relative() 실패 시 원본 반환
+                }
+            }
+
+            return path;
+        }
+
         static bool WriteEntity(JsonRttr::json& outEntity, const World& world, EntityId id)
         {
             outEntity = JsonRttr::json::object();
@@ -72,14 +125,25 @@ namespace Alice
             
             if (const auto* mat = world.GetMaterial(id); mat)
             {
-                rttr::instance inst = const_cast<MaterialComponent&>(*mat);
+                // 경로를 상대 경로로 변환하기 위해 복사본 생성
+                MaterialComponent matCopy = *mat;
+                matCopy.assetPath = NormalizePathToRelative(matCopy.assetPath);
+                matCopy.albedoTexturePath = NormalizePathToRelative(matCopy.albedoTexturePath);
+                
+                rttr::instance inst = matCopy;
                 outEntity["Material"] = JsonRttr::ToJsonObject(inst);
             }
 
             
             if (const auto* skinned = world.GetSkinnedMesh(id); skinned)
             {
-                rttr::instance inst = const_cast<SkinnedMeshComponent&>(*skinned);
+                // 경로를 상대 경로로 변환하기 위해 복사본 생성
+                SkinnedMeshComponent skinnedCopy = *skinned;
+                skinnedCopy.instanceAssetPath = NormalizePathToRelative(skinnedCopy.instanceAssetPath);
+                // meshAssetPath는 이미 상대 경로일 가능성이 높지만 안전을 위해 변환
+                skinnedCopy.meshAssetPath = NormalizePathToRelative(skinnedCopy.meshAssetPath);
+                
+                rttr::instance inst = skinnedCopy;
                 outEntity["SkinnedMesh"] = JsonRttr::ToJsonObject(inst);
             }
 
