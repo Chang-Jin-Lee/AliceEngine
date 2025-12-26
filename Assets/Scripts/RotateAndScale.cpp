@@ -9,11 +9,11 @@ namespace Alice
     // 이 스크립트를 리플렉션/팩토리 시스템에 등록합니다.
     REGISTER_SCRIPT(RotateAndScale);
 
-    ALICE_SCRIPT_REFLECT_BEGIN(RotateAndScale)
+    /*ALICE_SCRIPT_REFLECT_BEGIN(RotateAndScale)
         ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_spinSpeed)
         ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_pulseSpeed)
         ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_pulseAmplitude)
-    ALICE_SCRIPT_REFLECT_END()
+    ALICE_SCRIPT_REFLECT_END()*/
 
     void RotateAndScale::Start()
     {

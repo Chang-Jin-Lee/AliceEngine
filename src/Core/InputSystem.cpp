@@ -25,6 +25,7 @@ namespace Alice
         // 델타는 프레임마다 초기화합니다.
         m_mouseDelta.x = 0;
         m_mouseDelta.y = 0;
+        m_mouseScrollDelta = 0.0f;
 
         if (!m_keyboard || !m_mouse) return;
 
@@ -48,6 +49,12 @@ namespace Alice
         m_mouseDelta.y += current.y - m_prevMousePos.y;
 
         m_prevMousePos = current;
+
+        // 마우스 스크롤 델타 계산
+        // DirectXTK의 scrollWheelValue는 누적값이므로 이전 값과의 차이를 계산합니다.
+        const int currentScrollWheelValue = m_mouseState.scrollWheelValue;
+        m_mouseScrollDelta = static_cast<float>(currentScrollWheelValue - m_prevScrollWheelValue);
+        m_prevScrollWheelValue = currentScrollWheelValue;
     }
 
     bool InputSystem::IsKeyDown(Keyboard::Keys key) const
@@ -68,6 +75,49 @@ namespace Alice
     bool InputSystem::IsLeftButtonDown() const
     {
         return m_mouseState.leftButton;
+    }
+
+    bool InputSystem::IsMiddleButtonDown() const
+    {
+        return m_mouseState.middleButton;
+    }
+
+    bool InputSystem::IsMouseButtonDown(int buttonIndex) const
+    {
+        switch (buttonIndex)
+        {
+        case 0: return m_mouseState.leftButton;
+        case 1: return m_mouseState.rightButton;
+        case 2: return m_mouseState.middleButton;
+        default: return false;
+        }
+    }
+
+    bool InputSystem::IsMouseButtonPressed(int buttonIndex) const
+    {
+        switch (buttonIndex)
+        {
+        case 0: return m_mouseTracker.leftButton == DirectX::Mouse::ButtonStateTracker::PRESSED;
+        case 1: return m_mouseTracker.rightButton == DirectX::Mouse::ButtonStateTracker::PRESSED;
+        case 2: return m_mouseTracker.middleButton == DirectX::Mouse::ButtonStateTracker::PRESSED;
+        default: return false;
+        }
+    }
+
+    bool InputSystem::IsMouseButtonReleased(int buttonIndex) const
+    {
+        switch (buttonIndex)
+        {
+        case 0: return m_mouseTracker.leftButton == DirectX::Mouse::ButtonStateTracker::RELEASED;
+        case 1: return m_mouseTracker.rightButton == DirectX::Mouse::ButtonStateTracker::RELEASED;
+        case 2: return m_mouseTracker.middleButton == DirectX::Mouse::ButtonStateTracker::RELEASED;
+        default: return false;
+        }
+    }
+
+    POINT InputSystem::GetMousePosition() const
+    {
+        return POINT{ m_mouseState.x, m_mouseState.y };
     }
 }
 

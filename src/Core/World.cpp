@@ -1,4 +1,5 @@
 ﻿#include "Core/World.h"
+#include "Core/GameObject.h"
 
 namespace Alice {
 	void World::Clear()
@@ -47,6 +48,23 @@ namespace Alice {
 		m_skinnedMeshes.erase(id);
 		m_skinnedAnimations.erase(id);
 		m_cameras.erase(id);
+	}
+
+	GameObject World::FindGameObject(const std::string& name)
+	{
+		// 이름으로 엔티티 검색 (선형 검색)
+		// 엔티티가 많아지면 별도 Map<String, EntityId> 관리 권장
+		for (const auto& [id, entityName] : m_names)
+		{
+			if (entityName == name)
+			{
+				// GameObject 생성 (ScriptServices는 nullptr로 전달)
+				// 스크립트에서 사용할 때는 IScript::gameObject()를 통해 ScriptServices가 포함된 GameObject를 얻을 수 있음
+				return GameObject(this, id, nullptr);
+			}
+		}
+		// 찾지 못한 경우 빈 GameObject 반환 (IsValid() == false)
+		return GameObject();
 	}
 
 	void World::SetEntityName(EntityId id, const std::string& name)

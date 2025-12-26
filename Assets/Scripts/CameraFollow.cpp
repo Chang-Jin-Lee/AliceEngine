@@ -79,16 +79,16 @@
 // 카메라가 그냥 플레이어를 따라다니는 스크립트
 #include "CameraFollow.h"
 #include "Core/GameObject.h"
+#include <algorithm>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace Alice
 {
     REGISTER_SCRIPT(CameraFollow);
-
-    ALICE_SCRIPT_REFLECT_BEGIN(CameraFollow)
-        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_offsetX)
-        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_offsetY)
-        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_offsetZ)
-    ALICE_SCRIPT_REFLECT_END()
 
     // 헬퍼 함수: 선형 보간 (a에서 b로 t만큼 이동)
     float Lerp(float a, float b, float t)
@@ -163,10 +163,99 @@ namespace Alice
         myT->position.z = myT->position.z * lateDeltaTime;
     }
 
+    void CameraFollow::MoveOrbit()
+    {
+        auto go = gameObject();
+        auto* input = Input();
+        if (!go.IsValid() || !input) return;
+
+        auto target = go.FindFirstSkinnedMesh();
+        if (!target.IsValid()) return;
+
+        auto* myT = go.GetComponent<TransformComponent>();
+        auto* tT = target.GetComponent<TransformComponent>();
+        if (!myT || !tT) return;
+
+        // --- 1. 회전 처리 (마우스 왼쪽 드래그) ---
+        float yaw = Get_m_currentYaw();
+        float pitch = Get_m_currentPitch();
+
+        if (input->GetMouseButton(MouseCode::Left))
+        {
+            float sensitivity = Get_m_sensitivity();
+
+            // 마우스 이동량만큼 회전 (방향 반전: -=, -=)
+            yaw -= input->GetMouseDeltaX() * sensitivity;
+            pitch -= input->GetMouseDeltaY() * sensitivity;
+
+            // 상하 회전 제한 (-89 ~ 89도)
+            pitch = std::clamp(pitch, -89.0f, 89.0f);
+
+            Set_m_currentYaw(yaw);
+            Set_m_currentPitch(pitch);
+        }
+
+        // --- 2. [줌인/아웃] 거리 조절 (마우스 휠 스크롤) ---
+        float dist = Get_m_distance();
+
+        // Input 클래스에 휠 스크롤 값을 가져오는 함수가 있어야 합니다.
+        // (보통 휠 위로=+1.0, 아래로=-1.0 반환)
+        float wheel = input->GetMouseScrollDelta();
+
+        if (wheel != 0.0f)
+        {
+            // 휠 올림(+) -> 거리 감소(줌인)
+            // 휠 내림(-) -> 거리 증가(줌아웃)
+            dist -= wheel * Get_m_zoomSpeed();
+
+            // 최소/최대 거리 제한 (벽 뚫기나 너무 멀어짐 방지)
+            dist = std::clamp(dist, Get_m_minDistance(), Get_m_maxDistance());
+
+            Set_m_distance(dist);
+        }
+
+        // --- 3. 위치 계산 (구면 좌표계: Distance 반영) ---
+        // 타겟의 머리 높이(Pivot) 기준
+        float pivotX = tT->position.x;
+        float pivotY = tT->position.y + Get_m_heightOffset();
+        float pivotZ = tT->position.z;
+
+        // 각도를 라디안으로 변환
+        float radYaw = yaw * (static_cast<float>(M_PI) / 180.0f);
+        float radPitch = pitch * (static_cast<float>(M_PI) / 180.0f);
+
+        // 구면 좌표계 공식에 dist(거리) 적용
+        float hDist = dist * std::cos(radPitch); // 수평 거리
+        float vDist = dist * std::sin(radPitch); // 수직 높이
+
+        float offsetX = hDist * std::sin(radYaw);
+        float offsetZ = hDist * std::cos(radYaw);
+        float offsetY = vDist;
+
+        // 최종 위치 적용 (Pivot - Offset)
+        myT->position.x = pivotX - offsetX;
+        myT->position.y = pivotY + offsetY;
+        myT->position.z = pivotZ - offsetZ;
+
+        // --- 4. 회전 계산 (LookAt: 항상 타겟 바라보기) ---
+        const float dx = pivotX - myT->position.x;
+        const float dy = pivotY - myT->position.y;
+        const float dz = pivotZ - myT->position.z;
+
+        const float lookYaw = std::atan2(dx, dz);
+        const float distXZ = std::sqrt(dx * dx + dz * dz);
+        const float lookPitch = -std::atan2(dy, distXZ);
+
+        myT->rotation.x = lookPitch;
+        myT->rotation.y = lookYaw;
+    }
+
+
     void CameraFollow::LateUpdate(float lateDeltaTime)
     {
         //MoveLerp(lateDeltaTime);
-        MoveDirectly();
+        //MoveDirectly();
+        MoveOrbit();
     }
 }
 
