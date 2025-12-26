@@ -39,12 +39,12 @@ namespace Alice
             GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
             std::filesystem::path exePath = exePathW;
             std::filesystem::path exeDir = exePath.parent_path();
-            // build/bin/Debug 또는 build/bin/Release → 프로젝트 루트
+            // build/bin/Debug 또는 build/bin/Release 가 나옴. 프로젝트 루트임
             return exeDir.parent_path().parent_path().parent_path();
         }
 
         // 절대 경로를 상대 경로로 변환하는 헬퍼 함수
-        // Assets/ 또는 Resource/로 시작하는 경로는 그대로 유지
+        // Assets/ 또는 Resource/로 시작하는 경로는 그대로 유지함
         static std::string NormalizePathToRelative(const std::string& path)
         {
             if (path.empty())
