@@ -483,7 +483,9 @@ namespace Alice
 
             MaterialFile::Save(matPath, matComp);
 
-            result.materialAssetPaths.push_back(matPath.string());
+            // 상대 경로로 변환하여 저장 D:\\Github\\AliceRenderer\\Assets\\Materials\\ -> (Assets/Materials/... 형식)
+            fs::path matPathRelative = fs::path("Assets/Materials") / (baseName + "_" + std::to_string(i) + ".mat");
+            result.materialAssetPaths.push_back(matPathRelative.generic_string());
         }
 
         // 5) 메시 자산의 논리 경로는 FBX 이름을 그대로 사용합니다.
@@ -505,17 +507,17 @@ namespace Alice
 
             if (!SaveFbxInstanceAsset(fbxAssetPath, asset)) return result;
 
-            result.instanceAssetPath = fbxAssetPath.string();
+            // 상대 경로로 변환하여 저장 D:\\Github\\AliceRenderer\\Assets\\Materials -> (Assets/Fbx/... 형식)
+            fs::path fbxAssetPathRelative = fs::path("Assets/Fbx") / (baseName + ".fbxasset");
+            result.instanceAssetPath = fbxAssetPathRelative.generic_string();
         }
 
         // 디버그 로깅: Import 완료
         {
-            char buf[256] = {};
-            std::snprintf(buf, sizeof(buf),
-                          "[FbxImporter] Import done: meshAssetPath=\"%s\", materials=%zu\n",
-                          result.meshAssetPath.c_str(),
-                          result.materialAssetPaths.size());
-            ALICE_LOG_INFO("%s", buf);
+
+			ALICE_LOG_INFO("[FbxImporter] Import done: meshAssetPath=\"%s\", materials=%zu\n",
+				result.meshAssetPath.c_str(),
+				result.materialAssetPaths.size());
         }
 
         return result;
