@@ -1059,6 +1059,14 @@ namespace Alice
                     {
                         std::filesystem::path fbxPath = fileBuffer;
 
+						wchar_t exePathW[MAX_PATH] = {};
+						GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+						std::filesystem::path exePath = exePathW;
+						std::filesystem::path exeDir = exePath.parent_path();
+                        std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+
+                        fbxPath = std::filesystem::relative(fbxPath, projectRoot);
+
                         // 간단한 FBX 임포트 옵션
                         FbxImportOptions opt{};
                         FbxImporter importer(*m_resources, m_skinnedRegistry);
