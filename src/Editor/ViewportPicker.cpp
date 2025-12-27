@@ -81,7 +81,7 @@ namespace Alice
         XMStoreFloat3(&rayWorld.origin,    originWorld);
         XMStoreFloat3(&rayWorld.direction, dirWorld);
 
-        const auto& transforms = world.GetTransforms();
+        const auto& transforms = world.GetComponents<TransformComponent>();
         if (transforms.empty())
             return InvalidEntityId;
 

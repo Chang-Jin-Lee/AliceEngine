@@ -12,7 +12,7 @@ namespace Alice
     {
         // 큐브 엔티티 생성 및 기본 Transform 설정
         m_cubeEntity = world.CreateEntity();
-        auto& transform = world.AddTransform(m_cubeEntity);
+        auto& transform = world.AddComponent<TransformComponent>(m_cubeEntity);
         transform
             .SetPosition(0.0f, 0.0f, 0.0f)
             .SetScale(1.0f, 1.0f, 1.0f);
@@ -31,7 +31,7 @@ namespace Alice
     {
         if (m_cubeEntity == InvalidEntityId) return;
 
-        auto* transform = world.GetTransform(m_cubeEntity);
+        auto* transform = world.GetComponent<TransformComponent>(m_cubeEntity);
         if (!transform) return;
 
         // 시간에 따라 Y축 회전

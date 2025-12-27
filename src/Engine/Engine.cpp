@@ -253,7 +253,7 @@ namespace Alice
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
 		pImpl->m_scriptSystem.onTrimVideoMemory.BindObject(this, &Engine::TrimVideoMemory);
 
-		ALICE_LOG_INFO("Engine::Initialize: Success (Entities: %zu)", pImpl->m_world.GetTransforms().size());
+		ALICE_LOG_INFO("Engine::Initialize: Success (Entities: %zu)", pImpl->m_world.GetComponents<TransformComponent>().size());
 		return true;
 	}
 
@@ -310,15 +310,15 @@ namespace Alice
 		{
 			// 우선순위: Primary 카메라 -> 없으면 첫 번째 발견된 카메라
 			EntityId camId = InvalidEntityId;
-			for (const auto& [id, cam] : pImpl->m_world.GetCameras())
+			for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
 			{
 				if (cam.primary) { camId = id; break; }
 				if (camId == InvalidEntityId) camId = id;
 			}
 
-			if (const auto* t = pImpl->m_world.GetTransform(camId))
+			if (const auto* t = pImpl->m_world.GetComponent<TransformComponent>(camId))
 			{
-				const auto* c = pImpl->m_world.GetCamera(camId);
+				const auto* c = pImpl->m_world.GetComponent<CameraComponent>(camId);
 				pImpl->m_cameraPosition = t->position;
 				pImpl->m_cameraYawRadians = t->rotation.y;
 				pImpl->m_cameraPitchRadians = t->rotation.x;
@@ -426,7 +426,7 @@ namespace Alice
 
 		// 카메라 엔티티 ID 집합 구성
 		std::unordered_set<EntityId> cameraIDs;
-		for (const auto& [id, _] : pImpl->m_world.GetCameras()) cameraIDs.insert(id);
+		for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
 
 		pImpl->m_forwardRenderSystem->Render(
 			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
@@ -453,9 +453,9 @@ namespace Alice
 	void Engine::EnsureSkinnedMeshesRegisteredForWorld()
 	{
 		auto* device = pImpl->m_renderDevice ? pImpl->m_renderDevice->GetDevice() : nullptr;
-		if (!device || pImpl->m_world.GetSkinnedMeshes().empty()) return;
+		if (!device || pImpl->m_world.GetComponents<SkinnedMeshComponent>().empty()) return;
 
-		for (const auto& [entityId, comp] : pImpl->m_world.GetSkinnedMeshes())
+		for (const auto& [entityId, comp] : pImpl->m_world.GetComponents<SkinnedMeshComponent>())
 		{
 			// 이미 등록되었거나 경로가 비어있으면 스킵
 			if (comp.meshAssetPath.empty() || pImpl->m_skinnedMeshRegistry.Find(comp.meshAssetPath)) continue;

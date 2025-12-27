@@ -23,7 +23,7 @@ namespace Alice
         if (!m_world || m_entity == InvalidEntityId)
             return nullptr;
 
-        return m_world->GetTransform(m_entity);
+        return m_world->GetComponent<TransformComponent>(m_entity);
     }
 
     GameObject IScript::gameObject() const
@@ -68,8 +68,7 @@ namespace Alice
 
     std::unique_ptr<IScript> ScriptFactory::Create(const char* name)
     {
-        if (!name)
-            return nullptr;
+        if (!name) return nullptr;
 
         // 1) 정적(내장) 스크립트 레지스트리에서 먼저 찾습니다.
         auto& registry = GetScriptRegistry();
@@ -391,13 +390,88 @@ namespace Alice
         }
     }
 
+    void ScriptSystem::CallUpdate(World& world, float deltaTime)
+    {
+        auto& allScripts = world.GetAllScripts();
+        for (auto it = allScripts.begin(); it != allScripts.end(); ++it)
+        {
+            EntityId entityId = it->first;
+            auto& list = it->second;
+
+            // 벡터를 순회할 때 size를 매번 체크하며 인덱스로 접근
+            for (size_t i = 0; i < list.size(); ++i)
+            {
+                auto& comp = list[i];
+
+                if (!comp.instance) continue;
+
+                // Update 도중 RemoveComponent가 호출되어 현재 인덱스가 삭제될 수 있음
+                // 하지만 여기서는 간단히 null 체크나 enabled 체크로 넘어감
+                // 더 엄격하게 하려면 삭제된 요소를 건너뛰는 로직을 나중에 넣어야함.
+                // 일단은 이렇게 처리해둠. 문제 생기면 그때 수정.
+
+                comp.instance->SetContext(&world, entityId);
+                comp.instance->SetServices(&m_services);
+
+                if (!comp.awoken)
+                {
+                    comp.awoken = true;
+                    comp.wasEnabled = comp.enabled;
+
+                    comp.instance->Awake();
+
+                    // Awake 도중 스크립트가 삭제되었을 수도 있으므로 체크
+                    if (i >= list.size()) break;
+                    if (!list[i].instance) continue; // 삭제된 경우
+
+                    if (comp.enabled) comp.instance->OnEnable();
+                }
+
+                // 중간에 삭제되었는지 다시 확인
+                if (i >= list.size()) break;
+
+                // 참조 다시 획득 벡터 재할당 가능성을 배제할 순 없음
+                auto& currentComp = list[i];
+
+                if (currentComp.enabled != currentComp.wasEnabled)
+                {
+                    if (currentComp.enabled) 
+                        currentComp.instance->OnEnable();
+                    else 
+                        currentComp.instance->OnDisable();
+
+                    currentComp.wasEnabled = currentComp.enabled;
+                }
+
+                if (!currentComp.enabled)
+                    continue;
+
+                if (!currentComp.started)
+                {
+                    currentComp.started = true;
+                    currentComp.instance->Start();
+                }
+
+                // Start 등에서 벡터가 재할당되었을 수 있으므로 다시 참조 갱신
+                if (i < list.size() && list[i].instance)
+                {
+                    list[i].instance->Update(deltaTime);
+                }
+            }
+        }
+    }
+
     void ScriptSystem::CallFixedUpdate(World& world, float fixedDt)
     {
-        for (auto& [entityId, list] : world.GetAllScripts())
+        auto& allScripts = world.GetAllScripts();
+        for (auto it = allScripts.begin(); it != allScripts.end(); ++it)
         {
-            (void)entityId;
-            for (auto& comp : list)
+            auto& list = it->second;
+            for (size_t i = 0; i < list.size(); ++i)
             {
+                if (i >= list.size()) break;
+                auto& comp = list[i];
+
                 if (!comp.instance || !comp.enabled) continue;
                 comp.instance->FixedUpdate(fixedDt);
             }
@@ -406,11 +480,15 @@ namespace Alice
 
     void ScriptSystem::CallLateUpdate(World& world, float deltaTime)
     {
-        for (auto& [entityId, list] : world.GetAllScripts())
+        auto& allScripts = world.GetAllScripts();
+        for (auto it = allScripts.begin(); it != allScripts.end(); ++it)
         {
-            (void)entityId;
-            for (auto& comp : list)
+            auto& list = it->second;
+
+            for (size_t i = 0; i < list.size(); ++i)
             {
+                if (i >= list.size()) break;
+                auto& comp = list[i];
                 if (!comp.instance || !comp.enabled) continue;
                 comp.instance->LateUpdate(deltaTime);
             }
@@ -456,48 +534,7 @@ namespace Alice
         EnsureServicesBound(world);
 
         // Awake/OnEnable/Start/Update
-        for (auto& [entityId, list] : world.GetAllScripts())
-        {
-            for (auto& comp : list)
-            {
-                if (!comp.instance)
-                    continue;
-
-                comp.instance->SetContext(&world, entityId);
-                comp.instance->SetServices(&m_services);
-
-                if (!comp.awoken)
-                {
-                    comp.awoken = true;
-                    comp.wasEnabled = comp.enabled;
-
-                    comp.instance->Awake();
-                    comp.instance->OnCreate(world, entityId); // 구 버전 호환
-
-                    if (comp.enabled)
-                        comp.instance->OnEnable();
-                }
-
-                if (comp.enabled != comp.wasEnabled)
-                {
-                    if (comp.enabled) comp.instance->OnEnable();
-                    else              comp.instance->OnDisable();
-                    comp.wasEnabled = comp.enabled;
-                }
-
-                if (!comp.enabled)
-                    continue;
-
-                if (!comp.started)
-                {
-                    comp.started = true;
-                    comp.instance->Start();
-                }
-
-                comp.instance->Update(deltaTime);
-                comp.instance->OnUpdate(world, entityId, deltaTime); // 구 버전 호환
-            }
-        }
+		CallUpdate(world, deltaTime);
 
         // FixedUpdate
         m_fixedAcc += deltaTime;

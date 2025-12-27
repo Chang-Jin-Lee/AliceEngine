@@ -1,97 +1,23 @@
 #pragma once
 
-#include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <DirectXMath.h>
+#include <string>
+#include <type_traits> // for std::is_same_v
 
 #include "Core/Entity.h"
 #include "Core/Script.h"
 
-namespace Alice {
-    // 전방 선언
+// 컴포넌트 헤더들
+#include "Components/TransformComponent.h"
+#include "Components/MaterialComponent.h"
+#include "Components/SkinnedMeshComponent.h"
+#include "Components/SkinnedAnimationComponent.h"
+#include "Components/CameraComponent.h"
+
+namespace Alice
+{
     class GameObject;
-
-    /// 간단한 ECS 스타일의 월드(World) 구현입니다.
-    /// - 엔티티 생성/삭제 책임
-    /// - Transform / Script / Material 컴포넌트 관리 책임
-    ///   (필요 시 다른 컴포넌트 컨테이너를 추가 확장)
-
-    struct TransformComponent 
-    {
-        // 위치, 회전(라디안), 스케일
-        DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
-
-        TransformComponent& SetPosition(float x, float y, float z) 
-        {
-            position = DirectX::XMFLOAT3(x, y, z);
-            return *this;
-        }
-
-        TransformComponent& SetScale(float x, float y, float z) 
-        {
-            scale = DirectX::XMFLOAT3(x, y, z);
-            return *this;
-        }
-
-        TransformComponent& SetRotation(float x, float y, float z) 
-        {
-            rotation = DirectX::XMFLOAT3(DirectX::XMConvertToRadians(x),
-                DirectX::XMConvertToRadians(y),
-                DirectX::XMConvertToRadians(z));
-            return *this;
-        }
-    };
-
-    /// 머티리얼 컴포넌트
-    /// - 현재는 베이스 컬러 + 러프니스/메탈니스만 가집니다.
-    /// - 추후 더 많은 파라미터를 확장할 수 있습니다.
-    struct MaterialComponent 
-    {
-        DirectX::XMFLOAT3 color{ 0.7f, 0.7f, 0.7f }; // 베이스 색상 (albedo)
-        float roughness{ 0.5f };                     // 0~1 러프니스 (PBR)
-        float metalness{ 0.0f };                     // 0~1 메탈니스 (PBR)
-        std::string assetPath;                     // 선택된 머티리얼 에셋 경로 (옵션)
-        std::string albedoTexturePath; // 알베도 텍스처 경로 (.alice 또는 원본)
-    };
-
-    /// Skinned FBX 메시에 대한 최소 정보만 담는 컴포넌트입니다.
-    /// - 실제 FBX 파싱/애니메이션은 게임(샘플) 레벨에서 처리합니다.
-    /// - 엔진은 bone 행렬 배열과 본 개수만 사용합니다.
-    struct SkinnedMeshComponent 
-    {
-        std::string meshAssetPath; // FBX/메시 에셋 경로 (SkinnedMeshRegistry 키)
-        std::string instanceAssetPath; // .fbxasset 인스턴스 에셋 경로 (씬/프로젝트 저장용)
-        const DirectX::XMFLOAT4X4* boneMatrices{ nullptr };               // 외부에서 관리하는 본 행렬 배열
-        std::uint32_t boneCount{ 0 }; // 사용 중인 본 개수
-    };
-
-    /// 스키닝 애니메이션 재생 상태(엔티티 단위)
-    /// - 실제 평가/팔레트 계산은 SkinnedAnimationSystem 이 수행합니다.
-    struct SkinnedAnimationComponent 
-    {
-        int clipIndex{ 0 }; // 현재 재생 클립 인덱스
-        bool playing{ true };
-        float speed{ 1.0f };   // 배속(1.0 = 정상)
-        double timeSec{ 0.0 }; // 현재 시간(초)
-
-        // CPU 본 팔레트(ForwardRenderSystem이 여기서 읽어 VS CB로 업로드)
-        std::vector<DirectX::XMFLOAT4X4> palette;
-    };
-
-    /// 씬 내 카메라(유니티의 Main Camera 느낌)
-    /// - 게임 모드에서는 "첫번째(primary 우선)" 카메라 엔티티를 따라
-    /// Camera(view/proj)를 갱신합니다.
-    struct CameraComponent 
-    {
-        bool primary{ true };
-        float fovYRad{ DirectX::XM_PIDIV4 };
-        float nearPlane{ 0.1f };
-        float farPlane{ 5000.0f };
-    };
 
     class World
     {
@@ -99,139 +25,296 @@ namespace Alice {
         World() = default;
 
         void Clear();
-
-        /// 새로운 엔티티를 생성합니다.
         EntityId CreateEntity();
-
-        /// 엔티티를 제거하고, 연결된 컴포넌트도 정리합니다.
         void DestroyEntity(EntityId id);
 
-        // ==== GameObject 검색 기능 ====
-        /// 이름을 이용해 GameObject를 찾아 반환합니다.
-        /// - 이름이 일치하는 엔티티를 찾아 GameObject 래퍼를 반환합니다.
-        /// - 없으면 빈 GameObject(IsValid() == false)를 반환합니다.
+        // ==== 유틸리티 ====
         GameObject FindGameObject(const std::string& name);
-
-        // ==== Entity Name (에디터 하이라리키 표시용) ====
         void SetEntityName(EntityId id, const std::string& name);
         std::string GetEntityName(EntityId id) const;
 
-        /// Transform 컴포넌트를 추가합니다.
-        TransformComponent& AddTransform(EntityId id);
+        // ==== 제네릭 컴포넌트 관리 시스템 ====
+        // 컴포넌트 타입 T에 따라 올바른 Map을 자동으로 찾아줍니다.
 
-        /// Transform 컴포넌트를 가져옵니다. (없으면 nullptr)
-        TransformComponent* GetTransform(EntityId id);
+        /// 컴포넌트 추가 (기존 데이터가 있으면 덮어쓰거나 반환)
+        /// 사용법: world.AddComponent<TransformComponent>(id).SetPosition(0,0,0);
+        template <typename T, typename... Args>
+        T& AddComponent(EntityId id, Args&&... args)
+        {
+            // 1. 유저 스크립트인 경우 (IScript 상속 여부 확인)
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                // unique_ptr 생성
+                auto instance = std::make_unique<T>(std::forward<Args>(args)...);
 
-        /// Transform 컴포넌트의 읽기 전용 포인터를 가져옵니다.
-        const TransformComponent* GetTransform(EntityId id) const;
+                // 반환값 저장을 위해 Raw Pointer 확보 (move 후에는 instance가 null이 됨)
+                T* rawPtr = instance.get();
 
-        /// 현재 등록된 Transform 컴포넌트 목록을 읽기 전용으로 반환합니다.
-        /// - 에디터 하이러키 뷰에서 엔티티를 나열할 때 사용합니다.
-        const std::unordered_map<EntityId, TransformComponent>&
-            GetTransforms() const {
-            return m_transforms;
+                // 컨테이너 생성 및 데이터 채우기
+                ScriptComponent newScriptComp{};
+                newScriptComp.scriptName = typeid(T).name();
+                newScriptComp.instance = std::move(instance); // 소유권 이전
+
+                // 초기화 루틴
+                newScriptComp.instance->SetContext(this, id);
+
+                // 월드 데이터에 등록 (Move)
+                m_scripts[id].push_back(std::move(newScriptComp));
+
+                // 저장해둔 포인터 반환
+                return *rawPtr;
+            }
+            else
+            {
+                auto& map = GetMap<T>();
+                // emplace는 키가 이미 있으면 삽입하지 않고 iterator를 반환함
+                // or_insert_assign 등의 로직이 필요하면 [] 연산자 사용
+                // 여기서는 깔끔하게 []로 접근하여 생성 또는 갱신
+                if constexpr (std::is_default_constructible_v<T> && sizeof...(Args) == 0)
+                {
+                    return map[id];
+                }
+                else
+                {
+                    // 인자가 있는 경우 덮어쓰기
+                    T newComp(std::forward<Args>(args)...);
+                    map[id] = std::move(newComp);
+                    return map[id];
+                }
+            }
         }
 
-        // ==== Script 컴포넌트 관련 ====
+        /// 컴포넌트 가져오기 (없으면 nullptr)
+        /// 사용법: auto* tr = world.GetComponent<TransformComponent>(id);
+        template <typename T>
+        T* GetComponent(EntityId id)
+        {
+            // T가 유저 스크립트인 경우. IScript를 상속받았으면 유저가 만든 스크립트임
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                auto it = m_scripts.find(id);
+                if (it == m_scripts.end()) return nullptr;
 
-        /// Script 컴포넌트를 추가합니다. (엔티티당 여러 개 가능)
+                // 해당 엔티티에 붙은 모든 스크립트를 순회하며 타입 검사
+                for (auto& scriptComp : it->second)
+                {
+                    // IScript* -> MyCustomScript* 로 변환 시도
+                    // dynamic_cast는 실패 시 nullptr를 반환함
+                    if (scriptComp.instance)
+                    {
+                        T* casted = dynamic_cast<T*>(scriptComp.instance.get());
+                        if (casted) return casted;
+                    }
+                }
+                return nullptr;
+            }
+            else
+            {
+                auto& map = GetMap<T>();
+                auto it = map.find(id);
+                if (it == map.end()) return nullptr;
+                return &it->second;
+            }
+        }
+
+        /// const 버전 가져오기
+        template <typename T>
+        const T* GetComponent(EntityId id) const
+        {
+            // const_cast를 피해 const 맵을 가져오는 헬퍼 필요하지만, 
+            // 간단하게 const_cast로 처리하거나 별도 GetMapConst 구현.
+            // 여기선 코드 단축을 위해 const_cast 활용 (안전함)
+            return const_cast<World*>(this)->GetComponent<T>(id);
+        }
+
+        /// 사용법: std::vector<MonsterScript*> list = world.GetComponents<MonsterScript>(id);
+        template <typename T>
+        std::vector<T*> GetComponents(EntityId id)
+        {
+            std::vector<T*> results;
+
+            // 스크립트인 경우: 벡터를 순회하며 dynamic_cast 성공하는 모든 객체 수집
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                auto it = m_scripts.find(id);
+                if (it != m_scripts.end())
+                {
+                    for (auto& scriptComp : it->second)
+                    {
+                        if (scriptComp.instance)
+                        {
+                            // 부모 타입으로 요청해도 자식들을 다 찾아줍니다.
+                            T* casted = dynamic_cast<T*>(scriptComp.instance.get());
+                            if (casted) results.push_back(casted);
+                        }
+                    }
+                }
+            }
+            // 2. 일반 엔진 컴포넌트인 경우: 1개만 있으므로 있으면 담아서 리턴
+            else
+            {
+                T* comp = GetComponent<T>(id);
+                if (comp) results.push_back(comp);
+            }
+
+            return results;
+        }
+
+        /// const 버전 GetComponents
+        template <typename T>
+        std::vector<const T*> GetComponents(EntityId id) const
+        {
+            std::vector<const T*> results;
+
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                auto it = m_scripts.find(id);
+                if (it != m_scripts.end())
+                {
+                    for (const auto& scriptComp : it->second)
+                    {
+                        if (scriptComp.instance)
+                        {
+                            const T* casted = dynamic_cast<const T*>(scriptComp.instance.get());
+                            if (casted) results.push_back(casted);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                const T* comp = GetComponent<T>(id);
+                if (comp) results.push_back(comp);
+            }
+            return results;
+        }
+
+        /// 컴포넌트 제거
+        template <typename T>
+        void RemoveComponent(EntityId id)
+        {
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                auto it = m_scripts.find(id);
+                if (it == m_scripts.end()) return;
+
+                auto& vec = it->second;
+                for (auto iter = vec.begin(); iter != vec.end(); ++iter)
+                {
+                    // 타입 일치 확인
+                    if (iter->instance && dynamic_cast<T*>(iter->instance.get()))
+                    {
+                        iter->instance->OnDisable();
+                        iter->instance->OnDestroy();
+
+                        vec.erase(iter); // 벡터에서 해당 요소 하나만 제거
+
+                        // 비었으면 맵에서도 엔티티 키 제거
+                        if (vec.empty()) m_scripts.erase(it);
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                GetMap<T>().erase(id);
+            }
+        }
+
+        // 전체 맵 접근 (시스템/에디터용)
+        template <typename T>
+        const auto& GetComponents() const { return GetMapConst<T>(); }
+
+        // ==== 스크립트 (특수 케이스) ====
+        // 스크립트는 1개 엔티티에 여러 개가 붙을 수 있어 별도 관리 추천
         ScriptComponent& AddScript(EntityId id, const std::string& scriptName);
 
-        /// Script 컴포넌트 목록을 가져옵니다. (없으면 nullptr)
+        /// 전체 Script 컨테이너 ScriptSystem에서 사용
+        const std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() const { return m_scripts;  }
+        std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() { return m_scripts; }
+
         std::vector<ScriptComponent>* GetScripts(EntityId id);
         const std::vector<ScriptComponent>* GetScripts(EntityId id) const;
-
-        /// 전체 Script 컨테이너 (ScriptSystem 이 사용)
-        const std::unordered_map<EntityId, std::vector<ScriptComponent>>&
-            GetAllScripts() const {
-            return m_scripts;
-        }
-        std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() 
-        {
-            return m_scripts;
-        }
-
-        /// 지정 인덱스의 Script 컴포넌트를 제거합니다.
         void RemoveScript(EntityId id, std::size_t index);
+        void RemoveAllScript(); // Clear용
 
-        void RemoveAllScript();
+        // ==== 카메라 (특수 케이스 - 메인 카메라 등) ====
+        // 필요하다면 별도 헬퍼 함수 유지
+        EntityId GetMainCameraEntityId();
 
-        // ==== Material 컴포넌트 관련 ====
-
-        /// 머티리얼 컴포넌트를 추가합니다.
-        /// \param id        대상 엔티티 ID
-        /// \param color     기본 베이스 컬러
-        /// \param assetPath 이 머티리얼이 참조하는 에셋 경로(선택 사항)
-        MaterialComponent& AddMaterial(EntityId id, const DirectX::XMFLOAT3& color,
-            const std::string& assetPath = {});
-
-        /// 머티리얼 컴포넌트를 가져옵니다. (없으면 nullptr)
-        MaterialComponent* GetMaterial(EntityId id);
-        const MaterialComponent* GetMaterial(EntityId id) const;
-
-        /// 전체 머티리얼 컴포넌트 컨테이너 (렌더링/에디터에서 사용)
-        const std::unordered_map<EntityId, MaterialComponent>& GetMaterials() const 
+    private:
+        // if constexpr을 사용하여 타입에 맞는 맵을 반환
+        template <typename T>
+        auto& GetMap()
         {
-            return m_materials;
+            if constexpr (std::is_same_v<T, TransformComponent>) return m_transforms;
+            else if constexpr (std::is_same_v<T, MaterialComponent>) return m_materials;
+            else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
+            else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
+            else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
         }
 
-        /// 머티리얼 컴포넌트를 제거합니다.
-        void RemoveMaterial(EntityId id);
-
-        // ==== Skinned Mesh 컴포넌트 관련 ====
-
-        /// 스키닝 메시 컴포넌트를 추가합니다.
-        SkinnedMeshComponent& AddSkinnedMesh(EntityId id,
-            const std::string& meshAssetPath);
-
-        /// 스키닝 메시 컴포넌트를 가져옵니다. (없으면 nullptr)
-        SkinnedMeshComponent* GetSkinnedMesh(EntityId id);
-        const SkinnedMeshComponent* GetSkinnedMesh(EntityId id) const;
-
-        /// 전체 스키닝 메시 컨테이너 (렌더링/에디터에서 사용)
-        const std::unordered_map<EntityId, SkinnedMeshComponent>&
-            GetSkinnedMeshes() const 
+        // const 버전 맵 반환
+        template <typename T>
+        const auto& GetMapConst() const
         {
-            return m_skinnedMeshes;
+            if constexpr (std::is_same_v<T, TransformComponent>) return m_transforms;
+            else if constexpr (std::is_same_v<T, MaterialComponent>) return m_materials;
+            else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
+            else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
+            else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
         }
-
-        /// 스키닝 메시 컴포넌트를 제거합니다.
-        void RemoveSkinnedMesh(EntityId id);
-
-        // ==== Skinned Animation 컴포넌트 관련 ====
-
-        SkinnedAnimationComponent& AddSkinnedAnimation(EntityId id);
-        SkinnedAnimationComponent* GetSkinnedAnimation(EntityId id);
-        const SkinnedAnimationComponent* GetSkinnedAnimation(EntityId id) const;
-        const std::unordered_map<EntityId, SkinnedAnimationComponent>&
-            GetSkinnedAnimations() const
-        {
-            return m_skinnedAnimations;
-        }
-        void RemoveSkinnedAnimation(EntityId id);
-
-        // ==== Camera 컴포넌트 관련 ====
-        CameraComponent& AddCamera(EntityId id);
-        CameraComponent* GetCamera(EntityId id);
-        CameraComponent* GetCamera();     // Get main (first) camera
-        EntityId GetMainCameraEntityId(); // Get main (first) camera entity ID
-        const CameraComponent* GetCamera(EntityId id) const;
-        const std::unordered_map<EntityId, CameraComponent>& GetCameras() const 
-        {
-            return m_cameras;
-        }
-        void RemoveCamera(EntityId id);
 
     private:
         EntityId m_nextEntityId{ 1 };
 
         std::unordered_map<EntityId, std::string> m_names;
 
+        // 데이터 컨테이너들 (메모리 연속성을 위해 map<id, struct> 유지)
         std::unordered_map<EntityId, TransformComponent> m_transforms;
-        std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
         std::unordered_map<EntityId, MaterialComponent> m_materials;
         std::unordered_map<EntityId, SkinnedMeshComponent> m_skinnedMeshes;
         std::unordered_map<EntityId, SkinnedAnimationComponent> m_skinnedAnimations;
         std::unordered_map<EntityId, CameraComponent> m_cameras;
+
+        // 스크립트는 vector를 값으로 가지므로 일반 T와 구조가 달라 따로 둠
+        std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
     };
-} // namespace Alice
+
+    template <typename T>
+    T* IScript::GetComponent()
+    {
+        if (!m_world || m_entity == InvalidEntityId) return nullptr;
+        return m_world->GetComponent<T>(m_entity);
+    }
+
+    template <typename T>
+    const T* IScript::GetComponent() const
+    {
+        if (!m_world || m_entity == InvalidEntityId) return nullptr;
+        return m_world->GetComponent<T>(m_entity);
+    }
+
+    template <typename T>
+    std::vector<T*> IScript::GetComponents()
+    {
+        if (!m_world || m_entity == InvalidEntityId) return {};
+        return m_world->GetComponents<T>(m_entity);
+    }
+
+    template <typename T, typename... Args>
+    T& IScript::AddComponent(Args&&... args)
+    {
+        // World가 없으면 크래시가 나겠지만, 스크립트가 실행 중이라면 World는 반드시 존재해야 합니다.
+        return m_world->AddComponent<T>(m_entity, std::forward<Args>(args)...);
+    }
+
+    template <typename T>
+    void IScript::RemoveComponent()
+    {
+        if (m_world && m_entity != InvalidEntityId)
+            m_world->RemoveComponent<T>(m_entity);
+    }
+}

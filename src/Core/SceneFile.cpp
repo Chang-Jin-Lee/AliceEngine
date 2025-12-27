@@ -94,7 +94,7 @@ namespace Alice
             if (!name.empty())
                 outEntity["name"] = name;
             
-            if (const auto* transform = world.GetTransform(id); transform)
+            if (const auto* transform = world.GetComponent<TransformComponent>(id); transform)
             {
                 rttr::instance inst = const_cast<TransformComponent&>(*transform);
                 outEntity["Transform"] = JsonRttr::ToJsonObject(inst);
@@ -123,7 +123,7 @@ namespace Alice
             }
 
             
-            if (const auto* mat = world.GetMaterial(id); mat)
+            if (const auto* mat = world.GetComponent<MaterialComponent>(id); mat)
             {
                 // 경로를 상대 경로로 변환하기 위해 복사본 생성
                 MaterialComponent matCopy = *mat;
@@ -135,7 +135,7 @@ namespace Alice
             }
 
             
-            if (const auto* skinned = world.GetSkinnedMesh(id); skinned)
+            if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(id); skinned)
             {
                 // 경로를 상대 경로로 변환하기 위해 복사본 생성
                 SkinnedMeshComponent skinnedCopy = *skinned;
@@ -148,13 +148,13 @@ namespace Alice
             }
 
             
-            if (const auto* anim = world.GetSkinnedAnimation(id); anim)
+            if (const auto* anim = world.GetComponent<SkinnedAnimationComponent>(id); anim)
             {
                 rttr::instance inst = const_cast<SkinnedAnimationComponent&>(*anim);
                 outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
-            if (const auto* cam = world.GetCamera(id); cam)
+            if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
             {
                 rttr::instance inst = const_cast<CameraComponent&>(*cam);
                 outEntity["Camera"] = JsonRttr::ToJsonObject(inst);
@@ -174,7 +174,7 @@ namespace Alice
                 world.SetEntityName(id, name);
 
             // Transform
-            TransformComponent& t = world.AddTransform(id);
+            TransformComponent& t = world.AddComponent<TransformComponent>(id);
             auto itT = e.find("Transform");
             if (itT != e.end())
             {
@@ -225,7 +225,7 @@ namespace Alice
             auto itM = e.find("Material");
             if (itM != e.end() && itM->is_object())
             {
-                MaterialComponent& mc = world.AddMaterial(id, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f), {});
+                MaterialComponent& mc = world.AddComponent<MaterialComponent>(id, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
                 rttr::instance inst = mc;
                 if (!JsonRttr::FromJsonObject(inst, *itM)) return false;
             }
@@ -240,7 +240,7 @@ namespace Alice
 
                 if (!tmp.meshAssetPath.empty())
                 {
-                    SkinnedMeshComponent& sm = world.AddSkinnedMesh(id, tmp.meshAssetPath);
+                    SkinnedMeshComponent& sm = world.AddComponent<SkinnedMeshComponent>(id, tmp.meshAssetPath);
                     sm.instanceAssetPath = tmp.instanceAssetPath;
                     sm.boneMatrices = &g_IdentityBone;
                     sm.boneCount = 1;
@@ -251,7 +251,7 @@ namespace Alice
             auto itSA = e.find("SkinnedAnimation");
             if (itSA != e.end() && itSA->is_object())
             {
-                SkinnedAnimationComponent& sa = world.AddSkinnedAnimation(id);
+                SkinnedAnimationComponent& sa = world.AddComponent<SkinnedAnimationComponent>(id);
                 rttr::instance inst = sa;
                 if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
             }
@@ -260,7 +260,7 @@ namespace Alice
             auto itC = e.find("Camera");
             if (itC != e.end() && itC->is_object())
             {
-                CameraComponent& cc = world.AddCamera(id);
+                CameraComponent& cc = world.AddComponent<CameraComponent>(id);
                 rttr::instance inst = cc;
                 if (!JsonRttr::FromJsonObject(inst, *itC)) return false;
             }
@@ -317,7 +317,7 @@ namespace Alice
             root["version"] = 1;
             root["entities"] = JsonRttr::json::array();
 
-            const auto& transforms = world.GetTransforms();
+            const auto& transforms = world.GetComponents<TransformComponent>();
             for (const auto& [id, transform] : transforms)
             {
                 (void)transform;
@@ -346,8 +346,8 @@ namespace Alice
                 {
                     world.Clear();
                     const EntityId e = world.CreateEntity();
-                    world.AddTransform(e);
-                    world.AddMaterial(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f), {});
+                    world.AddComponent<TransformComponent>(e);
+                    world.AddComponent<MaterialComponent>(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
                     Save(world, path);
                     return true;
                 }
