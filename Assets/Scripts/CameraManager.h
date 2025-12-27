@@ -16,6 +16,7 @@ namespace Alice
         const char* GetName() const override { return "CameraManager"; }
 
         void Awake() override;
+		void Update(float deltaTime) override;
     };
 }
 

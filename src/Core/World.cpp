@@ -86,39 +86,15 @@ namespace Alice {
 		return it->second;
 	}
 
-	TransformComponent& World::AddTransform(EntityId id)
-	{
-		// 없는 키일 경우 기본 값으로 새로 생성됩니다.
-		return m_transforms[id];
-	}
-
-	TransformComponent* World::GetTransform(EntityId id)
-	{
-		auto it = m_transforms.find(id);
-		if (it == m_transforms.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	const TransformComponent* World::GetTransform(EntityId id) const
-	{
-		auto it = m_transforms.find(id);
-		if (it == m_transforms.end())
-			return nullptr;
-		return &it->second;
-	}
-
 	ScriptComponent& World::AddScript(EntityId id, const std::string& scriptName)
 	{
-		auto& list = m_scripts[id];
 		ScriptComponent comp{};
 		comp.scriptName = scriptName;
 		comp.instance = ScriptFactory::Create(scriptName.c_str());
-		if (comp.instance)
-			comp.instance->SetContext(this, id);
+		if (comp.instance) comp.instance->SetContext(this, id);
 
-		list.push_back(std::move(comp));
-		return list.back();
+		m_scripts[id].push_back(std::move(comp));
+		return m_scripts[id].back();
 	}
 
 	std::vector<ScriptComponent>* World::GetScripts(EntityId id)
@@ -159,7 +135,6 @@ namespace Alice {
 
 	void World::RemoveAllScript() {
 		for (auto& [id, list] : m_scripts) {
-			(void)id;
 			for (auto& scriptComp : list) {
 				if (!scriptComp.instance)
 					continue;
@@ -170,103 +145,9 @@ namespace Alice {
 		m_scripts.clear();
 	}
 
-	MaterialComponent& World::AddMaterial(EntityId id,
-		const DirectX::XMFLOAT3& color,
-		const std::string& assetPath) {
-		MaterialComponent& mat = m_materials[id];
-		mat.color = color;
-		mat.assetPath = assetPath;
-		return mat;
-	}
-
-	MaterialComponent* World::GetMaterial(EntityId id) {
-		auto it = m_materials.find(id);
-		if (it == m_materials.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	const MaterialComponent* World::GetMaterial(EntityId id) const {
-		auto it = m_materials.find(id);
-		if (it == m_materials.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	void World::RemoveMaterial(EntityId id) { m_materials.erase(id); }
-
-	SkinnedMeshComponent& World::AddSkinnedMesh(EntityId id,
-		const std::string& meshAssetPath) {
-		SkinnedMeshComponent& comp = m_skinnedMeshes[id];
-		comp.meshAssetPath = meshAssetPath;
-		return comp;
-	}
-
-	SkinnedMeshComponent* World::GetSkinnedMesh(EntityId id) {
-		auto it = m_skinnedMeshes.find(id);
-		if (it == m_skinnedMeshes.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	const SkinnedMeshComponent* World::GetSkinnedMesh(EntityId id) const {
-		auto it = m_skinnedMeshes.find(id);
-		if (it == m_skinnedMeshes.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	void World::RemoveSkinnedMesh(EntityId id) { m_skinnedMeshes.erase(id); }
-
-	SkinnedAnimationComponent& World::AddSkinnedAnimation(EntityId id) {
-		return m_skinnedAnimations[id];
-	}
-
-	SkinnedAnimationComponent* World::GetSkinnedAnimation(EntityId id) {
-		auto it = m_skinnedAnimations.find(id);
-		if (it == m_skinnedAnimations.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	const SkinnedAnimationComponent* World::GetSkinnedAnimation(EntityId id) const {
-		auto it = m_skinnedAnimations.find(id);
-		if (it == m_skinnedAnimations.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	void World::RemoveSkinnedAnimation(EntityId id) {
-		m_skinnedAnimations.erase(id);
-	}
-
-	CameraComponent& World::AddCamera(EntityId id) { return m_cameras[id]; }
-
-	CameraComponent* World::GetCamera(EntityId id) {
-		auto it = m_cameras.find(id);
-		if (it == m_cameras.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	CameraComponent* World::GetCamera() {
-		if (m_cameras.empty())
-			return nullptr;
-		return &m_cameras.begin()->second;
-	}
-
 	EntityId World::GetMainCameraEntityId() {
 		if (m_cameras.empty())
 			return InvalidEntityId;
 		return m_cameras.begin()->first;
 	}
-
-	const CameraComponent* World::GetCamera(EntityId id) const {
-		auto it = m_cameras.find(id);
-		if (it == m_cameras.end())
-			return nullptr;
-		return &it->second;
-	}
-
-	void World::RemoveCamera(EntityId id) { m_cameras.erase(id); }
 } // namespace Alice

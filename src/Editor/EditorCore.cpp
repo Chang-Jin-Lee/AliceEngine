@@ -996,12 +996,12 @@ namespace Alice
                 if (ImGui::MenuItem("Cube"))
                 {
                     EntityId e = world.CreateEntity();
-                    auto& t = world.AddTransform(e);
+					auto& t = world.AddComponent<TransformComponent>(e);
                     t.SetPosition(0.0f, 0.0f, 0.0f)
                      .SetScale(1.0f, 1.0f, 1.0f);
                     // 기본 회색 머티리얼을 함께 추가합니다.
                     DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-                    world.AddMaterial(e, defaultColor);
+					world.AddComponent<MaterialComponent>(e, defaultColor);
                     world.SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
                     selectedEntity = e;
                     g_SceneDirty   = true;
@@ -1009,16 +1009,16 @@ namespace Alice
                 }
                 if (ImGui::MenuItem("Camera"))
                 {
-                    const bool hasCamera = !world.GetCameras().empty();
-                    const int camIndex = (int)world.GetCameras().size() + 1;
+                    const bool hasCamera = world.GetComponents<CameraComponent>().empty();
+                    const bool camIndex = world.GetComponents<CameraComponent>().size() + 1;
 
                     EntityId e = world.CreateEntity();
-                    auto& t = world.AddTransform(e);
+					auto& t = world.AddComponent<TransformComponent>(e);
                     t.position = { 0.0f, 2.0f, -5.0f };
                     t.rotation = { 0.0f, 0.0f, 0.0f };
                     t.scale = { 1.0f, 1.0f, 1.0f };
 
-                    auto& c = world.AddCamera(e);
+					auto& c = world.AddComponent<CameraComponent>(e);
                     c.primary = !hasCamera;
 
                     world.SetEntityName(e, "Camera" + std::to_string(camIndex));
@@ -1059,6 +1059,14 @@ namespace Alice
                     {
                         std::filesystem::path fbxPath = fileBuffer;
 
+						wchar_t exePathW[MAX_PATH] = {};
+						GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+						std::filesystem::path exePath = exePathW;
+						std::filesystem::path exeDir = exePath.parent_path();
+                        std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+
+                        fbxPath = std::filesystem::relative(fbxPath, projectRoot);
+
                         // 간단한 FBX 임포트 옵션
                         FbxImportOptions opt{};
                         FbxImporter importer(*m_resources, m_skinnedRegistry);
@@ -1071,13 +1079,13 @@ namespace Alice
                         if (!result.meshAssetPath.empty())
                         {
                             EntityId e = world.CreateEntity();
-                            TransformComponent& t = world.AddTransform(e);
+							TransformComponent& t = world.AddComponent<TransformComponent>(e);
                             t.position = { 0.0f, 0.0f, 0.0f };
                             t.scale    = { 1.0f, 1.0f, 1.0f };
                             t.rotation = { 0.0f, 0.0f, 0.0f };
 
                             // 스키닝 메시 컴포넌트 등록
-                            SkinnedMeshComponent& skinned = world.AddSkinnedMesh(e, result.meshAssetPath);
+							SkinnedMeshComponent& skinned = world.AddComponent<SkinnedMeshComponent>(e, result.meshAssetPath);
                             skinned.instanceAssetPath     = result.instanceAssetPath;
 
                             // (임시) 본 행렬이 아직 없으므로, 1개짜리 항등 행렬 팔레트를 사용합니다.
@@ -1094,7 +1102,7 @@ namespace Alice
                             if (!result.materialAssetPaths.empty())
                             {
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-                                MaterialComponent& mat = world.AddMaterial(e, defaultColor);
+                                MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = result.materialAssetPaths.front();
                                 MaterialFile::Load(mat.assetPath, mat);
                             }
@@ -1330,7 +1338,7 @@ namespace Alice
             Alice::ImGuiText(L"엔티티 목록");
             ImGui::Separator();
 
-            const auto& transforms = world.GetTransforms();
+            const auto& transforms = world.GetComponents<TransformComponent>();
             if (transforms.empty())
             {
                 Alice::ImGuiText(L"생성된 엔티티가 없습니다.");
@@ -1458,7 +1466,7 @@ namespace Alice
                 ImGui::Separator();
 
                 // Transform 편집 (RTTR 기반, Rotation만 특별 처리)
-                if (auto* transform = world.GetTransform(selectedEntity))
+                if (auto* transform = world.GetComponent<TransformComponent>(selectedEntity))
                 {
                     ImGui::Text("Transform");
                     bool changed = false;
@@ -1639,7 +1647,7 @@ namespace Alice
                                                 g_SceneDirty = true;
                                             }
 
-                                            for (const auto& [eid, tr] : world.GetTransforms())
+                                            for (const auto& [eid, tr] : world.GetComponents<TransformComponent>())
                                             {
                                                 (void)tr;
                                                 const bool selected = (eid == cur);
@@ -1676,7 +1684,7 @@ namespace Alice
 
                 // Material 컴포넌트 섹션 (RTTR 기반)
                 ImGui::Text("Material");
-                if (MaterialComponent* mat = world.GetMaterial(selectedEntity))
+                if (MaterialComponent* mat = world.GetComponent<MaterialComponent>(selectedEntity))
                 {
                     const bool hasAsset = !mat->assetPath.empty();
                     if (hasAsset)
@@ -1735,11 +1743,11 @@ namespace Alice
 
                             // 2) 같은 에셋을 참조하는 모든 엔티티의 머티리얼을 갱신
                             const std::string targetPath = mat->assetPath;
-                            const auto& allMats = world.GetMaterials();
+                            const auto& allMats = world.GetComponents<MaterialComponent>();
                             for (const auto& [id, matConst] : allMats)
                             {
                                 (void)matConst;
-                                MaterialComponent* other = world.GetMaterial(id);
+                                MaterialComponent* other = world.GetComponent<MaterialComponent>(id);
                                 if (!other) continue;
                                 if (other->assetPath == targetPath)
                                 {
@@ -1794,13 +1802,13 @@ namespace Alice
 
                     if (ImGui::Button("Remove Material"))
                     {
-                        world.RemoveMaterial(selectedEntity);
+                        world.RemoveComponent<MaterialComponent>(selectedEntity);
                         g_SceneDirty = true;
                     }
                 }
 
                 // Skinned Mesh / Bone 정보 + 서브메시 텍스처
-                if (SkinnedMeshComponent* skinned = world.GetSkinnedMesh(selectedEntity))
+                if (SkinnedMeshComponent* skinned = world.GetComponent<SkinnedMeshComponent>(selectedEntity))
                 {
                     ImGui::Separator();
                     ImGui::Text("Skinned Mesh");
@@ -1933,7 +1941,7 @@ namespace Alice
                     if (ImGui::Button("Add Default Material"))
                     {
                         DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-                        world.AddMaterial(selectedEntity, defaultColor);
+                        world.AddComponent<MaterialComponent>(selectedEntity, defaultColor);
                         g_SceneDirty = true;
                     }
                 }
@@ -2079,7 +2087,7 @@ namespace Alice
                 // ImGuizmo를 사용하여 선택된 엔티티 조작 (재생 중이 아닐 때만)
                 if (!isPlaying && selectedEntity != InvalidEntityId)
                 {
-                    if (TransformComponent* transform = world.GetTransform(selectedEntity))
+                    if (TransformComponent* transform = world.GetComponent<TransformComponent>(selectedEntity))
                     {
                         // View/Proj 행렬 준비 (XMFLOAT4X4로 변환)
                         XMMATRIX viewXM = camera.GetViewMatrix();
@@ -2255,7 +2263,7 @@ namespace Alice
                     }
                     else
                     {
-                        SkinnedMeshComponent* skinned = world.GetSkinnedMesh(selectedEntity);
+                        SkinnedMeshComponent* skinned = world.GetComponent<SkinnedMeshComponent>(selectedEntity);
                         if (!skinned || skinned->meshAssetPath.empty())
                         {
                             ImGui::TextUnformatted("Selected entity has no SkinnedMesh.");
@@ -2285,8 +2293,8 @@ namespace Alice
                                 }
                                 else
                                 {
-                                    auto* anim = world.GetSkinnedAnimation(selectedEntity);
-                                    if (!anim) anim = &world.AddSkinnedAnimation(selectedEntity);
+                                    auto* anim = world.GetComponent<SkinnedAnimationComponent>(selectedEntity);
+                                    if (!anim) anim = &world.AddComponent<SkinnedAnimationComponent>(selectedEntity);
 
                                     ImGui::Separator();
                                     ImGui::Checkbox("Playing", &anim->playing);
@@ -2510,10 +2518,10 @@ namespace Alice
 
                     // 2) 이 에셋을 참조하는 모든 엔티티의 MaterialComponent 를 갱신
                     const std::string targetPath = g_MaterialEditorPath.string();
-                    const auto& allMats = world.GetMaterials();
+                    const auto& allMats = world.GetComponents<MaterialComponent>();
                     for (const auto& [id, matConst] : allMats)
                     {
-                        MaterialComponent* mat = world.GetMaterial(id);
+                        MaterialComponent* mat = world.GetComponent<MaterialComponent>(id);
                         if (!mat) continue;
                         if (mat->assetPath == targetPath)
                         {
@@ -2766,6 +2774,14 @@ namespace Alice
                             cfs << "    void " << className << "::ExampleFunction()\n";
                             cfs << "    {\n";
                             cfs << "        // 리플렉션으로 등록된 함수 예시입니다.\n";
+                            cfs << "        // 이 함수는 에디터에서 호출할 수 있습니다.\n";
+                            cfs << "        \n";
+                            cfs << "        // 예시: Transform 컴포넌트 가져오기\n";
+                            cfs << "        if (auto* transform = GetComponent<TransformComponent>())\n";
+                            cfs << "        {\n";
+                            cfs << "            // 위치를 (0, 0, 0)으로 리셋하는 예시\n";
+                            cfs << "            transform->position = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);\n";
+                            cfs << "        }\n";
                             cfs << "    }\n";
                             cfs << "}\n";
                         }
@@ -2832,8 +2848,8 @@ namespace Alice
                     // ForwardRenderSystem은 Transform만 있어도 기본 큐브를 그립니다.
                     World temp;
                     const EntityId e = temp.CreateEntity();
-                    temp.AddTransform(e);
-                    temp.AddMaterial(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f), {});
+                    temp.AddComponent<TransformComponent>(e);
+                    temp.AddComponent<MaterialComponent>(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
                     SceneFile::Save(temp, newPath);
                 }
 
@@ -3000,13 +3016,13 @@ namespace Alice
                 {
                     if (ImGui::MenuItem("Assign To Selected Entity") &&
                         selectedEntity != InvalidEntityId &&
-                        world.GetTransform(selectedEntity))
+                        world.GetComponent<TransformComponent>(selectedEntity))
                     {
-                        MaterialComponent* mat = world.GetMaterial(selectedEntity);
+                        MaterialComponent* mat = world.GetComponent<MaterialComponent>(selectedEntity);
                         if (!mat)
                         {
                             DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-                            mat = &world.AddMaterial(selectedEntity, defaultColor);
+                            mat = &world.AddComponent<MaterialComponent>(selectedEntity, defaultColor);
                         }
 
                         if (mat)
@@ -3072,12 +3088,12 @@ namespace Alice
                             }
 
                             EntityId e = world.CreateEntity();
-                            TransformComponent& t = world.AddTransform(e);
+                            TransformComponent& t = world.AddComponent<TransformComponent>(e);
                             t.position = { 0.0f, 0.0f, 0.0f };
                             t.scale    = { 1.0f, 1.0f, 1.0f };
                             t.rotation = { 0.0f, 0.0f, 0.0f };
 
-                            SkinnedMeshComponent& skinned = world.AddSkinnedMesh(e, asset.meshAssetPath);
+                            SkinnedMeshComponent& skinned = world.AddComponent<SkinnedMeshComponent>(e, asset.meshAssetPath);
                             skinned.instanceAssetPath     = path.string();
                             static DirectX::XMFLOAT4X4 s_identityBone =
                                 DirectX::XMFLOAT4X4(1,0,0,0,
@@ -3094,7 +3110,7 @@ namespace Alice
                             if (!asset.materialAssetPaths.empty())
                             {
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-                                MaterialComponent& mat = world.AddMaterial(e, defaultColor);
+                                MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = asset.materialAssetPaths.front();
                                 MaterialFile::Load(mat.assetPath, mat);
                             }
@@ -3160,10 +3176,10 @@ namespace Alice
     // 스킨 메쉬 등록 보장
     void EditorCore::EnsureSkinnedMeshesRegistered(World& world)
     {
-        if (!m_skinnedRegistry || !m_resources || !m_renderDevice || world.GetSkinnedMeshes().empty())
+        if (!m_skinnedRegistry || !m_resources || !m_renderDevice || world.GetComponents<SkinnedMeshComponent>().empty())
             return;
 
-        for (const auto& [entityId, comp] : world.GetSkinnedMeshes())
+        for (const auto& [entityId, comp] : world.GetComponents<SkinnedMeshComponent>())
         {
             if (comp.meshAssetPath.empty() || m_skinnedRegistry->Find(comp.meshAssetPath))
                 continue;
