@@ -119,7 +119,7 @@ namespace Alice
         };
 
     public:
-        /// 스키닝 메시를 그리기 위한 매우 단순한 드로우 커맨드입니다.
+        /// 스키닝 메시를 그리기 위한 드로우 커맨드입니다.
         struct SkinnedDrawCommand
         {
             ID3D11Buffer*     vertexBuffer { nullptr };
@@ -188,6 +188,7 @@ namespace Alice
         bool CreateConstantBuffers();
         bool CreateTextures();
         bool CreateSamplerState();
+		bool CreateBlendStates();
         bool CreateRasterizerStates();
 
         bool CreateSkyboxResources();
@@ -215,9 +216,8 @@ namespace Alice
 
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
 
-        void GetSceneBounds(const World& world, DirectX::XMVECTOR& outFocus, float& outRadius);
-
-        void SetCullState(DirectX::CXMMATRIX worldM, bool isShadowPass);
+        //void GetSceneBounds(const World& world, DirectX::XMVECTOR& outFocus, float& outRadius);
+       // void SetCullState(DirectX::CXMMATRIX worldM, bool isShadowPass);
 
         DirectX::XMMATRIX RenderShadowPass(const World& world, const std::vector<SkinnedDrawCommand>& skinnedCommands, const std::unordered_set<EntityId>& cameraEntities);
         void RenderMainPass(const World& world, const Camera& camera, int shadingMode, bool enableFillLight, DirectX::CXMMATRIX lightViewProj);
@@ -253,6 +253,9 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_flatNormalSRV; // (0.5,0.5,1) 기본 노말맵
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_specularSRV;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerState;
+
+        // 알파 블렌드용 State
+        Microsoft::WRL::ComPtr<ID3D11BlendState> m_alphaBlendState;
 
         // 음수 스케일(반전 스케일)을 위한 컬링 모드 제어용 래스터라이저 상태
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerState;
@@ -318,8 +321,7 @@ namespace Alice
     public:
         /// 스키닝 메시를 렌더링합니다.
         /// - AliceGame 의 SkinnedMeshSystem 이 만들어 준 DrawCommand 리스트를 사용합니다.
-        void RenderSkinnedMeshes(const Camera& camera,
-            const std::vector<SkinnedDrawCommand>& commands);
+        void RenderSkinnedMeshes(const Camera& camera, const std::vector<SkinnedDrawCommand>& commands);
 
         /// 현재 조명 파라미터(색상, 강도, Shininess 등)를 반환합니다.
         /// ImGui 등에서 이 값을 직접 수정해도 됩니다.
