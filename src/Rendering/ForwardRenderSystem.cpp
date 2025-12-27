@@ -1233,7 +1233,7 @@ float4 main(PSInput input) : SV_TARGET
         XMFLOAT3 maxP{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
         bool hasObjects = false;
 
-        const auto& transforms = world.GetTransforms();
+        const auto& transforms = world.GetComponents<TransformComponent>();
         for (const auto& [id, tr] : transforms)
         {
             if (cameraEntities.contains(id)) continue;
@@ -1319,7 +1319,7 @@ float4 main(PSInput input) : SV_TARGET
             for (const auto& [id, transform] : transforms)
             {
                 if (cameraEntities.contains(id)) continue;
-                if (world.GetSkinnedMesh(id)) continue;
+                if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
 
                 XMMATRIX worldM = BuildWorldMatrix(transform);
 
@@ -1416,10 +1416,10 @@ float4 main(PSInput input) : SV_TARGET
         m_context->OMSetBlendState(m_alphaBlendState.Get(), blendFactor, 0xffffffff);
 
         // --- 정적 메시 루프 (Static Meshes) ---
-        const auto& transforms = world.GetTransforms();
+        const auto& transforms = world.GetComponents<TransformComponent>();
         for (const auto& [id, transform] : transforms)
         {
-            if (world.GetSkinnedMesh(id)) continue; // 스키닝 메시는 제외
+            if (world.GetComponent<SkinnedMeshComponent>(id)) continue; // 스키닝 메시는 제외
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
 
@@ -1429,7 +1429,7 @@ float4 main(PSInput input) : SV_TARGET
             float metal = m_lightingParameters.metalness;
             bool useTex = false;
 
-            if (const MaterialComponent* mat = world.GetMaterial(id)) {
+            if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id)) {
                 color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
                 rough = mat->roughness; metal = mat->metalness;
                 useTex = !mat->albedoTexturePath.empty();

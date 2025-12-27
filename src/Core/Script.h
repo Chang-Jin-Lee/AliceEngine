@@ -53,9 +53,10 @@ namespace Alice
         virtual void OnDestroy() {}
         virtual void OnApplicationQuit() {}
 
-        // (구 버전 호환) 기존 스크립트가 OnCreate/OnUpdate를 오버라이드해도 동작하게 둡니다.
-        virtual void OnCreate(World& /*world*/, EntityId /*entity*/) {}
-        virtual void OnUpdate(World& /*world*/, EntityId /*entity*/, float /*deltaTime*/) {}
+        template <typename T> T* GetComponent();
+        template <typename T> const T* GetComponent() const;
+        template <typename T, typename... Args> T& AddComponent(Args&&... args);
+        template <typename T> void RemoveComponent();
 
         /// World / Entity 컨텍스트를 내부에 저장합니다.
         /// - World::AddScript 에서 자동으로 호출됩니다.

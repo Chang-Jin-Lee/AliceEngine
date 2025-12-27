@@ -25,7 +25,7 @@ namespace Alice
 
         void Update(World& world, double dtSec)
         {
-            auto& skinnedMap = world.GetSkinnedMeshes();
+            auto& skinnedMap = world.GetComponents<SkinnedMeshComponent>();
             if (skinnedMap.empty())
                 return;
 
@@ -38,9 +38,9 @@ namespace Alice
                 if (!mesh || !mesh->sourceModel)
                     continue;
 
-                auto* animComp = world.GetSkinnedAnimation(entityId);
+                auto* animComp = world.GetComponent<SkinnedAnimationComponent>(entityId);
                 if (!animComp)
-                    animComp = &world.AddSkinnedAnimation(entityId);
+                    animComp = &world.AddComponent<SkinnedAnimationComponent>(entityId);
 
                 // 초기 팔레트 크기 보장
                 const std::size_t boneCount = mesh->sourceModel->GetBoneNames().size();
@@ -102,7 +102,7 @@ namespace Alice
 				}
 
                 // 렌더 시스템이 읽을 포인터 연결
-                auto* skinnedWrite = world.GetSkinnedMesh(entityId);
+                auto* skinnedWrite = world.GetComponent<SkinnedMeshComponent>(entityId);
                 if (!skinnedWrite)
                     continue;
                 skinnedWrite->boneMatrices = animComp->palette.data();
