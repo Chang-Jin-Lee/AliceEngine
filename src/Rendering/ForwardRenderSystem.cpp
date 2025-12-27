@@ -21,7 +21,6 @@ using Microsoft::WRL::ComPtr;
 namespace Alice
 {
     // 간단한 Lambert / Phong / Blinn-Phong 셰이더 코드
-    // (D3D11 튜토리얼의 기본 조명 코드를 참고한 단순 버전)
 	namespace
     {
         const char* g_PhongVertexShaderSource = R"(
@@ -243,6 +242,11 @@ struct PSInput
 
 float4 main(PSInput input) : SV_TARGET
 {
+	float4 textureColor = gDiffuseMap.Sample(gSampler, input.TexCoord);
+    float alphaTex = textureColor.a * gMaterialColor.a;
+    // 알파 블렌딩
+    clip(alphaTex - 0.1f);
+
     float3 N = normalize(input.Normal);
     if (gEnableNormalMap != 0)
     {
@@ -446,7 +450,7 @@ float4 main(PSInput input) : SV_TARGET
         // 최종 색상 = 직접광 + 간접광(IBL)
         float3 colorPbr = Lo + (diffuseIBL + specularIBL);
 
-        return float4(colorPbr, 1.0f);
+        return float4(colorPbr, alphaTex);
     }
 
     // 기본 Phong/Blinn-Phong/Lambert 경로
@@ -455,7 +459,7 @@ float4 main(PSInput input) : SV_TARGET
         totalDiffuse * albedo +
         totalSpecular * specColor;
 
-    return float4(baseColor, 1.0f);
+    return float4(baseColor, alphaTex);
 }
 )";
 
@@ -567,6 +571,11 @@ float4 main(PSInput input) : SV_TARGET
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateTextures failed.");
             return false;
         }
+        if(!CreateBlendStates())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateBlendStates failed.");
+            return false;
+		}
         if (!CreateSamplerState())
         {
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateSamplerState failed.");
@@ -889,9 +898,25 @@ float4 main(PSInput input) : SV_TARGET
         samplerDesc.MinLOD = 0;
         samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-        HRESULT hr = m_device->CreateSamplerState(&samplerDesc, m_samplerState.ReleaseAndGetAddressOf());
-        if (FAILED(hr)) return false;
+        if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_samplerState.ReleaseAndGetAddressOf()))) return false;
 
+        return true;
+    }
+
+    bool ForwardRenderSystem::CreateBlendStates()
+    {
+        D3D11_BLEND_DESC blendDesc = {};
+        blendDesc.RenderTarget[0].BlendEnable = TRUE;
+        blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+        blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+        blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+
+        blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+        blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+        if (FAILED(m_device->CreateBlendState(&blendDesc, m_alphaBlendState.ReleaseAndGetAddressOf()))) return false;
         return true;
     }
 
@@ -991,10 +1016,8 @@ float4 main(PSInput input) : SV_TARGET
         // 유효한 본은 Transpose해서 넣고, 나머지는 Identity로 채움
         for (std::uint32_t i = 0; i < MaxBones; ++i)
         {
-            if (i < cb->boneCount)
-                cb->bones[i] = XMMatrixTranspose(XMLoadFloat4x4(&boneMatrices[i]));
-            else
-                cb->bones[i] = XMMatrixIdentity();
+            if (i < cb->boneCount) cb->bones[i] = XMMatrixTranspose(XMLoadFloat4x4(&boneMatrices[i]));
+            else cb->bones[i] = XMMatrixIdentity();
         }
 
         m_context->Unmap(m_cbBones.Get(), 0);
@@ -1388,6 +1411,9 @@ float4 main(PSInput input) : SV_TARGET
         m_context->PSSetSamplers(0, 1, samplers);
         ID3D11SamplerState* shadowSamplers[] = { m_shadowSampler.Get() };
         m_context->PSSetSamplers(1, 1, shadowSamplers);
+		// Blend State (알파 블렌딩)
+        float blendFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        m_context->OMSetBlendState(m_alphaBlendState.Get(), blendFactor, 0xffffffff);
 
         // --- 정적 메시 루프 (Static Meshes) ---
         const auto& transforms = world.GetTransforms();
