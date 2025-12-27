@@ -27,7 +27,7 @@ namespace Alice
         {
             outCommands.clear();
 
-            const auto& skinnedMap = world.GetSkinnedMeshes();
+            const auto& skinnedMap = world.GetComponents<SkinnedMeshComponent>();
             if (skinnedMap.empty())
             {
                 // 디폴트 상태(스키닝 컴포넌트가 하나도 없을 때)는 로그를 찍지 않습니다.
@@ -56,7 +56,7 @@ namespace Alice
                     continue;
                 }
 
-                const TransformComponent* t = world.GetTransform(entityId);
+                const TransformComponent* t = world.GetComponent<TransformComponent>(entityId);
                 if (!t)
                 {
                     //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no Transform",
@@ -83,7 +83,7 @@ namespace Alice
                 cmd.boneCount    = comp.boneCount;
                 cmd.meshKey      = comp.meshAssetPath;
 
-                if (const MaterialComponent* mat = world.GetMaterial(entityId))
+                if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(entityId))
                 {
                     cmd.color             = mat->color;
                     cmd.roughness         = mat->roughness;

@@ -25,7 +25,7 @@ namespace Alice
 
             // 엔티티 생성 및 Transform / Script 부착
             EntityId entity = world.CreateEntity();
-            TransformComponent& t = world.AddTransform(entity);
+            TransformComponent& t = world.AddComponent<TransformComponent>(entity);
             auto itT = root.find("Transform");
             if (itT != root.end() && itT->is_object())
             {
@@ -71,7 +71,7 @@ namespace Alice
         {
             if (entity == InvalidEntityId) return false;
 
-            const TransformComponent* t = world.GetTransform(entity);
+            const TransformComponent* t = world.GetComponent<TransformComponent>(entity);
             if (!t)
                 return false;
 
@@ -89,6 +89,7 @@ namespace Alice
 
             root["Scripts"] = JsonRttr::json::array();
             if (const auto* scripts = world.GetScripts(entity); scripts)
+            //if (const auto* scripts = world.GetScripts(entity); scripts)
             {
                 for (const auto& sc : *scripts)
                 {
