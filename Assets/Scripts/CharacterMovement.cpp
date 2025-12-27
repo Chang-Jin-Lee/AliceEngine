@@ -148,7 +148,7 @@ namespace Alice
 
         // 메인 카메라 찾기 (태그나 이름으로 검색 가정)
         auto mainCamObj = GetWorld()->FindGameObject("MainCamera");
-        ALICE_LOG_INFO("TEST");
+        //ALICE_LOG_INFO("TEST");
 
 
         if (hasInput && mainCamObj.IsValid())
@@ -156,8 +156,8 @@ namespace Alice
             auto* camT = mainCamObj.GetComponent<TransformComponent>();
             if (camT)
             {
-                ALICE_LOG_INFO("Camera Position: x={0}, y={1}, z={2}",
-					camT->position.x, camT->position.y, camT->position.z);
+                //ALICE_LOG_INFO("Camera Position: x={0}, y={1}, z={2}",
+				//	camT->position.x, camT->position.y, camT->position.z);
                 // Forward: 나(Target) - 카메라(Eye) = 화면 깊이 방향
                 float fwdX = t->position.x - camT->position.x;
                 float fwdZ = t->position.z - camT->position.z;
