@@ -41,20 +41,46 @@ namespace Alice
         template <typename T, typename... Args>
         T& AddComponent(EntityId id, Args&&... args)
         {
-            auto& map = GetMap<T>();
-            // emplace는 키가 이미 있으면 삽입하지 않고 iterator를 반환함
-            // or_insert_assign 등의 로직이 필요하면 [] 연산자 사용
-            // 여기서는 깔끔하게 []로 접근하여 생성 또는 갱신
-            if constexpr (std::is_default_constructible_v<T> && sizeof...(Args) == 0)
+            // 1. 유저 스크립트인 경우 (IScript 상속 여부 확인)
+            if constexpr (std::is_base_of_v<IScript, T>)
             {
-                return map[id];
+                // unique_ptr 생성
+                auto instance = std::make_unique<T>(std::forward<Args>(args)...);
+
+                // 반환값 저장을 위해 Raw Pointer 확보 (move 후에는 instance가 null이 됨)
+                T* rawPtr = instance.get();
+
+                // 컨테이너 생성 및 데이터 채우기
+                ScriptComponent newScriptComp{};
+                newScriptComp.scriptName = typeid(T).name();
+                newScriptComp.instance = std::move(instance); // 소유권 이전
+
+                // 초기화 루틴
+                newScriptComp.instance->SetContext(this, id);
+
+                // 월드 데이터에 등록 (Move)
+                m_scripts[id].push_back(std::move(newScriptComp));
+
+                // 저장해둔 포인터 반환
+                return *rawPtr;
             }
             else
             {
-                // 인자가 있는 경우 덮어쓰기
-                T newComp(std::forward<Args>(args)...);
-                map[id] = std::move(newComp);
-                return map[id];
+                auto& map = GetMap<T>();
+                // emplace는 키가 이미 있으면 삽입하지 않고 iterator를 반환함
+                // or_insert_assign 등의 로직이 필요하면 [] 연산자 사용
+                // 여기서는 깔끔하게 []로 접근하여 생성 또는 갱신
+                if constexpr (std::is_default_constructible_v<T> && sizeof...(Args) == 0)
+                {
+                    return map[id];
+                }
+                else
+                {
+                    // 인자가 있는 경우 덮어쓰기
+                    T newComp(std::forward<Args>(args)...);
+                    map[id] = std::move(newComp);
+                    return map[id];
+                }
             }
         }
 
@@ -101,17 +127,103 @@ namespace Alice
             return const_cast<World*>(this)->GetComponent<T>(id);
         }
 
+        /// 사용법: std::vector<MonsterScript*> list = world.GetComponents<MonsterScript>(id);
+        template <typename T>
+        std::vector<T*> GetComponents(EntityId id)
+        {
+            std::vector<T*> results;
+
+            // 스크립트인 경우: 벡터를 순회하며 dynamic_cast 성공하는 모든 객체 수집
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                auto it = m_scripts.find(id);
+                if (it != m_scripts.end())
+                {
+                    for (auto& scriptComp : it->second)
+                    {
+                        if (scriptComp.instance)
+                        {
+                            // 부모 타입으로 요청해도 자식들을 다 찾아줍니다.
+                            T* casted = dynamic_cast<T*>(scriptComp.instance.get());
+                            if (casted) results.push_back(casted);
+                        }
+                    }
+                }
+            }
+            // 2. 일반 엔진 컴포넌트인 경우: 1개만 있으므로 있으면 담아서 리턴
+            else
+            {
+                T* comp = GetComponent<T>(id);
+                if (comp) results.push_back(comp);
+            }
+
+            return results;
+        }
+
+        /// const 버전 GetComponents
+        template <typename T>
+        std::vector<const T*> GetComponents(EntityId id) const
+        {
+            std::vector<const T*> results;
+
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                auto it = m_scripts.find(id);
+                if (it != m_scripts.end())
+                {
+                    for (const auto& scriptComp : it->second)
+                    {
+                        if (scriptComp.instance)
+                        {
+                            const T* casted = dynamic_cast<const T*>(scriptComp.instance.get());
+                            if (casted) results.push_back(casted);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                const T* comp = GetComponent<T>(id);
+                if (comp) results.push_back(comp);
+            }
+            return results;
+        }
+
         /// 컴포넌트 제거
         template <typename T>
         void RemoveComponent(EntityId id)
         {
-            GetMap<T>().erase(id);
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                auto it = m_scripts.find(id);
+                if (it == m_scripts.end()) return;
+
+                auto& vec = it->second;
+                for (auto iter = vec.begin(); iter != vec.end(); ++iter)
+                {
+                    // 타입 일치 확인
+                    if (iter->instance && dynamic_cast<T*>(iter->instance.get()))
+                    {
+                        iter->instance->OnDisable();
+                        iter->instance->OnDestroy();
+
+                        vec.erase(iter); // 벡터에서 해당 요소 하나만 제거
+
+                        // 비었으면 맵에서도 엔티티 키 제거
+                        if (vec.empty()) m_scripts.erase(it);
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                GetMap<T>().erase(id);
+            }
         }
 
         // 전체 맵 접근 (시스템/에디터용)
         template <typename T>
         const auto& GetComponents() const { return GetMapConst<T>(); }
-
 
         // ==== 스크립트 (특수 케이스) ====
         // 스크립트는 1개 엔티티에 여러 개가 붙을 수 있어 별도 관리 추천
@@ -183,6 +295,13 @@ namespace Alice
     {
         if (!m_world || m_entity == InvalidEntityId) return nullptr;
         return m_world->GetComponent<T>(m_entity);
+    }
+
+    template <typename T>
+    std::vector<T*> IScript::GetComponents()
+    {
+        if (!m_world || m_entity == InvalidEntityId) return {};
+        return m_world->GetComponents<T>(m_entity);
     }
 
     template <typename T, typename... Args>

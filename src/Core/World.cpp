@@ -88,15 +88,13 @@ namespace Alice {
 
 	ScriptComponent& World::AddScript(EntityId id, const std::string& scriptName)
 	{
-		auto& list = m_scripts[id];
 		ScriptComponent comp{};
 		comp.scriptName = scriptName;
 		comp.instance = ScriptFactory::Create(scriptName.c_str());
-		if (comp.instance)
-			comp.instance->SetContext(this, id);
+		if (comp.instance) comp.instance->SetContext(this, id);
 
-		list.push_back(std::move(comp));
-		return list.back();
+		m_scripts[id].push_back(std::move(comp));
+		return m_scripts[id].back();
 	}
 
 	std::vector<ScriptComponent>* World::GetScripts(EntityId id)
@@ -146,7 +144,6 @@ namespace Alice {
 		}
 		m_scripts.clear();
 	}
-
 
 	EntityId World::GetMainCameraEntityId() {
 		if (m_cameras.empty())

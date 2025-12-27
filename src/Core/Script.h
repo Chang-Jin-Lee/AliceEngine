@@ -55,6 +55,7 @@ namespace Alice
 
         template <typename T> T* GetComponent();
         template <typename T> const T* GetComponent() const;
+        template <typename T> std::vector<T*> GetComponents();
         template <typename T, typename... Args> T& AddComponent(Args&&... args);
         template <typename T> void RemoveComponent();
 
@@ -141,7 +142,7 @@ namespace Alice
     /// - instance 는 실제 실행되는 스크립트 객체입니다.
     struct ScriptComponent
     {
-        std::string                 scriptName;
+        std::string                scriptName;
         std::unique_ptr<IScript>   instance;
         bool enabled { true };
         bool awoken  { false };
@@ -195,6 +196,7 @@ namespace Alice
 
         void BeginInputFrame();
         void EnsureServicesBound(World& world);
+		void CallUpdate(World& world, float deltaTime);
         void CallLateUpdate(World& world, float deltaTime);
         void CallFixedUpdate(World& world, float fixedDt);
         void ProcessSceneRequests(World& world);
