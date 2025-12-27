@@ -32,21 +32,7 @@ namespace Alice
             if (!m_world || m_id == InvalidEntityId)
                 return nullptr;
 
-            if constexpr (std::is_same_v<T, TransformComponent>)
-                return m_world->GetTransform(m_id);
-            else if constexpr (std::is_same_v<T, MaterialComponent>)
-                return m_world->GetMaterial(m_id);
-            else if constexpr (std::is_same_v<T, SkinnedMeshComponent>)
-                return m_world->GetSkinnedMesh(m_id);
-            else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>)
-                return m_world->GetSkinnedAnimation(m_id);
-            else if constexpr (std::is_same_v<T, CameraComponent>)
-                return m_world->GetCamera(m_id);
-            else
-            {
-                static_assert(sizeof(T) == 0, "GetComponent<T>: unsupported component type.");
-                return nullptr;
-            }
+            return m_world->GetComponent<T>(m_id);
         }
 
         /// Animator 핸들(엔티티 단위)
@@ -64,7 +50,7 @@ namespace Alice
                 if (!m_world || m_id == InvalidEntityId || !m_services || !m_services->skinnedRegistry)
                     return false;
 
-                auto* skinned = m_world->GetSkinnedMesh(m_id);
+                auto* skinned = m_world->GetComponent<SkinnedMeshComponent>(m_id);
                 if (!skinned || skinned->meshAssetPath.empty())
                     return false;
 
@@ -178,7 +164,7 @@ namespace Alice
             {
                 if (!m_world || !m_services || !m_services->skinnedRegistry)
                     return nullptr;
-                auto* skinned = m_world->GetSkinnedMesh(m_id);
+                auto* skinned = m_world->GetComponent<SkinnedMeshComponent>(m_id);
                 if (!skinned) return nullptr;
                 auto mesh = m_services->skinnedRegistry->Find(skinned->meshAssetPath);
                 if (!mesh) return nullptr;
@@ -188,9 +174,9 @@ namespace Alice
             SkinnedAnimationComponent* AnimComp(bool create) const
             {
                 if (!m_world) return nullptr;
-                if (auto* a = m_world->GetSkinnedAnimation(m_id))
+                if (auto* a = m_world->GetComponent<SkinnedAnimationComponent>(m_id))
                     return a;
-                return create ? &m_world->AddSkinnedAnimation(m_id) : nullptr;
+                return create ? &m_world->AddComponent<SkinnedAnimationComponent>(m_id) : nullptr;
             }
 
             World* m_world = nullptr;
@@ -206,7 +192,7 @@ namespace Alice
             if (!m_world)
                 return {};
 
-            for (const auto& [id, comp] : m_world->GetSkinnedMeshes())
+            for (const auto& [id, comp] : m_world->GetComponents<SkinnedMeshComponent>())
             {
                 if (id == InvalidEntityId) continue;
                 if (comp.meshAssetPath.empty()) continue;

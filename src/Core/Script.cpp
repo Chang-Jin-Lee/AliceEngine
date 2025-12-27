@@ -23,7 +23,7 @@ namespace Alice
         if (!m_world || m_entity == InvalidEntityId)
             return nullptr;
 
-        return m_world->GetTransform(m_entity);
+        return m_world->GetComponent<TransformComponent>(m_entity);
     }
 
     GameObject IScript::gameObject() const
@@ -472,7 +472,6 @@ namespace Alice
                     comp.wasEnabled = comp.enabled;
 
                     comp.instance->Awake();
-                    comp.instance->OnCreate(world, entityId); // 구 버전 호환
 
                     if (comp.enabled)
                         comp.instance->OnEnable();
@@ -495,7 +494,6 @@ namespace Alice
                 }
 
                 comp.instance->Update(deltaTime);
-                comp.instance->OnUpdate(world, entityId, deltaTime); // 구 버전 호환
             }
         }
 
