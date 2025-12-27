@@ -59,7 +59,6 @@ namespace Alice
             .property("assetPath", &MaterialComponent::assetPath)
             .property("albedoTexturePath", &MaterialComponent::albedoTexturePath);
 
-        // === SkinnedMeshComponent ?벑濡? ===
         // === SkinnedMeshComponent 등록 ===
         // boneMatrices는 뼈 행렬을 나타내는 프로퍼티
         rttr::registration::class_<SkinnedMeshComponent>("SkinnedMeshComponent")

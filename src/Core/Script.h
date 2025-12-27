@@ -53,9 +53,11 @@ namespace Alice
         virtual void OnDestroy() {}
         virtual void OnApplicationQuit() {}
 
-        // (구 버전 호환) 기존 스크립트가 OnCreate/OnUpdate를 오버라이드해도 동작하게 둡니다.
-        virtual void OnCreate(World& /*world*/, EntityId /*entity*/) {}
-        virtual void OnUpdate(World& /*world*/, EntityId /*entity*/, float /*deltaTime*/) {}
+        template <typename T> T* GetComponent();
+        template <typename T> const T* GetComponent() const;
+        template <typename T> std::vector<T*> GetComponents();
+        template <typename T, typename... Args> T& AddComponent(Args&&... args);
+        template <typename T> void RemoveComponent();
 
         /// World / Entity 컨텍스트를 내부에 저장합니다.
         /// - World::AddScript 에서 자동으로 호출됩니다.
@@ -140,7 +142,7 @@ namespace Alice
     /// - instance 는 실제 실행되는 스크립트 객체입니다.
     struct ScriptComponent
     {
-        std::string                 scriptName;
+        std::string                scriptName;
         std::unique_ptr<IScript>   instance;
         bool enabled { true };
         bool awoken  { false };
@@ -194,6 +196,7 @@ namespace Alice
 
         void BeginInputFrame();
         void EnsureServicesBound(World& world);
+		void CallUpdate(World& world, float deltaTime);
         void CallLateUpdate(World& world, float deltaTime);
         void CallFixedUpdate(World& world, float fixedDt);
         void ProcessSceneRequests(World& world);
