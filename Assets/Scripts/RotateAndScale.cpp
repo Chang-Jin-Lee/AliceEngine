@@ -22,7 +22,7 @@ namespace Alice
         {
             // 월드가 없거나 엔티티가 유효하지 않으면 아무것도 하지 않습니다.
             if (auto* w = GetWorld())
-                t = &w->AddTransform(GetOwner());
+                t = &w->AddComponent<TransformComponent>(GetOwner());
         }
 
         if (auto* t = transform())

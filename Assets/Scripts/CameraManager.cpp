@@ -1,6 +1,7 @@
 #include "CameraManager.h"
 
 #include "Core/GameObject.h"
+#include "CameraFollow.h"
 
 namespace Alice
 {
@@ -8,6 +9,13 @@ namespace Alice
 
     void CameraManager::Awake()
     {
+		auto* camFollow = GetComponent<CameraFollow>();
+        if (camFollow)
+        {
+            ALICE_LOG_INFO("[CameraManager] CameraFollow script is attached. {%f}", camFollow->Get_m_smoothSpeed());
+			return;
+        }
+
         auto go = gameObject();
         if (!go.IsValid())
             return;
@@ -19,7 +27,7 @@ namespace Alice
             auto* world = GetWorld();
             if (!world)
                 return;
-            cam = &world->AddCamera(GetOwner());
+            cam = &world->AddComponent<CameraComponent>(GetOwner());
         }
 
         cam->primary = true;
