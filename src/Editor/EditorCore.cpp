@@ -2774,6 +2774,14 @@ namespace Alice
                             cfs << "    void " << className << "::ExampleFunction()\n";
                             cfs << "    {\n";
                             cfs << "        // 리플렉션으로 등록된 함수 예시입니다.\n";
+                            cfs << "        // 이 함수는 에디터에서 호출할 수 있습니다.\n";
+                            cfs << "        \n";
+                            cfs << "        // 예시: Transform 컴포넌트 가져오기\n";
+                            cfs << "        if (auto* transform = GetComponent<TransformComponent>())\n";
+                            cfs << "        {\n";
+                            cfs << "            // 위치를 (0, 0, 0)으로 리셋하는 예시\n";
+                            cfs << "            transform->position = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);\n";
+                            cfs << "        }\n";
                             cfs << "    }\n";
                             cfs << "}\n";
                         }
