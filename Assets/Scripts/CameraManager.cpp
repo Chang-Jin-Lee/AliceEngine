@@ -2,6 +2,7 @@
 
 #include "Core/GameObject.h"
 #include "CameraFollow.h"
+#include "AddGetRemoveComponentTest.h"
 
 namespace Alice
 {
@@ -33,6 +34,23 @@ namespace Alice
         cam->primary = true;
         ALICE_LOG_INFO("[CameraManager] Ready. primary=1");
     }
+
+	void CameraManager::Update(float deltaTime)
+    {
+        if (Input()->GetKeyDown(KeyCode::H))
+        {
+            AddComponent<AddGetRemoveComponentTest>();
+        }
+        if (Input()->GetKeyDown(KeyCode::J))
+        {
+			RemoveComponent<AddGetRemoveComponentTest>();
+        }
+        if (Input()->GetKeyDown(KeyCode::K))
+        {
+            std::vector<AddGetRemoveComponentTest*> t = GetComponents<AddGetRemoveComponentTest>();
+			ALICE_LOG_INFO("Found {%d} AddGetRemoveComponentTest components.", t.size());
+        }
+	}
 }
 
 
