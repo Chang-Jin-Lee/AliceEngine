@@ -355,7 +355,7 @@ namespace Alice
 
     void ScriptSystem::EnsureServicesBound(World& world)
     {
-        for (auto& [entityId, list] : world.GetAllScripts())
+        for (auto& [entityId, list] : world.GetAllScriptsInWorld())
         {
             for (auto& comp : list)
             {
@@ -392,7 +392,7 @@ namespace Alice
 
     void ScriptSystem::CallUpdate(World& world, float deltaTime)
     {
-        auto& allScripts = world.GetAllScripts();
+        auto& allScripts = world.GetAllScriptsInWorld();
         for (auto it = allScripts.begin(); it != allScripts.end(); ++it)
         {
             EntityId entityId = it->first;
@@ -463,7 +463,7 @@ namespace Alice
 
     void ScriptSystem::CallFixedUpdate(World& world, float fixedDt)
     {
-        auto& allScripts = world.GetAllScripts();
+        auto& allScripts = world.GetAllScriptsInWorld();
         for (auto it = allScripts.begin(); it != allScripts.end(); ++it)
         {
             auto& list = it->second;
@@ -480,7 +480,7 @@ namespace Alice
 
     void ScriptSystem::CallLateUpdate(World& world, float deltaTime)
     {
-        auto& allScripts = world.GetAllScripts();
+        auto& allScripts = world.GetAllScriptsInWorld();
         for (auto it = allScripts.begin(); it != allScripts.end(); ++it)
         {
             auto& list = it->second;
@@ -554,7 +554,7 @@ namespace Alice
     void ScriptSystem::OnApplicationQuit(World& world)
     {
         EnsureServicesBound(world);
-        for (auto& [entityId, list] : world.GetAllScripts())
+        for (auto& [entityId, list] : world.GetAllScriptsInWorld())
         {
             (void)entityId;
             for (auto& comp : list)
