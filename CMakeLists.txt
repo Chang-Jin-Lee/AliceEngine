@@ -37,6 +37,9 @@ set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
 # RTTR 서브모듈 추가 (경로: ThirdParty/rttr)
 add_subdirectory(ThirdParty/rttr)
 
+# window, std 둘의 min, max 충돌삭제
+add_compile_definitions(NOMINMAX)
+
 # ==========================================
 # [Target] Engine (기존 AliceEngine)
 # ==========================================
