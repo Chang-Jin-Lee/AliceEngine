@@ -230,8 +230,8 @@ namespace Alice
         ScriptComponent& AddScript(EntityId id, const std::string& scriptName);
 
         /// 전체 Script 컨테이너 ScriptSystem에서 사용
-        const std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() const { return m_scripts;  }
-        std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() { return m_scripts; }
+        const std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScriptsInWorld() const { return m_scripts;  }
+        std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScriptsInWorld() { return m_scripts; }
 
         std::vector<ScriptComponent>* GetScripts(EntityId id);
         const std::vector<ScriptComponent>* GetScripts(EntityId id) const;
