@@ -8,6 +8,8 @@
 #include <array>
 #include <typeinfo>
 
+#include <rttr/type>
+
 #include "Delegate.h"
 #include "Core/Entity.h"
 #include "Core/ScriptAPI.h"
@@ -35,6 +37,8 @@ namespace Alice
     /// - World / Entity 에 접근해서 간단한 게임 로직을 작성할 수 있습니다.
     class IScript
     {
+    public:
+        RTTR_ENABLE()
     public:
         virtual ~IScript() = default;
 
