@@ -84,5 +84,8 @@ namespace Alice
             .property("fovYRad", &CameraComponent::fovYRad)
             .property("nearPlane", &CameraComponent::nearPlane)
             .property("farPlane", &CameraComponent::farPlane);
+
+        rttr::registration::class_<IScript>("IScript")
+            .constructor<>();
     }
 }
