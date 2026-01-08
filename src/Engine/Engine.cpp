@@ -32,6 +32,7 @@
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
+#include "Rendering/DeferredRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
 #include "Editor/EditorCore.h"
@@ -100,7 +101,11 @@ namespace Alice
 
 		std::unique_ptr<ID3D11RenderDevice>  m_renderDevice;
 		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
+		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+
+		// 렌더링 모드 전환 (true: Forward, false: Deferred)
+		bool m_useForwardRendering = true;
 
 		// Skinned FBX 메시 렌더링용 레지스트리/시스템
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
@@ -215,6 +220,13 @@ namespace Alice
 		pImpl->m_forwardRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 
 		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
+
+		// Deferred 렌더러 설정
+		pImpl->m_deferredRenderSystem = std::make_unique<DeferredRenderSystem>(*pImpl->m_renderDevice);
+		pImpl->m_deferredRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
+		pImpl->m_deferredRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
+
+		if (!pImpl->m_deferredRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
 
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
 		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
@@ -380,7 +392,9 @@ namespace Alice
 
 	void Engine::Render()
 	{
-		if (!pImpl->m_renderDevice || !pImpl->m_forwardRenderSystem) return;
+		if (!pImpl->m_renderDevice) return;
+		if (pImpl->m_useForwardRendering && !pImpl->m_forwardRenderSystem) return;
+		if (!pImpl->m_useForwardRendering && !pImpl->m_deferredRenderSystem) return;
 
 		float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
 		pImpl->m_renderDevice->BeginFrame(clearColor); // Clear Color: Dark Blue
@@ -394,10 +408,11 @@ namespace Alice
 			// 에디터 UI 그리기 (인자 전달 간소화)
 			int shadingMode = static_cast<int>(pImpl->m_shadingMode);
 			pImpl->m_editorCore.DrawEditorUI(
-				pImpl->m_world, pImpl->m_camera, *pImpl->m_forwardRenderSystem, pImpl->m_sceneManager.get(),
+				pImpl->m_world, pImpl->m_camera, *pImpl->m_forwardRenderSystem, *pImpl->m_deferredRenderSystem, pImpl->m_sceneManager.get(),
 				pImpl->m_timer.DeltaTime(), (pImpl->m_timer.DeltaTime() > 0) ? (1.0f / pImpl->m_timer.DeltaTime()) : 0.0f,
 				pImpl->m_isPlaying, shadingMode, pImpl->m_useFillLight,
-				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed
+				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
+				pImpl->m_useForwardRendering
 			);
 			pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
 
@@ -417,30 +432,55 @@ namespace Alice
 		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
-		// ============================================= 렌더링 =============================================
-		// Forward Pass 수행
-		// 게임 모드: 강제 PBR, 에디터: 선택된 쉐이딩 모드
-		const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
+	// ============================================= 렌더링 =============================================
+	// Forward/Deferred 렌더링 모드에 따라 분기
+	EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
 
-		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
+	// 카메라 엔티티 ID 집합 구성
+	std::unordered_set<EntityId> cameraIDs;
+	for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
 
-		// 카메라 엔티티 ID 집합 구성
-		std::unordered_set<EntityId> cameraIDs;
-		for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
+	const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
 
+	if (pImpl->m_useForwardRendering)
+	{
+		// Forward 렌더링
 		pImpl->m_forwardRenderSystem->Render(
 			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
 			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
 		);
+	}
+	else
+	{
+		// Deferred 렌더링
+		pImpl->m_deferredRenderSystem->Render(
+			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+		);
+	}
 
-		// ============================================= 복사 =============================================
-		// 렌더 타겟 -> 백버퍼 복사
-		{
-			Microsoft::WRL::ComPtr<ID3D11Resource> src, dst;
-			pImpl->m_forwardRenderSystem->GetSceneSRV()->GetResource(src.GetAddressOf());
-			pImpl->m_renderDevice->GetBackBufferRTV()->GetResource(dst.GetAddressOf());
-			pImpl->m_renderDevice->GetImmediateContext()->CopyResource(dst.Get(), src.Get());
-		}
+        // 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
+        if (!pImpl->m_editorMode)
+        {
+            ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
+            if (backBufferRTV)
+            {
+                D3D11_VIEWPORT viewport = {};
+                viewport.Width = static_cast<float>(pImpl->m_width);
+                viewport.Height = static_cast<float>(pImpl->m_height);
+                viewport.MaxDepth = 1.0f;
+
+                if (pImpl->m_useForwardRendering)
+                {
+                    pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+                }
+                else
+                {
+                    pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+                }
+            }
+        }
+
 
 		// ============================================= 오버레이 =============================================
 		// 디버그 드로우 및 ImGui(에디터 전용)
@@ -492,6 +532,16 @@ namespace Alice
 	void Engine::TrimVideoMemory()
 	{
 		pImpl->m_renderDevice->TrimVideoMemory();
+	}
+
+	void Engine::SetUseForwardRendering(bool useForward)
+	{
+		pImpl->m_useForwardRendering = useForward;
+	}
+
+	bool Engine::GetUseForwardRendering() const
+	{
+		return pImpl->m_useForwardRendering;
 	}
 
 	void Engine::UpdateIblForScene()
@@ -569,6 +619,10 @@ namespace Alice
 		if (pImpl->m_forwardRenderSystem)
 		{
 			pImpl->m_forwardRenderSystem->Resize(width, height);
+		}
+		if (pImpl->m_deferredRenderSystem)
+		{
+			pImpl->m_deferredRenderSystem->Resize(width, height);
 		}
 	}
 
