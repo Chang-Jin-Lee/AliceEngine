@@ -518,6 +518,159 @@ float4 main(PSInput input) : SV_TARGET
     return g_TexCube.Sample(g_Sam, input.Direction);
 }
 )";
+
+        // Quad Vertex Shader (FullScreen) - 톤매핑용
+        const char* g_QuadVertexShaderSource = R"(
+struct VSInput
+{
+    float3 Position : POSITION;
+    float2 TexCoord : TEXCOORD0;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float2 TexCoord : TEXCOORD0;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+    output.Position = float4(input.Position.xy, 0.0f, 1.0f);
+    output.TexCoord = input.TexCoord;
+    return output;
+}
+)";
+
+        // Tone Mapping Pixel Shader - LDR (예제 프로젝트 36_ToneMappingPS_LDR.hlsl 참고)
+        const char* g_ToneMappingPixelShaderSource_LDR = R"(
+Texture2D g_SceneHDR : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer PostProcessConstantBuffer : register(b2)
+{
+    float g_Exposure;
+    float g_MaxHDRNits;
+    float2 g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+// ACES Filmic Tone Mapping (예제 프로젝트와 동일)
+float3 ACESFilm(float3 x)
+{
+    float a = 2.51f;
+    float b = 0.03f;
+    float c = 2.43f;
+    float d = 0.59f;
+    float e = 0.14f;
+    return saturate(x * (a * x + b) / (x * (c * x + d) + e));
+}
+
+// Linear to sRGB (Gamma Correction) - 예제 프로젝트와 동일
+float3 LinearToSRGB(float3 linearColor)
+{
+    return pow(max(linearColor, 0.0f), 1.0f / 2.2f);
+}
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    // 예제 프로젝트 36_ToneMappingPS_LDR.hlsl와 동일한 로직
+    // 1. 선형 HDR 값 로드 (Nits 값으로 간주)
+    float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
+    
+    // 2. Exposure 적용
+    float exposureFactor = pow(2.0f, g_Exposure);
+    C_linear709 *= exposureFactor;
+    
+    // 3. ACES 톤매핑 (HDR -> SDR 변환)
+    float3 C_tonemapped = ACESFilm(C_linear709);
+    
+    // 4. 감마 보정 (Linear -> sRGB)
+    float3 C_final = LinearToSRGB(C_tonemapped);
+    
+    return float4(C_final, 1.0f);
+}
+)";
+
+        // Tone Mapping Pixel Shader - HDR (예제 프로젝트 36_ToneMappingPS_HDR.hlsl 참고)
+        const char* g_ToneMappingPixelShaderSource_HDR = R"(
+Texture2D g_SceneHDR : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer PostProcessConstantBuffer : register(b2)
+{
+    float g_Exposure;
+    float g_MaxHDRNits;
+    float2 g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+// ACES Filmic Tone Mapping
+float3 ACESFilm(float3 x)
+{
+    float a = 2.51f;
+    float b = 0.03f;
+    float c = 2.43f;
+    float d = 0.59f;
+    float e = 0.14f;
+    return saturate(x * (a * x + b) / (x * (c * x + d) + e));
+}
+
+// Rec709 to Rec2020 색공간 변환
+float3 Rec709ToRec2020(float3 color)
+{
+    static const float3x3 conversion =
+    {
+        0.627402, 0.329292, 0.043306,
+        0.069095, 0.919544, 0.011360,
+        0.016394, 0.088028, 0.895578
+    };
+    return mul(conversion, color);
+}
+
+// Linear to ST2084 (PQ 인코딩)
+float3 LinearToST2084(float3 color)
+{
+    // g_MaxHDRNits를 반영하여 HDR 스케일링 (10000 nits 기준으로 정규화)
+    const float st2084max = 10000.0;
+    float hdrScalar = g_MaxHDRNits / st2084max;
+    float3 scaledColor = color * hdrScalar;
+    
+    float m1 = 2610.0 / 4096.0 / 4;
+    float m2 = 2523.0 / 4096.0 * 128;
+    float c1 = 3424.0 / 4096.0;
+    float c2 = 2413.0 / 4096.0 * 32;
+    float c3 = 2392.0 / 4096.0 * 32;
+    float3 cp = pow(abs(scaledColor), m1);
+    return pow((c1 + c2 * cp) / (1 + c3 * cp), m2);
+}
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    // 예제 프로젝트 36_ToneMappingPS_HDR.hlsl와 동일한 로직
+    // 1. 선형 HDR 값 로드 (Nits 값으로 간주)
+    float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
+    float3 C_exposure = C_linear709 * pow(2.0f, g_Exposure);
+    float3 C_tonemapped = ACESFilm(C_exposure);
+    
+    // Rec709 → Rec2020 색공간 변환 (LinearToST2084 내부에서 g_MaxHDRNits 처리)
+    float3 C_Rec2020 = Rec709ToRec2020(C_tonemapped);
+    float3 C_ST2084 = LinearToST2084(C_Rec2020);
+    
+    // 최종 PQ 인코딩된 값 [0.0, 1.0]을 R10G10B10A2_UNORM 백버퍼에 출력
+    return float4(C_ST2084, 1.0);
+}
+)";
     }
 
     ForwardRenderSystem::ForwardRenderSystem(ID3D11RenderDevice& renderDevice)
@@ -596,6 +749,11 @@ float4 main(PSInput input) : SV_TARGET
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateIblResources failed.");
             return false;
         }
+        if (!CreateToneMappingResources())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateToneMappingResources failed.");
+            return false;
+        }
 
         ALICE_LOG_INFO("ForwardRenderSystem::Initialize: success.");
         return true;
@@ -609,6 +767,9 @@ float4 main(PSInput input) : SV_TARGET
         m_sceneColorTex.Reset();
         m_sceneRTV.Reset();
         m_sceneSRV.Reset();
+        m_viewportTex.Reset();
+        m_viewportRTV.Reset();
+        m_viewportSRV.Reset();
         m_sceneDepthTex.Reset();
         m_sceneDSV.Reset();
 
@@ -620,12 +781,19 @@ float4 main(PSInput input) : SV_TARGET
         m_sceneWidth = width; m_sceneHeight = height;
         if (width == 0 || height == 0) return false;
 
-        // 1. Scene Color Texture & Views (RTV, SRV)
+        // 1. Scene Color Texture & Views (RTV, SRV) - HDR 포맷: 톤매핑을 위해 R16G16B16A16_FLOAT 사용
         // 순서: Width, Height, MipLevels, ArraySize, Format, SampleDesc{Count, Quality}, Usage, BindFlags, CPUAccess, Misc
-        D3D11_TEXTURE2D_DESC cDesc = { width, height, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+        D3D11_TEXTURE2D_DESC cDesc = { width, height, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
         if (FAILED(m_device->CreateTexture2D(&cDesc, nullptr, m_sceneColorTex.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreateRenderTargetView(m_sceneColorTex.Get(), nullptr, m_sceneRTV.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreateShaderResourceView(m_sceneColorTex.Get(), nullptr, m_sceneSRV.ReleaseAndGetAddressOf()))) return false;
+
+        // 1-1. Editor Viewport Output (ToneMapped LDR)
+        // - ImGui::Image 표시용 (UNORM, 감마 적용된 값이 들어갈 예정)
+        D3D11_TEXTURE2D_DESC vDesc = { width, height, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+        if (FAILED(m_device->CreateTexture2D(&vDesc, nullptr, m_viewportTex.ReleaseAndGetAddressOf()))) return false;
+        if (FAILED(m_device->CreateRenderTargetView(m_viewportTex.Get(), nullptr, m_viewportRTV.ReleaseAndGetAddressOf()))) return false;
+        if (FAILED(m_device->CreateShaderResourceView(m_viewportTex.Get(), nullptr, m_viewportSRV.ReleaseAndGetAddressOf()))) return false;
 
         // 2. Depth Texture & View (DSV)
         D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_D24_UNORM_S8_UINT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL, 0, 0 };
@@ -822,6 +990,12 @@ float4 main(PSInput input) : SV_TARGET
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbSkybox.ReleaseAndGetAddressOf()))) return false;
 
+        // 4. PostProcess 상수 버퍼 생성 (톤매핑용)
+        desc.ByteWidth = sizeof(float) * 4; // exposure, maxHDRNits, padding[2]
+        desc.Usage = D3D11_USAGE_DYNAMIC;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbPostProcess.ReleaseAndGetAddressOf()))) return false;
+
         return true;
     }
 
@@ -899,6 +1073,12 @@ float4 main(PSInput input) : SV_TARGET
         samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
         if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_samplerState.ReleaseAndGetAddressOf()))) return false;
+
+        // Linear Sampler (톤매핑용)
+        samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_samplerLinear.ReleaseAndGetAddressOf()))) return false;
 
         return true;
     }
@@ -1486,8 +1666,247 @@ float4 main(PSInput input) : SV_TARGET
         // 4. 스카이박스 렌더링 (Skybox)
         RenderSkybox(camera);
 
-        // 5. 최종 백버퍼 복귀 (Finalize) - ImGui 등 후처리를 위해 백버퍼로 타겟을 돌려놓습니다.
+        // 5. 에디터 뷰포트 표시용 LDR 텍스처로 톤매핑 (ImGui::Image에서 사용)
+        if (m_viewportRTV)
+        {
+            D3D11_VIEWPORT viewport = {};
+            viewport.Width = static_cast<float>(m_sceneWidth);
+            viewport.Height = static_cast<float>(m_sceneHeight);
+            viewport.MaxDepth = 1.0f;
+            RenderToneMapping(m_viewportRTV.Get(), viewport);
+        }
+
+        // 6. 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
         RestoreBackBuffer();
+    }
+
+    bool ForwardRenderSystem::CreateToneMappingResources()
+    {
+        ComPtr<ID3DBlob> vsBlob, psBlob, errorBlob;
+
+        // Quad Vertex Shader 컴파일
+        if (FAILED(D3DCompile(g_QuadVertexShaderSource, strlen(g_QuadVertexShaderSource), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+            {
+                ALICE_LOG_ERRORF("Quad VS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            }
+            return false;
+        }
+        if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_quadVS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Quad VS");
+            return false;
+        }
+
+        // Quad Input Layout
+        D3D11_INPUT_ELEMENT_DESC quadLayout[] = {
+            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0}
+        };
+        if (FAILED(m_device->CreateInputLayout(quadLayout, ARRAYSIZE(quadLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_quadInputLayout.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Quad Input Layout");
+            return false;
+        }
+
+        // HDR 지원 여부 확인 및 적절한 셰이더 선택
+        float maxNits = 100.0f;
+        bool isHDRSupported = m_renderDevice.IsHDRSupported(maxNits);
+        const char* toneMappingShaderSource = isHDRSupported ? g_ToneMappingPixelShaderSource_HDR : g_ToneMappingPixelShaderSource_LDR;
+        const char* shaderName = isHDRSupported ? "HDR" : "LDR";
+
+        // Tone Mapping Pixel Shader 컴파일
+        psBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(toneMappingShaderSource, strlen(toneMappingShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+            {
+                ALICE_LOG_ERRORF("Tone Mapping PS (%s) compile error: %s", shaderName, (char*)errorBlob->GetBufferPointer());
+            }
+            return false;
+        }
+        if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_toneMappingPS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Tone Mapping PS (%s)", shaderName);
+            return false;
+        }
+
+        if (isHDRSupported)
+        {
+            ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: HDR 톤매핑 셰이더 사용. MaxNits: %.1f", maxNits);
+        }
+        else
+        {
+            ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: LDR 톤매핑 셰이더 사용.");
+        }
+
+        // 톤매핑 전용 상태 객체 생성 (Blend OFF, Depth OFF, Cull OFF)
+        // Depth OFF
+        {
+            D3D11_DEPTH_STENCIL_DESC ds = {};
+            ds.DepthEnable = FALSE;
+            ds.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+            ds.DepthFunc = D3D11_COMPARISON_ALWAYS;
+            ds.StencilEnable = FALSE;
+            if (FAILED(m_device->CreateDepthStencilState(&ds, m_ppDepthOff.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create PostProcess Depth State");
+                return false;
+            }
+        }
+
+        // Blend OFF (opaque)
+        {
+            D3D11_BLEND_DESC bd = {};
+            bd.AlphaToCoverageEnable = FALSE;
+            bd.IndependentBlendEnable = FALSE;
+            auto& rt = bd.RenderTarget[0];
+            rt.BlendEnable = FALSE;
+            rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+            if (FAILED(m_device->CreateBlendState(&bd, m_ppBlendOpaque.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create PostProcess Blend State");
+                return false;
+            }
+        }
+
+        // Rasterizer: cull off, scissor off
+        {
+            D3D11_RASTERIZER_DESC rd = {};
+            rd.FillMode = D3D11_FILL_SOLID;
+            rd.CullMode = D3D11_CULL_NONE;
+            rd.DepthClipEnable = TRUE;
+            rd.ScissorEnable = FALSE;
+            if (FAILED(m_device->CreateRasterizerState(&rd, m_ppRasterNoCull.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create PostProcess Rasterizer State");
+                return false;
+            }
+        }
+
+        // Quad 지오메트리 생성
+        struct QuadVertex
+        {
+            DirectX::XMFLOAT3 position;
+            DirectX::XMFLOAT2 uv;
+        };
+
+        QuadVertex vertices[] = {
+            { DirectX::XMFLOAT3(-1.0f, 1.0f, 1.0f), DirectX::XMFLOAT2(0.0f, 0.0f) },  // Left Top
+            { DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f), DirectX::XMFLOAT2(1.0f, 0.0f) },   // Right Top
+            { DirectX::XMFLOAT3(-1.0f, -1.0f, 1.0f), DirectX::XMFLOAT2(0.0f, 1.0f) }, // Left Bottom
+            { DirectX::XMFLOAT3(1.0f, -1.0f, 1.0f), DirectX::XMFLOAT2(1.0f, 1.0f) }   // Right Bottom
+        };
+
+        D3D11_BUFFER_DESC vbDesc = {};
+        vbDesc.ByteWidth = sizeof(QuadVertex) * 4;
+        vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        vbDesc.Usage = D3D11_USAGE_DEFAULT;
+        D3D11_SUBRESOURCE_DATA vbData = {};
+        vbData.pSysMem = vertices;
+        if (FAILED(m_device->CreateBuffer(&vbDesc, &vbData, m_quadVB.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Quad VB");
+            return false;
+        }
+
+        m_quadStride = sizeof(QuadVertex);
+        m_quadOffset = 0;
+
+        WORD indices[] = { 0, 1, 2, 2, 1, 3 };
+        m_quadIndexCount = 6;
+        D3D11_BUFFER_DESC ibDesc = {};
+        ibDesc.ByteWidth = sizeof(WORD) * 6;
+        ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        ibDesc.Usage = D3D11_USAGE_DEFAULT;
+        D3D11_SUBRESOURCE_DATA ibData = {};
+        ibData.pSysMem = indices;
+        if (FAILED(m_device->CreateBuffer(&ibDesc, &ibData, m_quadIB.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Quad IB");
+            return false;
+        }
+
+        return true;
+    }
+
+    void ForwardRenderSystem::RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+    {
+        if (!m_toneMappingPS || !m_quadVS || !m_sceneSRV || !targetRTV) return;
+
+        // 뷰포트 설정
+        m_context->RSSetViewports(1, &viewport);
+
+        // 렌더 타겟 설정
+        m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
+
+        // 상태 정리 (중요: 이전 패스의 상태가 남아있으면 후처리가 오염됨)
+        float blendFactor[4] = { 0, 0, 0, 0 };
+        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        m_context->RSSetState(m_ppRasterNoCull.Get());
+
+        // PostProcess 상수 버퍼 업데이트
+        struct PostProcessCB
+        {
+            float exposure;
+            float maxHDRNits;
+            float padding[2];
+        };
+        PostProcessCB cbData = {};
+        GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
+
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            memcpy(mapped.pData, &cbData, sizeof(PostProcessCB));
+            m_context->Unmap(m_cbPostProcess.Get(), 0);
+        }
+
+        // 리소스 바인딩
+        ID3D11ShaderResourceView* srv = m_sceneSRV.Get();
+        ID3D11SamplerState* sampler = m_samplerLinear.Get();
+        ID3D11Buffer* cb = m_cbPostProcess.Get();
+
+        m_context->PSSetShaderResources(0, 1, &srv);
+        m_context->PSSetSamplers(0, 1, &sampler);
+        m_context->PSSetConstantBuffers(2, 1, &cb); // register(b2)에 맞춰 슬롯 2 사용
+
+        // Quad 그리기 (VB 바인딩은 로컬 변수로 안전하게)
+        UINT stride = m_quadStride, offset = m_quadOffset;
+        ID3D11Buffer* vb = m_quadVB.Get();
+
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_context->IASetInputLayout(m_quadInputLayout.Get());
+        m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+        m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
+        m_context->PSSetShader(m_toneMappingPS.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+        // 리소스 해제
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(0, 1, &nullSRV);
+    }
+
+    void ForwardRenderSystem::GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const
+    {
+        outExposure = m_postProcessParams.exposure;
+        
+        // RenderDevice에서 HDR 지원 여부 및 최대 밝기 가져오기
+        float maxNits = 100.0f;
+        m_renderDevice.IsHDRSupported(maxNits);
+        // 사용자가 설정한 값이 있으면 사용, 없으면 모니터 최대 밝기 사용
+        outMaxHDRNits = (m_postProcessParams.maxHDRNits > 0.0f) ? m_postProcessParams.maxHDRNits : maxNits;
+    }
+
+    void ForwardRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits)
+    {
+        m_postProcessParams.exposure = exposure;
+        m_postProcessParams.maxHDRNits = maxHDRNits;
     }
 }
 
