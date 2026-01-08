@@ -192,8 +192,9 @@ namespace Alice
         bool CreateRasterizerStates();
 
         bool CreateSkyboxResources();
-        bool CreateIblResources(const std::string& iblDir = "Bridge",  const std::string& iblName = "bridge");
+        bool CreateIblResources(const std::string& iblDir = "Indoor",  const std::string& iblName = "indoor");
         bool CreateSkinnedResources();
+        bool CreateToneMappingResources();
 
         void RenderSkybox(const Camera& camera);
 
@@ -246,6 +247,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbLighting;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbSkybox; // 스카이박스 전용 CB (DYNAMIC)
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPostProcess; // 톤매핑용 PostProcess CB
 
         // 텍스처 / 샘플러
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_diffuseSRV;
@@ -253,6 +255,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_flatNormalSRV; // (0.5,0.5,1) 기본 노말맵
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_specularSRV;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerState;
+        Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerLinear; // 톤매핑용 Linear Sampler
 
         // 알파 블렌드용 State
         Microsoft::WRL::ComPtr<ID3D11BlendState> m_alphaBlendState;
@@ -280,6 +283,13 @@ namespace Alice
         // 배경색 (스카이박스가 Off일 때 사용)
         DirectX::XMFLOAT4                                m_backgroundColor { 0.1f, 0.1f, 0.1f, 1.0f };
 
+        // ==== 포스트 프로세스 파라미터 ====
+        struct PostProcessParams
+        {
+            float exposure = 0.0f;        // Exposure 값 (기본값: 0 = 1.0배)
+            float maxHDRNits = 1000.0f;   // HDR 모니터 최대 밝기 (nits)
+        } m_postProcessParams;
+
         // ==== IBL (Image-Based Lighting) 리소스 ====
         // - Diffuse IBL: Irradiance map (간접 난반사)
         // - Specular IBL: Prefiltered env map (거칠기별 반사)
@@ -293,6 +303,12 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneColorTex;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView>  m_sceneRTV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneSRV;
+
+        // ==== 에디터 뷰포트 표시용 LDR 결과 텍스처 (ToneMapped) ====
+        // - ImGui::Image는 HDR/톤매핑/감마를 처리하지 않으므로, 표시 전용 텍스처를 별도로 생성합니다.
+        Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_viewportTex;
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView>  m_viewportRTV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_viewportSRV;
 
         // ==== 게임 뷰포트용 깊이/스텐실 ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
@@ -318,6 +334,20 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11InputLayout>       m_inputLayoutSkinned;
         Microsoft::WRL::ComPtr<ID3D11Buffer>            m_cbBones;
 
+        // ==== 톤매핑 리소스 ====
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_quadVS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>       m_toneMappingPS;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_quadInputLayout;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>            m_quadVB;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>            m_quadIB;
+        UINT                                           m_quadIndexCount = 0;
+        UINT                                           m_quadStride = 0;
+        UINT                                           m_quadOffset = 0;
+        // 톤매핑 전용 상태 객체 (Blend OFF, Depth OFF, Cull OFF)
+        Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_ppDepthOff;
+        Microsoft::WRL::ComPtr<ID3D11BlendState>        m_ppBlendOpaque;
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_ppRasterNoCull;
+
     public:
         /// 스키닝 메시를 렌더링합니다.
         /// - AliceGame 의 SkinnedMeshSystem 이 만들어 준 DrawCommand 리스트를 사용합니다.
@@ -335,6 +365,9 @@ namespace Alice
 
 		ID3D11ShaderResourceView* GetSceneSRV() const { return m_sceneSRV.Get(); }
 
+        /// 에디터 뷰포트 표시용(톤매핑 완료) SRV
+        ID3D11ShaderResourceView* GetViewportSRV() const { return m_viewportSRV.Get(); }
+
         /// IBL 세트를 변경합니다 (Bridge/Indoor/Sample)
         /// - 씬 전환 시 호출하여 환경에 맞는 IBL을 로드합니다.
         bool SetIblSet(const std::string& iblDir = "Bridge", const std::string& iblName = "bridge");
@@ -346,6 +379,17 @@ namespace Alice
         /// 배경색을 설정합니다 (스카이박스가 Off일 때 사용).
         void SetBackgroundColor(const DirectX::XMFLOAT4& color) { m_backgroundColor = color; }
         const DirectX::XMFLOAT4& GetBackgroundColor() const { return m_backgroundColor; }
+
+        /// 톤매핑을 적용하여 HDR 씬 텍스처를 백버퍼에 렌더링합니다.
+        /// @param targetRTV 백버퍼 RTV
+        /// @param viewport 뷰포트 영역
+        void RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+
+        /// 포스트 프로세스 파라미터 가져오기
+        void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
+        
+        /// 포스트 프로세스 파라미터 설정하기
+        void SetPostProcessParams(float exposure, float maxHDRNits);
     };
 }
 
