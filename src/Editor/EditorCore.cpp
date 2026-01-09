@@ -6,6 +6,7 @@
 
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/DeferredRenderSystem.h"
+#include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
@@ -1940,7 +1941,10 @@ namespace Alice
 
             Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
 
-            auto& lighting = forward.GetLightingParameters();
+            // Forward/Deferred 모드에 따라 조명 파라미터를 각 렌더러에 반영합니다.
+			//auto& lighting = useForwardRendering ? forward.GetLightingParameters() : deferred.GetLightingParameters();
+			//auto& lighting = forward.GetLightingParameters();
+			auto& lighting = deferred.GetLightingParameters();
             
             // PBR 모드일 때 PBR 파라미터 표시
             if (mode == 4)
