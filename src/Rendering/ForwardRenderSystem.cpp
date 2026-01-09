@@ -163,7 +163,7 @@ VSOutput main(VSInput input)
 }
 )";
 
-        const char* g_PhongPixelShaderSource = R"(
+        const char* g_PBRPixelShaderSource = R"(
 Texture2D gDiffuseMap  : register(t0);
 Texture2D gNormalMap   : register(t1);
 Texture2D gSpecularMap : register(t2);
@@ -957,7 +957,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vertexShader.ReleaseAndGetAddressOf()))) return false;
 
         // 2. Pixel Shader 컴파일 및 생성
-        if (FAILED(D3DCompile(g_PhongPixelShaderSource, strlen(g_PhongPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) 
+        if (FAILED(D3DCompile(g_PBRPixelShaderSource, strlen(g_PBRPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) 
             return false;
         if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_pixelShader.ReleaseAndGetAddressOf()))) return false;
 

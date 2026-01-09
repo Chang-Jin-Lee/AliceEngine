@@ -192,7 +192,7 @@ namespace Alice
         bool CreateRasterizerStates();
 
         bool CreateSkyboxResources();
-        bool CreateIblResources(const std::string& iblDir = "Indoor",  const std::string& iblName = "indoor");
+        bool CreateIblResources(const std::string& iblDir = "Bridge",  const std::string& iblName = "bridge");
         bool CreateSkinnedResources();
         bool CreateToneMappingResources();
 

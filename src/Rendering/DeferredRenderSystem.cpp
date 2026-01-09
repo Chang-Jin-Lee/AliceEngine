@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cfloat>
 #include <algorithm>
+#include <cstring>
 
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
@@ -105,6 +106,7 @@ struct VSInput
     float3 Normal       : NORMAL;
     float3 Tangent      : TANGENT;
     float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
     uint4  BoneIndices  : BLENDINDICES;
     float4 BoneWeights  : BLENDWEIGHT;
     float2 TexCoord     : TEXCOORD0;
@@ -148,6 +150,242 @@ VSOutput main(VSInput input)
     output.TexCoord = input.TexCoord;
     
     return output;
+}
+)";
+
+        // Transparent Forward-Style Skinned VS
+        // - GBuffer 스키닝 VS와 동일한 출력(월드 좌표/노말/UV/TBN)을 만든 뒤,
+        //   Transparent PS에서 직접 조명을 계산하고 알파 블렌딩합니다.
+        const char* g_TransparentSkinnedVertexShaderSource = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBBones : register(b2)
+{
+    float4x4 gBones[1023];
+    uint     gBoneCount;
+    float3   _padBones;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
+    float2 TexCoord     : TEXCOORD0;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+
+    uint4 bi = input.BoneIndices;
+    float4 bw = input.BoneWeights;
+    matrix M = bw.x * gBones[bi.x]
+             + bw.y * gBones[bi.y]
+             + bw.z * gBones[bi.z]
+             + bw.w * gBones[bi.w];
+
+    float4 posL = float4(input.Position, 1.0f);
+    float4 skinnedPos = mul(posL, M);
+    float3x3 M3 = (float3x3)M;
+    float3 skinnedN = normalize(mul(input.Normal, M3));
+    float3 skinnedT = normalize(mul(input.Tangent, M3));
+    float3 skinnedB = normalize(mul(input.Binormal, M3));
+
+    float4 posW = mul(skinnedPos, gWorld);
+    output.Position = mul(mul(posW, gView), gProj);
+    output.WorldPos = posW.xyz;
+
+    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
+    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
+    output.TexCoord = input.TexCoord;
+
+    return output;
+}
+)";
+
+        // Transparent Forward-Style PS
+        // - 알파가 1.0에 가까운 픽셀은 디퍼드(불투명)에서 처리하므로 여기서는 제외(discard)
+        // - 0.1 미만은 컷아웃으로 제거(Forward/튜토리얼과 동일 스케일)
+        const char* g_TransparentPixelShaderSource = R"(
+static const float PI = 3.14159265f;
+static const float INV_PI = 0.31830988618f;
+
+float DistributionGGX(float NdotH, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float denom = max(NdotH * NdotH * (a2 - 1.0f) + 1.0f, 1e-4f);
+    return a2 / (PI * denom * denom);
+}
+
+float GeometrySchlickGGX(float NdotX, float roughness)
+{
+    float r = roughness + 1.0f;
+    float k = (r * r) * 0.125f;
+    return NdotX / (NdotX * (1.0f - k) + k);
+}
+
+float GeometrySmith(float NdotV, float NdotL, float roughness)
+{
+    float gv = GeometrySchlickGGX(NdotV, roughness);
+    float gl = GeometrySchlickGGX(NdotL, roughness);
+    return gv * gl;
+}
+
+float3 FresnelSchlick(float3 F0, float cosTheta)
+{
+    return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
+// 텍스처
+Texture2D  g_DiffuseMap : register(t0);
+Texture2D  g_NormalMap  : register(t1);
+
+// IBL
+TextureCube g_IBL_Diffuse : register(t5);
+TextureCube g_IBL_Specular : register(t6);
+Texture2D   g_IBL_BRDF_LUT : register(t7);
+
+SamplerState g_Sam : register(s0);
+
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBTransparentLight : register(b1)
+{
+    float3 g_LightDir;
+    float  g_LightIntensity;
+    float3 g_LightColor;
+    float  _pad0;
+    float3 g_CameraPosW;
+    float  _pad1;
+};
+
+struct PSIn
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+float3 LinearToSRGB(float3 linearColor)
+{
+    return pow(max(linearColor, 0.0f), 1.0f / 2.2f);
+}
+
+float4 main(PSIn pIn) : SV_Target
+{
+    float4 tex = float4(1,1,1,1);
+    if (gUseTexture != 0)
+        tex = g_DiffuseMap.Sample(g_Sam, pIn.TexCoord);
+
+    float alphaTex = tex.a * gMaterialColor.a;
+
+    // 컷아웃(완전 투명 근처) 제거
+    // Deferred에서는 반투명(0.1~1.0)을 GBuffer에 넣으면 합성이 깨집니다.
+    // - 거의 불투명(>=0.99)만 GBuffer에 기록하고
+    // - 나머지 반투명은 라이트 패스 이후 Forward-Style(알파 블렌드) 패스로 별도 렌더링합니다.
+    clip(alphaTex - 0.99f);
+    // 거의 불투명은 디퍼드에서 처리하므로 여기서는 제외
+    if (alphaTex >= 0.99f) discard;
+
+    float3 baseColor = gMaterialColor.rgb;
+    if (gUseTexture != 0)
+        baseColor *= tex.rgb;
+
+    float3 albedoLinear = pow(max(baseColor, 0.0f), 2.2f);
+
+    float3 N = normalize(pIn.Normal);
+    if (gEnableNormalMap != 0)
+    {
+        float3 T = normalize(pIn.TangentW);
+        float3 B = normalize(pIn.BitanW);
+        float handed = dot(cross(T, B), N);
+        if (handed < 0.0f) B = -B;
+        float3x3 TBN = float3x3(T, B, N);
+        float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
+        N_ts.y = -N_ts.y;
+        N = normalize(mul(normalize(N_ts), TBN));
+    }
+
+    float metalness = saturate(gMetalness);
+    float roughness = max(saturate(gRoughness), 0.04f);
+    float ao = 1.0f;
+
+    float3 L = normalize(-g_LightDir);
+    float3 V = normalize(g_CameraPosW - pIn.WorldPos);
+    float3 H = normalize(L + V);
+
+    float NdotL = saturate(dot(N, L));
+    float NdotV = saturate(dot(N, V));
+    float NdotH = saturate(dot(N, H));
+    float VdotH = saturate(dot(V, H));
+
+    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoLinear, metalness);
+    float D = DistributionGGX(NdotH, roughness);
+    float G = GeometrySmith(NdotV, NdotL, roughness);
+    float3 F = FresnelSchlick(F0, VdotH);
+
+    float3 numerator = D * G * F;
+    float denomSpec = max(4.0f * NdotV * NdotL, 1e-4f);
+    float3 specular = numerator / denomSpec;
+
+    float3 kS = F;
+    float3 kD = (1.0f - kS) * (1.0f - metalness);
+    float3 diffuse = kD * albedoLinear * INV_PI;
+
+    float3 radiance = g_LightColor.rgb * PI * g_LightIntensity;
+    float3 direct = (diffuse + specular) * radiance * NdotL * ao;
+
+    // IBL
+    float3 diffuseIBL = kD * g_IBL_Diffuse.Sample(g_Sam, N).rgb * albedoLinear;
+    float3 Renv = reflect(-V, N);
+    const float kMaxSpecularMip = 8.0f;
+    float3 prefilteredColor = g_IBL_Specular.SampleLevel(g_Sam, Renv, roughness * kMaxSpecularMip).rgb;
+    float2 specBRDF = g_IBL_BRDF_LUT.Sample(g_Sam, float2(NdotV, roughness)).rg;
+    float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
+    float3 ibl = (diffuseIBL + specularIBL) * ao;
+
+    float3 outLinear = direct + ibl;
+    return float4(outLinear, alphaTex);
 }
 )";
 
@@ -775,15 +1013,18 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_gBufferSkinnedVS.ReleaseAndGetAddressOf())))
             return false;
 
-        // G-Buffer Skinned Input Layout (COLOR 제거, Offset 조정)
+        // G-Buffer Skinned Input Layout
+        // - ForwardRenderSystem 과 동일한 정점 레이아웃/오프셋을 사용해야 본 인덱스/웨이트가 깨지지 않습니다.
+        //   (Deferred 쪽이 COLOR를 누락하면 TEXCOORD 이후 오프셋이 밀려 애니메이션/UV가 전부 망가질 수 있음)
         D3D11_INPUT_ELEMENT_DESC skinnedLayout[] = {
-            {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,  0, 56, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0}
+            {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0}
         };
         if (FAILED(m_device->CreateInputLayout(skinnedLayout, ARRAYSIZE(skinnedLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_gBufferSkinnedInputLayout.ReleaseAndGetAddressOf())))
             return false;
@@ -839,6 +1080,78 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_deferredLightPS.ReleaseAndGetAddressOf())))
         {
             ALICE_LOG_ERRORF("Failed to create Deferred Light PS");
+            return false;
+        }
+
+        // ===================== Transparent Forward-Style Shaders =====================
+        // Skinned Transparent VS
+        vsBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(g_TransparentSkinnedVertexShaderSource,
+                              strlen(g_TransparentSkinnedVertexShaderSource),
+                              nullptr, nullptr, nullptr,
+                              "main", "vs_5_0",
+                              0, 0,
+                              vsBlob.GetAddressOf(),
+                              errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+                ALICE_LOG_ERRORF("Transparent Skinned VS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            return false;
+        }
+        if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(),
+                                                vsBlob->GetBufferSize(),
+                                                nullptr,
+                                                m_transparentSkinnedVS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Transparent Skinned VS");
+            return false;
+        }
+
+        // Transparent Skinned Input Layout (Forward와 동일 오프셋)
+        {
+            D3D11_INPUT_ELEMENT_DESC skinnedLayoutT[] = {
+                {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0}
+            };
+            if (FAILED(m_device->CreateInputLayout(skinnedLayoutT,
+                                                   ARRAYSIZE(skinnedLayoutT),
+                                                   vsBlob->GetBufferPointer(),
+                                                   vsBlob->GetBufferSize(),
+                                                   m_transparentSkinnedInputLayout.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Transparent Skinned InputLayout");
+                return false;
+            }
+        }
+
+        // Transparent PS
+        psBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(g_TransparentPixelShaderSource,
+                              strlen(g_TransparentPixelShaderSource),
+                              nullptr, nullptr, nullptr,
+                              "main", "ps_5_0",
+                              0, 0,
+                              psBlob.GetAddressOf(),
+                              errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+                ALICE_LOG_ERRORF("Transparent PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            return false;
+        }
+        if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(),
+                                               psBlob->GetBufferSize(),
+                                               nullptr,
+                                               m_transparentPS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Transparent PS");
             return false;
         }
 
@@ -1046,6 +1359,12 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbPostProcess.ReleaseAndGetAddressOf())))
             return false;
 
+        // Transparent Forward-Style Light CB (register(b1))
+        // float3 dir + float intensity + float3 color + pad + float3 camPos + pad = 48 bytes (16B 정렬)
+        cbDesc.ByteWidth = sizeof(float) * 12;
+        if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbTransparentLight.ReleaseAndGetAddressOf())))
+            return false;
+
         return true;
     }
 
@@ -1138,6 +1457,19 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
         blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
         if (FAILED(m_device->CreateBlendState(&blendDesc, m_blendStateAdditive.ReleaseAndGetAddressOf())))
+            return false;
+
+        // Alpha Blend State (반투명 Forward-Style 패스용)
+        D3D11_BLEND_DESC alphaDesc = {};
+        alphaDesc.RenderTarget[0].BlendEnable = TRUE;
+        alphaDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+        alphaDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+        alphaDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        alphaDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+        alphaDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+        alphaDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        alphaDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        if (FAILED(m_device->CreateBlendState(&alphaDesc, m_alphaBlendState.ReleaseAndGetAddressOf())))
             return false;
 
         return true;
@@ -1233,6 +1565,9 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         {
             RenderSkybox(camera);
         }
+
+        // 반투명(알파 블렌딩) 오브젝트는 라이트 패스 이후 Forward-Style로 합성
+        PassTransparentForward(camera, skinnedCommands);
 
         // 에디터 뷰포트 표시용 LDR 텍스처로 톤매핑 (ImGui::Image에서 사용)
         if (m_viewportRTV)
@@ -1334,6 +1669,8 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         }
         
         // 2. 스키닝 메시 렌더링
+        // - ForwardRenderSystem과 동일하게, Registry의 서브셋 머티리얼 SRV를 우선 사용합니다.
+        // - (cmd.albedoTexturePath는 에디터에서 오버라이드한 경우에만 사용)
         if (!skinnedCommands.empty() && m_gBufferSkinnedVS && m_gBufferPS)
         {
             m_context->VSSetShader(m_gBufferSkinnedVS.Get(), nullptr, 0);
@@ -1348,18 +1685,46 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
                 m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
                 UpdateBonesCB(cmd.bones, cmd.boneCount);
-                
-                // 텍스처 준비
-                ID3D11ShaderResourceView* texSRV = GetOrCreateTexture(cmd.albedoTexturePath);
-                ID3D11ShaderResourceView* srvs[] = { texSRV, nullptr };
-                m_context->PSSetShaderResources(0, 2, srvs);
 
-                // CB 업데이트
-                UpdatePerObjectCB(cmd.world, view, proj, 
-                    XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), 
-                    cmd.roughness, cmd.metalness, (texSRV != nullptr), false);
+                const XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
 
-                m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                std::shared_ptr<SkinnedMeshGPU> mesh =
+                    (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
+
+                if (mesh && !mesh->subsets.empty())
+                {
+                    for (const auto& sub : mesh->subsets)
+                    {
+                        if (sub.indexCount == 0) continue;
+
+                        ID3D11ShaderResourceView* diff =
+                            (sub.materialIndex < mesh->materialSRVs.size()) ? mesh->materialSRVs[sub.materialIndex].Get() : nullptr;
+                        ID3D11ShaderResourceView* norm =
+                            (sub.materialIndex < mesh->normalSRVs.size()) ? mesh->normalSRVs[sub.materialIndex].Get() : nullptr;
+
+                        ID3D11ShaderResourceView* srvs[] = { diff, norm };
+                        m_context->PSSetShaderResources(0, 2, srvs);
+
+                        UpdatePerObjectCB(cmd.world, view, proj, color,
+                                          cmd.roughness, cmd.metalness,
+                                          (diff != nullptr), (norm != nullptr));
+
+                        m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                    }
+                }
+                else
+                {
+                    // 오버라이드 텍스처 (또는 단일 텍스처)만 있는 경우
+                    ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
+                    ID3D11ShaderResourceView* srvs[] = { diff, nullptr };
+                    m_context->PSSetShaderResources(0, 2, srvs);
+
+                    UpdatePerObjectCB(cmd.world, view, proj, color,
+                                      cmd.roughness, cmd.metalness,
+                                      (diff != nullptr), false);
+
+                    m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                }
             }
         }
 
@@ -1421,6 +1786,133 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         // 리소스 해제
         ID3D11ShaderResourceView* nullSRVs[9] = { nullptr };
         m_context->PSSetShaderResources(0, 9, nullSRVs);
+    }
+
+    void DeferredRenderSystem::PassTransparentForward(
+        const Camera& camera,
+        const std::vector<ForwardRenderSystem::SkinnedDrawCommand>& skinnedCommands)
+    {
+        if (!m_device || !m_context) return;
+        if (!m_sceneRTV || !m_sceneDSV) return;
+        if (!m_alphaBlendState || !m_depthStencilStateReadOnly) return;
+        if (!m_transparentSkinnedVS || !m_transparentPS || !m_transparentSkinnedInputLayout) return;
+        if (!m_cbTransparentLight) return;
+
+        // 현재는 "반투명 문제가 주로 FBX(스키닝) 쪽"에서 발생하므로 스키닝 커맨드만 처리합니다.
+        if (skinnedCommands.empty()) return;
+
+        // 렌더 타깃: HDR 씬 컬러 + (GBuffer에서 채운) 깊이 버퍼
+        m_context->OMSetRenderTargets(1, m_sceneRTV.GetAddressOf(), m_sceneDSV.Get());
+
+        // 블렌딩 ON, 깊이 테스트 ON(읽기 전용)
+        float blendFactor[4] = { 0, 0, 0, 0 };
+        m_context->OMSetBlendState(m_alphaBlendState.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_depthStencilStateReadOnly.Get(), 0);
+        m_context->RSSetState(m_rasterizerState.Get());
+
+        // 파이프라인
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_context->IASetInputLayout(m_transparentSkinnedInputLayout.Get());
+        m_context->VSSetShader(m_transparentSkinnedVS.Get(), nullptr, 0);
+        m_context->PSSetShader(m_transparentPS.Get(), nullptr, 0);
+
+        // 샘플러
+        ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
+        m_context->PSSetSamplers(0, 1, samplers);
+
+        // Transparent Light CB 업데이트 (register b1)
+        struct TransparentLightCB
+        {
+            DirectX::XMFLOAT3 lightDir;
+            float             intensity;
+            DirectX::XMFLOAT3 lightColor;
+            float             pad0;
+            DirectX::XMFLOAT3 cameraPos;
+            float             pad1;
+        };
+
+        TransparentLightCB tl{};
+        tl.lightDir = DirectX::XMFLOAT3(0.5f, -1.0f, 0.5f);
+        tl.intensity = 1.0f;
+        tl.lightColor = DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f);
+        tl.cameraPos = camera.GetPosition();
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (SUCCEEDED(m_context->Map(m_cbTransparentLight.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            std::memcpy(mapped.pData, &tl, sizeof(tl));
+            m_context->Unmap(m_cbTransparentLight.Get(), 0);
+        }
+        ID3D11Buffer* tlCB = m_cbTransparentLight.Get();
+        m_context->PSSetConstantBuffers(1, 1, &tlCB);
+
+        // IBL 리소스 바인딩 (t5~t7)
+        ID3D11ShaderResourceView* iblDiffuse = m_iblDiffuseSRV.Get();
+        ID3D11ShaderResourceView* iblSpec = m_iblSpecularSRV.Get();
+        ID3D11ShaderResourceView* iblBrdf = m_iblBrdfLutSRV.Get();
+        ID3D11ShaderResourceView* iblSrvs[] = { iblDiffuse, iblSpec, iblBrdf };
+        m_context->PSSetShaderResources(5, 3, iblSrvs);
+
+        // 공통 행렬
+        DirectX::XMMATRIX view = camera.GetViewMatrix();
+        DirectX::XMMATRIX proj = camera.GetProjectionMatrix();
+
+        for (const auto& cmd : skinnedCommands)
+        {
+            if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
+
+            UINT stride = cmd.stride;
+            UINT offset = 0;
+            ID3D11Buffer* vb = cmd.vertexBuffer;
+            m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+            m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+            // Bones
+            UpdateBonesCB(cmd.bones, cmd.boneCount);
+
+            // PerObject CB
+            const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
+            UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, true, true);
+
+            // FBX 서브셋 머티리얼이 있으면 그걸 우선 사용 (Forward와 동일)
+            std::shared_ptr<SkinnedMeshGPU> mesh =
+                (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
+
+            if (mesh && !mesh->subsets.empty())
+            {
+                for (const auto& sub : mesh->subsets)
+                {
+                    if (sub.indexCount == 0) continue;
+
+                    ID3D11ShaderResourceView* diff =
+                        (sub.materialIndex < mesh->materialSRVs.size()) ? mesh->materialSRVs[sub.materialIndex].Get() : nullptr;
+                    ID3D11ShaderResourceView* norm =
+                        (sub.materialIndex < mesh->normalSRVs.size()) ? mesh->normalSRVs[sub.materialIndex].Get() : nullptr;
+
+                    // t0: diffuse, t1: normal
+                    ID3D11ShaderResourceView* srvs01[2] = { diff, norm };
+                    m_context->PSSetShaderResources(0, 2, srvs01);
+
+                    // enableNormalMap은 "노말 SRV가 존재할 때만" 켜는게 안정적입니다.
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr));
+
+                    m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                }
+            }
+            else
+            {
+                // 머티리얼 오버라이드(에디터) 경로가 있으면 그걸 사용
+                ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
+                ID3D11ShaderResourceView* srvs01[2] = { diff, nullptr };
+                m_context->PSSetShaderResources(0, 2, srvs01);
+                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false);
+                m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+            }
+        }
+
+        // SRV 정리 (D3D11 hazard 방지)
+        ID3D11ShaderResourceView* nulls[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->PSSetShaderResources(0, 8, nulls);
     }
 
     void DeferredRenderSystem::RenderSkybox(const Camera& camera)
