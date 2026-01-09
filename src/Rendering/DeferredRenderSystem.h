@@ -102,6 +102,7 @@ namespace Alice
         // 셰이더 및 리소스 생성
         bool CreateShaders();
         bool CreateQuadGeometry();
+        bool CreateCubeGeometry();
         bool CreateConstantBuffers();
         bool CreateSamplerStates();
         bool CreateBlendStates();
@@ -121,6 +122,14 @@ namespace Alice
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
                                const DirectX::XMMATRIX& view,
                                const DirectX::XMMATRIX& projection);
+        void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
+                               const DirectX::XMMATRIX& view,
+                               const DirectX::XMMATRIX& projection,
+                               const DirectX::XMFLOAT4& color,
+                               float roughness,
+                               float metalness,
+                               bool useTexture,
+                               bool enableNormalMap);
         void UpdateLightingCB(const Camera& camera, int shadingMode, bool enableFillLight);
         void UpdateBonesCB(const DirectX::XMFLOAT4X4* boneMatrices, std::uint32_t boneCount);
         
@@ -173,6 +182,11 @@ namespace Alice
         UINT                                           m_quadIndexCount = 0;
         UINT                                           m_quadStride = 0;
         UINT                                           m_quadOffset = 0;
+
+        // ==== 큐브 지오메트리 (정적 메시) ====
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cubeVB;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cubeIB;
+        UINT                                           m_cubeIndexCount = 0;
 
         // ==== 상수 버퍼 ====
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
