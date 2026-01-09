@@ -273,91 +273,52 @@ namespace Alice
         }
     }
 
-    bool D3D11RenderDevice::IsHDRSupported(float& outMaxNits) const
-    {
-        Microsoft::WRL::ComPtr<IDXGIFactory4> pFactory;
-        HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&pFactory));
-        if (FAILED(hr))
-        {
-            ALICE_LOG_ERRORF("D3D11RenderDevice::IsHDRSupported: DXGI Factory 생성 실패. hr=0x%08X", hr);
-            outMaxNits = 100.0f;
-            return false;
-        }
+	bool D3D11RenderDevice::IsHDRSupported(float& outMaxNits) const
+	{
+		using Microsoft::WRL::ComPtr;
+		outMaxNits = 100.0f; // 기본값(SDR) 설정. 실패 시 이 값이 유지됨.
 
-        // 주 그래픽 어댑터 (0번) 열거
-        Microsoft::WRL::ComPtr<IDXGIAdapter1> pAdapter;
-        UINT adapterIndex = 0;
-        while (pFactory->EnumAdapters1(adapterIndex, &pAdapter) != DXGI_ERROR_NOT_FOUND)
-        {
-            DXGI_ADAPTER_DESC1 desc;
-            pAdapter->GetDesc1(&desc);
+		ComPtr<IDXGIFactory4> factory;
+		if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
+		{
+			ALICE_LOG_ERRORF("IsHDRSupported: Factory 생성 실패");
+			return false;
+		}
 
-            // WARP 어댑터(소프트웨어)를 건너뛰고 주 어댑터만 사용
-            if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-            {
-                adapterIndex++;
-                pAdapter.Reset();
-                continue;
-            }
-            break;
-        }
+		// 하드웨어 어댑터 탐색 (소프트웨어 렌더러 제외)
+		ComPtr<IDXGIAdapter1> adapter;
+		DXGI_ADAPTER_DESC1 adpDesc;
+		for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+		{
+			adapter->GetDesc1(&adpDesc);
+			if (!(adpDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) break;
+		}
 
-        if (!pAdapter)
-        {
-            ALICE_LOG_ERRORF("D3D11RenderDevice::IsHDRSupported: 유효한 하드웨어 어댑터를 찾을 수 없습니다.");
-            outMaxNits = 100.0f;
-            return false;
-        }
+		if (!adapter) return false;
 
-        // 주 모니터 출력 (0번) 열거
-        Microsoft::WRL::ComPtr<IDXGIOutput> pOutput;
-        hr = pAdapter->EnumOutputs(0, &pOutput);
-        if (FAILED(hr))
-        {
-            ALICE_LOG_ERRORF("D3D11RenderDevice::IsHDRSupported: 주 모니터 출력(Output 0)을 찾을 수 없습니다. hr=0x%08X", hr);
-            outMaxNits = 100.0f;
-            return false;
-        }
+		// 주 모니터(0) 및 HDR 인터페이스(Output6) 쿼리
+		ComPtr<IDXGIOutput> output;
+		ComPtr<IDXGIOutput6> output6;
+		if (FAILED(adapter->EnumOutputs(0, &output)) || FAILED(output.As(&output6)))
+		{
+			return false; // 모니터가 없거나 OS/드라이버가 구형
+		}
 
-        // HDR 정보를 얻기 위해 IDXGIOutput6으로 쿼리
-        Microsoft::WRL::ComPtr<IDXGIOutput6> pOutput6;
-        hr = pOutput.As(&pOutput6);
-        if (FAILED(hr))
-        {
-            ALICE_LOG_INFO("D3D11RenderDevice::IsHDRSupported: IDXGIOutput6 인터페이스를 얻을 수 없습니다. HDR 정보를 얻을 수 없습니다.");
-            outMaxNits = 100.0f;
-            return false;
-        }
+		DXGI_OUTPUT_DESC1 desc1{}; // C++20 zero initialization
+		if (FAILED(output6->GetDesc1(&desc1))) return false;
 
-        // DXGI_OUTPUT_DESC1에서 HDR 정보 확인
-        DXGI_OUTPUT_DESC1 desc1 = {};
-        hr = pOutput6->GetDesc1(&desc1);
-        if (FAILED(hr))
-        {
-            ALICE_LOG_ERRORF("D3D11RenderDevice::IsHDRSupported: GetDesc1 호출 실패. hr=0x%08X", hr);
-            outMaxNits = 100.0f;
-            return false;
-        }
+		// HDR 활성 조건: 색공간 일치 및 밝기 > 100.0f
+		const bool bIsHDR = (desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) &&
+			(desc1.MaxLuminance > 100.0f);
 
-        // HDR 활성화 조건 분석
-        bool isHDRColorSpace = (desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
-        outMaxNits = static_cast<float>(desc1.MaxLuminance);
+		if (bIsHDR)
+		{
+			outMaxNits = static_cast<float>(desc1.MaxLuminance);
+			ALICE_LOG_INFO("IsHDRSupported: HDR ON (Max: %.1f)", outMaxNits);
+		}
 
-        // OS가 HDR을 켰을 때 MaxLuminance는 100 Nits(SDR 기준)를 초과합니다.
-        bool isHDRActive = outMaxNits > 100.0f;
-
-        if (isHDRColorSpace && isHDRActive)
-        {
-            ALICE_LOG_INFO("D3D11RenderDevice::IsHDRSupported: HDR 활성화됨. MaxNits: %.1f", outMaxNits);
-            return true;
-        }
-        else
-        {
-            outMaxNits = 100.0f; // SDR 기본값
-            ALICE_LOG_INFO("D3D11RenderDevice::IsHDRSupported: HDR 비활성화. MaxNits: 100.0");
-            return false;
-        }
-    }
+		return bIsHDR;
+	}
 }
 
 
