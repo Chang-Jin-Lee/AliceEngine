@@ -1,0 +1,765 @@
+#pragma once
+
+namespace Alice
+{
+    /// 디퍼드 렌더링 전용 셰이더 코드
+    class DeferredShader
+    {
+    public:
+        // G-Buffer Vertex Shader
+        inline static const char* GBufferVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+struct VSInput
+{
+    float3 Position : POSITION;
+    float3 Normal   : NORMAL;
+    float2 TexCoord : TEXCOORD0;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+    
+    float4 posW = mul(float4(input.Position, 1.0f), gWorld);
+    output.Position = mul(mul(posW, gView), gProj);
+    output.WorldPos = posW.xyz;
+    
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
+    output.Normal = N;
+    
+    float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
+    float3 T = normalize(cross(up, N));
+    float3 B = normalize(cross(N, T));
+    
+    output.TangentW = T;
+    output.BitanW = B;
+    output.TexCoord = input.TexCoord;
+    
+    return output;
+}
+)";
+
+        // G-Buffer Skinned Vertex Shader
+        inline static const char* GBufferSkinnedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBBones : register(b2)
+{
+    float4x4 gBones[1023];
+    uint     gBoneCount;
+    float3   _padBones;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+    float2 TexCoord     : TEXCOORD0;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+    
+    uint4 bi = input.BoneIndices;
+    float4 bw = input.BoneWeights;
+    matrix M = bw.x * gBones[bi.x]
+             + bw.y * gBones[bi.y]
+             + bw.z * gBones[bi.z]
+             + bw.w * gBones[bi.w];
+    
+    float4 posL = float4(input.Position, 1.0f);
+    float4 skinnedPos = mul(posL, M);
+    float3x3 M3 = (float3x3)M;
+    float3 skinnedN = normalize(mul(input.Normal, M3));
+    float3 skinnedT = normalize(mul(input.Tangent, M3));
+    float3 skinnedB = normalize(mul(input.Binormal, M3));
+    
+    float4 posW = mul(skinnedPos, gWorld);
+    output.Position = mul(mul(posW, gView), gProj);
+    output.WorldPos = posW.xyz;
+    
+    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
+    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
+    output.TexCoord = input.TexCoord;
+    
+    return output;
+}
+)";
+
+        // G-Buffer Pixel Shader
+        inline static const char* GBufferPS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+struct VertexOut
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+struct GBufferOut
+{
+    float4 PositionWS : SV_Target0;
+    float4 NormalWS   : SV_Target1;
+    float4 Metalness  : SV_Target2;
+    float4 Roughness  : SV_Target3;
+    float4 BaseColor  : SV_Target4;
+};
+
+Texture2D  g_DiffuseMap : register(t0);
+Texture2D  g_NormalMap  : register(t1);
+SamplerState g_Sam : register(s0);
+
+GBufferOut main(VertexOut pIn)
+{
+    GBufferOut gOut;
+    
+    float4 textureColor = float4(1,1,1,1);
+    if (gUseTexture != 0)
+    {
+        textureColor = g_DiffuseMap.Sample(g_Sam, pIn.TexCoord);
+    }
+    
+    float alphaTex = textureColor.a * gMaterialColor.a;
+    clip(alphaTex - 0.1f);
+    
+    float3 baseColor = gMaterialColor.rgb;
+    if (gUseTexture != 0)
+    {
+        baseColor *= textureColor.rgb;
+    }
+    
+    float3 N = normalize(pIn.Normal);
+    if (gEnableNormalMap != 0)
+    {
+        float3 T = normalize(pIn.TangentW);
+        float3 B = normalize(pIn.BitanW);
+        float handed = dot(cross(T, B), N);
+        if (handed < 0.0f) B = -B;
+        float3x3 TBN = float3x3(T, B, N);
+        float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
+        N_ts.y = -N_ts.y;
+        N_ts = normalize(N_ts);
+        N = normalize(mul(N_ts, TBN));
+    }
+    
+    float metalness = saturate(gMetalness);
+    float roughness = saturate(gRoughness);
+    
+    gOut.PositionWS = float4(pIn.WorldPos, 1.0f);
+    gOut.NormalWS   = float4(N, 1.0f);
+    gOut.Metalness  = float4(metalness, 0, 0, 1);
+    gOut.Roughness  = float4(roughness, 0, 0, 1);
+    gOut.BaseColor  = float4(baseColor, 1.0f);
+    
+    return gOut;
+}
+)";
+
+        // Deferred Light Pixel Shader
+        inline static const char* LightPS = R"(
+// PBR 헬퍼 함수들
+static const float PI = 3.14159265f;
+static const float INV_PI = 0.31830988618f;
+
+float DistributionGGX(float NdotH, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float denom = max(NdotH * NdotH * (a2 - 1.0f) + 1.0f, 1e-4f);
+    return a2 / (PI * denom * denom);
+}
+
+float GeometrySchlickGGX(float NdotX, float roughness)
+{
+    float r = roughness + 1.0f;
+    float k = (r * r) * 0.125f;
+    return NdotX / (NdotX * (1.0f - k) + k);
+}
+
+float GeometrySmith(float NdotV, float NdotL, float roughness)
+{
+    float gv = GeometrySchlickGGX(NdotV, roughness);
+    float gl = GeometrySchlickGGX(NdotL, roughness);
+    return gv * gl;
+}
+
+float3 FresnelSchlick(float3 F0, float cosTheta)
+{
+    return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
+// ShadowCB (register b4)
+cbuffer ShadowCB : register(b4)
+{
+    float4x4 g_ShadowLightViewProj;
+    float    g_ShadowBias2;
+    float    g_ShadowMapSize2;
+    float    g_ShadowPCFRadius2;
+    int      g_ShadowEnabled2;
+    float3   g_ShadowPad2;
+};
+
+// 그림자 계산 함수 (PCF)
+float CalcShadowFactorDeferred(float3 posW, Texture2D<float> shadowMap, SamplerComparisonState shadowSampler)
+{
+    if (g_ShadowEnabled2 == 0) return 1.0f;
+
+    float4 shadowPos = mul(float4(posW, 1.0f), g_ShadowLightViewProj);
+    shadowPos.xyz /= shadowPos.w;
+
+    float2 shadowTex;
+    shadowTex.x = shadowPos.x * 0.5f + 0.5f;
+    shadowTex.y = -shadowPos.y * 0.5f + 0.5f;
+    float depth = shadowPos.z;
+
+    if (shadowTex.x < 0.0f || shadowTex.x > 1.0f || shadowTex.y < 0.0f || shadowTex.y > 1.0f)
+        return 1.0f;
+
+    const float2 texelSize = float2(1.0f, 1.0f) / max(g_ShadowMapSize2, 1.0f);
+    const float2 pcfStep = max(g_ShadowPCFRadius2, 0.0f) * texelSize;
+
+    float sum = 0.0f;
+    [unroll] for (int y = -1; y <= 1; ++y)
+    {
+        [unroll] for (int x = -1; x <= 1; ++x)
+        {
+            float2 offset = float2(x, y) * pcfStep;
+            sum += shadowMap.SampleCmpLevelZero(shadowSampler, shadowTex + offset, depth - g_ShadowBias2);
+        }
+    }
+    return sum / 9.0f;
+}
+
+// 구조체 정의
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+// G-Buffer 텍스처
+Texture2D g_PositionWS : register(t0);
+Texture2D g_NormalWS : register(t1);
+Texture2D g_Metalness : register(t2);
+Texture2D g_Roughness : register(t3);
+Texture2D g_BaseColor : register(t4);
+TextureCube g_IBL_Diffuse : register(t5);
+TextureCube g_IBL_Specular : register(t6);
+Texture2D   g_IBL_BRDF_LUT : register(t7);
+Texture2D<float> g_ShadowMap : register(t8);
+
+SamplerState g_Sam : register(s0);
+SamplerComparisonState g_ShadowSampler : register(s1);
+SamplerState g_SamplerLinear : register(s2);
+
+// 상수 버퍼
+cbuffer ConstantBuffer : register(b0)
+{
+    float4x4 g_World;
+    float4x4 g_View;
+    float4x4 g_Proj;
+    float4x4 g_WorldInvTranspose;
+    float4 g_Material_ambient;
+    float4 g_Material_diffuse;
+    float4 g_Material_specular;
+    float4 g_Material_reflect;
+    float4 g_DirLight_ambient;
+    float4 g_DirLight_diffuse;
+    float4 g_DirLight_specular;
+    float3 g_DirLight_direction;
+    float  g_DirLight_intensity;
+    float3 g_EyePosW;
+    int    g_ShadingMode;
+    int    g_EnableNormalMap;
+    int    g_UseSpecularMap;
+    int    g_UseDiffuseMap;
+    float  g_Pad;
+    int    g_UseTextureColor;
+    float3 g_PBRPad;
+    float4 g_PBRBaseColor;
+    float  g_PBRMetalness;
+    float  g_PBRRoughness;
+    float  g_PBRAmbientOcclusion;
+    float  g_PBRPad2;
+    float  g_OutlineWidth;
+    float  g_OutlinePow;
+    float  g_OutlineThickness;
+    float  g_OutlineStrength;
+    float4 g_OutlineColor;
+    float4x4 g_LightViewProj;
+    float  g_ShadowBias;
+    float  g_ShadowMapSize;
+    float  g_ShadowPCFRadius;
+    int    g_ShadowEnabled;
+    int    g_BoundsBoneIndex;
+    float3 g_BoundsPad;
+};
+
+cbuffer DirectionalLightBuffer : register(b3)
+{
+    float4 g_LightDirection;
+    float4 g_LightColor;
+    float g_intensity;
+    float g_pad[3];
+};
+
+float4 main(PS_INPUT_QUAD pIn) : SV_Target
+{
+    // G-Buffer 가져오기
+    float4 positionWS = g_PositionWS.Sample(g_Sam, pIn.uv);
+    float4 normalWS_packed = g_NormalWS.Sample(g_Sam, pIn.uv);
+    float4 metalness_packed = g_Metalness.Sample(g_Sam, pIn.uv);
+    float4 roughness_packed = g_Roughness.Sample(g_Sam, pIn.uv);
+    float4 baseColor = g_BaseColor.Sample(g_Sam, pIn.uv);
+    
+    // 배경 체크
+    if (length(normalWS_packed.xyz) < 0.1f) discard;
+
+    // 데이터 복원
+    float3 posW = positionWS.xyz;
+    float3 N = normalize(normalWS_packed.xyz);
+    float metalness = metalness_packed.r;
+    float roughness = max(roughness_packed.r, 0.04f);
+    float3 albedo = baseColor.rgb;
+    float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
+    
+    // 라이팅 벡터 계산
+    float3 L = normalize(-g_LightDirection.xyz);
+    float3 V = normalize(g_EyePosW - posW);
+    float3 H = normalize(L + V);
+    
+    float NdotL = dot(N, L);
+    float theta = saturate(NdotL);
+    float NdotV = saturate(dot(N, V));
+    float NdotH = saturate(dot(N, H));
+    float VdotH = saturate(dot(V, H));
+    
+    // PBR 연산
+    float3 albedoPBR = albedoLinear;
+    roughness = max(roughness, 0.04f);
+    float ao = saturate(g_PBRAmbientOcclusion);
+    
+    // Direct Light
+    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoPBR, metalness);
+    float D = DistributionGGX(NdotH, roughness);
+    float G = GeometrySmith(NdotV, theta, roughness);
+    float3 F = FresnelSchlick(F0, VdotH);
+    
+    float3 numerator = D * G * F;
+    float denomSpec = max(4.0f * NdotV * theta, 1e-4f);
+    float3 specular = numerator / denomSpec;
+    
+    float3 kS = F;
+    float3 kD = (1.0f - kS) * (1.0f - metalness);
+    float3 diffuse = kD * albedoPBR * INV_PI;
+    
+    float shadowVis = CalcShadowFactorDeferred(posW, g_ShadowMap, g_ShadowSampler);
+    float3 radiance = g_LightColor.rgb * PI;
+    float3 directLighting = (diffuse + specular) * radiance * theta * ao * shadowVis * g_intensity;
+    
+    // Indirect Light (IBL)
+    float3 diffuseIBL = kD * g_IBL_Diffuse.Sample(g_Sam, N).rgb * albedoPBR;
+    
+    float3 Renv = reflect(-V, N);
+    const float kMaxSpecularMip = 8.0f;
+    float3 prefilteredColor = g_IBL_Specular.SampleLevel(g_Sam, Renv, roughness * kMaxSpecularMip).rgb;
+    float2 specBRDF = g_IBL_BRDF_LUT.Sample(g_SamplerLinear, float2(NdotV, roughness)).rg;
+    float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
+    
+    float3 iblColor = (diffuseIBL + specularIBL) * ao;
+    
+    // 최종 색상
+    float3 color = directLighting + iblColor;
+    
+    return float4(color, 1.0f);
+}
+)";
+
+        // Transparent Forward-Style Skinned VS
+        inline static const char* TransparentSkinnedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBBones : register(b2)
+{
+    float4x4 gBones[1023];
+    uint     gBoneCount;
+    float3   _padBones;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
+    float2 TexCoord     : TEXCOORD0;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+
+    uint4 bi = input.BoneIndices;
+    float4 bw = input.BoneWeights;
+    matrix M = bw.x * gBones[bi.x]
+             + bw.y * gBones[bi.y]
+             + bw.z * gBones[bi.z]
+             + bw.w * gBones[bi.w];
+
+    float4 posL = float4(input.Position, 1.0f);
+    float4 skinnedPos = mul(posL, M);
+    float3x3 M3 = (float3x3)M;
+    float3 skinnedN = normalize(mul(input.Normal, M3));
+    float3 skinnedT = normalize(mul(input.Tangent, M3));
+    float3 skinnedB = normalize(mul(input.Binormal, M3));
+
+    float4 posW = mul(skinnedPos, gWorld);
+    output.Position = mul(mul(posW, gView), gProj);
+    output.WorldPos = posW.xyz;
+
+    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
+    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
+    output.TexCoord = input.TexCoord;
+
+    return output;
+}
+)";
+
+        // Transparent Forward-Style PS
+        inline static const char* TransparentPS = R"(
+static const float PI = 3.14159265f;
+static const float INV_PI = 0.31830988618f;
+
+float DistributionGGX(float NdotH, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float denom = max(NdotH * NdotH * (a2 - 1.0f) + 1.0f, 1e-4f);
+    return a2 / (PI * denom * denom);
+}
+
+float GeometrySchlickGGX(float NdotX, float roughness)
+{
+    float r = roughness + 1.0f;
+    float k = (r * r) * 0.125f;
+    return NdotX / (NdotX * (1.0f - k) + k);
+}
+
+float GeometrySmith(float NdotV, float NdotL, float roughness)
+{
+    float gv = GeometrySchlickGGX(NdotV, roughness);
+    float gl = GeometrySchlickGGX(NdotL, roughness);
+    return gv * gl;
+}
+
+float3 FresnelSchlick(float3 F0, float cosTheta)
+{
+    return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
+// 텍스처
+Texture2D  g_DiffuseMap : register(t0);
+Texture2D  g_NormalMap  : register(t1);
+
+// IBL
+TextureCube g_IBL_Diffuse : register(t5);
+TextureCube g_IBL_Specular : register(t6);
+Texture2D   g_IBL_BRDF_LUT : register(t7);
+
+SamplerState g_Sam : register(s0);
+
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBTransparentLight : register(b1)
+{
+    float3 g_LightDir;
+    float  g_LightIntensity;
+    float3 g_LightColor;
+    float  _pad0;
+    float3 g_CameraPosW;
+    float  _pad1;
+};
+
+struct PSIn
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+float3 LinearToSRGB(float3 linearColor)
+{
+    return pow(max(linearColor, 0.0f), 1.0f / 2.2f);
+}
+
+float4 main(PSIn pIn) : SV_Target
+{
+    float4 tex = float4(1,1,1,1);
+    if (gUseTexture != 0)
+        tex = g_DiffuseMap.Sample(g_Sam, pIn.TexCoord);
+
+    float alphaTex = tex.a * gMaterialColor.a;
+
+    // 컷아웃(완전 투명 근처) 제거
+    clip(alphaTex - 0.99f);
+    // 거의 불투명은 디퍼드에서 처리하므로 여기서는 제외
+    if (alphaTex >= 0.99f) discard;
+
+    float3 baseColor = gMaterialColor.rgb;
+    if (gUseTexture != 0)
+        baseColor *= tex.rgb;
+
+    float3 albedoLinear = pow(max(baseColor, 0.0f), 2.2f);
+
+    float3 N = normalize(pIn.Normal);
+    if (gEnableNormalMap != 0)
+    {
+        float3 T = normalize(pIn.TangentW);
+        float3 B = normalize(pIn.BitanW);
+        float handed = dot(cross(T, B), N);
+        if (handed < 0.0f) B = -B;
+        float3x3 TBN = float3x3(T, B, N);
+        float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
+        N_ts.y = -N_ts.y;
+        N = normalize(mul(normalize(N_ts), TBN));
+    }
+
+    float metalness = saturate(gMetalness);
+    float roughness = max(saturate(gRoughness), 0.04f);
+    float ao = 1.0f;
+
+    float3 L = normalize(-g_LightDir);
+    float3 V = normalize(g_CameraPosW - pIn.WorldPos);
+    float3 H = normalize(L + V);
+
+    float NdotL = saturate(dot(N, L));
+    float NdotV = saturate(dot(N, V));
+    float NdotH = saturate(dot(N, H));
+    float VdotH = saturate(dot(V, H));
+
+    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoLinear, metalness);
+    float D = DistributionGGX(NdotH, roughness);
+    float G = GeometrySmith(NdotV, NdotL, roughness);
+    float3 F = FresnelSchlick(F0, VdotH);
+
+    float3 numerator = D * G * F;
+    float denomSpec = max(4.0f * NdotV * NdotL, 1e-4f);
+    float3 specular = numerator / denomSpec;
+
+    float3 kS = F;
+    float3 kD = (1.0f - kS) * (1.0f - metalness);
+    float3 diffuse = kD * albedoLinear * INV_PI;
+
+    float3 radiance = g_LightColor.rgb * PI * g_LightIntensity;
+    float3 direct = (diffuse + specular) * radiance * NdotL * ao;
+
+    // IBL
+    float3 diffuseIBL = kD * g_IBL_Diffuse.Sample(g_Sam, N).rgb * albedoLinear;
+    float3 Renv = reflect(-V, N);
+    const float kMaxSpecularMip = 8.0f;
+    float3 prefilteredColor = g_IBL_Specular.SampleLevel(g_Sam, Renv, roughness * kMaxSpecularMip).rgb;
+    float2 specBRDF = g_IBL_BRDF_LUT.Sample(g_Sam, float2(NdotV, roughness)).rg;
+    float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
+    float3 ibl = (diffuseIBL + specularIBL) * ao;
+
+    float3 outLinear = direct + ibl;
+    return float4(outLinear, alphaTex);
+}
+)";
+
+        // Shadow VS (Static)
+        inline static const char* ShadowVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+struct VSInput
+{
+    float3 Position : POSITION;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput o;
+    float4 posW = mul(float4(input.Position, 1.0f), gWorld);
+    o.Position = mul(mul(posW, gView), gProj);
+    return o;
+}
+)";
+
+        // Shadow Skinned VS
+        inline static const char* ShadowSkinnedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBBones : register(b2)
+{
+    float4x4 gBones[1023];
+    uint     gBoneCount;
+    float3   _padBones;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+    float2 TexCoord     : TEXCOORD0; 
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput o;
+    
+    // 본 인덱스와 가중치를 가져옴
+    uint4 bi = input.BoneIndices;
+    float4 bw = input.BoneWeights;
+    
+    // 스키닝 행렬 계산
+    matrix M = bw.x * gBones[bi.x]
+             + bw.y * gBones[bi.y]
+             + bw.z * gBones[bi.z]
+             + bw.w * gBones[bi.w];
+    
+    // 위치 변환 (Local -> Skinned -> World -> View -> Proj)
+    float4 posL = float4(input.Position, 1.0f);
+    float4 skinnedPos = mul(posL, M);
+    float4 posW = mul(skinnedPos, gWorld);
+    
+    o.Position = mul(mul(posW, gView), gProj);
+    
+    return o;
+}
+)";
+    };
+}

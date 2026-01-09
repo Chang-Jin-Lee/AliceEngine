@@ -16,6 +16,8 @@
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include "Rendering/ShaderCode/CommonShaderCode.h"
+#include "Rendering/ShaderCode/DeferredShader.h"
 #include <fstream>
 #include <sstream>
 
@@ -24,898 +26,6 @@ using Microsoft::WRL::ComPtr;
 
 namespace Alice
 {
-    // G-Buffer Vertex Shader (인라인 코드)
-    namespace
-    {
-        const char* g_GBufferVertexShaderSource = R"(
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-struct VSInput
-{
-    float3 Position : POSITION;
-    float3 Normal   : NORMAL;
-    float2 TexCoord : TEXCOORD0;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : TEXCOORD0;
-    float3 Normal   : TEXCOORD1;
-    float2 TexCoord : TEXCOORD2;
-    float3 TangentW : TEXCOORD3;
-    float3 BitanW   : TEXCOORD4;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput output;
-    
-    float4 posW = mul(float4(input.Position, 1.0f), gWorld);
-    output.Position = mul(mul(posW, gView), gProj);
-    output.WorldPos = posW.xyz;
-    
-    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
-    output.Normal = N;
-    
-    float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
-    float3 T = normalize(cross(up, N));
-    float3 B = normalize(cross(N, T));
-    
-    output.TangentW = T;
-    output.BitanW = B;
-    output.TexCoord = input.TexCoord;
-    
-    return output;
-}
-)";
-
-        // 스키닝용 G-Buffer Vertex Shader
-        const char* g_GBufferSkinnedVertexShaderSource = R"(
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-cbuffer CBBones : register(b2)
-{
-    float4x4 gBones[1023];
-    uint     gBoneCount;
-    float3   _padBones;
-};
-
-struct VSInput
-{
-    float3 Position     : POSITION;
-    float3 Normal       : NORMAL;
-    float3 Tangent      : TANGENT;
-    float3 Binormal     : BINORMAL;
-    float4 Color        : COLOR;
-    uint4  BoneIndices  : BLENDINDICES;
-    float4 BoneWeights  : BLENDWEIGHT;
-    float2 TexCoord     : TEXCOORD0;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : TEXCOORD0;
-    float3 Normal   : TEXCOORD1;
-    float2 TexCoord : TEXCOORD2;
-    float3 TangentW : TEXCOORD3;
-    float3 BitanW   : TEXCOORD4;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput output;
-    
-    uint4 bi = input.BoneIndices;
-    float4 bw = input.BoneWeights;
-    matrix M = bw.x * gBones[bi.x]
-             + bw.y * gBones[bi.y]
-             + bw.z * gBones[bi.z]
-             + bw.w * gBones[bi.w];
-    
-    float4 posL = float4(input.Position, 1.0f);
-    float4 skinnedPos = mul(posL, M);
-    float3x3 M3 = (float3x3)M;
-    float3 skinnedN = normalize(mul(input.Normal, M3));
-    float3 skinnedT = normalize(mul(input.Tangent, M3));
-    float3 skinnedB = normalize(mul(input.Binormal, M3));
-    
-    float4 posW = mul(skinnedPos, gWorld);
-    output.Position = mul(mul(posW, gView), gProj);
-    output.WorldPos = posW.xyz;
-    
-    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
-    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
-    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
-    output.TexCoord = input.TexCoord;
-    
-    return output;
-}
-)";
-
-        // Transparent Forward-Style Skinned VS
-        // - GBuffer 스키닝 VS와 동일한 출력(월드 좌표/노말/UV/TBN)을 만든 뒤,
-        //   Transparent PS에서 직접 조명을 계산하고 알파 블렌딩합니다.
-        const char* g_TransparentSkinnedVertexShaderSource = R"(
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-cbuffer CBBones : register(b2)
-{
-    float4x4 gBones[1023];
-    uint     gBoneCount;
-    float3   _padBones;
-};
-
-struct VSInput
-{
-    float3 Position     : POSITION;
-    float3 Normal       : NORMAL;
-    float3 Tangent      : TANGENT;
-    float3 Binormal     : BINORMAL;
-    float4 Color        : COLOR;
-    float2 TexCoord     : TEXCOORD0;
-    uint4  BoneIndices  : BLENDINDICES;
-    float4 BoneWeights  : BLENDWEIGHT;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : TEXCOORD0;
-    float3 Normal   : TEXCOORD1;
-    float2 TexCoord : TEXCOORD2;
-    float3 TangentW : TEXCOORD3;
-    float3 BitanW   : TEXCOORD4;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput output;
-
-    uint4 bi = input.BoneIndices;
-    float4 bw = input.BoneWeights;
-    matrix M = bw.x * gBones[bi.x]
-             + bw.y * gBones[bi.y]
-             + bw.z * gBones[bi.z]
-             + bw.w * gBones[bi.w];
-
-    float4 posL = float4(input.Position, 1.0f);
-    float4 skinnedPos = mul(posL, M);
-    float3x3 M3 = (float3x3)M;
-    float3 skinnedN = normalize(mul(input.Normal, M3));
-    float3 skinnedT = normalize(mul(input.Tangent, M3));
-    float3 skinnedB = normalize(mul(input.Binormal, M3));
-
-    float4 posW = mul(skinnedPos, gWorld);
-    output.Position = mul(mul(posW, gView), gProj);
-    output.WorldPos = posW.xyz;
-
-    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
-    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
-    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
-    output.TexCoord = input.TexCoord;
-
-    return output;
-}
-)";
-
-        // Transparent Forward-Style PS
-        // - 알파가 1.0에 가까운 픽셀은 디퍼드(불투명)에서 처리하므로 여기서는 제외(discard)
-        // - 0.1 미만은 컷아웃으로 제거(Forward/튜토리얼과 동일 스케일)
-        const char* g_TransparentPixelShaderSource = R"(
-static const float PI = 3.14159265f;
-static const float INV_PI = 0.31830988618f;
-
-float DistributionGGX(float NdotH, float roughness)
-{
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float denom = max(NdotH * NdotH * (a2 - 1.0f) + 1.0f, 1e-4f);
-    return a2 / (PI * denom * denom);
-}
-
-float GeometrySchlickGGX(float NdotX, float roughness)
-{
-    float r = roughness + 1.0f;
-    float k = (r * r) * 0.125f;
-    return NdotX / (NdotX * (1.0f - k) + k);
-}
-
-float GeometrySmith(float NdotV, float NdotL, float roughness)
-{
-    float gv = GeometrySchlickGGX(NdotV, roughness);
-    float gl = GeometrySchlickGGX(NdotL, roughness);
-    return gv * gl;
-}
-
-float3 FresnelSchlick(float3 F0, float cosTheta)
-{
-    return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
-}
-
-// 텍스처
-Texture2D  g_DiffuseMap : register(t0);
-Texture2D  g_NormalMap  : register(t1);
-
-// IBL
-TextureCube g_IBL_Diffuse : register(t5);
-TextureCube g_IBL_Specular : register(t6);
-Texture2D   g_IBL_BRDF_LUT : register(t7);
-
-SamplerState g_Sam : register(s0);
-
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-cbuffer CBTransparentLight : register(b1)
-{
-    float3 g_LightDir;
-    float  g_LightIntensity;
-    float3 g_LightColor;
-    float  _pad0;
-    float3 g_CameraPosW;
-    float  _pad1;
-};
-
-struct PSIn
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : TEXCOORD0;
-    float3 Normal   : TEXCOORD1;
-    float2 TexCoord : TEXCOORD2;
-    float3 TangentW : TEXCOORD3;
-    float3 BitanW   : TEXCOORD4;
-};
-
-float3 LinearToSRGB(float3 linearColor)
-{
-    return pow(max(linearColor, 0.0f), 1.0f / 2.2f);
-}
-
-float4 main(PSIn pIn) : SV_Target
-{
-    float4 tex = float4(1,1,1,1);
-    if (gUseTexture != 0)
-        tex = g_DiffuseMap.Sample(g_Sam, pIn.TexCoord);
-
-    float alphaTex = tex.a * gMaterialColor.a;
-
-    // 컷아웃(완전 투명 근처) 제거
-    // Deferred에서는 반투명(0.1~1.0)을 GBuffer에 넣으면 합성이 깨집니다.
-    // - 거의 불투명(>=0.99)만 GBuffer에 기록하고
-    // - 나머지 반투명은 라이트 패스 이후 Forward-Style(알파 블렌드) 패스로 별도 렌더링합니다.
-    clip(alphaTex - 0.99f);
-    // 거의 불투명은 디퍼드에서 처리하므로 여기서는 제외
-    if (alphaTex >= 0.99f) discard;
-
-    float3 baseColor = gMaterialColor.rgb;
-    if (gUseTexture != 0)
-        baseColor *= tex.rgb;
-
-    float3 albedoLinear = pow(max(baseColor, 0.0f), 2.2f);
-
-    float3 N = normalize(pIn.Normal);
-    if (gEnableNormalMap != 0)
-    {
-        float3 T = normalize(pIn.TangentW);
-        float3 B = normalize(pIn.BitanW);
-        float handed = dot(cross(T, B), N);
-        if (handed < 0.0f) B = -B;
-        float3x3 TBN = float3x3(T, B, N);
-        float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
-        N_ts.y = -N_ts.y;
-        N = normalize(mul(normalize(N_ts), TBN));
-    }
-
-    float metalness = saturate(gMetalness);
-    float roughness = max(saturate(gRoughness), 0.04f);
-    float ao = 1.0f;
-
-    float3 L = normalize(-g_LightDir);
-    float3 V = normalize(g_CameraPosW - pIn.WorldPos);
-    float3 H = normalize(L + V);
-
-    float NdotL = saturate(dot(N, L));
-    float NdotV = saturate(dot(N, V));
-    float NdotH = saturate(dot(N, H));
-    float VdotH = saturate(dot(V, H));
-
-    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoLinear, metalness);
-    float D = DistributionGGX(NdotH, roughness);
-    float G = GeometrySmith(NdotV, NdotL, roughness);
-    float3 F = FresnelSchlick(F0, VdotH);
-
-    float3 numerator = D * G * F;
-    float denomSpec = max(4.0f * NdotV * NdotL, 1e-4f);
-    float3 specular = numerator / denomSpec;
-
-    float3 kS = F;
-    float3 kD = (1.0f - kS) * (1.0f - metalness);
-    float3 diffuse = kD * albedoLinear * INV_PI;
-
-    float3 radiance = g_LightColor.rgb * PI * g_LightIntensity;
-    float3 direct = (diffuse + specular) * radiance * NdotL * ao;
-
-    // IBL
-    float3 diffuseIBL = kD * g_IBL_Diffuse.Sample(g_Sam, N).rgb * albedoLinear;
-    float3 Renv = reflect(-V, N);
-    const float kMaxSpecularMip = 8.0f;
-    float3 prefilteredColor = g_IBL_Specular.SampleLevel(g_Sam, Renv, roughness * kMaxSpecularMip).rgb;
-    float2 specBRDF = g_IBL_BRDF_LUT.Sample(g_Sam, float2(NdotV, roughness)).rg;
-    float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
-    float3 ibl = (diffuseIBL + specularIBL) * ao;
-
-    float3 outLinear = direct + ibl;
-    return float4(outLinear, alphaTex);
-}
-)";
-
-        // Quad Vertex Shader (FullScreen)
-        const char* g_QuadVertexShaderSource = R"(
-struct VSInput
-{
-    float3 Position : POSITION;
-    float2 TexCoord : TEXCOORD0;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-    float2 TexCoord : TEXCOORD0;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput output;
-    output.Position = float4(input.Position.xy, 0.0f, 1.0f);
-    output.TexCoord = input.TexCoord;
-    return output;
-}
-)";
-
-        // G-Buffer Pixel Shader (인라인)
-        const char* g_GBufferPixelShaderSource = R"(
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-struct VertexOut
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : TEXCOORD0;
-    float3 Normal   : TEXCOORD1;
-    float2 TexCoord : TEXCOORD2;
-    float3 TangentW : TEXCOORD3;
-    float3 BitanW   : TEXCOORD4;
-};
-
-struct GBufferOut
-{
-    float4 PositionWS : SV_Target0;
-    float4 NormalWS   : SV_Target1;
-    float4 Metalness  : SV_Target2;
-    float4 Roughness  : SV_Target3;
-    float4 BaseColor  : SV_Target4;
-};
-
-Texture2D  g_DiffuseMap : register(t0);
-Texture2D  g_NormalMap  : register(t1);
-SamplerState g_Sam : register(s0);
-
-GBufferOut main(VertexOut pIn)
-{
-    GBufferOut gOut;
-    
-    float4 textureColor = float4(1,1,1,1);
-    if (gUseTexture != 0)
-    {
-        textureColor = g_DiffuseMap.Sample(g_Sam, pIn.TexCoord);
-    }
-    
-    float alphaTex = textureColor.a * gMaterialColor.a;
-    clip(alphaTex - 0.1f);
-    
-    float3 baseColor = gMaterialColor.rgb;
-    if (gUseTexture != 0)
-    {
-        baseColor *= textureColor.rgb;
-    }
-    
-    float3 N = normalize(pIn.Normal);
-    if (gEnableNormalMap != 0)
-    {
-        float3 T = normalize(pIn.TangentW);
-        float3 B = normalize(pIn.BitanW);
-        float handed = dot(cross(T, B), N);
-        if (handed < 0.0f) B = -B;
-        float3x3 TBN = float3x3(T, B, N);
-        float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
-        N_ts.y = -N_ts.y;
-        N_ts = normalize(N_ts);
-        N = normalize(mul(N_ts, TBN));
-    }
-    
-    float metalness = saturate(gMetalness);
-    float roughness = saturate(gRoughness);
-    
-    gOut.PositionWS = float4(pIn.WorldPos, 1.0f);
-    gOut.NormalWS   = float4(N, 1.0f);
-    gOut.Metalness  = float4(metalness, 0, 0, 1);
-    gOut.Roughness  = float4(roughness, 0, 0, 1);
-    gOut.BaseColor  = float4(baseColor, 1.0f);
-    
-    return gOut;
-}
-)";
-
-        // Deferred Light Pixel Shader (인라인)
-        const char* g_DeferredLightPixelShaderSource = R"(
-// PBR 헬퍼 함수들
-static const float PI = 3.14159265f;
-static const float INV_PI = 0.31830988618f;
-
-float DistributionGGX(float NdotH, float roughness)
-{
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float denom = max(NdotH * NdotH * (a2 - 1.0f) + 1.0f, 1e-4f);
-    return a2 / (PI * denom * denom);
-}
-
-float GeometrySchlickGGX(float NdotX, float roughness)
-{
-    float r = roughness + 1.0f;
-    float k = (r * r) * 0.125f;
-    return NdotX / (NdotX * (1.0f - k) + k);
-}
-
-float GeometrySmith(float NdotV, float NdotL, float roughness)
-{
-    float gv = GeometrySchlickGGX(NdotV, roughness);
-    float gl = GeometrySchlickGGX(NdotL, roughness);
-    return gv * gl;
-}
-
-float3 FresnelSchlick(float3 F0, float cosTheta)
-{
-    return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
-}
-
-// ShadowCB (register b4)
-// - ConstantBuffer(b0)는 구조가 매우 커서 CPU/HLSL 패킹 불일치로 행렬이 깨지기 쉽습니다.
-// - Shadow 관련 값만 별도 CB로 빼서 정확히 전달합니다. (Forward와 동일한 안정성)
-cbuffer ShadowCB : register(b4)
-{
-    float4x4 g_ShadowLightViewProj;
-    float    g_ShadowBias2;
-    float    g_ShadowMapSize2;
-    float    g_ShadowPCFRadius2;
-    int      g_ShadowEnabled2;
-    float3   g_ShadowPad2;
-};
-
-
-// 그림자 계산 함수 (PCF)
-// - ForwardRenderSystem 과 동일한 방식(3x3 SampleCmpLevelZero)
-float CalcShadowFactorDeferred(float3 posW, Texture2D<float> shadowMap, SamplerComparisonState shadowSampler)
-{
-    if (g_ShadowEnabled2 == 0) return 1.0f;
-
-    float4 shadowPos = mul(float4(posW, 1.0f), g_ShadowLightViewProj);
-    shadowPos.xyz /= shadowPos.w;
-
-    float2 shadowTex;
-    shadowTex.x = shadowPos.x * 0.5f + 0.5f;
-    shadowTex.y = -shadowPos.y * 0.5f + 0.5f;
-    float depth = shadowPos.z;
-
-    if (shadowTex.x < 0.0f || shadowTex.x > 1.0f || shadowTex.y < 0.0f || shadowTex.y > 1.0f)
-        return 1.0f;
-
-    const float2 texelSize = float2(1.0f, 1.0f) / max(g_ShadowMapSize2, 1.0f);
-    const float2 pcfStep = max(g_ShadowPCFRadius2, 0.0f) * texelSize;
-
-    float sum = 0.0f;
-    [unroll] for (int y = -1; y <= 1; ++y)
-    {
-        [unroll] for (int x = -1; x <= 1; ++x)
-        {
-            float2 offset = float2(x, y) * pcfStep;
-            sum += shadowMap.SampleCmpLevelZero(shadowSampler, shadowTex + offset, depth - g_ShadowBias2);
-        }
-    }
-    return sum / 9.0f;
-}
-
-// 구조체 정의
-struct PS_INPUT_QUAD
-{
-    float4 position : SV_Position;
-    float2 uv : TEXCOORD0;
-};
-
-// G-Buffer 텍스처
-Texture2D g_PositionWS : register(t0);
-Texture2D g_NormalWS : register(t1);
-Texture2D g_Metalness : register(t2);
-Texture2D g_Roughness : register(t3);
-Texture2D g_BaseColor : register(t4);
-TextureCube g_IBL_Diffuse : register(t5);
-TextureCube g_IBL_Specular : register(t6);
-Texture2D   g_IBL_BRDF_LUT : register(t7);
-Texture2D<float> g_ShadowMap : register(t8);
-
-SamplerState g_Sam : register(s0);
-SamplerComparisonState g_ShadowSampler : register(s1);
-SamplerState g_SamplerLinear : register(s2);
-
-// 상수 버퍼
-cbuffer ConstantBuffer : register(b0)
-{
-    float4x4 g_World;
-    float4x4 g_View;
-    float4x4 g_Proj;
-    float4x4 g_WorldInvTranspose;
-    float4 g_Material_ambient;
-    float4 g_Material_diffuse;
-    float4 g_Material_specular;
-    float4 g_Material_reflect;
-    float4 g_DirLight_ambient;
-    float4 g_DirLight_diffuse;
-    float4 g_DirLight_specular;
-    float3 g_DirLight_direction;
-    float  g_DirLight_intensity;
-    float3 g_EyePosW;
-    int    g_ShadingMode;
-    int    g_EnableNormalMap;
-    int    g_UseSpecularMap;
-    int    g_UseDiffuseMap;
-    float  g_Pad;
-    int    g_UseTextureColor;
-    float3 g_PBRPad;
-    float4 g_PBRBaseColor;
-    float  g_PBRMetalness;
-    float  g_PBRRoughness;
-    float  g_PBRAmbientOcclusion;
-    float  g_PBRPad2;
-    float  g_OutlineWidth;
-    float  g_OutlinePow;
-    float  g_OutlineThickness;
-    float  g_OutlineStrength;
-    float4 g_OutlineColor;
-    float4x4 g_LightViewProj;
-    float  g_ShadowBias;
-    float  g_ShadowMapSize;
-    float  g_ShadowPCFRadius;
-    int    g_ShadowEnabled;
-    int    g_BoundsBoneIndex;
-    float3 g_BoundsPad;
-};
-
-cbuffer DirectionalLightBuffer : register(b3)
-{
-    float4 g_LightDirection;
-    float4 g_LightColor;
-    float g_intensity;
-    float g_pad[3];
-};
-
-float4 main(PS_INPUT_QUAD pIn) : SV_Target
-{
-    // G-Buffer 가져오기
-    float4 positionWS = g_PositionWS.Sample(g_Sam, pIn.uv);
-    float4 normalWS_packed = g_NormalWS.Sample(g_Sam, pIn.uv);
-    float4 metalness_packed = g_Metalness.Sample(g_Sam, pIn.uv);
-    float4 roughness_packed = g_Roughness.Sample(g_Sam, pIn.uv);
-    float4 baseColor = g_BaseColor.Sample(g_Sam, pIn.uv);
-    
-    // 배경 체크
-    if (length(normalWS_packed.xyz) < 0.1f) discard;
-
-    // 데이터 복원
-    float3 posW = positionWS.xyz;
-    float3 N = normalize(normalWS_packed.xyz);
-    float metalness = metalness_packed.r;
-    float roughness = max(roughness_packed.r, 0.04f);
-    float3 albedo = baseColor.rgb;
-    float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
-    
-    // 라이팅 벡터 계산
-    float3 L = normalize(-g_LightDirection.xyz);
-    float3 V = normalize(g_EyePosW - posW);
-    float3 H = normalize(L + V);
-    
-    float NdotL = dot(N, L);
-    float theta = saturate(NdotL);
-    float NdotV = saturate(dot(N, V));
-    float NdotH = saturate(dot(N, H));
-    float VdotH = saturate(dot(V, H));
-    
-    // PBR 연산
-    float3 albedoPBR = albedoLinear;
-    roughness = max(roughness, 0.04f);
-    float ao = saturate(g_PBRAmbientOcclusion);
-    
-    // Direct Light
-    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoPBR, metalness);
-    float D = DistributionGGX(NdotH, roughness);
-    float G = GeometrySmith(NdotV, theta, roughness);
-    float3 F = FresnelSchlick(F0, VdotH);
-    
-    float3 numerator = D * G * F;
-    float denomSpec = max(4.0f * NdotV * theta, 1e-4f);
-    float3 specular = numerator / denomSpec;
-    
-    float3 kS = F;
-    float3 kD = (1.0f - kS) * (1.0f - metalness);
-    float3 diffuse = kD * albedoPBR * INV_PI;
-    
-    float shadowVis = CalcShadowFactorDeferred(posW, g_ShadowMap, g_ShadowSampler);
-    float3 radiance = g_LightColor.rgb * PI;
-    float3 directLighting = (diffuse + specular) * radiance * theta * ao * shadowVis * g_intensity;
-    
-    // Indirect Light (IBL)
-    float3 diffuseIBL = kD * g_IBL_Diffuse.Sample(g_Sam, N).rgb * albedoPBR;
-    
-    float3 Renv = reflect(-V, N);
-    const float kMaxSpecularMip = 8.0f;
-    float3 prefilteredColor = g_IBL_Specular.SampleLevel(g_Sam, Renv, roughness * kMaxSpecularMip).rgb;
-    float2 specBRDF = g_IBL_BRDF_LUT.Sample(g_SamplerLinear, float2(NdotV, roughness)).rg;
-    float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
-    
-    float3 iblColor = (diffuseIBL + specularIBL) * ao;
-    
-    // 최종 색상
-    float3 color = directLighting + iblColor;
-    
-    return float4(color, 1.0f);
-}
-)";
-
-        // Skybox Vertex Shader (인라인)
-        const char* g_SkyboxVertexShaderSource = R"(
-cbuffer CBSkybox : register(b0)
-{
-    float4x4 gWorldViewProj;
-};
-
-struct SkyBoxVertexPos
-{
-    float3 posL : POSITION;
-};
-
-struct SkyBoxVertexPosHL
-{
-    float4 posH : SV_POSITION;
-    float3 posL : POSITION;
-};
-
-SkyBoxVertexPosHL VS(SkyBoxVertexPos vIn)
-{
-    SkyBoxVertexPosHL vOut;
-    float4 posH = mul(float4(vIn.posL, 1.0f), gWorldViewProj);
-    vOut.posH = posH.xyww;
-    vOut.posL = vIn.posL;
-    return vOut;
-}
-)";
-
-        // Skybox Pixel Shader (인라인)
-        const char* g_SkyboxPixelShaderSource = R"(
-TextureCube g_TexCube : register(t0);
-SamplerState g_Sam : register(s0);
-
-struct SkyBoxVertexPosHL
-{
-    float4 posH : SV_POSITION;
-    float3 posL : POSITION;
-};
-
-float4 PS(SkyBoxVertexPosHL pIn) : SV_Target
-{
-    return g_TexCube.Sample(g_Sam, pIn.posL);
-}
-)";
-
-        // Tone Mapping Pixel Shader (인라인) - 예제 프로젝트 36_ToneMappingPS_LDR.hlsl 참고
-        const char* g_ToneMappingPixelShaderSource = R"(
-Texture2D g_SceneHDR : register(t0);
-SamplerState g_SamplerLinear : register(s0);
-
-cbuffer PostProcessConstantBuffer : register(b2)
-{
-    float g_Exposure;
-    float g_MaxHDRNits;
-    float2 g_Padding;
-};
-
-struct PS_INPUT_QUAD
-{
-    float4 position : SV_POSITION;
-    float2 uv : TEXCOORD0;
-};
-
-// ACES Filmic Tone Mapping (예제 프로젝트와 동일)
-float3 ACESFilm(float3 x)
-{
-    float a = 2.51f;
-    float b = 0.03f;
-    float c = 2.43f;
-    float d = 0.59f;
-    float e = 0.14f;
-    return saturate(x * (a * x + b) / (x * (c * x + d) + e));
-}
-
-// Linear to sRGB (Gamma Correction) - 예제 프로젝트와 동일
-float3 LinearToSRGB(float3 linearColor)
-{
-    return pow(linearColor, 1.0f / 2.2f);
-}
-
-float4 main(PS_INPUT_QUAD input) : SV_Target
-{
-    // 예제 프로젝트 36_ToneMappingPS_LDR.hlsl와 동일한 로직
-    // 1. 선형 HDR 값 로드 (Nits 값으로 간주)
-    float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
-    
-    // 2. Exposure 적용
-    float exposureFactor = pow(2.0f, g_Exposure);
-    C_linear709 *= exposureFactor;
-    
-    // 3. ACES 톤매핑 (HDR -> SDR 변환)
-    float3 C_tonemapped = ACESFilm(C_linear709);
-    
-    // 4. 감마 보정 (Linear -> sRGB)
-    float3 C_final = LinearToSRGB(C_tonemapped);
-    
-    return float4(C_final, 1.0f);
-}
-)";
-
-        // Shadow pass (depth-only)
-        // - PS는 사용하지 않고(nullptr) Depth만 기록합니다.
-        const char* g_ShadowVertexShaderSource = R"(
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-struct VSInput
-{
-    float3 Position : POSITION;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput o;
-    float4 posW = mul(float4(input.Position, 1.0f), gWorld);
-    o.Position = mul(mul(posW, gView), gProj);
-    return o;
-}
-)";
-
-        const char* g_ShadowSkinnedVertexShaderSource = R"(
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-cbuffer CBBones : register(b2)
-{
-    float4x4 gBones[1023];
-    uint     gBoneCount;
-    float3   _padBones;
-};
-
-struct VSInput
-{
-    float3 Position     : POSITION;
-    float3 Normal       : NORMAL;
-    float3 Tangent      : TANGENT;
-    float3 Binormal     : BINORMAL;
-    float4 Color        : COLOR;
-    uint4  BoneIndices  : BLENDINDICES;
-    float4 BoneWeights  : BLENDWEIGHT;
-    float2 TexCoord     : TEXCOORD0; 
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput o;
-    
-    // 본 인덱스와 가중치를 가져옴
-    uint4 bi = input.BoneIndices;
-    float4 bw = input.BoneWeights;
-    
-    // 스키닝 행렬 계산
-    matrix M = bw.x * gBones[bi.x]
-             + bw.y * gBones[bi.y]
-             + bw.z * gBones[bi.z]
-             + bw.w * gBones[bi.w];
-    
-    // 위치 변환 (Local -> Skinned -> World -> View -> Proj)
-    float4 posL = float4(input.Position, 1.0f);
-    float4 skinnedPos = mul(posL, M);
-    float4 posW = mul(skinnedPos, gWorld);
-    
-    o.Position = mul(mul(posW, gView), gProj);
-    
-    return o;
-}
-)";
-    }
 
     DeferredRenderSystem::DeferredRenderSystem(ID3D11RenderDevice& renderDevice)
         : m_renderDevice(renderDevice)
@@ -1109,7 +219,7 @@ VSOutput main(VSInput input)
         ComPtr<ID3DBlob> vsBlob, psBlob, errorBlob;
 
         // G-Buffer Vertex Shader
-        if (FAILED(D3DCompile(g_GBufferVertexShaderSource, strlen(g_GBufferVertexShaderSource), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        if (FAILED(D3DCompile(DeferredShader::GBufferVS, strlen(DeferredShader::GBufferVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
             {
@@ -1135,7 +245,7 @@ VSOutput main(VSInput input)
 
         // G-Buffer Skinned Vertex Shader
         vsBlob.Reset();
-        if (FAILED(D3DCompile(g_GBufferSkinnedVertexShaderSource, strlen(g_GBufferSkinnedVertexShaderSource), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        if (FAILED(D3DCompile(DeferredShader::GBufferSkinnedVS, strlen(DeferredShader::GBufferSkinnedVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
             {
@@ -1165,7 +275,7 @@ VSOutput main(VSInput input)
 
         // Quad Vertex Shader
         vsBlob.Reset();
-        if (FAILED(D3DCompile(g_QuadVertexShaderSource, strlen(g_QuadVertexShaderSource), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        if (FAILED(D3DCompile(CommonShaderCode::QuadVS, strlen(CommonShaderCode::QuadVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
             {
@@ -1186,7 +296,7 @@ VSOutput main(VSInput input)
             return false;
 
         // G-Buffer Pixel Shader 컴파일
-        if (FAILED(D3DCompile(g_GBufferPixelShaderSource, strlen(g_GBufferPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        if (FAILED(D3DCompile(DeferredShader::GBufferPS, strlen(DeferredShader::GBufferPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
             {
@@ -1203,7 +313,7 @@ VSOutput main(VSInput input)
         // Deferred Light Pixel Shader 컴파일
         psBlob.Reset();
         errorBlob.Reset();
-        if (FAILED(D3DCompile(g_DeferredLightPixelShaderSource, strlen(g_DeferredLightPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        if (FAILED(D3DCompile(DeferredShader::LightPS, strlen(DeferredShader::LightPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
             {
@@ -1221,8 +331,8 @@ VSOutput main(VSInput input)
         // Skinned Transparent VS
         vsBlob.Reset();
         errorBlob.Reset();
-        if (FAILED(D3DCompile(g_TransparentSkinnedVertexShaderSource,
-                              strlen(g_TransparentSkinnedVertexShaderSource),
+        if (FAILED(D3DCompile(DeferredShader::TransparentSkinnedVS,
+                              strlen(DeferredShader::TransparentSkinnedVS),
                               nullptr, nullptr, nullptr,
                               "main", "vs_5_0",
                               0, 0,
@@ -1268,8 +378,8 @@ VSOutput main(VSInput input)
         // Transparent PS
         psBlob.Reset();
         errorBlob.Reset();
-        if (FAILED(D3DCompile(g_TransparentPixelShaderSource,
-                              strlen(g_TransparentPixelShaderSource),
+        if (FAILED(D3DCompile(DeferredShader::TransparentPS,
+                              strlen(DeferredShader::TransparentPS),
                               nullptr, nullptr, nullptr,
                               "main", "ps_5_0",
                               0, 0,
@@ -1292,7 +402,7 @@ VSOutput main(VSInput input)
         // Skybox Vertex Shader 컴파일
         vsBlob.Reset();
         errorBlob.Reset();
-        if (FAILED(D3DCompile(g_SkyboxVertexShaderSource, strlen(g_SkyboxVertexShaderSource), nullptr, nullptr, nullptr, "VS", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        if (FAILED(D3DCompile(CommonShaderCode::SkyboxVS, strlen(CommonShaderCode::SkyboxVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
             {
@@ -1317,7 +427,7 @@ VSOutput main(VSInput input)
         // Skybox Pixel Shader 컴파일
         psBlob.Reset();
         errorBlob.Reset();
-        if (FAILED(D3DCompile(g_SkyboxPixelShaderSource, strlen(g_SkyboxPixelShaderSource), nullptr, nullptr, nullptr, "PS", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        if (FAILED(D3DCompile(CommonShaderCode::SkyboxPS, strlen(CommonShaderCode::SkyboxPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
             {
@@ -1356,22 +466,7 @@ VSOutput main(VSInput input)
         if (FAILED(m_device->CreateBuffer(&skyboxCbDesc, nullptr, m_cbSkybox.ReleaseAndGetAddressOf())))
             return false;
 
-        // 톤매핑 Pixel Shader 컴파일
-        psBlob.Reset();
-        errorBlob.Reset();
-        if (FAILED(D3DCompile(g_ToneMappingPixelShaderSource, strlen(g_ToneMappingPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
-        {
-            if (errorBlob)
-            {
-                ALICE_LOG_ERRORF("Tone Mapping PS compile error: %s", (char*)errorBlob->GetBufferPointer());
-            }
-            return false;
-        }
-        if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_toneMappingPS.ReleaseAndGetAddressOf())))
-        {
-            ALICE_LOG_ERRORF("Failed to create Tone Mapping PS");
-            return false;
-        }
+        // 톤매핑 Pixel Shader는 CreateToneMappingResources에서 HDR 지원 여부에 따라 생성합니다.
 
         // 톤매핑 전용 상태 객체 생성 (Blend OFF, Depth OFF, Cull OFF)
         // Depth OFF
@@ -1421,8 +516,8 @@ VSOutput main(VSInput input)
         // Static shadow VS + input layout (POSITION only)
         vsBlob.Reset();
         errorBlob.Reset();
-        if (FAILED(D3DCompile(g_ShadowVertexShaderSource,
-                              strlen(g_ShadowVertexShaderSource),
+        if (FAILED(D3DCompile(DeferredShader::ShadowVS,
+                              strlen(DeferredShader::ShadowVS),
                               nullptr, nullptr, nullptr,
                               "main", "vs_5_0",
                               0, 0,
@@ -1459,8 +554,8 @@ VSOutput main(VSInput input)
         // Skinned shadow VS (input layout은 m_gBufferSkinnedInputLayout을 그대로 사용)
         vsBlob.Reset();
         errorBlob.Reset();
-        if (FAILED(D3DCompile(g_ShadowSkinnedVertexShaderSource,
-                              strlen(g_ShadowSkinnedVertexShaderSource),
+        if (FAILED(D3DCompile(DeferredShader::ShadowSkinnedVS,
+                              strlen(DeferredShader::ShadowSkinnedVS),
                               nullptr, nullptr, nullptr,
                               "main", "vs_5_0",
                               0, 0,
@@ -1785,6 +880,37 @@ VSOutput main(VSInput input)
 		if (FAILED(m_device->CreateTexture2D(&dDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf()))) return false;
 		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { dDesc.Format, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
 		if (FAILED(m_device->CreateDepthStencilView(m_sceneDepthTex.Get(), &dsvDesc, m_sceneDSV.ReleaseAndGetAddressOf()))) return false;
+
+        // HDR 지원 여부 확인 및 적절한 톤매핑 셰이더 선택
+        ComPtr<ID3DBlob> psBlob, errorBlob;
+        float maxNits = 100.0f;
+        bool isHDRSupported = m_renderDevice.IsHDRSupported(maxNits);
+        const char* toneMappingShaderSource = isHDRSupported ? CommonShaderCode::ToneMappingPS_HDR : CommonShaderCode::ToneMappingPS_LDR;
+        const char* shaderName = isHDRSupported ? "HDR" : "LDR";
+
+        // Tone Mapping Pixel Shader 컴파일
+        if (FAILED(D3DCompile(toneMappingShaderSource, strlen(toneMappingShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+            {
+                ALICE_LOG_ERRORF("Tone Mapping PS (%s) compile error: %s", shaderName, (char*)errorBlob->GetBufferPointer());
+            }
+            return false;
+        }
+        if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_toneMappingPS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Tone Mapping PS (%s)", shaderName);
+            return false;
+        }
+
+        if (isHDRSupported)
+        {
+            ALICE_LOG_INFO("DeferredRenderSystem::CreateToneMappingResources: HDR 톤매핑 셰이더 사용. MaxNits: %.1f", maxNits);
+        }
+        else
+        {
+            ALICE_LOG_INFO("DeferredRenderSystem::CreateToneMappingResources: LDR 톤매핑 셰이더 사용.");
+        }
 
         return true;
     }

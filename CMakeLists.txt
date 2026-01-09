@@ -81,6 +81,11 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
+	
+	# ½¦ÀÌ´õ ÄÚµå ¹­À½
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
 )
 
 set(ENGINE_HEADERS
@@ -144,6 +149,12 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
+    ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
+	
+	# ½¦ÀÌ´õ ÄÚµå ¹­À½
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
 
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
