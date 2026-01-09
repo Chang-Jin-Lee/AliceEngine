@@ -117,6 +117,10 @@ namespace Alice
                         const std::unordered_set<EntityId>& cameraEntities);
         void PassDeferredLight(const Camera& camera, int shadingMode, bool enableFillLight);
         void RenderSkybox(const Camera& camera);
+        // 반투명(알파 블렌딩) 오브젝트는 Deferred(GBuffer)로 정확히 합성하기 어렵기 때문에
+        // 라이트 패스 이후 Forward-Style 패스로 별도 렌더링합니다.
+        void PassTransparentForward(const Camera& camera,
+                                    const std::vector<ForwardRenderSystem::SkinnedDrawCommand>& skinnedCommands);
         
         // 상수 버퍼 업데이트
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
@@ -171,6 +175,13 @@ namespace Alice
         // ==== Deferred Light 패스 셰이더 ====
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_deferredLightPS;
 
+        // ==== Transparent Forward-Style 패스 셰이더 ====
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_transparentVS;
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_transparentSkinnedVS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_transparentPS;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_transparentInputLayout;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_transparentSkinnedInputLayout;
+
         // ==== Tone Mapping 셰이더 ====
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_toneMappingPS;
 
@@ -194,6 +205,8 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbDirectionalLight;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbBones;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPostProcess;
+        // Transparent Forward-Style 패스용 최소 조명 CB
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbTransparentLight;
 
         // ==== 씬 렌더 타겟 (최종 결과) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneColorTex;
@@ -217,6 +230,7 @@ namespace Alice
 
         // ==== 블렌드 상태 ====
         Microsoft::WRL::ComPtr<ID3D11BlendState>        m_blendStateAdditive; // 라이트 패스용
+        Microsoft::WRL::ComPtr<ID3D11BlendState>        m_alphaBlendState;    // 반투명 Forward 패스용
 
         // ==== 래스터라이저 상태 ====
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_rasterizerState;
