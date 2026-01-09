@@ -1,4 +1,4 @@
-#include "Rendering/DeferredRenderSystem.h"
+ï»¿#include "Rendering/DeferredRenderSystem.h"
 
 #include <d3dcompiler.h>
 #include <DirectXTK/WICTextureLoader.h>
@@ -9,6 +9,7 @@
 #include <cfloat>
 #include <algorithm>
 #include <cstring>
+#include <DirectXMath.h>
 
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
@@ -23,7 +24,7 @@ using Microsoft::WRL::ComPtr;
 
 namespace Alice
 {
-    // G-Buffer Vertex Shader (ÀÎ¶óÀÎ ÄÚµå)
+    // G-Buffer Vertex Shader (ì¸ë¼ì¸ ì½”ë“œ)
     namespace
     {
         const char* g_GBufferVertexShaderSource = R"(
@@ -79,7 +80,7 @@ VSOutput main(VSInput input)
 }
 )";
 
-        // ½ºÅ°´×¿ë G-Buffer Vertex Shader
+        // ìŠ¤í‚¤ë‹ìš© G-Buffer Vertex Shader
         const char* g_GBufferSkinnedVertexShaderSource = R"(
 cbuffer CBPerObject : register(b0)
 {
@@ -154,8 +155,8 @@ VSOutput main(VSInput input)
 )";
 
         // Transparent Forward-Style Skinned VS
-        // - GBuffer ½ºÅ°´× VS¿Í µ¿ÀÏÇÑ Ãâ·Â(¿ùµå ÁÂÇ¥/³ë¸»/UV/TBN)À» ¸¸µç µÚ,
-        //   Transparent PS¿¡¼­ Á÷Á¢ Á¶¸íÀ» °è»êÇÏ°í ¾ËÆÄ ºí·»µùÇÕ´Ï´Ù.
+        // - GBuffer ìŠ¤í‚¤ë‹ VSì™€ ë™ì¼í•œ ì¶œë ¥(ì›”ë“œ ì¢Œí‘œ/ë…¸ë§/UV/TBN)ì„ ë§Œë“  ë’¤,
+        //   Transparent PSì—ì„œ ì§ì ‘ ì¡°ëª…ì„ ê³„ì‚°í•˜ê³  ì•ŒíŒŒ ë¸”ë Œë”©í•©ë‹ˆë‹¤.
         const char* g_TransparentSkinnedVertexShaderSource = R"(
 cbuffer CBPerObject : register(b0)
 {
@@ -230,8 +231,8 @@ VSOutput main(VSInput input)
 )";
 
         // Transparent Forward-Style PS
-        // - ¾ËÆÄ°¡ 1.0¿¡ °¡±î¿î ÇÈ¼¿Àº µğÆÛµå(ºÒÅõ¸í)¿¡¼­ Ã³¸®ÇÏ¹Ç·Î ¿©±â¼­´Â Á¦¿Ü(discard)
-        // - 0.1 ¹Ì¸¸Àº ÄÆ¾Æ¿ôÀ¸·Î Á¦°Å(Forward/Æ©Åä¸®¾ó°ú µ¿ÀÏ ½ºÄÉÀÏ)
+        // - ì•ŒíŒŒê°€ 1.0ì— ê°€ê¹Œìš´ í”½ì…€ì€ ë””í¼ë“œ(ë¶ˆíˆ¬ëª…)ì—ì„œ ì²˜ë¦¬í•˜ë¯€ë¡œ ì—¬ê¸°ì„œëŠ” ì œì™¸(discard)
+        // - 0.1 ë¯¸ë§Œì€ ì»·ì•„ì›ƒìœ¼ë¡œ ì œê±°(Forward/íŠœí† ë¦¬ì–¼ê³¼ ë™ì¼ ìŠ¤ì¼€ì¼)
         const char* g_TransparentPixelShaderSource = R"(
 static const float PI = 3.14159265f;
 static const float INV_PI = 0.31830988618f;
@@ -263,7 +264,7 @@ float3 FresnelSchlick(float3 F0, float cosTheta)
     return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
 }
 
-// ÅØ½ºÃ³
+// í…ìŠ¤ì²˜
 Texture2D  g_DiffuseMap : register(t0);
 Texture2D  g_NormalMap  : register(t1);
 
@@ -319,12 +320,12 @@ float4 main(PSIn pIn) : SV_Target
 
     float alphaTex = tex.a * gMaterialColor.a;
 
-    // ÄÆ¾Æ¿ô(¿ÏÀü Åõ¸í ±ÙÃ³) Á¦°Å
-    // Deferred¿¡¼­´Â ¹İÅõ¸í(0.1~1.0)À» GBuffer¿¡ ³ÖÀ¸¸é ÇÕ¼ºÀÌ ±úÁı´Ï´Ù.
-    // - °ÅÀÇ ºÒÅõ¸í(>=0.99)¸¸ GBuffer¿¡ ±â·ÏÇÏ°í
-    // - ³ª¸ÓÁö ¹İÅõ¸íÀº ¶óÀÌÆ® ÆĞ½º ÀÌÈÄ Forward-Style(¾ËÆÄ ºí·»µå) ÆĞ½º·Î º°µµ ·»´õ¸µÇÕ´Ï´Ù.
+    // ì»·ì•„ì›ƒ(ì™„ì „ íˆ¬ëª… ê·¼ì²˜) ì œê±°
+    // Deferredì—ì„œëŠ” ë°˜íˆ¬ëª…(0.1~1.0)ì„ GBufferì— ë„£ìœ¼ë©´ í•©ì„±ì´ ê¹¨ì§‘ë‹ˆë‹¤.
+    // - ê±°ì˜ ë¶ˆíˆ¬ëª…(>=0.99)ë§Œ GBufferì— ê¸°ë¡í•˜ê³ 
+    // - ë‚˜ë¨¸ì§€ ë°˜íˆ¬ëª…ì€ ë¼ì´íŠ¸ íŒ¨ìŠ¤ ì´í›„ Forward-Style(ì•ŒíŒŒ ë¸”ë Œë“œ) íŒ¨ìŠ¤ë¡œ ë³„ë„ ë Œë”ë§í•©ë‹ˆë‹¤.
     clip(alphaTex - 0.99f);
-    // °ÅÀÇ ºÒÅõ¸íÀº µğÆÛµå¿¡¼­ Ã³¸®ÇÏ¹Ç·Î ¿©±â¼­´Â Á¦¿Ü
+    // ê±°ì˜ ë¶ˆíˆ¬ëª…ì€ ë””í¼ë“œì—ì„œ ì²˜ë¦¬í•˜ë¯€ë¡œ ì—¬ê¸°ì„œëŠ” ì œì™¸
     if (alphaTex >= 0.99f) discard;
 
     float3 baseColor = gMaterialColor.rgb;
@@ -412,7 +413,7 @@ VSOutput main(VSInput input)
 }
 )";
 
-        // G-Buffer Pixel Shader (ÀÎ¶óÀÎ)
+        // G-Buffer Pixel Shader (ì¸ë¼ì¸)
         const char* g_GBufferPixelShaderSource = R"(
 cbuffer CBPerObject : register(b0)
 {
@@ -495,9 +496,9 @@ GBufferOut main(VertexOut pIn)
 }
 )";
 
-        // Deferred Light Pixel Shader (ÀÎ¶óÀÎ)
+        // Deferred Light Pixel Shader (ì¸ë¼ì¸)
         const char* g_DeferredLightPixelShaderSource = R"(
-// PBR ÇïÆÛ ÇÔ¼öµé
+// PBR í—¬í¼ í•¨ìˆ˜ë“¤
 static const float PI = 3.14159265f;
 static const float INV_PI = 0.31830988618f;
 
@@ -528,21 +529,60 @@ float3 FresnelSchlick(float3 F0, float cosTheta)
     return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
 }
 
-// ±×¸²ÀÚ °è»ê ÇÔ¼ö
-float CalcShadowFactorDeferred(float3 posW)
+// ShadowCB (register b4)
+// - ConstantBuffer(b0)ëŠ” êµ¬ì¡°ê°€ ë§¤ìš° ì»¤ì„œ CPU/HLSL íŒ¨í‚¹ ë¶ˆì¼ì¹˜ë¡œ í–‰ë ¬ì´ ê¹¨ì§€ê¸° ì‰½ìŠµë‹ˆë‹¤.
+// - Shadow ê´€ë ¨ ê°’ë§Œ ë³„ë„ CBë¡œ ë¹¼ì„œ ì •í™•íˆ ì „ë‹¬í•©ë‹ˆë‹¤. (Forwardì™€ ë™ì¼í•œ ì•ˆì •ì„±)
+cbuffer ShadowCB : register(b4)
 {
-    // °£´ÜÇÑ ±×¸²ÀÚ °è»ê (½ÇÁ¦ ±¸ÇöÀº ´õ º¹Àâ)
-    return 1.0f;
+    float4x4 g_ShadowLightViewProj;
+    float    g_ShadowBias2;
+    float    g_ShadowMapSize2;
+    float    g_ShadowPCFRadius2;
+    int      g_ShadowEnabled2;
+    float3   g_ShadowPad2;
+};
+
+
+// ê·¸ë¦¼ì ê³„ì‚° í•¨ìˆ˜ (PCF)
+// - ForwardRenderSystem ê³¼ ë™ì¼í•œ ë°©ì‹(3x3 SampleCmpLevelZero)
+float CalcShadowFactorDeferred(float3 posW, Texture2D<float> shadowMap, SamplerComparisonState shadowSampler)
+{
+    if (g_ShadowEnabled2 == 0) return 1.0f;
+
+    float4 shadowPos = mul(float4(posW, 1.0f), g_ShadowLightViewProj);
+    shadowPos.xyz /= shadowPos.w;
+
+    float2 shadowTex;
+    shadowTex.x = shadowPos.x * 0.5f + 0.5f;
+    shadowTex.y = -shadowPos.y * 0.5f + 0.5f;
+    float depth = shadowPos.z;
+
+    if (shadowTex.x < 0.0f || shadowTex.x > 1.0f || shadowTex.y < 0.0f || shadowTex.y > 1.0f)
+        return 1.0f;
+
+    const float2 texelSize = float2(1.0f, 1.0f) / max(g_ShadowMapSize2, 1.0f);
+    const float2 pcfStep = max(g_ShadowPCFRadius2, 0.0f) * texelSize;
+
+    float sum = 0.0f;
+    [unroll] for (int y = -1; y <= 1; ++y)
+    {
+        [unroll] for (int x = -1; x <= 1; ++x)
+        {
+            float2 offset = float2(x, y) * pcfStep;
+            sum += shadowMap.SampleCmpLevelZero(shadowSampler, shadowTex + offset, depth - g_ShadowBias2);
+        }
+    }
+    return sum / 9.0f;
 }
 
-// ±¸Á¶Ã¼ Á¤ÀÇ
+// êµ¬ì¡°ì²´ ì •ì˜
 struct PS_INPUT_QUAD
 {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
 };
 
-// G-Buffer ÅØ½ºÃ³
+// G-Buffer í…ìŠ¤ì²˜
 Texture2D g_PositionWS : register(t0);
 Texture2D g_NormalWS : register(t1);
 Texture2D g_Metalness : register(t2);
@@ -551,13 +591,13 @@ Texture2D g_BaseColor : register(t4);
 TextureCube g_IBL_Diffuse : register(t5);
 TextureCube g_IBL_Specular : register(t6);
 Texture2D   g_IBL_BRDF_LUT : register(t7);
-Texture2D g_ShadowMap : register(t8);
+Texture2D<float> g_ShadowMap : register(t8);
 
 SamplerState g_Sam : register(s0);
-SamplerState g_ShadowSamp : register(s1);
+SamplerComparisonState g_ShadowSampler : register(s1);
 SamplerState g_SamplerLinear : register(s2);
 
-// »ó¼ö ¹öÆÛ
+// ìƒìˆ˜ ë²„í¼
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 g_World;
@@ -610,17 +650,17 @@ cbuffer DirectionalLightBuffer : register(b3)
 
 float4 main(PS_INPUT_QUAD pIn) : SV_Target
 {
-    // G-Buffer °¡Á®¿À±â
+    // G-Buffer ê°€ì ¸ì˜¤ê¸°
     float4 positionWS = g_PositionWS.Sample(g_Sam, pIn.uv);
     float4 normalWS_packed = g_NormalWS.Sample(g_Sam, pIn.uv);
     float4 metalness_packed = g_Metalness.Sample(g_Sam, pIn.uv);
     float4 roughness_packed = g_Roughness.Sample(g_Sam, pIn.uv);
     float4 baseColor = g_BaseColor.Sample(g_Sam, pIn.uv);
     
-    // ¹è°æ Ã¼Å©
+    // ë°°ê²½ ì²´í¬
     if (length(normalWS_packed.xyz) < 0.1f) discard;
 
-    // µ¥ÀÌÅÍ º¹¿ø
+    // ë°ì´í„° ë³µì›
     float3 posW = positionWS.xyz;
     float3 N = normalize(normalWS_packed.xyz);
     float metalness = metalness_packed.r;
@@ -628,7 +668,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 albedo = baseColor.rgb;
     float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
     
-    // ¶óÀÌÆÃ º¤ÅÍ °è»ê
+    // ë¼ì´íŒ… ë²¡í„° ê³„ì‚°
     float3 L = normalize(-g_LightDirection.xyz);
     float3 V = normalize(g_EyePosW - posW);
     float3 H = normalize(L + V);
@@ -639,7 +679,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float NdotH = saturate(dot(N, H));
     float VdotH = saturate(dot(V, H));
     
-    // PBR ¿¬»ê
+    // PBR ì—°ì‚°
     float3 albedoPBR = albedoLinear;
     roughness = max(roughness, 0.04f);
     float ao = saturate(g_PBRAmbientOcclusion);
@@ -658,7 +698,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 kD = (1.0f - kS) * (1.0f - metalness);
     float3 diffuse = kD * albedoPBR * INV_PI;
     
-    float shadowVis = CalcShadowFactorDeferred(posW);
+    float shadowVis = CalcShadowFactorDeferred(posW, g_ShadowMap, g_ShadowSampler);
     float3 radiance = g_LightColor.rgb * PI;
     float3 directLighting = (diffuse + specular) * radiance * theta * ao * shadowVis * g_intensity;
     
@@ -668,19 +708,19 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 Renv = reflect(-V, N);
     const float kMaxSpecularMip = 8.0f;
     float3 prefilteredColor = g_IBL_Specular.SampleLevel(g_Sam, Renv, roughness * kMaxSpecularMip).rgb;
-    float2 specBRDF = g_IBL_BRDF_LUT.Sample(g_ShadowSamp, float2(NdotV, roughness)).rg;
+    float2 specBRDF = g_IBL_BRDF_LUT.Sample(g_SamplerLinear, float2(NdotV, roughness)).rg;
     float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
     
     float3 iblColor = (diffuseIBL + specularIBL) * ao;
     
-    // ÃÖÁ¾ »ö»ó
+    // ìµœì¢… ìƒ‰ìƒ
     float3 color = directLighting + iblColor;
     
     return float4(color, 1.0f);
 }
 )";
 
-        // Skybox Vertex Shader (ÀÎ¶óÀÎ)
+        // Skybox Vertex Shader (ì¸ë¼ì¸)
         const char* g_SkyboxVertexShaderSource = R"(
 cbuffer CBSkybox : register(b0)
 {
@@ -708,7 +748,7 @@ SkyBoxVertexPosHL VS(SkyBoxVertexPos vIn)
 }
 )";
 
-        // Skybox Pixel Shader (ÀÎ¶óÀÎ)
+        // Skybox Pixel Shader (ì¸ë¼ì¸)
         const char* g_SkyboxPixelShaderSource = R"(
 TextureCube g_TexCube : register(t0);
 SamplerState g_Sam : register(s0);
@@ -725,7 +765,7 @@ float4 PS(SkyBoxVertexPosHL pIn) : SV_Target
 }
 )";
 
-        // Tone Mapping Pixel Shader (ÀÎ¶óÀÎ) - ¿¹Á¦ ÇÁ·ÎÁ§Æ® 36_ToneMappingPS_LDR.hlsl Âü°í
+        // Tone Mapping Pixel Shader (ì¸ë¼ì¸) - ì˜ˆì œ í”„ë¡œì íŠ¸ 36_ToneMappingPS_LDR.hlsl ì°¸ê³ 
         const char* g_ToneMappingPixelShaderSource = R"(
 Texture2D g_SceneHDR : register(t0);
 SamplerState g_SamplerLinear : register(s0);
@@ -743,7 +783,7 @@ struct PS_INPUT_QUAD
     float2 uv : TEXCOORD0;
 };
 
-// ACES Filmic Tone Mapping (¿¹Á¦ ÇÁ·ÎÁ§Æ®¿Í µ¿ÀÏ)
+// ACES Filmic Tone Mapping (ì˜ˆì œ í”„ë¡œì íŠ¸ì™€ ë™ì¼)
 float3 ACESFilm(float3 x)
 {
     float a = 2.51f;
@@ -754,7 +794,7 @@ float3 ACESFilm(float3 x)
     return saturate(x * (a * x + b) / (x * (c * x + d) + e));
 }
 
-// Linear to sRGB (Gamma Correction) - ¿¹Á¦ ÇÁ·ÎÁ§Æ®¿Í µ¿ÀÏ
+// Linear to sRGB (Gamma Correction) - ì˜ˆì œ í”„ë¡œì íŠ¸ì™€ ë™ì¼
 float3 LinearToSRGB(float3 linearColor)
 {
     return pow(linearColor, 1.0f / 2.2f);
@@ -762,21 +802,117 @@ float3 LinearToSRGB(float3 linearColor)
 
 float4 main(PS_INPUT_QUAD input) : SV_Target
 {
-    // ¿¹Á¦ ÇÁ·ÎÁ§Æ® 36_ToneMappingPS_LDR.hlsl¿Í µ¿ÀÏÇÑ ·ÎÁ÷
-    // 1. ¼±Çü HDR °ª ·Îµå (Nits °ªÀ¸·Î °£ÁÖ)
+    // ì˜ˆì œ í”„ë¡œì íŠ¸ 36_ToneMappingPS_LDR.hlslì™€ ë™ì¼í•œ ë¡œì§
+    // 1. ì„ í˜• HDR ê°’ ë¡œë“œ (Nits ê°’ìœ¼ë¡œ ê°„ì£¼)
     float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
     
-    // 2. Exposure Àû¿ë
+    // 2. Exposure ì ìš©
     float exposureFactor = pow(2.0f, g_Exposure);
     C_linear709 *= exposureFactor;
     
-    // 3. ACES Åæ¸ÅÇÎ (HDR -> SDR º¯È¯)
+    // 3. ACES í†¤ë§¤í•‘ (HDR -> SDR ë³€í™˜)
     float3 C_tonemapped = ACESFilm(C_linear709);
     
-    // 4. °¨¸¶ º¸Á¤ (Linear -> sRGB)
+    // 4. ê°ë§ˆ ë³´ì • (Linear -> sRGB)
     float3 C_final = LinearToSRGB(C_tonemapped);
     
     return float4(C_final, 1.0f);
+}
+)";
+
+        // Shadow pass (depth-only)
+        // - PSëŠ” ì‚¬ìš©í•˜ì§€ ì•Šê³ (nullptr) Depthë§Œ ê¸°ë¡í•©ë‹ˆë‹¤.
+        const char* g_ShadowVertexShaderSource = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+struct VSInput
+{
+    float3 Position : POSITION;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput o;
+    float4 posW = mul(float4(input.Position, 1.0f), gWorld);
+    o.Position = mul(mul(posW, gView), gProj);
+    return o;
+}
+)";
+
+        const char* g_ShadowSkinnedVertexShaderSource = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBBones : register(b2)
+{
+    float4x4 gBones[1023];
+    uint     gBoneCount;
+    float3   _padBones;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+    float2 TexCoord     : TEXCOORD0; 
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput o;
+    
+    // ë³¸ ì¸ë±ìŠ¤ì™€ ê°€ì¤‘ì¹˜ë¥¼ ê°€ì ¸ì˜´
+    uint4 bi = input.BoneIndices;
+    float4 bw = input.BoneWeights;
+    
+    // ìŠ¤í‚¤ë‹ í–‰ë ¬ ê³„ì‚°
+    matrix M = bw.x * gBones[bi.x]
+             + bw.y * gBones[bi.y]
+             + bw.z * gBones[bi.z]
+             + bw.w * gBones[bi.w];
+    
+    // ìœ„ì¹˜ ë³€í™˜ (Local -> Skinned -> World -> View -> Proj)
+    float4 posL = float4(input.Position, 1.0f);
+    float4 skinnedPos = mul(posL, M);
+    float4 posW = mul(skinnedPos, gWorld);
+    
+    o.Position = mul(mul(posW, gView), gProj);
+    
+    return o;
 }
 )";
     }
@@ -796,89 +932,83 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
         }
 
-        // G-Buffer »ı¼º
+        // G-Buffer ìƒì„±
         if (!CreateGBuffer(width, height))
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateGBuffer failed.");
             return false;
         }
 
-        // ¼ÎÀÌ´õ »ı¼º
+        // ì…°ì´ë” ìƒì„±
         if (!CreateShaders())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateShaders failed.");
             return false;
         }
 
-        // Quad Áö¿À¸ŞÆ®¸® »ı¼º
+        // Quad ì§€ì˜¤ë©”íŠ¸ë¦¬ ìƒì„±
         if (!CreateQuadGeometry())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateQuadGeometry failed.");
             return false;
         }
 
-        // Å¥ºê Áö¿À¸ŞÆ®¸® »ı¼º
+        // íë¸Œ ì§€ì˜¤ë©”íŠ¸ë¦¬ ìƒì„±
         if (!CreateCubeGeometry())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateCubeGeometry failed.");
             return false;
         }
 
-        // »ó¼ö ¹öÆÛ »ı¼º
+        // ìƒìˆ˜ ë²„í¼ ìƒì„±
         if (!CreateConstantBuffers())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateConstantBuffers failed.");
             return false;
         }
 
-        // »ùÇÃ·¯ »óÅÂ »ı¼º
+        // ìƒ˜í”ŒëŸ¬ ìƒíƒœ ìƒì„±
         if (!CreateSamplerStates())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateSamplerStates failed.");
             return false;
         }
 
-        // ºí·»µå »óÅÂ »ı¼º
+        // ë¸”ë Œë“œ ìƒíƒœ ìƒì„±
         if (!CreateBlendStates())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateBlendStates failed.");
             return false;
         }
 
-        // ·¡½ºÅÍ¶óÀÌÀú »óÅÂ »ı¼º
+        // ë˜ìŠ¤í„°ë¼ì´ì € ìƒíƒœ ìƒì„±
         if (!CreateRasterizerStates())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateRasterizerStates failed.");
             return false;
         }
 
-        // ±íÀÌ/½ºÅÙ½Ç »óÅÂ »ı¼º
+        // ê¹Šì´/ìŠ¤í…ì‹¤ ìƒíƒœ ìƒì„±
         if (!CreateDepthStencilStates())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateDepthStencilStates failed.");
             return false;
         }
 
-        // ¾À ·»´õ Å¸°Ù »ı¼º (HDR Æ÷¸Ë: Åæ¸ÅÇÎÀ» À§ÇØ R16G16B16A16_FLOAT »ç¿ë)
-        m_sceneWidth = width;
-        m_sceneHeight = height;
-        D3D11_TEXTURE2D_DESC cDesc = { width, height, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
-        if (FAILED(m_device->CreateTexture2D(&cDesc, nullptr, m_sceneColorTex.ReleaseAndGetAddressOf()))) return false;
-        if (FAILED(m_device->CreateRenderTargetView(m_sceneColorTex.Get(), nullptr, m_sceneRTV.ReleaseAndGetAddressOf()))) return false;
-        if (FAILED(m_device->CreateShaderResourceView(m_sceneColorTex.Get(), nullptr, m_sceneColorSRV.ReleaseAndGetAddressOf()))) return false;
+        // ì„€ë„ìš° ë§µ ë¦¬ì†ŒìŠ¤ ìƒì„± (Deferred Lightì—ì„œ PCFë¡œ ì‚¬ìš©)
+        if (!CreateShadowMapResources())
+        {
+            ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateShadowMapResources failed.");
+            return false;
+        }
 
-        // ¿¡µğÅÍ ºäÆ÷Æ® Ç¥½Ã¿ë LDR °á°ú ÅØ½ºÃ³ (ToneMapped)
-        D3D11_TEXTURE2D_DESC vDesc = { width, height, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
-        if (FAILED(m_device->CreateTexture2D(&vDesc, nullptr, m_viewportTex.ReleaseAndGetAddressOf()))) return false;
-        if (FAILED(m_device->CreateRenderTargetView(m_viewportTex.Get(), nullptr, m_viewportRTV.ReleaseAndGetAddressOf()))) return false;
-        if (FAILED(m_device->CreateShaderResourceView(m_viewportTex.Get(), nullptr, m_viewportSRV.ReleaseAndGetAddressOf()))) return false;
+		if (!CreateToneMappingResources(width, height))
+		{
+			ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateToneMappingResources failed.");
+			return false;
+		}
 
-        D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_D24_UNORM_S8_UINT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL, 0, 0 };
-        if (FAILED(m_device->CreateTexture2D(&dDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf()))) return false;
-        D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { dDesc.Format, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
-        if (FAILED(m_device->CreateDepthStencilView(m_sceneDepthTex.Get(), &dsvDesc, m_sceneDSV.ReleaseAndGetAddressOf()))) return false;
-
-        // IBL ¸®¼Ò½º »ı¼º
+        // IBL ë¦¬ì†ŒìŠ¤ ìƒì„±
         if (!CreateIblResources())
         {
             ALICE_LOG_WARN("DeferredRenderSystem::Initialize: CreateIblResources failed (optional).");
@@ -893,10 +1023,10 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (!m_device) return;
         if (width == 0 || height == 0) return;
 
-        // G-Buffer ¸®»çÀÌÁî
+        // G-Buffer ë¦¬ì‚¬ì´ì¦ˆ
         CreateGBuffer(width, height);
 
-        // ¾À ·»´õ Å¸°Ù ¸®»çÀÌÁî
+        // ì”¬ ë Œë” íƒ€ê²Ÿ ë¦¬ì‚¬ì´ì¦ˆ
         m_sceneColorTex.Reset();
         m_sceneRTV.Reset();
         m_sceneColorSRV.Reset();
@@ -926,7 +1056,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
     bool DeferredRenderSystem::CreateGBuffer(std::uint32_t width, std::uint32_t height)
     {
-        // ±âÁ¸ G-Buffer ÇØÁ¦
+        // ê¸°ì¡´ G-Buffer í•´ì œ
         for (int i = 0; i < GBufferCount; ++i)
         {
             m_gBufferSRVs[i].Reset();
@@ -934,16 +1064,20 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             m_gBufferTextures[i].Reset();
         }
 
-        // G-Buffer Æ÷¸Ë Á¤ÀÇ
+        // G-Buffer í¬ë§· ì •ì˜
+        // NOTE:
+        // - Shadow/IBL ë“±ì—ì„œ ì›”ë“œ í¬ì§€ì…˜ ê¸°ë°˜ ì—°ì‚°(íŠ¹íˆ ShadowMap íˆ¬ì˜)ì€ ì •ë°€ë„ì— ë§¤ìš° ë¯¼ê°í•©ë‹ˆë‹¤.
+        // - PositionWSë¥¼ R16F(half)ë¡œ ì €ì¥í•˜ë©´ ì”¬ ìŠ¤ì¼€ì¼/ê±°ë¦¬ì—ì„œ ì–‘ìí™”ê°€ ì»¤ì ¸
+        //   "ì›ì ìœ¼ë¡œ ì°¢ì–´ì§€ëŠ”" í˜•íƒœì˜ ì„€ë„ìš° ì•„í‹°íŒ©íŠ¸ê°€ ë°œìƒí•  ìˆ˜ ìˆì–´, Positionë§Œ R32Fë¡œ ì˜¬ë¦½ë‹ˆë‹¤.
         DXGI_FORMAT formats[GBufferCount] = {
-            DXGI_FORMAT_R16G16B16A16_FLOAT,  // 0: PositionWS
+            DXGI_FORMAT_R32G32B32A32_FLOAT,  // 0: PositionWS (ì •ë°€ë„ ê°•í™”)
             DXGI_FORMAT_R16G16B16A16_FLOAT,  // 1: NormalWS
             DXGI_FORMAT_R8_UNORM,             // 2: Metalness
             DXGI_FORMAT_R8_UNORM,             // 3: Roughness
             DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,  // 4: BaseColor
         };
 
-        // °¢ G-Buffer ÅØ½ºÃ³ »ı¼º
+        // ê° G-Buffer í…ìŠ¤ì²˜ ìƒì„±
         for (int i = 0; i < GBufferCount; ++i)
         {
             D3D11_TEXTURE2D_DESC td = {};
@@ -1014,8 +1148,8 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
 
         // G-Buffer Skinned Input Layout
-        // - ForwardRenderSystem °ú µ¿ÀÏÇÑ Á¤Á¡ ·¹ÀÌ¾Æ¿ô/¿ÀÇÁ¼ÂÀ» »ç¿ëÇØ¾ß º» ÀÎµ¦½º/¿şÀÌÆ®°¡ ±úÁöÁö ¾Ê½À´Ï´Ù.
-        //   (Deferred ÂÊÀÌ COLOR¸¦ ´©¶ôÇÏ¸é TEXCOORD ÀÌÈÄ ¿ÀÇÁ¼ÂÀÌ ¹Ğ·Á ¾Ö´Ï¸ŞÀÌ¼Ç/UV°¡ ÀüºÎ ¸Á°¡Áú ¼ö ÀÖÀ½)
+        // - ForwardRenderSystem ê³¼ ë™ì¼í•œ ì •ì  ë ˆì´ì•„ì›ƒ/ì˜¤í”„ì…‹ì„ ì‚¬ìš©í•´ì•¼ ë³¸ ì¸ë±ìŠ¤/ì›¨ì´íŠ¸ê°€ ê¹¨ì§€ì§€ ì•ŠìŠµë‹ˆë‹¤.
+        //   (Deferred ìª½ì´ COLORë¥¼ ëˆ„ë½í•˜ë©´ TEXCOORD ì´í›„ ì˜¤í”„ì…‹ì´ ë°€ë ¤ ì• ë‹ˆë©”ì´ì…˜/UVê°€ ì „ë¶€ ë§ê°€ì§ˆ ìˆ˜ ìˆìŒ)
         D3D11_INPUT_ELEMENT_DESC skinnedLayout[] = {
             {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
             {"NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -1051,7 +1185,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateInputLayout(quadLayout, ARRAYSIZE(quadLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_quadInputLayout.ReleaseAndGetAddressOf())))
             return false;
 
-        // G-Buffer Pixel Shader ÄÄÆÄÀÏ
+        // G-Buffer Pixel Shader ì»´íŒŒì¼
         if (FAILED(D3DCompile(g_GBufferPixelShaderSource, strlen(g_GBufferPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
@@ -1066,7 +1200,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
         }
 
-        // Deferred Light Pixel Shader ÄÄÆÄÀÏ
+        // Deferred Light Pixel Shader ì»´íŒŒì¼
         psBlob.Reset();
         errorBlob.Reset();
         if (FAILED(D3DCompile(g_DeferredLightPixelShaderSource, strlen(g_DeferredLightPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
@@ -1108,7 +1242,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
         }
 
-        // Transparent Skinned Input Layout (Forward¿Í µ¿ÀÏ ¿ÀÇÁ¼Â)
+        // Transparent Skinned Input Layout (Forwardì™€ ë™ì¼ ì˜¤í”„ì…‹)
         {
             D3D11_INPUT_ELEMENT_DESC skinnedLayoutT[] = {
                 {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -1155,7 +1289,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
         }
 
-        // Skybox Vertex Shader ÄÄÆÄÀÏ
+        // Skybox Vertex Shader ì»´íŒŒì¼
         vsBlob.Reset();
         errorBlob.Reset();
         if (FAILED(D3DCompile(g_SkyboxVertexShaderSource, strlen(g_SkyboxVertexShaderSource), nullptr, nullptr, nullptr, "VS", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
@@ -1180,7 +1314,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
         }
 
-        // Skybox Pixel Shader ÄÄÆÄÀÏ
+        // Skybox Pixel Shader ì»´íŒŒì¼
         psBlob.Reset();
         errorBlob.Reset();
         if (FAILED(D3DCompile(g_SkyboxPixelShaderSource, strlen(g_SkyboxPixelShaderSource), nullptr, nullptr, nullptr, "PS", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
@@ -1197,7 +1331,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
         }
 
-        // Skybox Depth State ¹× Rasterizer State »ı¼º
+        // Skybox Depth State ë° Rasterizer State ìƒì„±
         D3D11_DEPTH_STENCIL_DESC skyboxDsDesc = {};
         skyboxDsDesc.DepthEnable = TRUE;
         skyboxDsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
@@ -1213,7 +1347,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateRasterizerState(&skyboxRsDesc, m_skyboxRasterizerState.ReleaseAndGetAddressOf())))
             return false;
 
-        // Skybox Constant Buffer »ı¼º
+        // Skybox Constant Buffer ìƒì„±
         D3D11_BUFFER_DESC skyboxCbDesc = {};
         skyboxCbDesc.ByteWidth = sizeof(XMMATRIX);
         skyboxCbDesc.Usage = D3D11_USAGE_DYNAMIC;
@@ -1222,7 +1356,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateBuffer(&skyboxCbDesc, nullptr, m_cbSkybox.ReleaseAndGetAddressOf())))
             return false;
 
-        // Åæ¸ÅÇÎ Pixel Shader ÄÄÆÄÀÏ
+        // í†¤ë§¤í•‘ Pixel Shader ì»´íŒŒì¼
         psBlob.Reset();
         errorBlob.Reset();
         if (FAILED(D3DCompile(g_ToneMappingPixelShaderSource, strlen(g_ToneMappingPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
@@ -1239,7 +1373,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
         }
 
-        // Åæ¸ÅÇÎ Àü¿ë »óÅÂ °´Ã¼ »ı¼º (Blend OFF, Depth OFF, Cull OFF)
+        // í†¤ë§¤í•‘ ì „ìš© ìƒíƒœ ê°ì²´ ìƒì„± (Blend OFF, Depth OFF, Cull OFF)
         // Depth OFF
         {
             D3D11_DEPTH_STENCIL_DESC ds = {};
@@ -1281,6 +1415,69 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
                 ALICE_LOG_ERRORF("Failed to create PostProcess Rasterizer State");
                 return false;
             }
+        }
+
+        // ===================== Shadow Pass Shaders =====================
+        // Static shadow VS + input layout (POSITION only)
+        vsBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(g_ShadowVertexShaderSource,
+                              strlen(g_ShadowVertexShaderSource),
+                              nullptr, nullptr, nullptr,
+                              "main", "vs_5_0",
+                              0, 0,
+                              vsBlob.GetAddressOf(),
+                              errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+                ALICE_LOG_ERRORF("Shadow VS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            return false;
+        }
+        if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(),
+                                                vsBlob->GetBufferSize(),
+                                                nullptr,
+                                                m_shadowVS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Shadow VS");
+            return false;
+        }
+        {
+            D3D11_INPUT_ELEMENT_DESC il[] = {
+                {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}
+            };
+            if (FAILED(m_device->CreateInputLayout(il,
+                                                   ARRAYSIZE(il),
+                                                   vsBlob->GetBufferPointer(),
+                                                   vsBlob->GetBufferSize(),
+                                                   m_shadowInputLayout.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Shadow InputLayout");
+                return false;
+            }
+        }
+
+        // Skinned shadow VS (input layoutì€ m_gBufferSkinnedInputLayoutì„ ê·¸ëŒ€ë¡œ ì‚¬ìš©)
+        vsBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(g_ShadowSkinnedVertexShaderSource,
+                              strlen(g_ShadowSkinnedVertexShaderSource),
+                              nullptr, nullptr, nullptr,
+                              "main", "vs_5_0",
+                              0, 0,
+                              vsBlob.GetAddressOf(),
+                              errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+                ALICE_LOG_ERRORF("Shadow Skinned VS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            return false;
+        }
+        if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(),
+                                                vsBlob->GetBufferSize(),
+                                                nullptr,
+                                                m_shadowSkinnedVS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Shadow Skinned VS");
+            return false;
         }
 
         return true;
@@ -1329,7 +1526,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
     bool DeferredRenderSystem::CreateConstantBuffers()
     {
-        // PerObject CB (Forward¿Í µ¿ÀÏÇÑ ±¸Á¶: Çà·Ä + ÀçÁú Á¤º¸)
+        // PerObject CB (Forwardì™€ ë™ì¼í•œ êµ¬ì¡°: í–‰ë ¬ + ì¬ì§ˆ ì •ë³´)
         D3D11_BUFFER_DESC cbDesc = {};
         cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX) * 3 + sizeof(DirectX::XMFLOAT4) + sizeof(float) * 2 + sizeof(int) * 2; // world, view, proj, color, rough, metal, useTex, enableNorm
         cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
@@ -1338,9 +1535,9 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbPerObject.ReleaseAndGetAddressOf())))
             return false;
 
-        // Lighting CB (Deferred Light ÆĞ½º¿ë - ConstantBuffer register(b0))
-        // HLSLÀÇ ConstantBuffer ±¸Á¶Ã¼ Å©±â¿¡ ¸ÂÃç¾ß ÇÔ (´ë·« 512¹ÙÀÌÆ® ÀÌ»ó)
-        cbDesc.ByteWidth = 4096; // ÃæºĞÇÑ Å©±â
+        // Lighting CB (Deferred Light íŒ¨ìŠ¤ìš© - ConstantBuffer register(b0))
+        // HLSLì˜ ConstantBuffer êµ¬ì¡°ì²´ í¬ê¸°ì— ë§ì¶°ì•¼ í•¨ (ëŒ€ëµ 512ë°”ì´íŠ¸ ì´ìƒ)
+        cbDesc.ByteWidth = 4096; // ì¶©ë¶„í•œ í¬ê¸°
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbLighting.ReleaseAndGetAddressOf())))
             return false;
 
@@ -1360,17 +1557,27 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
 
         // Transparent Forward-Style Light CB (register(b1))
-        // float3 dir + float intensity + float3 color + pad + float3 camPos + pad = 48 bytes (16B Á¤·Ä)
+        // float3 dir + float intensity + float3 color + pad + float3 camPos + pad = 48 bytes (16B ì •ë ¬)
         cbDesc.ByteWidth = sizeof(float) * 12;
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbTransparentLight.ReleaseAndGetAddressOf())))
             return false;
+
+        // Shadow CB (register(b4))
+        // float4x4(64) + float3(12) + int(4) + float3 pad(12) = 92 -> 96(16B align)
+        {
+            cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX) + sizeof(float) * 3 + sizeof(int) + sizeof(float) * 3;
+            cbDesc.ByteWidth = (cbDesc.ByteWidth + 15u) & ~15u;
+            if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbShadow.ReleaseAndGetAddressOf())))
+                return false;
+        }
+
 
         return true;
     }
 
     bool DeferredRenderSystem::CreateCubeGeometry()
     {
-        // ForwardRenderSystem::SimpleVertex¿Í µ¿ÀÏÇÑ ±¸Á¶Ã¼
+        // ForwardRenderSystem::SimpleVertexì™€ ë™ì¼í•œ êµ¬ì¡°ì²´
         struct SimpleVertex
         {
             XMFLOAT3 Position;
@@ -1446,7 +1653,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
     bool DeferredRenderSystem::CreateBlendStates()
     {
-        // Additive Blend State (¶óÀÌÆ® ÆĞ½º¿ë)
+        // Additive Blend State (ë¼ì´íŠ¸ íŒ¨ìŠ¤ìš©)
         D3D11_BLEND_DESC blendDesc = {};
         blendDesc.RenderTarget[0].BlendEnable = TRUE;
         blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
@@ -1459,7 +1666,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateBlendState(&blendDesc, m_blendStateAdditive.ReleaseAndGetAddressOf())))
             return false;
 
-        // Alpha Blend State (¹İÅõ¸í Forward-Style ÆĞ½º¿ë)
+        // Alpha Blend State (ë°˜íˆ¬ëª… Forward-Style íŒ¨ìŠ¤ìš©)
         D3D11_BLEND_DESC alphaDesc = {};
         alphaDesc.RenderTarget[0].BlendEnable = TRUE;
         alphaDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
@@ -1491,12 +1698,27 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateRasterizerState(&rsDesc, m_rasterizerState.ReleaseAndGetAddressOf())))
             return false;
 
+        // Shadow pass RS (Depth Bias)
+        {
+            D3D11_RASTERIZER_DESC s = rsDesc;
+            s.CullMode = D3D11_CULL_BACK;
+            s.DepthBias = 1000;
+            s.SlopeScaledDepthBias = 1.0f;
+            s.FrontCounterClockwise = TRUE;
+            if (FAILED(m_device->CreateRasterizerState(&s, m_shadowRasterizerState.ReleaseAndGetAddressOf())))
+                return false;
+
+            s.FrontCounterClockwise = FALSE;
+            if (FAILED(m_device->CreateRasterizerState(&s, m_shadowRasterizerStateReversed.ReleaseAndGetAddressOf())))
+                return false;
+        }
+
         return true;
     }
 
     bool DeferredRenderSystem::CreateDepthStencilStates()
     {
-        // ±âº» Depth Stencil State
+        // ê¸°ë³¸ Depth Stencil State
         D3D11_DEPTH_STENCIL_DESC dsDesc = {};
         dsDesc.DepthEnable = TRUE;
         dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -1505,7 +1727,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateDepthStencilState(&dsDesc, m_depthStencilState.ReleaseAndGetAddressOf())))
             return false;
 
-        // Read Only Depth Stencil State (¶óÀÌÆ® ÆĞ½º¿ë)
+        // Read Only Depth Stencil State (ë¼ì´íŠ¸ íŒ¨ìŠ¤ìš©)
         dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
         if (FAILED(m_device->CreateDepthStencilState(&dsDesc, m_depthStencilStateReadOnly.ReleaseAndGetAddressOf())))
             return false;
@@ -1513,15 +1735,70 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         return true;
     }
 
+    bool DeferredRenderSystem::CreateShadowMapResources()
+    {
+        const UINT size = (UINT)m_shadowSettings.mapSizePx;
+        if (size == 0) return false;
+
+        // 1) Shadow map texture (typeless)
+        D3D11_TEXTURE2D_DESC tDesc = { size, size, 1, 1, DXGI_FORMAT_R32_TYPELESS, {1, 0},
+                                       D3D11_USAGE_DEFAULT,
+                                       D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE,
+                                       0, 0 };
+        if (FAILED(m_device->CreateTexture2D(&tDesc, nullptr, m_shadowTex.ReleaseAndGetAddressOf())))
+            return false;
+
+        // 2) DSV
+        D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { DXGI_FORMAT_D32_FLOAT, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
+        if (FAILED(m_device->CreateDepthStencilView(m_shadowTex.Get(), &dsvDesc, m_shadowDSV.ReleaseAndGetAddressOf())))
+            return false;
+
+        // 3) SRV
+        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R32_FLOAT, D3D11_SRV_DIMENSION_TEXTURE2D, 0 };
+        srvDesc.Texture2D.MipLevels = 1;
+        if (FAILED(m_device->CreateShaderResourceView(m_shadowTex.Get(), &srvDesc, m_shadowSRV.ReleaseAndGetAddressOf())))
+            return false;
+
+        // 4) Viewport
+        m_shadowViewport = { 0.0f, 0.0f, (float)size, (float)size, 0.0f, 1.0f };
+
+        return true;
+    }
+
+    bool DeferredRenderSystem::CreateToneMappingResources(const std::uint32_t& width, const std::uint32_t& height)
+    {
+		// ì”¬ ë Œë” íƒ€ê²Ÿ ìƒì„± (HDR í¬ë§·: í†¤ë§¤í•‘ì„ ìœ„í•´ R16G16B16A16_FLOAT ì‚¬ìš©)
+		m_sceneWidth = width;
+		m_sceneHeight = height;
+		D3D11_TEXTURE2D_DESC cDesc = { width, height, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+		if (FAILED(m_device->CreateTexture2D(&cDesc, nullptr, m_sceneColorTex.ReleaseAndGetAddressOf()))) return false;
+		if (FAILED(m_device->CreateRenderTargetView(m_sceneColorTex.Get(), nullptr, m_sceneRTV.ReleaseAndGetAddressOf()))) return false;
+		if (FAILED(m_device->CreateShaderResourceView(m_sceneColorTex.Get(), nullptr, m_sceneColorSRV.ReleaseAndGetAddressOf()))) return false;
+
+		// ì—ë””í„° ë·°í¬íŠ¸ í‘œì‹œìš© LDR ê²°ê³¼ í…ìŠ¤ì²˜ (ToneMapped)
+		D3D11_TEXTURE2D_DESC vDesc = { width, height, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+		if (FAILED(m_device->CreateTexture2D(&vDesc, nullptr, m_viewportTex.ReleaseAndGetAddressOf()))) return false;
+		if (FAILED(m_device->CreateRenderTargetView(m_viewportTex.Get(), nullptr, m_viewportRTV.ReleaseAndGetAddressOf()))) return false;
+		if (FAILED(m_device->CreateShaderResourceView(m_viewportTex.Get(), nullptr, m_viewportSRV.ReleaseAndGetAddressOf()))) return false;
+
+		D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_D24_UNORM_S8_UINT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL, 0, 0 };
+		if (FAILED(m_device->CreateTexture2D(&dDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf()))) return false;
+		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { dDesc.Format, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
+		if (FAILED(m_device->CreateDepthStencilView(m_sceneDepthTex.Get(), &dsvDesc, m_sceneDSV.ReleaseAndGetAddressOf()))) return false;
+
+        return true;
+    }
+
+
     bool DeferredRenderSystem::CreateIblResources(const std::string& iblDir, const std::string& iblName)
     {
         if (!m_resources) return false;
 
         namespace fs = std::filesystem;
-        // °æ·Î ¹× ÀÌ¸§ ¼³Á¤ (Sample -> BakerSample, ±× ¿Ü ¼Ò¹®ÀÚ º¯È¯)
+        // ê²½ë¡œ ë° ì´ë¦„ ì„¤ì • (Sample -> BakerSample, ê·¸ ì™¸ ì†Œë¬¸ì ë³€í™˜)
         fs::path base = fs::path("Resource/Skybox") / iblDir;
 
-        // Diffuse, Specular, Brdf ·Îµå
+        // Diffuse, Specular, Brdf ë¡œë“œ
         if (!(m_iblDiffuseSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "DiffuseHDR.dds"), m_device.Get())))
             ALICE_LOG_WARN("Failed IBL Diffuse: %s", (base / iblName).string().c_str());
 
@@ -1531,12 +1808,153 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (!(m_iblBrdfLutSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "Brdf.dds"), m_device.Get())))
             ALICE_LOG_WARN("Failed IBL BRDF %s", (base / iblName).string().c_str());
 
-        // Skybox Env ·Îµå ¹× »óÅÂ ¼³Á¤
+        // Skybox Env ë¡œë“œ ë° ìƒíƒœ ì„¤ì •
         m_skyboxEnabled = (m_skyboxSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "EnvHDR.dds"), m_device.Get())) != nullptr;
         if (!m_skyboxEnabled) ALICE_LOG_WARN("Failed Skybox Env");
 
         m_currentIblSet = iblName;
         return true;
+    }
+
+    DirectX::XMMATRIX DeferredRenderSystem::RenderShadowPass(
+        const World& world,
+        const std::vector<SkinnedDrawCommand>& skinnedCommands,
+        const std::unordered_set<EntityId>& cameraEntities)
+    {
+        using namespace DirectX;
+
+        if (!m_shadowDSV || !m_shadowVS || !m_shadowSkinnedVS) return XMMatrixIdentity();
+
+       // 1) ë¼ì´íŠ¸ ë°©í–¥: ì—ë””í„° UIì—ì„œ ë°”ë€ŒëŠ” keyDirectionì„ ê·¸ëŒ€ë¡œ ë°˜ì˜
+       auto GetSafeDir = [](const DirectX::XMFLOAT3& v) {
+        DirectX::XMVECTOR vv = DirectX::XMLoadFloat3(&v);
+        return DirectX::XMVector3Equal(vv, DirectX::XMVectorZero())
+            ? DirectX::XMVectorSet(0, -1, 0, 0)
+            : DirectX::XMVector3Normalize(vv);
+        };
+        XMVECTOR lightDir = GetSafeDir(m_lightingParameters.keyDirection);
+
+        // 2) ì”¬ ë°”ìš´ë”© ê³„ì‚° (ì¹´ë©”ë¼ ì—”í‹°í‹° ì œì™¸)
+        XMFLOAT3 minP{ FLT_MAX, FLT_MAX, FLT_MAX };
+        XMFLOAT3 maxP{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
+        bool hasObjects = false;
+
+        const auto& transforms = world.GetComponents<TransformComponent>();
+        for (const auto& [id, tr] : transforms)
+        {
+            if (cameraEntities.contains(id)) continue;
+            hasObjects = true;
+            minP.x = (std::min)(minP.x, tr.position.x); minP.y = (std::min)(minP.y, tr.position.y); minP.z = (std::min)(minP.z, tr.position.z);
+            maxP.x = (std::max)(maxP.x, tr.position.x); maxP.y = (std::max)(maxP.y, tr.position.y); maxP.z = (std::max)(maxP.z, tr.position.z);
+        }
+
+        if (!hasObjects)
+        {
+            minP = { -10.0f, -10.0f, -10.0f };
+            maxP = { 10.0f, 10.0f, 10.0f };
+        }
+
+        // 3) Focus/Radius
+        XMVECTOR vMin = XMLoadFloat3(&minP);
+        XMVECTOR vMax = XMLoadFloat3(&maxP);
+        XMVECTOR focus = (vMin + vMax) * 0.5f;
+
+        XMVECTOR diagonal = XMVector3Length(vMax - vMin);
+        float sceneRadius = XMVectorGetX(diagonal) * 0.5f;
+
+        float r = (std::max)(m_shadowSettings.orthoRadius, sceneRadius);
+        r *= 1.5f;
+
+        // 4) lightView/lightProj
+        float distFromCenter = r * 3.0f;
+        XMVECTOR lightPos = focus - lightDir * distFromCenter;
+
+        XMVECTOR up = (fabsf(XMVectorGetX(XMVector3Dot(XMVectorSet(0, 1, 0, 0), lightDir))) > 0.99f)
+            ? XMVectorSet(0, 0, 1, 0) : XMVectorSet(0, 1, 0, 0);
+
+        XMMATRIX lightView = XMMatrixLookToLH(lightPos, lightDir, up);
+
+        float nearZ = 0.01f;
+        float farZ = distFromCenter + r * 2.0f;
+        XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(-r, r, -r, r, nearZ, farZ);
+
+        // 5) Texel snapping
+        XMVECTOR focusLS = XMVector3TransformCoord(focus, lightView);
+        float texelWorld = (2.0f * r) / static_cast<float>(m_shadowSettings.mapSizePx);
+        float snapX = floorf(XMVectorGetX(focusLS) / texelWorld) * texelWorld;
+        float snapY = floorf(XMVectorGetY(focusLS) / texelWorld) * texelWorld;
+        lightView = XMMatrixTranslation(snapX - XMVectorGetX(focusLS), snapY - XMVectorGetY(focusLS), 0.0f) * lightView;
+
+        XMMATRIX lightViewProj = lightView * lightProj;
+
+        // --- Render Shadow Depth ---
+        // SRV(t8) ë°”ì¸ë”© í•´ì œ (DSV ì¶©ëŒ ë°©ì§€)
+        ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
+        m_context->PSSetShaderResources(8, 1, nullSRV);
+
+        m_context->RSSetViewports(1, &m_shadowViewport);
+        m_context->OMSetRenderTargets(0, nullptr, m_shadowDSV.Get());
+        m_context->ClearDepthStencilView(m_shadowDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+        m_context->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
+
+        // Depth-only: PS none
+        m_context->PSSetShader(nullptr, nullptr, 0);
+
+        // 1) Static meshes (cube)
+        if (m_cubeVB && m_cubeIB && m_shadowInputLayout && m_shadowVS && m_cubeIndexCount > 0)
+        {
+            UINT stride = sizeof(DirectX::XMFLOAT3) * 2 + sizeof(DirectX::XMFLOAT2); // SimpleVertex(Position,Normal,Tex)
+            UINT offset = 0;
+            ID3D11Buffer* vb = m_cubeVB.Get();
+            m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+            m_context->IASetIndexBuffer(m_cubeIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+            m_context->IASetInputLayout(m_shadowInputLayout.Get());
+            m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            m_context->VSSetShader(m_shadowVS.Get(), nullptr, 0);
+
+            for (const auto& [id, tr] : transforms)
+            {
+                if (cameraEntities.contains(id)) continue;
+                if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
+
+                XMMATRIX worldM = BuildWorldMatrix(tr);
+
+                const bool flipped = XMVectorGetX(XMMatrixDeterminant(worldM)) < 0.0f;
+                if (flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
+                else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
+
+                UpdatePerObjectCB(worldM, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false);
+                m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
+            }
+        }
+
+        // 2) Skinned meshes
+        if (!skinnedCommands.empty() && m_gBufferSkinnedInputLayout && m_shadowSkinnedVS)
+        {
+            UINT offset = 0;
+            m_context->IASetInputLayout(m_gBufferSkinnedInputLayout.Get());
+            m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            m_context->VSSetShader(m_shadowSkinnedVS.Get(), nullptr, 0);
+
+            for (const auto& cmd : skinnedCommands)
+            {
+                if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
+
+                UINT sStride = cmd.stride;
+                m_context->IASetVertexBuffers(0, 1, &cmd.vertexBuffer, &sStride, &offset);
+                m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                const bool flipped = XMVectorGetX(XMMatrixDeterminant(cmd.world)) < 0.0f;
+                if (flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
+                else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
+
+                UpdateBonesCB(cmd.bones, cmd.boneCount);
+                UpdatePerObjectCB(cmd.world, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false);
+                m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+            }
+        }
+
+        return lightViewProj;
     }
 
     void DeferredRenderSystem::Render(const World& world,
@@ -1545,31 +1963,37 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
                                       const std::unordered_set<EntityId>& cameraEntities,
                                       int shadingMode,
                                       bool enableFillLight,
-                                      const std::vector<ForwardRenderSystem::SkinnedDrawCommand>& skinnedCommands)
+                                      const std::vector<SkinnedDrawCommand>& skinnedCommands)
     {
         if (!m_device || !m_context) return;
 
-        // Viewport ¼³Á¤
+        // Viewport ì„¤ì •
         D3D11_VIEWPORT vp{};
         vp.Width = (float)m_sceneWidth; vp.Height = (float)m_sceneHeight; vp.MaxDepth = 1.0f;
         m_context->RSSetViewports(1, &vp);
 
-        // G-Buffer ÆĞ½º
+        // Shadow pass ë¨¼ì € ë Œë”ë§ (lightViewProj ê³„ì‚° + shadow depth ìƒì„±)
+        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities);
+
+        // ShadowPassì—ì„œ viewportê°€ ì„€ë„ìš°ë§µ í•´ìƒë„ë¡œ ë°”ë€Œë¯€ë¡œ, ì”¬ ë·°í¬íŠ¸ë¥¼ ë‹¤ì‹œ ì„¤ì •
+        m_context->RSSetViewports(1, &vp);
+
+        // G-Buffer íŒ¨ìŠ¤
         PassGBuffer(world, camera, skinnedCommands, cameraEntities);
 
-        // Deferred Light ÆĞ½º
-        PassDeferredLight(camera, shadingMode, enableFillLight);
+        // Deferred Light íŒ¨ìŠ¤
+        PassDeferredLight(camera, shadingMode, enableFillLight, lightViewProj);
 
-        // ½ºÄ«ÀÌ¹Ú½º ·»´õ¸µ
+        // ìŠ¤ì¹´ì´ë°•ìŠ¤ ë Œë”ë§
         if (m_skyboxEnabled)
         {
             RenderSkybox(camera);
         }
 
-        // ¹İÅõ¸í(¾ËÆÄ ºí·»µù) ¿ÀºêÁ§Æ®´Â ¶óÀÌÆ® ÆĞ½º ÀÌÈÄ Forward-Style·Î ÇÕ¼º
+        // ë°˜íˆ¬ëª…(ì•ŒíŒŒ ë¸”ë Œë”©) ì˜¤ë¸Œì íŠ¸ëŠ” ë¼ì´íŠ¸ íŒ¨ìŠ¤ ì´í›„ Forward-Styleë¡œ í•©ì„±
         PassTransparentForward(camera, skinnedCommands);
 
-        // ¿¡µğÅÍ ºäÆ÷Æ® Ç¥½Ã¿ë LDR ÅØ½ºÃ³·Î Åæ¸ÅÇÎ (ImGui::Image¿¡¼­ »ç¿ë)
+        // ì—ë””í„° ë·°í¬íŠ¸ í‘œì‹œìš© LDR í…ìŠ¤ì²˜ë¡œ í†¤ë§¤í•‘ (ImGui::Imageì—ì„œ ì‚¬ìš©)
         if (m_viewportRTV)
         {
             D3D11_VIEWPORT viewport = {};
@@ -1579,16 +2003,24 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             RenderToneMapping(m_viewportRTV.Get(), viewport);
         }
 
-        // ÃÖÁ¾ ¹é¹öÆÛ º¹±Í (ImGui µî UI ·»´õ¸µÀ» À§ÇØ)
+        // ìµœì¢… ë°±ë²„í¼ ë³µê·€ (ImGui ë“± UI ë Œë”ë§ì„ ìœ„í•´)
         RestoreBackBuffer();
     }
 
     void DeferredRenderSystem::PassGBuffer(const World& world,
                                            const Camera& camera,
-                                           const std::vector<ForwardRenderSystem::SkinnedDrawCommand>& skinnedCommands,
+                                           const std::vector<SkinnedDrawCommand>& skinnedCommands,
                                            const std::unordered_set<EntityId>& cameraEntities)
     {
-        // G-Buffer Å¬¸®¾î
+        // ShadowPass ë“±ì—ì„œ viewportê°€ ë³€ê²½ë  ìˆ˜ ìˆìœ¼ë¯€ë¡œ,
+        // GBuffer íŒ¨ìŠ¤ ì‹œì‘ ì‹œ í•­ìƒ ì”¬ í•´ìƒë„ ë·°í¬íŠ¸ë¥¼ ì¬ì„¤ì •í•©ë‹ˆë‹¤.
+        D3D11_VIEWPORT vp{};
+        vp.Width = (float)m_sceneWidth;
+        vp.Height = (float)m_sceneHeight;
+        vp.MaxDepth = 1.0f;
+        m_context->RSSetViewports(1, &vp);
+
+        // G-Buffer í´ë¦¬ì–´
         float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         float clearNormal[4] = { 0.5f, 0.5f, 0.5f, 1.0f };
 
@@ -1599,7 +2031,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         m_context->ClearRenderTargetView(m_gBufferRTVs[4].Get(), clearColor); // BaseColor
         m_context->ClearDepthStencilView(m_sceneDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-        // G-Buffer ·»´õ Å¸°Ù ¼³Á¤
+        // G-Buffer ë Œë” íƒ€ê²Ÿ ì„¤ì •
         ID3D11RenderTargetView* rtvs[GBufferCount] = {
             m_gBufferRTVs[0].Get(), m_gBufferRTVs[1].Get(),
             m_gBufferRTVs[2].Get(), m_gBufferRTVs[3].Get(),
@@ -1609,18 +2041,18 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         m_context->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
         m_context->RSSetState(m_rasterizerState.Get());
 
-        // ÆÄÀÌÇÁ¶óÀÎ ¼³Á¤
+        // íŒŒì´í”„ë¼ì¸ ì„¤ì •
         m_context->VSSetShader(m_gBufferVS.Get(), nullptr, 0);
         m_context->PSSetShader(m_gBufferPS.Get(), nullptr, 0);
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_context->IASetInputLayout(m_gBufferInputLayout.Get());
 
-        // »ó¼ö ¹öÆÛ ¾÷µ¥ÀÌÆ®
+        // ìƒìˆ˜ ë²„í¼ ì—…ë°ì´íŠ¸
         XMMATRIX view = camera.GetViewMatrix();
         XMMATRIX proj = camera.GetProjectionMatrix();
 
-        // 1. Á¤Àû ¸Ş½Ã (Å¥ºê) ·»´õ¸µ
-        // ForwardRenderSystem::SimpleVertex¿Í µ¿ÀÏÇÑ ±¸Á¶Ã¼ (privateÀÌ¹Ç·Î ·ÎÄÃ Á¤ÀÇ)
+        // 1. ì •ì  ë©”ì‹œ (íë¸Œ) ë Œë”ë§
+        // ForwardRenderSystem::SimpleVertexì™€ ë™ì¼í•œ êµ¬ì¡°ì²´ (privateì´ë¯€ë¡œ ë¡œì»¬ ì •ì˜)
         struct SimpleVertex
         {
             XMFLOAT3 Position;
@@ -1641,13 +2073,13 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
             
-            // ÀçÁú Á¤º¸ °¡Á®¿À±â
+            // ì¬ì§ˆ ì •ë³´ ê°€ì ¸ì˜¤ê¸°
             XMFLOAT4 color = { 1, 1, 1, 1 };
             float rough = 0.5f, metal = 0.0f;
             bool useTex = false;
             ID3D11ShaderResourceView* texSRV = nullptr;
             
-            // MaterialComponent°¡ ÀÖÀ¸¸é °ª Àû¿ë
+            // MaterialComponentê°€ ìˆìœ¼ë©´ ê°’ ì ìš©
             if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id)) {
                 color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
                 rough = mat->roughness; 
@@ -1658,19 +2090,19 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
                 }
             }
 
-            // ÅØ½ºÃ³ ¹ÙÀÎµù (t0: Diffuse, t1: Normal)
-            ID3D11ShaderResourceView* srvs[] = { texSRV, nullptr }; // Á¤Àû ¸Ş½Ã´Â ³ë¸»¸Ê ÇöÀç null
+            // í…ìŠ¤ì²˜ ë°”ì¸ë”© (t0: Diffuse, t1: Normal)
+            ID3D11ShaderResourceView* srvs[] = { texSRV, nullptr }; // ì •ì  ë©”ì‹œëŠ” ë…¸ë§ë§µ í˜„ì¬ null
             m_context->PSSetShaderResources(0, 2, srvs);
 
-            // CB ¾÷µ¥ÀÌÆ® (ÀçÁú Á¤º¸ Æ÷ÇÔ)
+            // CB ì—…ë°ì´íŠ¸ (ì¬ì§ˆ ì •ë³´ í¬í•¨)
             UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false);
 
             m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
         }
         
-        // 2. ½ºÅ°´× ¸Ş½Ã ·»´õ¸µ
-        // - ForwardRenderSystem°ú µ¿ÀÏÇÏ°Ô, RegistryÀÇ ¼­ºê¼Â ¸ÓÆ¼¸®¾ó SRV¸¦ ¿ì¼± »ç¿ëÇÕ´Ï´Ù.
-        // - (cmd.albedoTexturePath´Â ¿¡µğÅÍ¿¡¼­ ¿À¹ö¶óÀÌµåÇÑ °æ¿ì¿¡¸¸ »ç¿ë)
+        // 2. ìŠ¤í‚¤ë‹ ë©”ì‹œ ë Œë”ë§
+        // - ForwardRenderSystemê³¼ ë™ì¼í•˜ê²Œ, Registryì˜ ì„œë¸Œì…‹ ë¨¸í‹°ë¦¬ì–¼ SRVë¥¼ ìš°ì„  ì‚¬ìš©í•©ë‹ˆë‹¤.
+        // - (cmd.albedoTexturePathëŠ” ì—ë””í„°ì—ì„œ ì˜¤ë²„ë¼ì´ë“œí•œ ê²½ìš°ì—ë§Œ ì‚¬ìš©)
         if (!skinnedCommands.empty() && m_gBufferSkinnedVS && m_gBufferPS)
         {
             m_context->VSSetShader(m_gBufferSkinnedVS.Get(), nullptr, 0);
@@ -1714,7 +2146,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
                 }
                 else
                 {
-                    // ¿À¹ö¶óÀÌµå ÅØ½ºÃ³ (¶Ç´Â ´ÜÀÏ ÅØ½ºÃ³)¸¸ ÀÖ´Â °æ¿ì
+                    // ì˜¤ë²„ë¼ì´ë“œ í…ìŠ¤ì²˜ (ë˜ëŠ” ë‹¨ì¼ í…ìŠ¤ì²˜)ë§Œ ìˆëŠ” ê²½ìš°
                     ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
                     ID3D11ShaderResourceView* srvs[] = { diff, nullptr };
                     m_context->PSSetShaderResources(0, 2, srvs);
@@ -1728,31 +2160,31 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             }
         }
 
-        // RTV ÇØÁ¦
+        // RTV í•´ì œ
         ID3D11RenderTargetView* nullRTVs[GBufferCount] = { nullptr };
         m_context->OMSetRenderTargets(GBufferCount, nullRTVs, nullptr);
     }
 
-    void DeferredRenderSystem::PassDeferredLight(const Camera& camera, int shadingMode, bool enableFillLight)
+    void DeferredRenderSystem::PassDeferredLight(const Camera& camera, int shadingMode, bool enableFillLight, DirectX::CXMMATRIX lightViewProj)
     {
-        // ºäÆ÷Æ® ¼³Á¤ (ForwardRenderSystem°ú µ¿ÀÏ)
+        // ë·°í¬íŠ¸ ì„¤ì • (ForwardRenderSystemê³¼ ë™ì¼)
         D3D11_VIEWPORT vp{};
         vp.Width = (float)m_sceneWidth; vp.Height = (float)m_sceneHeight; vp.MaxDepth = 1.0f;
         m_context->RSSetViewports(1, &vp);
 
-        // ¾À Å¸°Ù ¼³Á¤
+        // ì”¬ íƒ€ê²Ÿ ì„¤ì •
         m_context->OMSetRenderTargets(1, m_sceneRTV.GetAddressOf(), nullptr);
-        // FullScreen Quad ÆĞ½º´Â DSV¸¦ »ç¿ëÇÏÁö ¾ÊÀ¸¹Ç·Î Depth Test¸¦ ¹İµå½Ã ²¨¾ß ÇÕ´Ï´Ù.
+        // FullScreen Quad íŒ¨ìŠ¤ëŠ” DSVë¥¼ ì‚¬ìš©í•˜ì§€ ì•Šìœ¼ë¯€ë¡œ Depth Testë¥¼ ë°˜ë“œì‹œ êº¼ì•¼ í•©ë‹ˆë‹¤.
         float blendFactor[4] = { 0, 0, 0, 0 };
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
         m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
         m_context->RSSetState(m_ppRasterNoCull.Get());
 
-        // Å¬¸®¾î (¹è°æ»ö)
+        // í´ë¦¬ì–´ (ë°°ê²½ìƒ‰)
         float clearColor[4] = { m_backgroundColor.x, m_backgroundColor.y, m_backgroundColor.z, m_backgroundColor.w };
         m_context->ClearRenderTargetView(m_sceneRTV.Get(), clearColor);
 
-        // G-Buffer ÅØ½ºÃ³ ¹ÙÀÎµù
+        // G-Buffer í…ìŠ¤ì²˜ ë°”ì¸ë”©
         std::vector<ID3D11ShaderResourceView*> srvs = {
             m_gBufferSRVs[0].Get(), // Position
             m_gBufferSRVs[1].Get(), // Normal
@@ -1766,14 +2198,47 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         };
         m_context->PSSetShaderResources(0, static_cast<UINT>(srvs.size()), srvs.data());
 
-        // »ùÇÃ·¯ ¼³Á¤
+        // ìƒ˜í”ŒëŸ¬ ì„¤ì •
         ID3D11SamplerState* samplers[] = { m_samplerState.Get(), m_shadowSampler.Get(), m_samplerLinear.Get() };
         m_context->PSSetSamplers(0, 3, samplers);
 
-        // »ó¼ö ¹öÆÛ ¾÷µ¥ÀÌÆ®
-        UpdateLightingCB(camera, shadingMode, enableFillLight);
+        // ìƒìˆ˜ ë²„í¼ ì—…ë°ì´íŠ¸ (ì„€ë„ìš° íŒŒë¼ë¯¸í„° í¬í•¨)
+        UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
 
-        // FullScreen Quad ±×¸®±â
+         // ShadowCB(b4) ì—…ë°ì´íŠ¸ (íŒ¨í‚¹ ì•ˆì „)
+        // - Shadow í–‰ë ¬/íŒŒë¼ë¯¸í„°ëŠ” ShadowCBì—ì„œë§Œ ì½ë„ë¡(ì…°ì´ë”) ë³€ê²½í–ˆìŠµë‹ˆë‹¤.
+        if (m_cbShadow)
+        {
+            struct ShadowCBData
+            {
+                DirectX::XMMATRIX lightViewProjT;
+                float bias;
+                float mapSize;
+                float pcfRadius;
+                int   enabled;
+                float pad[3];
+            };
+
+            ShadowCBData scb{};
+            scb.lightViewProjT = DirectX::XMMatrixTranspose(lightViewProj);
+            scb.bias = m_shadowSettings.bias;
+            scb.mapSize = (float)m_shadowSettings.mapSizePx;
+            scb.pcfRadius = m_shadowSettings.pcfRadius;
+            scb.enabled = m_shadowSettings.enabled ? 1 : 0;
+
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            if (SUCCEEDED(m_context->Map(m_cbShadow.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+            {
+                std::memcpy(mapped.pData, &scb, sizeof(scb));
+                m_context->Unmap(m_cbShadow.Get(), 0);
+            }
+
+            ID3D11Buffer* cb = m_cbShadow.Get();
+            m_context->PSSetConstantBuffers(4, 1, &cb); // b4
+        }
+
+
+        // FullScreen Quad ê·¸ë¦¬ê¸°
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_context->IASetInputLayout(m_quadInputLayout.Get());
         m_context->IASetVertexBuffers(0, 1, m_quadVB.GetAddressOf(), &m_quadStride, &m_quadOffset);
@@ -1783,14 +2248,14 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         m_context->PSSetShader(m_deferredLightPS.Get(), nullptr, 0);
         m_context->DrawIndexed(m_quadIndexCount, 0, 0);
 
-        // ¸®¼Ò½º ÇØÁ¦
+        // ë¦¬ì†ŒìŠ¤ í•´ì œ
         ID3D11ShaderResourceView* nullSRVs[9] = { nullptr };
         m_context->PSSetShaderResources(0, 9, nullSRVs);
     }
 
     void DeferredRenderSystem::PassTransparentForward(
         const Camera& camera,
-        const std::vector<ForwardRenderSystem::SkinnedDrawCommand>& skinnedCommands)
+        const std::vector<SkinnedDrawCommand>& skinnedCommands)
     {
         if (!m_device || !m_context) return;
         if (!m_sceneRTV || !m_sceneDSV) return;
@@ -1798,29 +2263,29 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (!m_transparentSkinnedVS || !m_transparentPS || !m_transparentSkinnedInputLayout) return;
         if (!m_cbTransparentLight) return;
 
-        // ÇöÀç´Â "¹İÅõ¸í ¹®Á¦°¡ ÁÖ·Î FBX(½ºÅ°´×) ÂÊ"¿¡¼­ ¹ß»ıÇÏ¹Ç·Î ½ºÅ°´× Ä¿¸Çµå¸¸ Ã³¸®ÇÕ´Ï´Ù.
+        // í˜„ì¬ëŠ” "ë°˜íˆ¬ëª… ë¬¸ì œê°€ ì£¼ë¡œ FBX(ìŠ¤í‚¤ë‹) ìª½"ì—ì„œ ë°œìƒí•˜ë¯€ë¡œ ìŠ¤í‚¤ë‹ ì»¤ë§¨ë“œë§Œ ì²˜ë¦¬í•©ë‹ˆë‹¤.
         if (skinnedCommands.empty()) return;
 
-        // ·»´õ Å¸±ê: HDR ¾À ÄÃ·¯ + (GBuffer¿¡¼­ Ã¤¿î) ±íÀÌ ¹öÆÛ
+        // ë Œë” íƒ€ê¹ƒ: HDR ì”¬ ì»¬ëŸ¬ + (GBufferì—ì„œ ì±„ìš´) ê¹Šì´ ë²„í¼
         m_context->OMSetRenderTargets(1, m_sceneRTV.GetAddressOf(), m_sceneDSV.Get());
 
-        // ºí·»µù ON, ±íÀÌ Å×½ºÆ® ON(ÀĞ±â Àü¿ë)
+        // ë¸”ë Œë”© ON, ê¹Šì´ í…ŒìŠ¤íŠ¸ ON(ì½ê¸° ì „ìš©)
         float blendFactor[4] = { 0, 0, 0, 0 };
         m_context->OMSetBlendState(m_alphaBlendState.Get(), blendFactor, 0xFFFFFFFF);
         m_context->OMSetDepthStencilState(m_depthStencilStateReadOnly.Get(), 0);
         m_context->RSSetState(m_rasterizerState.Get());
 
-        // ÆÄÀÌÇÁ¶óÀÎ
+        // íŒŒì´í”„ë¼ì¸
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_context->IASetInputLayout(m_transparentSkinnedInputLayout.Get());
         m_context->VSSetShader(m_transparentSkinnedVS.Get(), nullptr, 0);
         m_context->PSSetShader(m_transparentPS.Get(), nullptr, 0);
 
-        // »ùÇÃ·¯
+        // ìƒ˜í”ŒëŸ¬
         ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
         m_context->PSSetSamplers(0, 1, samplers);
 
-        // Transparent Light CB ¾÷µ¥ÀÌÆ® (register b1)
+        // Transparent Light CB ì—…ë°ì´íŠ¸ (register b1)
         struct TransparentLightCB
         {
             DirectX::XMFLOAT3 lightDir;
@@ -1832,9 +2297,9 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         };
 
         TransparentLightCB tl{};
-        tl.lightDir = DirectX::XMFLOAT3(0.5f, -1.0f, 0.5f);
-        tl.intensity = 1.0f;
-        tl.lightColor = DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f);
+        tl.lightDir = m_lightingParameters.keyDirection;
+        tl.intensity = m_lightingParameters.keyIntensity;
+        tl.lightColor = m_lightingParameters.diffuseColor;
         tl.cameraPos = camera.GetPosition();
 
         D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -1846,14 +2311,14 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         ID3D11Buffer* tlCB = m_cbTransparentLight.Get();
         m_context->PSSetConstantBuffers(1, 1, &tlCB);
 
-        // IBL ¸®¼Ò½º ¹ÙÀÎµù (t5~t7)
+        // IBL ë¦¬ì†ŒìŠ¤ ë°”ì¸ë”© (t5~t7)
         ID3D11ShaderResourceView* iblDiffuse = m_iblDiffuseSRV.Get();
         ID3D11ShaderResourceView* iblSpec = m_iblSpecularSRV.Get();
         ID3D11ShaderResourceView* iblBrdf = m_iblBrdfLutSRV.Get();
         ID3D11ShaderResourceView* iblSrvs[] = { iblDiffuse, iblSpec, iblBrdf };
         m_context->PSSetShaderResources(5, 3, iblSrvs);
 
-        // °øÅë Çà·Ä
+        // ê³µí†µ í–‰ë ¬
         DirectX::XMMATRIX view = camera.GetViewMatrix();
         DirectX::XMMATRIX proj = camera.GetProjectionMatrix();
 
@@ -1874,7 +2339,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
             UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, true, true);
 
-            // FBX ¼­ºê¼Â ¸ÓÆ¼¸®¾óÀÌ ÀÖÀ¸¸é ±×°É ¿ì¼± »ç¿ë (Forward¿Í µ¿ÀÏ)
+            // FBX ì„œë¸Œì…‹ ë¨¸í‹°ë¦¬ì–¼ì´ ìˆìœ¼ë©´ ê·¸ê±¸ ìš°ì„  ì‚¬ìš© (Forwardì™€ ë™ì¼)
             std::shared_ptr<SkinnedMeshGPU> mesh =
                 (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
 
@@ -1893,7 +2358,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
                     ID3D11ShaderResourceView* srvs01[2] = { diff, norm };
                     m_context->PSSetShaderResources(0, 2, srvs01);
 
-                    // enableNormalMapÀº "³ë¸» SRV°¡ Á¸ÀçÇÒ ¶§¸¸" ÄÑ´Â°Ô ¾ÈÁ¤ÀûÀÔ´Ï´Ù.
+                    // enableNormalMapì€ "ë…¸ë§ SRVê°€ ì¡´ì¬í•  ë•Œë§Œ" ì¼œëŠ”ê²Œ ì•ˆì •ì ì…ë‹ˆë‹¤.
                     UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr));
 
                     m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
@@ -1901,7 +2366,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             }
             else
             {
-                // ¸ÓÆ¼¸®¾ó ¿À¹ö¶óÀÌµå(¿¡µğÅÍ) °æ·Î°¡ ÀÖÀ¸¸é ±×°É »ç¿ë
+                // ë¨¸í‹°ë¦¬ì–¼ ì˜¤ë²„ë¼ì´ë“œ(ì—ë””í„°) ê²½ë¡œê°€ ìˆìœ¼ë©´ ê·¸ê±¸ ì‚¬ìš©
                 ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
                 ID3D11ShaderResourceView* srvs01[2] = { diff, nullptr };
                 m_context->PSSetShaderResources(0, 2, srvs01);
@@ -1910,23 +2375,23 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             }
         }
 
-        // SRV Á¤¸® (D3D11 hazard ¹æÁö)
+        // SRV ì •ë¦¬ (D3D11 hazard ë°©ì§€)
         ID3D11ShaderResourceView* nulls[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
         m_context->PSSetShaderResources(0, 8, nulls);
     }
 
     void DeferredRenderSystem::RenderSkybox(const Camera& camera)
     {
-        // À¯È¿¼º Ã¼Å© (ForwardRenderSystem°ú µ¿ÀÏ)
+        // ìœ íš¨ì„± ì²´í¬ (ForwardRenderSystemê³¼ ë™ì¼)
         if (!m_skyboxEnabled || !m_skyboxSRV || !m_skyboxVS || !m_skyboxPS || !m_cbSkybox) return;
 
-        // ¾À Å¸°Ù¿¡ ·»´õ¸µ (±íÀÌ ¹öÆÛ »ç¿ë)
+        // ì”¬ íƒ€ê²Ÿì— ë Œë”ë§ (ê¹Šì´ ë²„í¼ ì‚¬ìš©)
         m_context->OMSetRenderTargets(1, m_sceneRTV.GetAddressOf(), m_sceneDSV.Get());
         m_context->OMSetDepthStencilState(m_skyboxDepthState.Get(), 0);
         m_context->RSSetState(m_skyboxRasterizerState.Get());
 
-        // Å¥ºê Áö¿À¸ŞÆ®¸® ¼³Á¤ (ForwardRenderSystemÀÇ Å¥ºê »ç¿ë - ÇÊ¿ä½Ã º°µµ »ı¼º)
-        // ÇöÀç´Â °£´ÜÈ÷ ÇÏ±â À§ÇØ ÀÎ¶óÀÎ Å¥ºê µ¥ÀÌÅÍ »ç¿ë
+        // íë¸Œ ì§€ì˜¤ë©”íŠ¸ë¦¬ ì„¤ì • (ForwardRenderSystemì˜ íë¸Œ ì‚¬ìš© - í•„ìš”ì‹œ ë³„ë„ ìƒì„±)
+        // í˜„ì¬ëŠ” ê°„ë‹¨íˆ í•˜ê¸° ìœ„í•´ ì¸ë¼ì¸ íë¸Œ ë°ì´í„° ì‚¬ìš©
         struct SkyboxVertex { XMFLOAT3 Position; };
         SkyboxVertex vertices[] = {
             {{-1,-1, 1}}, {{-1, 1, 1}}, {{ 1, 1, 1}}, {{ 1,-1, 1}},
@@ -1941,7 +2406,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             12,13,14, 12,14,15, 16,17,18, 16,18,19, 20,21,22, 20,22,23
         };
 
-        // ÀÓ½Ã ¹öÆÛ »ı¼º (ÃÖÀûÈ­: ÃÊ±âÈ­ ½Ã »ı¼ºÇÏ´Â °ÍÀÌ ÁÁÀ½)
+        // ì„ì‹œ ë²„í¼ ìƒì„± (ìµœì í™”: ì´ˆê¸°í™” ì‹œ ìƒì„±í•˜ëŠ” ê²ƒì´ ì¢‹ìŒ)
         ComPtr<ID3D11Buffer> skyboxVB, skyboxIB;
         D3D11_BUFFER_DESC vbDesc = { sizeof(vertices), D3D11_USAGE_DEFAULT, D3D11_BIND_VERTEX_BUFFER, 0, 0, 0 };
         D3D11_SUBRESOURCE_DATA vbData = { vertices, 0, 0 };
@@ -1951,7 +2416,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         D3D11_SUBRESOURCE_DATA ibData = { indices, 0, 0 };
         if (FAILED(m_device->CreateBuffer(&ibDesc, &ibData, skyboxIB.GetAddressOf()))) return;
 
-        // IA ¼³Á¤
+        // IA ì„¤ì •
         UINT stride = sizeof(SkyboxVertex), offset = 0;
         ID3D11Buffer* vb = skyboxVB.Get();
         m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
@@ -1962,7 +2427,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         m_context->VSSetShader(m_skyboxVS.Get(), nullptr, 0);
         m_context->PSSetShader(m_skyboxPS.Get(), nullptr, 0);
 
-        // Çà·Ä °è»ê (Translation Á¦°Å)
+        // í–‰ë ¬ ê³„ì‚° (Translation ì œê±°)
         XMMATRIX view = camera.GetViewMatrix();
         view.r[3] = XMVectorSet(0.f, 0.f, 0.f, 1.f);
         XMMATRIX wvpT = XMMatrixTranspose(view * camera.GetProjectionMatrix());
@@ -1974,7 +2439,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             m_context->Unmap(m_cbSkybox.Get(), 0);
         }
 
-        // ¸®¼Ò½º ¹ÙÀÎµù
+        // ë¦¬ì†ŒìŠ¤ ë°”ì¸ë”©
         ID3D11Buffer* cb = m_cbSkybox.Get();
         ID3D11ShaderResourceView* srv = m_skyboxSRV.Get();
         ID3D11SamplerState* sam = m_samplerState.Get();
@@ -2041,108 +2506,55 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         }
 
         m_context->VSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
-        // PS¿¡¼­µµ ÀçÁú Á¤º¸¸¦ »ç¿ëÇÏ¹Ç·Î ¹İµå½Ã ¹ÙÀÎµù
+        // PSì—ì„œë„ ì¬ì§ˆ ì •ë³´ë¥¼ ì‚¬ìš©í•˜ë¯€ë¡œ ë°˜ë“œì‹œ ë°”ì¸ë”©
         m_context->PSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
     }
 
-    void DeferredRenderSystem::UpdateLightingCB(const Camera& camera, int shadingMode, bool enableFillLight)
+    void DeferredRenderSystem::UpdateLightingCB(const Camera& camera, int shadingMode, bool /*enableFillLight*/, DirectX::CXMMATRIX lightViewProj)
     {
-        // ConstantBuffer (register b0) ¾÷µ¥ÀÌÆ®
-        // HLSLÀÇ ConstantBuffer ±¸Á¶Ã¼¿Í ÀÏÄ¡ÇØ¾ß ÇÔ
-        struct ConstantBufferData
-        {
-            XMMATRIX g_World;
-            XMMATRIX g_View;
-            XMMATRIX g_Proj;
-            XMMATRIX g_WorldInvTranspose;
-            XMFLOAT4 g_Material_ambient;
-            XMFLOAT4 g_Material_diffuse;
-            XMFLOAT4 g_Material_specular;
-            XMFLOAT4 g_Material_reflect;
-            XMFLOAT4 g_DirLight_ambient;
-            XMFLOAT4 g_DirLight_diffuse;
-            XMFLOAT4 g_DirLight_specular;
-            XMFLOAT3 g_DirLight_direction;
-            float    g_DirLight_intensity;
-            XMFLOAT3 g_EyePosW;
-            int      g_ShadingMode;
-            int      g_EnableNormalMap;
-            int      g_UseSpecularMap;
-            int      g_UseDiffuseMap;
-            float    g_Pad;
-            int      g_UseTextureColor;
-            XMFLOAT3 g_PBRPad;
-            XMFLOAT4 g_PBRBaseColor;
-            float    g_PBRMetalness;
-            float    g_PBRRoughness;
-            float    g_PBRAmbientOcclusion;
-            float    g_PBRPad2;
-            float    g_OutlineWidth;
-            float    g_OutlinePow;
-            float    g_OutlineThickness;
-            float    g_OutlineStrength;
-            XMFLOAT4 g_OutlineColor;
-            XMMATRIX g_LightViewProj;
-            float    g_ShadowBias;
-            float    g_ShadowMapSize;
-            float    g_ShadowPCFRadius;
-            int      g_ShadowEnabled;
-            int      g_BoundsBoneIndex;
-            XMFLOAT3 g_BoundsPad;
-        };
-
+        // IMPORTANT:
+        // - ConstantBufferDataëŠ” ë§¤ìš° í° êµ¬ì¡°ì²´ì´ë¯€ë¡œ "ë¶€ë¶„ë§Œ ì±„ìš°ê³  memcpy" í•˜ë©´
+        //   ë‚˜ë¨¸ì§€ í•„ë“œê°€ ì“°ë ˆê¸° ê°’ì´ ë˜ì–´ ë¼ì´íŒ…/íŒŒë¼ë¯¸í„°ê°€ ëœë¤í•˜ê²Œ ê¹¨ì§ˆ ìˆ˜ ìˆìŠµë‹ˆë‹¤.
+        // - ë°˜ë“œì‹œ 0 ì´ˆê¸°í™” í›„ í•„ìš”í•œ ê°’ì„ ëª¨ë‘ ì•ˆì •ì ìœ¼ë¡œ ì„¸íŒ…í•©ë‹ˆë‹¤.
         ConstantBufferData cbData = {};
-        
-        // Çà·ÄÀº Identity·Î ¼³Á¤ (Deferred Light ÆĞ½º¿¡¼­´Â »ç¿ëÇÏÁö ¾ÊÁö¸¸ ±¸Á¶Ã¼¿¡ ÇÊ¿ä)
+
+        // (1) í–‰ë ¬: Deferred Light PSì—ì„œëŠ” ì£¼ë¡œ g_EyePosW / PBR íŒŒë¼ë¯¸í„° ë“±ì„ ì‚¬ìš©í•˜ì§€ë§Œ,
+        //     êµ¬ì¡°ì²´ì— í–‰ë ¬ í•„ë“œê°€ ìˆìœ¼ë¯€ë¡œ ì•ˆì „í•˜ê²Œ ì±„ì›ë‹ˆë‹¤.
         cbData.g_World = XMMatrixIdentity();
         cbData.g_View = XMMatrixIdentity();
         cbData.g_Proj = XMMatrixIdentity();
         cbData.g_WorldInvTranspose = XMMatrixIdentity();
-        cbData.g_LightViewProj = XMMatrixIdentity();
-        
-        // ¸ÓÆ¼¸®¾ó ±âº»°ª
-        cbData.g_Material_ambient = XMFLOAT4(0.1f, 0.1f, 0.1f, 1.0f);
-        cbData.g_Material_diffuse = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
-        cbData.g_Material_specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-        cbData.g_Material_reflect = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-        
-        // ¶óÀÌÆ® ±âº»°ª
-        cbData.g_DirLight_ambient = XMFLOAT4(0.1f, 0.1f, 0.1f, 1.0f);
-        cbData.g_DirLight_diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-        cbData.g_DirLight_specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-        cbData.g_DirLight_direction = XMFLOAT3(0.5f, -1.0f, 0.5f);
-        cbData.g_DirLight_intensity = 1.0f;
-        
-        // Ä«¸Ş¶ó À§Ä¡
-        XMFLOAT3 eyePos = camera.GetPosition();
-        cbData.g_EyePosW = eyePos;
-        
-        // ¼ÎÀÌµù ¸ğµå
+        cbData.g_LightViewProj = XMMatrixTranspose(lightViewProj); // (b0ì—ë„ ë³´ê´€: ë””ë²„ê·¸/í˜¸í™˜ìš©)
+
+        // (2) ì¹´ë©”ë¼
+        cbData.g_EyePosW = camera.GetPosition();
+
+        // (3) ì…°ì´ë”© ëª¨ë“œ
         cbData.g_ShadingMode = shadingMode;
-        cbData.g_EnableNormalMap = 0;
-        cbData.g_UseSpecularMap = 0;
-        cbData.g_UseDiffuseMap = 0;
+
+        // (4) PBR/ì¬ì§ˆ íŒŒë¼ë¯¸í„° (Deferred PSê°€ ì°¸ì¡°í•˜ëŠ” ê°’ í¬í•¨)
+        cbData.g_PBRBaseColor = XMFLOAT4(m_lightingParameters.baseColor.x,
+                                         m_lightingParameters.baseColor.y,
+                                         m_lightingParameters.baseColor.z,
+                                         1.0f);
+        cbData.g_PBRMetalness = m_lightingParameters.metalness;
+        cbData.g_PBRRoughness = m_lightingParameters.roughness;
+        cbData.g_PBRAmbientOcclusion = m_lightingParameters.ambientOcclusion;
         cbData.g_UseTextureColor = 1;
-        
-        // PBR ÆÄ¶ó¹ÌÅÍ
-        cbData.g_PBRBaseColor = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
-        cbData.g_PBRMetalness = 0.0f;
-        cbData.g_PBRRoughness = 0.5f;
-        cbData.g_PBRAmbientOcclusion = 1.0f;
-        
-        // ¾Æ¿ô¶óÀÎ (»ç¿ë ¾È ÇÔ)
-        cbData.g_OutlineWidth = 0.0f;
-        cbData.g_OutlinePow = 0.0f;
-        cbData.g_OutlineThickness = 0.0f;
-        cbData.g_OutlineStrength = 0.0f;
-        cbData.g_OutlineColor = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-        
-        // ¼¨µµ¿ì (»ç¿ë ¾È ÇÔ)
-        cbData.g_ShadowBias = 0.0015f;
-        cbData.g_ShadowMapSize = 2048.0f;
-        cbData.g_ShadowPCFRadius = 1.0f;
-        cbData.g_ShadowEnabled = 0;
-        cbData.g_BoundsBoneIndex = -1;
+
+        // (5) ì„€ë„ìš° (PCF) - b4(ShadowCB)ê°€ ì‹¤ì œë¡œ ì‚¬ìš©ë˜ì§€ë§Œ, b0ì—ë„ ì•ˆì •ì ìœ¼ë¡œ ì±„ì›Œë‘¡ë‹ˆë‹¤.
+        cbData.g_ShadowBias = m_shadowSettings.bias;
+        cbData.g_ShadowMapSize = (float)m_shadowSettings.mapSizePx;
+        cbData.g_ShadowPCFRadius = m_shadowSettings.pcfRadius;
+        cbData.g_ShadowEnabled = m_shadowSettings.enabled ? 1 : 0;
+
+        // (6) Directional light (b0ì— ìˆëŠ” ë ˆê±°ì‹œ í•„ë“œë„ ì¼ê´€ë˜ê²Œ ì„¸íŒ…)
+        cbData.g_DirLight_direction = m_lightingParameters.keyDirection;
+        cbData.g_DirLight_intensity = m_lightingParameters.keyIntensity;
+        cbData.g_DirLight_diffuse = XMFLOAT4(m_lightingParameters.diffuseColor.x,
+                                             m_lightingParameters.diffuseColor.y,
+                                             m_lightingParameters.diffuseColor.z,
+                                             1.0f);
 
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(m_context->Map(m_cbLighting.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
@@ -2151,22 +2563,28 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             m_context->Unmap(m_cbLighting.Get(), 0);
         }
 
-        // ConstantBuffer ¹ÙÀÎµù (register b0)
+        // ConstantBuffer ë°”ì¸ë”© (register b0)
         m_context->PSSetConstantBuffers(0, 1, m_cbLighting.GetAddressOf());
 
-        // Directional Light CB ¾÷µ¥ÀÌÆ® (b3)
-        struct DirectionalLightData
-        {
-            XMFLOAT4 direction;
-            XMFLOAT4 color;
-            float intensity;
-            float pad[3];
-        };
-
+        
+        // DirectionalLightBuffer(b3)ëŠ” Deferred Light PSì—ì„œ ì§ì ‘ ì‚¬ìš©í•©ë‹ˆë‹¤.
+        // ShadowPassì˜ ë¼ì´íŠ¸ ë°©í–¥/ê°•ë„ì™€ ë°˜ë“œì‹œ ë™ì¼í•´ì•¼ ì„€ë„ìš° ë°©í–¥/ì„¸ê¸°ê°€ ì¼ì¹˜í•©ë‹ˆë‹¤.
         DirectionalLightData lightData = {};
-        lightData.direction = XMFLOAT4(0.5f, -1.0f, 0.5f, 0.0f);
-        lightData.color = XMFLOAT4(1.0f, 1.0f, 1.0f, 0.0f);
-        lightData.intensity = 1.0f;
+        {
+            XMVECTOR dir = XMLoadFloat3(&m_lightingParameters.keyDirection);
+            if (XMVector3Equal(dir, XMVectorZero()))
+                dir = XMVectorSet(0, -1, 0, 0);
+            dir = XMVector3Normalize(dir);
+
+            XMFLOAT3 dirN{};
+            XMStoreFloat3(&dirN, dir);
+            lightData.direction = XMFLOAT4(dirN.x, dirN.y, dirN.z, 0.0f);
+        }
+        lightData.color = XMFLOAT4(m_lightingParameters.diffuseColor.x,
+                                   m_lightingParameters.diffuseColor.y,
+                                   m_lightingParameters.diffuseColor.z,
+                                   0.0f);
+        lightData.intensity = m_lightingParameters.keyIntensity;
 
         if (SUCCEEDED(m_context->Map(m_cbDirectionalLight.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
         {
@@ -2179,7 +2597,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
     void DeferredRenderSystem::UpdateBonesCB(const DirectX::XMFLOAT4X4* boneMatrices, std::uint32_t boneCount)
     {
-        // ForwardRenderSystem°ú µ¿ÀÏÇÑ ±¸Çö
+        // ForwardRenderSystemê³¼ ë™ì¼í•œ êµ¬í˜„
         if (!m_cbBones || !boneMatrices || boneCount == 0) return;
 
         static constexpr std::uint32_t MaxBones = 1023;
@@ -2187,17 +2605,11 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (FAILED(m_context->Map(m_cbBones.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
 
-        struct CBBones
-        {
-            XMMATRIX bones[MaxBones];
-            std::uint32_t boneCount;
-            std::uint32_t pad[3];
-        };
 
         auto* cb = reinterpret_cast<CBBones*>(mapped.pData);
         cb->boneCount = (std::min)(boneCount, MaxBones);
 
-        // À¯È¿ÇÑ º»Àº TransposeÇØ¼­ ³Ö°í, ³ª¸ÓÁö´Â Identity·Î Ã¤¿ò
+        // ìœ íš¨í•œ ë³¸ì€ Transposeí•´ì„œ ë„£ê³ , ë‚˜ë¨¸ì§€ëŠ” Identityë¡œ ì±„ì›€
         for (std::uint32_t i = 0; i < MaxBones; ++i)
         {
             if (i < cb->boneCount) cb->bones[i] = XMMatrixTranspose(XMLoadFloat4x4(&boneMatrices[i]));
@@ -2223,7 +2635,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
     ID3D11ShaderResourceView* DeferredRenderSystem::GetOrCreateTexture(const std::string& path)
     {
-        // ForwardRenderSystem°ú µ¿ÀÏÇÑ ±¸Çö
+        // ForwardRenderSystemê³¼ ë™ì¼í•œ êµ¬í˜„
         if (path.empty()) return nullptr;
 
         auto it = m_textureCache.find(path);
@@ -2249,10 +2661,10 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     {
         outExposure = m_postProcessParams.exposure;
         
-        // RenderDevice¿¡¼­ HDR Áö¿ø ¿©ºÎ ¹× ÃÖ´ë ¹à±â °¡Á®¿À±â
+        // RenderDeviceì—ì„œ HDR ì§€ì› ì—¬ë¶€ ë° ìµœëŒ€ ë°ê¸° ê°€ì ¸ì˜¤ê¸°
         float maxNits = 100.0f;
         m_renderDevice.IsHDRSupported(maxNits);
-        // »ç¿ëÀÚ°¡ ¼³Á¤ÇÑ °ªÀÌ ÀÖÀ¸¸é »ç¿ë, ¾øÀ¸¸é ¸ğ´ÏÅÍ ÃÖ´ë ¹à±â »ç¿ë
+        // ì‚¬ìš©ìê°€ ì„¤ì •í•œ ê°’ì´ ìˆìœ¼ë©´ ì‚¬ìš©, ì—†ìœ¼ë©´ ëª¨ë‹ˆí„° ìµœëŒ€ ë°ê¸° ì‚¬ìš©
         outMaxHDRNits = (m_postProcessParams.maxHDRNits > 0.0f) ? m_postProcessParams.maxHDRNits : maxNits;
     }
 
@@ -2274,7 +2686,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
     void DeferredRenderSystem::RestoreBackBuffer()
     {
-        // ForwardRenderSystem°ú µ¿ÀÏÇÑ ±¸Çö
+        // ForwardRenderSystemê³¼ ë™ì¼í•œ êµ¬í˜„
         ID3D11RenderTargetView* backBufferRTV = m_renderDevice.GetBackBufferRTV();
         ID3D11DepthStencilView* backBufferDSV = m_renderDevice.GetBackBufferDSV();
 
@@ -2289,25 +2701,18 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     {
         if (!m_toneMappingPS || !m_quadVS || !m_sceneColorSRV || !targetRTV) return;
 
-        // ºäÆ÷Æ® ¼³Á¤
+        // ë·°í¬íŠ¸ ì„¤ì •
         m_context->RSSetViewports(1, &viewport);
 
-        // ·»´õ Å¸°Ù ¼³Á¤
+        // ë Œë” íƒ€ê²Ÿ ì„¤ì •
         m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
 
-        // »óÅÂ Á¤¸® (ÀÌÀü ÆĞ½ºÀÇ »óÅÂ°¡ ³²¾ÆÀÖÀ¸¸é ÈÄÃ³¸®°¡ ÀÌ»óÇØÁü Á¶½ÉÇÏ¼À)
+        // ìƒíƒœ ì •ë¦¬ (ì´ì „ íŒ¨ìŠ¤ì˜ ìƒíƒœê°€ ë‚¨ì•„ìˆìœ¼ë©´ í›„ì²˜ë¦¬ê°€ ì´ìƒí•´ì§ ì¡°ì‹¬í•˜ì…ˆ)
         float blendFactor[4] = { 0, 0, 0, 0 };
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
         m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
         m_context->RSSetState(m_ppRasterNoCull.Get());
 
-        // PostProcess »ó¼ö ¹öÆÛ ¾÷µ¥ÀÌÆ®
-        struct PostProcessCB
-        {
-            float exposure;
-            float maxHDRNits;
-            float padding[2];
-        };
         PostProcessCB cbData = {};
         GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
 
@@ -2318,16 +2723,16 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             m_context->Unmap(m_cbPostProcess.Get(), 0);
         }
 
-        // ¸®¼Ò½º ¹ÙÀÎµù
+        // ë¦¬ì†ŒìŠ¤ ë°”ì¸ë”©
         ID3D11ShaderResourceView* srv = m_sceneColorSRV.Get();
         ID3D11SamplerState* sampler = m_samplerLinear.Get();
         ID3D11Buffer* cb = m_cbPostProcess.Get();
 
         m_context->PSSetShaderResources(0, 1, &srv);
         m_context->PSSetSamplers(0, 1, &sampler);
-        m_context->PSSetConstantBuffers(2, 1, &cb); // register(b2)¿¡ ¸ÂÃç ½½·Ô 2 »ç¿ë
+        m_context->PSSetConstantBuffers(2, 1, &cb); // register(b2)ì— ë§ì¶° ìŠ¬ë¡¯ 2 ì‚¬ìš©
 
-        // Quad ±×¸®±â
+        // Quad ê·¸ë¦¬ê¸°
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_context->IASetInputLayout(m_quadInputLayout.Get());
         m_context->IASetVertexBuffers(0, 1, m_quadVB.GetAddressOf(), &m_quadStride, &m_quadOffset);
@@ -2337,7 +2742,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         m_context->PSSetShader(m_toneMappingPS.Get(), nullptr, 0);
         m_context->DrawIndexed(m_quadIndexCount, 0, 0);
 
-        // ¸®¼Ò½º ÇØÁ¦
+        // ë¦¬ì†ŒìŠ¤ í•´ì œ
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
     }
