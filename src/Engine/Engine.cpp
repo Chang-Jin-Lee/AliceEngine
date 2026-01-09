@@ -105,7 +105,7 @@ namespace Alice
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
-		bool m_useForwardRendering = true;
+		bool m_useForwardRendering = false;
 		
 		// 렌더링 시스템 전환 지연 처리 (안전한 전환을 위해)
 		bool m_pendingRenderSystemChange = false;
@@ -115,7 +115,7 @@ namespace Alice
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
-		std::vector<ForwardRenderSystem::SkinnedDrawCommand> m_skinnedDrawCommands;
+		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
 	};
 	namespace
 	{
