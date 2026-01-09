@@ -78,6 +78,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.cpp
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
 )
@@ -137,6 +138,7 @@ set(ENGINE_HEADERS
     # ·»´õ¸µ °èÃþ
     ${ALICE_SRC_DIR}/Rendering/Camera.h
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.h
+    ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.h
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/IRenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.h

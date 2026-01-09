@@ -31,17 +31,18 @@ cbuffer CBPerObject : register(b0)
     float4x4 gWorld;
     float4x4 gView;
     float4x4 gProj;
-    float4x4 gWorldInvTranspose;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
 };
 
 struct VSInput
 {
     float3 Position : POSITION;
     float3 Normal   : NORMAL;
-    float3 Tangent  : TANGENT;
-    float3 Binormal : BINORMAL;
     float2 TexCoord : TEXCOORD0;
-    float4 Color    : COLOR;
 };
 
 struct VSOutput
@@ -50,6 +51,8 @@ struct VSOutput
     float3 WorldPos : TEXCOORD0;
     float3 Normal   : TEXCOORD1;
     float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
 };
 
 VSOutput main(VSInput input)
@@ -60,7 +63,15 @@ VSOutput main(VSInput input)
     output.Position = mul(mul(posW, gView), gProj);
     output.WorldPos = posW.xyz;
     
-    output.Normal = normalize(mul(input.Normal, (float3x3)gWorldInvTranspose));
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
+    output.Normal = N;
+    
+    float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
+    float3 T = normalize(cross(up, N));
+    float3 B = normalize(cross(N, T));
+    
+    output.TangentW = T;
+    output.BitanW = B;
     output.TexCoord = input.TexCoord;
     
     return output;
@@ -74,7 +85,11 @@ cbuffer CBPerObject : register(b0)
     float4x4 gWorld;
     float4x4 gView;
     float4x4 gProj;
-    float4x4 gWorldInvTranspose;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
 };
 
 cbuffer CBBones : register(b2)
@@ -93,7 +108,6 @@ struct VSInput
     uint4  BoneIndices  : BLENDINDICES;
     float4 BoneWeights  : BLENDWEIGHT;
     float2 TexCoord     : TEXCOORD0;
-    float4 Color        : COLOR;
 };
 
 struct VSOutput
@@ -102,13 +116,14 @@ struct VSOutput
     float3 WorldPos : TEXCOORD0;
     float3 Normal   : TEXCOORD1;
     float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
 };
 
 VSOutput main(VSInput input)
 {
     VSOutput output;
     
-    // 스키닝 계산
     uint4 bi = input.BoneIndices;
     float4 bw = input.BoneWeights;
     matrix M = bw.x * gBones[bi.x]
@@ -120,11 +135,16 @@ VSOutput main(VSInput input)
     float4 skinnedPos = mul(posL, M);
     float3x3 M3 = (float3x3)M;
     float3 skinnedN = normalize(mul(input.Normal, M3));
+    float3 skinnedT = normalize(mul(input.Tangent, M3));
+    float3 skinnedB = normalize(mul(input.Binormal, M3));
     
     float4 posW = mul(skinnedPos, gWorld);
     output.Position = mul(mul(posW, gView), gProj);
     output.WorldPos = posW.xyz;
-    output.Normal = normalize(mul(skinnedN, (float3x3)gWorldInvTranspose));
+    
+    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
+    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
     output.TexCoord = input.TexCoord;
     
     return output;
@@ -156,170 +176,82 @@ VSOutput main(VSInput input)
 
         // G-Buffer Pixel Shader (인라인)
         const char* g_GBufferPixelShaderSource = R"(
-// PBR 헬퍼 함수들
-static const float PI = 3.14159265f;
-static const float INV_PI = 0.31830988618f;
-
-// 구조체 정의
-struct DirectionalLight
+cbuffer CBPerObject : register(b0)
 {
-    float4 ambient;
-    float4 diffuse;
-    float4 specular;
-    float3 direction;
-    float  intensity;
-};
-
-struct Material
-{
-    float4 ambient;
-    float4 diffuse;
-    float4 specular;
-    float4 reflect;
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
 };
 
 struct VertexOut
 {
-    float4 posH      : SV_POSITION;
-    float3 posW      : TEXCOORD0;
-    float3 normalW   : TEXCOORD1;
-    float2 tex       : TEXCOORD2;
-    float4 color     : COLOR;
-    float3 tangentW  : TEXCOORD3;
-    float3 bitanW    : TEXCOORD4;
-    float4 posShadowH: TEXCOORD5;
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
 };
 
 struct GBufferOut
 {
     float4 PositionWS : SV_Target0;
-    float4 NormalWS : SV_Target1;
-    float4 Metalness : SV_Target2;
-    float4 Roughness : SV_Target3;
-    float4 BaseColor : SV_Target4;
+    float4 NormalWS   : SV_Target1;
+    float4 Metalness  : SV_Target2;
+    float4 Roughness  : SV_Target3;
+    float4 BaseColor  : SV_Target4;
 };
 
-// 텍스처 및 샘플러
 Texture2D  g_DiffuseMap : register(t0);
-Texture2D  g_NormalMap  : register(t2);
+Texture2D  g_NormalMap  : register(t1);
 SamplerState g_Sam : register(s0);
-
-// 상수 버퍼
-cbuffer ConstantBuffer : register(b0)
-{
-    float4x4 g_World;
-    float4x4 g_View;
-    float4x4 g_Proj;
-    float4x4 g_WorldInvTranspose;
-    Material g_Material;
-    DirectionalLight g_DirLight;
-    float3 g_EyePosW;
-    int    g_ShadingMode;
-    int    g_EnableNormalMap;
-    int    g_UseSpecularMap;
-    int    g_UseDiffuseMap;
-    float  g_Pad;
-    int    g_UseTextureColor;
-    float3 g_PBRPad;
-    float4 g_PBRBaseColor;
-    float  g_PBRMetalness;
-    float  g_PBRRoughness;
-    float  g_PBRAmbientOcclusion;
-    float  g_PBRPad2;
-    float  g_OutlineWidth;
-    float  g_OutlinePow;
-    float  g_OutlineThickness;
-    float  g_OutlineStrength;
-    float4 g_OutlineColor;
-    float4x4 g_LightViewProj;
-    float  g_ShadowBias;
-    float  g_ShadowMapSize;
-    float  g_ShadowPCFRadius;
-    int    g_ShadowEnabled;
-    int    g_BoundsBoneIndex;
-    float3 g_BoundsPad;
-};
 
 GBufferOut main(VertexOut pIn)
 {
     GBufferOut gOut;
     
-    // 텍스처 샘플링
-    float4 textureColor;
-    if (g_UseDiffuseMap != 0)
+    float4 textureColor = float4(1,1,1,1);
+    if (gUseTexture != 0)
     {
-        textureColor = g_DiffuseMap.Sample(g_Sam, pIn.tex);
+        textureColor = g_DiffuseMap.Sample(g_Sam, pIn.TexCoord);
     }
-    else
-    {
-        textureColor = float4(1,1,1,1);
-    }
-
-    // 알파 컷아웃
-    float alphaBase;
-    if (g_UseDiffuseMap != 0)
-    {
-        alphaBase = textureColor.a;
-    }
-    else
-    {
-        alphaBase = 1.0f;
-    }
-    float alphaTex = alphaBase * g_Material.diffuse.a;
+    
+    float alphaTex = textureColor.a * gMaterialColor.a;
     clip(alphaTex - 0.1f);
     
-    // 월드 노말 계산 (노말맵 적용)
-    float3 N = normalize(pIn.normalW);
-    if (g_EnableNormalMap != 0)
+    float3 baseColor = gMaterialColor.rgb;
+    if (gUseTexture != 0)
     {
-        float3 T = normalize(pIn.tangentW);
-        float3 B = normalize(pIn.bitanW);
+        baseColor *= textureColor.rgb;
+    }
+    
+    float3 N = normalize(pIn.Normal);
+    if (gEnableNormalMap != 0)
+    {
+        float3 T = normalize(pIn.TangentW);
+        float3 B = normalize(pIn.BitanW);
         float handed = dot(cross(T, B), N);
         if (handed < 0.0f) B = -B;
         float3x3 TBN = float3x3(T, B, N);
-        float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.tex).xyz * 2.0f - 1.0f;
-        N_ts.y = -N_ts.y; // 그린 채널 반전 보정
+        float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
+        N_ts.y = -N_ts.y;
         N_ts = normalize(N_ts);
         N = normalize(mul(N_ts, TBN));
     }
     
-    // PBR 머티리얼 파라미터
-    float roughnessTex = 1.0f;
-    float metalnessTex = 0.0f;
-    float3 baseColor;
+    float metalness = saturate(gMetalness);
+    float roughness = saturate(gRoughness);
     
-    if (g_UseDiffuseMap != 0)
-    {
-        roughnessTex = textureColor.g;
-        metalnessTex = textureColor.b;
-    }
-    
-    // BaseColor 계산
-    if (g_UseTextureColor != 0 && g_UseDiffuseMap != 0)
-    {
-        baseColor = textureColor.rgb * g_PBRBaseColor.rgb;
-    }
-    else
-    {
-        baseColor = pow(max(g_PBRBaseColor.rgb, 0.0f), 1.0f / 2.2f);
-    }
-    
-    // Roughness/Metalness 계산
-    float metalness = saturate(g_PBRMetalness);
-    float roughness = saturate(g_PBRRoughness);
-    
-    if (g_UseTextureColor != 0 && g_UseDiffuseMap != 0)
-    {
-        metalness = saturate(metalness * metalnessTex);
-        roughness = saturate(roughness * roughnessTex);
-    }
-    
-    // G-Buffer 출력
-    gOut.PositionWS = float4(pIn.posW, 1.0f);
-    gOut.NormalWS = float4(N, 1.0f);
-    gOut.Metalness = float4(metalness, 0, 0, 1);
-    gOut.Roughness = float4(roughness, 0, 0, 1);
-    gOut.BaseColor = float4(baseColor, 1.0f);
+    gOut.PositionWS = float4(pIn.WorldPos, 1.0f);
+    gOut.NormalWS   = float4(N, 1.0f);
+    gOut.Metalness  = float4(metalness, 0, 0, 1);
+    gOut.Roughness  = float4(roughness, 0, 0, 1);
+    gOut.BaseColor  = float4(baseColor, 1.0f);
     
     return gOut;
 }
@@ -647,6 +579,13 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             return false;
         }
 
+        // 큐브 지오메트리 생성
+        if (!CreateCubeGeometry())
+        {
+            ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateCubeGeometry failed.");
+            return false;
+        }
+
         // 상수 버퍼 생성
         if (!CreateConstantBuffers())
         {
@@ -836,16 +775,15 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_gBufferSkinnedVS.ReleaseAndGetAddressOf())))
             return false;
 
-        // G-Buffer Skinned Input Layout (ForwardRenderSystem과 동일한 오프셋/포맷)
+        // G-Buffer Skinned Input Layout (COLOR 제거, Offset 조정)
         D3D11_INPUT_ELEMENT_DESC skinnedLayout[] = {
             {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
             {"NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
             {"TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
             {"BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,  0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0}
+            {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,  0, 56, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0}
         };
         if (FAILED(m_device->CreateInputLayout(skinnedLayout, ARRAYSIZE(skinnedLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_gBufferSkinnedInputLayout.ReleaseAndGetAddressOf())))
             return false;
@@ -1078,9 +1016,9 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
     bool DeferredRenderSystem::CreateConstantBuffers()
     {
-        // PerObject CB
+        // PerObject CB (Forward와 동일한 구조: 행렬 + 재질 정보)
         D3D11_BUFFER_DESC cbDesc = {};
-        cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX) * 4; // world, view, proj, worldInvTranspose
+        cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX) * 3 + sizeof(DirectX::XMFLOAT4) + sizeof(float) * 2 + sizeof(int) * 2; // world, view, proj, color, rough, metal, useTex, enableNorm
         cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         cbDesc.Usage = D3D11_USAGE_DYNAMIC;
         cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -1089,7 +1027,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
         // Lighting CB (Deferred Light 패스용 - ConstantBuffer register(b0))
         // HLSL의 ConstantBuffer 구조체 크기에 맞춰야 함 (대략 512바이트 이상)
-        cbDesc.ByteWidth = 512; // 충분한 크기
+        cbDesc.ByteWidth = 4096; // 충분한 크기
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbLighting.ReleaseAndGetAddressOf())))
             return false;
 
@@ -1107,6 +1045,50 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         cbDesc.ByteWidth = sizeof(float) * 4; // exposure, maxHDRNits, padding
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbPostProcess.ReleaseAndGetAddressOf())))
             return false;
+
+        return true;
+    }
+
+    bool DeferredRenderSystem::CreateCubeGeometry()
+    {
+        // ForwardRenderSystem::SimpleVertex와 동일한 구조체
+        struct SimpleVertex
+        {
+            XMFLOAT3 Position;
+            XMFLOAT3 Normal;
+            XMFLOAT2 TexCoord;
+        };
+
+        SimpleVertex v[] = {
+            // Front (+Z)
+            { {-1,-1, 1}, { 0, 0, 1}, {0,1} }, { {-1, 1, 1}, { 0, 0, 1}, {0,0} }, { { 1, 1, 1}, { 0, 0, 1}, {1,0} }, { { 1,-1, 1}, { 0, 0, 1}, {1,1} },
+            // Back (-Z)
+            { {-1,-1,-1}, { 0, 0,-1}, {1,1} }, { { 1,-1,-1}, { 0, 0,-1}, {0,1} }, { { 1, 1,-1}, { 0, 0,-1}, {0,0} }, { {-1, 1,-1}, { 0, 0,-1}, {1,0} },
+            // Top (+Y)
+            { {-1, 1,-1}, { 0, 1, 0}, {0,1} }, { { 1, 1,-1}, { 0, 1, 0}, {1,1} }, { { 1, 1, 1}, { 0, 1, 0}, {1,0} }, { {-1, 1, 1}, { 0, 1, 0}, {0,0} },
+            // Bottom (-Y)
+            { {-1,-1,-1}, { 0,-1, 0}, {0,1} }, { {-1,-1, 1}, { 0,-1, 0}, {0,0} }, { { 1,-1, 1}, { 0,-1, 0}, {1,0} }, { { 1,-1,-1}, { 0,-1, 0}, {1,1} },
+            // Left (-X)
+            { {-1,-1,-1}, {-1, 0, 0}, {1,1} }, { {-1, 1,-1}, {-1, 0, 0}, {1,0} }, { {-1, 1, 1}, {-1, 0, 0}, {0,0} }, { {-1,-1, 1}, {-1, 0, 0}, {0,1} },
+            // Right (+X)
+            { { 1,-1,-1}, { 1, 0, 0}, {0,1} }, { { 1,-1, 1}, { 1, 0, 0}, {0,0} }, { { 1, 1, 1}, { 1, 0, 0}, {1,0} }, { { 1, 1,-1}, { 1, 0, 0}, {1,1} }
+        };
+
+        uint16_t i[] = {
+            0,1,2, 0,2,3,     4,5,6, 4,6,7,     8,9,10, 8,10,11,
+            12,13,14, 12,14,15, 16,17,18, 16,18,19, 20,21,22, 20,22,23
+        };
+
+        m_cubeIndexCount = (UINT)std::size(i);
+
+        D3D11_BUFFER_DESC desc = { sizeof(v), D3D11_USAGE_DEFAULT, D3D11_BIND_VERTEX_BUFFER, 0, 0, 0 };
+        D3D11_SUBRESOURCE_DATA data = { v, 0, 0 };
+        if (FAILED(m_device->CreateBuffer(&desc, &data, m_cubeVB.ReleaseAndGetAddressOf()))) return false;
+
+        desc.ByteWidth = sizeof(i);
+        desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        data.pSysMem = i;
+        if (FAILED(m_device->CreateBuffer(&desc, &data, m_cubeIB.ReleaseAndGetAddressOf()))) return false;
 
         return true;
     }
@@ -1165,7 +1147,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     {
         D3D11_RASTERIZER_DESC rsDesc = {};
         rsDesc.FillMode = D3D11_FILL_SOLID;
-        rsDesc.CullMode = D3D11_CULL_BACK;
+        rsDesc.CullMode = D3D11_CULL_NONE;
         rsDesc.FrontCounterClockwise = FALSE;
         rsDesc.DepthBias = 0;
         rsDesc.DepthBiasClamp = 0.0f;
@@ -1302,26 +1284,56 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         XMMATRIX view = camera.GetViewMatrix();
         XMMATRIX proj = camera.GetProjectionMatrix();
 
-        // 정적 메시 렌더링 (ForwardRenderSystem 참고)
+        // 1. 정적 메시 (큐브) 렌더링
+        // ForwardRenderSystem::SimpleVertex와 동일한 구조체 (private이므로 로컬 정의)
+        struct SimpleVertex
+        {
+            XMFLOAT3 Position;
+            XMFLOAT3 Normal;
+            XMFLOAT2 TexCoord;
+        };
+        UINT stride = sizeof(SimpleVertex);
+        UINT offset = 0;
+        ID3D11Buffer* vb = m_cubeVB.Get();
+        m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        m_context->IASetIndexBuffer(m_cubeIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+
         const auto& transforms = world.GetComponents<TransformComponent>();
         for (const auto& [id, transform] : transforms)
         {
-            // 카메라 엔티티 및 스키닝 메시는 제외
             if (cameraEntities.contains(id)) continue;
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
-            UpdatePerObjectCB(worldM, view, proj);
+            
+            // 재질 정보 가져오기
+            XMFLOAT4 color = { 1, 1, 1, 1 };
+            float rough = 0.5f, metal = 0.0f;
+            bool useTex = false;
+            ID3D11ShaderResourceView* texSRV = nullptr;
+            
+            // MaterialComponent가 있으면 값 적용
+            if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id)) {
+                color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
+                rough = mat->roughness; 
+                metal = mat->metalness;
+                if (!mat->albedoTexturePath.empty()) {
+                    texSRV = GetOrCreateTexture(mat->albedoTexturePath);
+                    useTex = (texSRV != nullptr);
+                }
+            }
 
-            // TODO: 정적 메시 그리기 (현재는 큐브가 없으므로 스킵)
-            // m_context->DrawIndexed(m_indexCount, 0, 0);
+            // 텍스처 바인딩 (t0: Diffuse, t1: Normal)
+            ID3D11ShaderResourceView* srvs[] = { texSRV, nullptr }; // 정적 메시는 노말맵 현재 null
+            m_context->PSSetShaderResources(0, 2, srvs);
+
+            // CB 업데이트 (재질 정보 포함)
+            UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false);
+
+            m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
         }
         
-        // PS용 상수 버퍼도 바인딩 (GBuffer PS가 b0를 사용)
-        // UpdatePerObjectCB는 VS만 바인딩하므로 PS도 추가
-        m_context->PSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
-
-        // 스키닝 메시 렌더링
+        // 2. 스키닝 메시 렌더링
         if (!skinnedCommands.empty() && m_gBufferSkinnedVS && m_gBufferPS)
         {
             m_context->VSSetShader(m_gBufferSkinnedVS.Get(), nullptr, 0);
@@ -1331,15 +1343,21 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
             {
                 if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
 
-                UINT stride = cmd.stride, offset = 0;
-                m_context->IASetVertexBuffers(0, 1, &cmd.vertexBuffer, &stride, &offset);
+                UINT sStride = cmd.stride;
+                m_context->IASetVertexBuffers(0, 1, &cmd.vertexBuffer, &sStride, &offset);
                 m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
                 UpdateBonesCB(cmd.bones, cmd.boneCount);
-                UpdatePerObjectCB(cmd.world, view, proj);
                 
-                // PS용 상수 버퍼도 바인딩 (GBuffer PS가 b0를 사용)
-                m_context->PSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
+                // 텍스처 준비
+                ID3D11ShaderResourceView* texSRV = GetOrCreateTexture(cmd.albedoTexturePath);
+                ID3D11ShaderResourceView* srvs[] = { texSRV, nullptr };
+                m_context->PSSetShaderResources(0, 2, srvs);
+
+                // CB 업데이트
+                UpdatePerObjectCB(cmd.world, view, proj, 
+                    XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), 
+                    cmd.roughness, cmd.metalness, (texSRV != nullptr), false);
 
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
             }
@@ -1492,6 +1510,47 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         }
 
         m_context->VSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
+    }
+
+    void DeferredRenderSystem::UpdatePerObjectCB(const DirectX::XMMATRIX& world,
+                                                  const DirectX::XMMATRIX& view,
+                                                  const DirectX::XMMATRIX& projection,
+                                                  const DirectX::XMFLOAT4& color,
+                                                  float roughness,
+                                                  float metalness,
+                                                  bool useTexture,
+                                                  bool enableNormalMap)
+    {
+        struct CBPerObjectData
+        {
+            XMMATRIX gWorld;
+            XMMATRIX gView;
+            XMMATRIX gProj;
+            XMFLOAT4 gMaterialColor;
+            float    gRoughness;
+            float    gMetalness;
+            int      gUseTexture;
+            int      gEnableNormalMap;
+        };
+
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (SUCCEEDED(m_context->Map(m_cbPerObject.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            CBPerObjectData* data = (CBPerObjectData*)mapped.pData;
+            data->gWorld = XMMatrixTranspose(world);
+            data->gView  = XMMatrixTranspose(view);
+            data->gProj  = XMMatrixTranspose(projection);
+            data->gMaterialColor = color;
+            data->gRoughness = roughness;
+            data->gMetalness = metalness;
+            data->gUseTexture = useTexture ? 1 : 0;
+            data->gEnableNormalMap = enableNormalMap ? 1 : 0;
+            m_context->Unmap(m_cbPerObject.Get(), 0);
+        }
+
+        m_context->VSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
+        // PS에서도 재질 정보를 사용하므로 반드시 바인딩
+        m_context->PSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
     }
 
     void DeferredRenderSystem::UpdateLightingCB(const Camera& camera, int shadingMode, bool enableFillLight)
@@ -1744,7 +1803,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         // 렌더 타겟 설정
         m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
 
-        // 상태 정리 (중요: 이전 패스의 상태가 남아있으면 후처리가 오염됨)
+        // 상태 정리 (이전 패스의 상태가 남아있으면 후처리가 이상해짐 조심하셈)
         float blendFactor[4] = { 0, 0, 0, 0 };
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
         m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);

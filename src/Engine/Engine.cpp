@@ -106,6 +106,10 @@ namespace Alice
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
 		bool m_useForwardRendering = true;
+		
+		// 렌더링 시스템 전환 지연 처리 (안전한 전환을 위해)
+		bool m_pendingRenderSystemChange = false;
+		bool m_pendingUseForwardRendering = true;
 
 		// Skinned FBX 메시 렌더링용 레지스트리/시스템
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
@@ -393,6 +397,49 @@ namespace Alice
 	void Engine::Render()
 	{
 		if (!pImpl->m_renderDevice) return;
+		
+		// ============================================= 렌더링 시스템 전환 처리 =============================================
+		// 렌더링 시작 전에 전환 요청이 있으면 안전하게 전환합니다.
+		if (pImpl->m_pendingRenderSystemChange)
+		{
+			// GPU 컨텍스트의 모든 리소스 바인딩 해제 (안전한 전환을 위해)
+			auto* context = pImpl->m_renderDevice->GetImmediateContext();
+			if (context)
+			{
+				// 모든 렌더 타겟 해제
+				ID3D11RenderTargetView* nullRTVs[8] = { nullptr };
+				context->OMSetRenderTargets(8, nullRTVs, nullptr);
+				
+				// 모든 셰이더 리소스 해제
+				ID3D11ShaderResourceView* nullSRVs[16] = { nullptr };
+				context->VSSetShaderResources(0, 16, nullSRVs);
+				context->PSSetShaderResources(0, 16, nullSRVs);
+				
+				// 모든 상수 버퍼 해제
+				ID3D11Buffer* nullCBs[16] = { nullptr };
+				context->VSSetConstantBuffers(0, 16, nullCBs);
+				context->PSSetConstantBuffers(0, 16, nullCBs);
+				
+				// 모든 셰이더 해제
+				context->VSSetShader(nullptr, nullptr, 0);
+				context->PSSetShader(nullptr, nullptr, 0);
+				context->GSSetShader(nullptr, nullptr, 0);
+				context->HSSetShader(nullptr, nullptr, 0);
+				context->DSSetShader(nullptr, nullptr, 0);
+				context->CSSetShader(nullptr, nullptr, 0);
+				
+				// Flush (모든 명령이 완료될 때까지 대기)
+				context->Flush();
+			}
+			
+			// 렌더링 시스템 전환
+			pImpl->m_useForwardRendering = pImpl->m_pendingUseForwardRendering;
+			pImpl->m_pendingRenderSystemChange = false;
+			
+			ALICE_LOG_INFO("Engine::Render: 렌더링 시스템 전환 완료 (Forward: %s)", 
+				pImpl->m_useForwardRendering ? "true" : "false");
+		}
+		
 		if (pImpl->m_useForwardRendering && !pImpl->m_forwardRenderSystem) return;
 		if (!pImpl->m_useForwardRendering && !pImpl->m_deferredRenderSystem) return;
 
@@ -536,7 +583,13 @@ namespace Alice
 
 	void Engine::SetUseForwardRendering(bool useForward)
 	{
-		pImpl->m_useForwardRendering = useForward;
+		// 즉시 전환하지 않고, 다음 프레임 시작 시 전환하도록 플래그만 설정
+		// 이렇게 하면 렌더링 중간에 리소스 상태가 꼬이는 것을 방지할 수 있습니다.
+		if (pImpl->m_useForwardRendering != useForward)
+		{
+			pImpl->m_pendingRenderSystemChange = true;
+			pImpl->m_pendingUseForwardRendering = useForward;
+		}
 	}
 
 	bool Engine::GetUseForwardRendering() const

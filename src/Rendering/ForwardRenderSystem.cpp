@@ -1259,11 +1259,18 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         if (!m_skyboxEnabled || !m_skyboxSRV || !m_skyboxVS || !m_skyboxPS || !m_cbSkybox) return;
 
         // 이전 상태 백업
-        ID3D11RasterizerState* pRS = nullptr; ID3D11DepthStencilState* pDS = nullptr; ID3D11ShaderResourceView* pSRV = nullptr;
+        ID3D11RasterizerState* pRS = nullptr; 
+        ID3D11DepthStencilState* pDS = nullptr; 
+        ID3D11ShaderResourceView* pSRV = nullptr;
+        ID3D11BlendState* pBS = nullptr; // 블렌드 상태 백업
         UINT ref = 0;
+        float blendFactor[4] = { 0.0f };
+        UINT sampleMask = 0;
+
         m_context->RSGetState(&pRS);
         m_context->OMGetDepthStencilState(&pDS, &ref);
         m_context->PSGetShaderResources(0, 1, &pSRV);
+        m_context->OMGetBlendState(&pBS, blendFactor, &sampleMask); // 현재 블렌드 상태 저장
 
         // IA 및 셰이더 설정
         UINT stride = sizeof(SimpleVertex), offset = 0;
@@ -1275,8 +1282,14 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
         m_context->VSSetShader(m_skyboxVS.Get(), nullptr, 0);
         m_context->PSSetShader(m_skyboxPS.Get(), nullptr, 0);
+        
         if (m_skyboxDepthState) m_context->OMSetDepthStencilState(m_skyboxDepthState.Get(), 0);
         if (m_skyboxRasterizerState) m_context->RSSetState(m_skyboxRasterizerState.Get());
+
+        // 스카이박스는 배경과 섞이면 안 되므로 블렌딩을 끕니다. (Opaque)
+        // DeferredRenderSystem과 동일한 m_ppBlendOpaque(Blend Disable) 사용
+        float zeroFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), zeroFactor, 0xFFFFFFFF);
 
         // 행렬 계산 (Translation 제거) 및 CB 업데이트
         XMMATRIX view = camera.GetViewMatrix();
@@ -1286,7 +1299,17 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         D3D11_MAPPED_SUBRESOURCE map;
         const HRESULT hr = m_context->Map(m_cbSkybox.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &map);
         if (FAILED(hr))
+        {
+            // 실패 시 상태 복원
+            m_context->OMSetDepthStencilState(pDS, ref);
+            m_context->RSSetState(pRS);
+            m_context->OMSetBlendState(pBS, blendFactor, sampleMask);
+            if (pSRV) pSRV->Release();
+            if (pDS) pDS->Release();
+            if (pRS) pRS->Release();
+            if (pBS) pBS->Release();
             return;
+        }
 
         memcpy(map.pData, &wvpT, sizeof(XMMATRIX));
         m_context->Unmap(m_cbSkybox.Get(), 0);
@@ -1305,10 +1328,16 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         // 상태 복원 및 릴리즈
         m_context->OMSetDepthStencilState(pDS, ref);
         m_context->RSSetState(pRS);
-        m_context->PSSetShaderResources(0, 1, &pSRV);
+        m_context->OMSetBlendState(pBS, blendFactor, sampleMask); // 블렌드 상태 복원
+        
+        // 리소스 해제
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(0, 1, &nullSRV);
+
         if (pSRV) pSRV->Release();
         if (pDS) pDS->Release();
         if (pRS) pRS->Release();
+        if (pBS) pBS->Release();
     }
 
     void ForwardRenderSystem::RenderSkinnedMeshes(
@@ -1513,7 +1542,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 
                 XMFLOAT4 dummy(1, 1, 1, 1);
                 UpdatePerObjectCB(worldM, lightView, lightProj, dummy, 1, 0, false, false);
-                m_context->DrawIndexed(m_indexCount, 0, 0);
+                //m_context->DrawIndexed(m_indexCount, 0, 0);
             }
 
             // 스키닝 메시 그리기
