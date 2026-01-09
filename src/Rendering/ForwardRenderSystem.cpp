@@ -388,8 +388,11 @@ float4 main(PSInput input) : SV_TARGET
         else if (NdotL > 0.2f)  level = 0.4f;
         else                    level = 0.1f;
 
-        float3 toonColor = albedo * level + 0.1f * albedo;
-        return float4(toonColor, 1.0f);
+        // Toon도 PCF shadow를 반영해야 Phong/Blinn과 동일하게 그림자가 보입니다.
+        // - Ambient(0.1)은 그림자 영향을 받지 않게 두고
+        // - 계단형 diffuse(level)만 shadow를 곱합니다.
+        float3 toonColor = albedo * (level * shadow) + 0.1f * albedo;
+        return float4(toonColor, alphaTex);
     }
 
     // === PBR 경로 (shadingMode == 4) ===
@@ -448,7 +451,11 @@ float4 main(PSInput input) : SV_TARGET
         float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
 
         // 최종 색상 = 직접광 + 간접광(IBL)
-        float3 colorPbr = Lo + (diffuseIBL + specularIBL);
+        // NOTE: 물리적으로는 그림자가 IBL(환경광)에 직접 적용되진 않지만,
+        //       "PBR에서 그림자가 안 보인다"는 체감 문제를 줄이기 위해
+        //       diffuse IBL에만 약하게 shadow를 반영합니다(스펙은 유지).
+        float shadowIBL = lerp(0.35f, 1.0f, shadow);
+        float3 colorPbr = Lo + (diffuseIBL * shadowIBL + specularIBL);
 
         return float4(colorPbr, alphaTex);
     }
@@ -1877,13 +1884,6 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
         m_context->RSSetState(m_ppRasterNoCull.Get());
 
-        // PostProcess 상수 버퍼 업데이트
-        struct PostProcessCB
-        {
-            float exposure;
-            float maxHDRNits;
-            float padding[2];
-        };
         PostProcessCB cbData = {};
         GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
 
