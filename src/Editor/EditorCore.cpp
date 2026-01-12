@@ -5,6 +5,8 @@
 #include "Editor/EditorCore.h"
 
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
+#include "Rendering/DeferredRenderSystem.h"
+#include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
@@ -907,6 +909,7 @@ namespace Alice
     void EditorCore::DrawEditorUI(World& world,
                                   Camera& camera,
                                   ForwardRenderSystem& forward,
+                                  DeferredRenderSystem& deferred,
                                   SceneManager* sceneManager,
                                   float deltaTime,
                                   float fps,
@@ -915,7 +918,8 @@ namespace Alice
                                   bool& useFillLight,
                                   EntityId& selectedEntity,
                                   ViewportPicker& picker,
-                                  float& cameraMoveSpeed)
+                                  float& cameraMoveSpeed,
+                                  bool& useForwardRendering)
     {
         // 메인 뷰포트 전체를 도킹 스페이스로 사용합니다.
         ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -1124,6 +1128,14 @@ namespace Alice
 
             ImGui::Separator();
             ImGui::Text("DeltaTime: %.3f  FPS: %.1f", deltaTime, fps);
+
+            ImGui::Separator();
+            // 렌더링 시스템 선택 체크박스
+            ImGui::Checkbox("Forward Rendering", &useForwardRendering);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("체크: Forward Rendering\n해제: Deferred Rendering");
+            }
 
             ImGui::EndMainMenuBar();
         }
@@ -1588,11 +1600,26 @@ namespace Alice
             ImGui::Separator();
             ImGui::Text("Play State : %s", isPlaying ? "Playing" : "Stopped");
 
-            if (ID3D11ShaderResourceView* sceneSRV = forward.GetSceneColorSRV())
-            {
-                const float sceneWidth  = static_cast<float>(forward.GetSceneWidth());
-                const float sceneHeight = static_cast<float>(forward.GetSceneHeight());
+            // 에디터 뷰포트는 톤매핑 완료(LDR) 텍스처를 표시해야 정상 색감이 나옵니다.
+            ID3D11ShaderResourceView* sceneSRV = nullptr;
+            float sceneWidth = 0.0f;
+            float sceneHeight = 0.0f;
 
+            if (useForwardRendering)
+            {
+                sceneSRV = forward.GetViewportSRV();
+                sceneWidth  = static_cast<float>(forward.GetSceneWidth());
+                sceneHeight = static_cast<float>(forward.GetSceneHeight());
+            }
+            else
+            {
+                sceneSRV = deferred.GetViewportSRV();
+                sceneWidth  = static_cast<float>(deferred.GetSceneWidth());
+                sceneHeight = static_cast<float>(deferred.GetSceneHeight());
+            }
+
+            if (sceneSRV)
+            {
                 ImVec2 avail = ImGui::GetContentRegionAvail();
                 ImVec2 size  = avail;
 
@@ -1914,7 +1941,10 @@ namespace Alice
 
             Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
 
-            auto& lighting = forward.GetLightingParameters();
+            // Forward/Deferred 모드에 따라 조명 파라미터를 각 렌더러에 반영합니다.
+			//auto& lighting = useForwardRendering ? forward.GetLightingParameters() : deferred.GetLightingParameters();
+			//auto& lighting = forward.GetLightingParameters();
+			auto& lighting = deferred.GetLightingParameters();
             
             // PBR 모드일 때 PBR 파라미터 표시
             if (mode == 4)
@@ -1962,44 +1992,140 @@ namespace Alice
             static int skyboxChoice = 3; // 기본값: Baker (Sample) - 인덱스 3
             const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker" };
             
-            if (ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems)))
+            if (useForwardRendering)
             {
-                // 스카이박스 변경
-                if (skyboxChoice == 0) // Off
+                if (ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems)))
                 {
-                    // 스카이박스 비활성화
-                    forward.SetSkyboxEnabled(false);
-                }
-                else
-                {
-                    // 스카이박스 활성화 및 IBL 세트 로드
-                    forward.SetSkyboxEnabled(true);
-                    switch (skyboxChoice)
+                    // 스카이박스 변경
+                    if (skyboxChoice == 0) // Off
                     {
-                    case 1: // Bridge
-                        forward.SetIblSet("Bridge", "bridge");
-                        break;
-                    case 2: // Indoor
-                        forward.SetIblSet("Indoor", "indoor");
-                        break;
-                    case 3: // Baker (Sample)
-                        forward.SetIblSet("Sample", "BakerSample");
-                        break;
-                    default:
-                        break;
+                        // 스카이박스 비활성화
+                        forward.SetSkyboxEnabled(false);
+                    }
+                    else
+                    {
+                        // 스카이박스 활성화 및 IBL 세트 로드
+                        forward.SetSkyboxEnabled(true);
+                        switch (skyboxChoice)
+                        {
+                        case 1: // Bridge
+                            forward.SetIblSet("Bridge", "bridge");
+                            break;
+                        case 2: // Indoor
+                            forward.SetIblSet("Indoor", "indoor");
+                            break;
+                        case 3: // Baker (Sample)
+                            forward.SetIblSet("Sample", "BakerSample");
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                }
+                // Off일 때만 배경색 편집
+                if (skyboxChoice == 0)
+                {
+                    DirectX::XMFLOAT4 bgColor = forward.GetBackgroundColor();
+                    if (ImGui::ColorEdit4("Background Color", &bgColor.x))
+                    {
+                        forward.SetBackgroundColor(bgColor);
                     }
                 }
             }
-
-            // Off일 때만 배경색 편집
-            if (skyboxChoice == 0)
+            else
             {
-                DirectX::XMFLOAT4 bgColor = forward.GetBackgroundColor();
-                if (ImGui::ColorEdit4("Background Color", &bgColor.x))
+                if (ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems)))
                 {
-                    forward.SetBackgroundColor(bgColor);
+                    // 스카이박스 변경
+                    if (skyboxChoice == 0) // Off
+                    {
+                        // 스카이박스 비활성화
+                        deferred.SetSkyboxEnabled(false);
+                    }
+                    else
+                    {
+                        // 스카이박스 활성화 및 IBL 세트 로드
+                        deferred.SetSkyboxEnabled(true);
+                        switch (skyboxChoice)
+                        {
+                        case 1: // Bridge
+                            deferred.SetIblSet("Bridge", "bridge");
+                            break;
+                        case 2: // Indoor
+                            deferred.SetIblSet("Indoor", "indoor");
+                            break;
+                        case 3: // Baker (Sample)
+                            deferred.SetIblSet("Sample", "BakerSample");
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                }
+                // Off일 때만 배경색 편집
+                if (skyboxChoice == 0)
+                {
+                    DirectX::XMFLOAT4 bgColor = deferred.GetBackgroundColor();
+                    if (ImGui::ColorEdit4("Background Color", &bgColor.x))
+                    {
+                        deferred.SetBackgroundColor(bgColor);
+                    }
                 }
             }
+            
+            // === Post-Process 파라미터 (Exposure, Max HDR Nits) ===
+            ImGui::Separator();
+            ImGui::Text("Post-Process");
+            ImGui::Separator();
+            
+            float exposure = 0.0f;
+            float maxHDRNits = 1000.0f;
+            
+            if (useForwardRendering)
+            {
+                forward.GetPostProcessParams(exposure, maxHDRNits);
+                
+                if (ImGui::SliderFloat("Exposure", &exposure, -3.0f, 3.0f, "%.2f"))
+                {
+                    forward.SetPostProcessParams(exposure, maxHDRNits);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Exposure 값: -3.0 (어두움) ~ 3.0 (밝음)\n0.0 = 1.0배 (기본값)");
+                }
+                
+                if (ImGui::SliderFloat("Max HDR Nits", &maxHDRNits, 100.0f, 10000.0f, "%.0f nits"))
+                {
+                    forward.SetPostProcessParams(exposure, maxHDRNits);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
+                }
+            }
+            else
+            {
+                deferred.GetPostProcessParams(exposure, maxHDRNits);
+                
+                if (ImGui::SliderFloat("Exposure", &exposure, -3.0f, 3.0f, "%.2f"))
+                {
+                    deferred.SetPostProcessParams(exposure, maxHDRNits);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Exposure 값: -3.0 (어두움) ~ 3.0 (밝음)\n0.0 = 1.0배 (기본값)");
+                }
+                
+                if (ImGui::SliderFloat("Max HDR Nits", &maxHDRNits, 100.0f, 10000.0f, "%.0f nits"))
+                {
+                    deferred.SetPostProcessParams(exposure, maxHDRNits);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
+                }
+            }
+            
         }
         ImGui::End();
 

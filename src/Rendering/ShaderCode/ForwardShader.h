@@ -1,0 +1,517 @@
+#pragma once
+
+namespace Alice
+{
+    /// 포워드 렌더링 전용 셰이더 코드
+    class ForwardShader
+    {
+    public:
+        // Basic Phong Vertex Shader
+        inline static const char* PhongVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor; // per-object 머티리얼 색상
+
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+struct VSInput
+{
+    float3 Position : POSITION;
+    float3 Normal   : NORMAL;
+    float2 TexCoord : TEXCOORD0;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+
+    float4 worldPos = mul(float4(input.Position, 1.0f), gWorld);
+    float4 viewPos  = mul(worldPos, gView);
+    output.Position = mul(viewPos, gProj);
+
+    output.WorldPos = worldPos.xyz;
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
+    output.Normal = N;
+    // 정적 지오메트리(큐브 등)는 탄젠트/바이탄젠트가 없으므로
+    // 노말에서 임의의 직교 기저를 만들어 노말맵(TBN) 계산이 가능하게 합니다.
+    float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
+    float3 T = normalize(cross(up, N));
+    float3 B = normalize(cross(N, T));
+    output.TangentW = T;
+    output.BitanW = B;
+    output.TexCoord = input.TexCoord;
+
+    return output;
+}
+)";
+
+        // Skinned Vertex Shader
+        inline static const char* SkinnedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBBones : register(b2)
+{
+    float4x4 gBones[1023];
+    uint     gBoneCount;
+    float3   _padBones;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+    float2 TexCoord     : TEXCOORD0;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+
+    // D3D11-AliceTutorial/31_IBL 방식으로 스키닝
+    // - CPU에서 전치 업로드된 본 팔레트에 대해 row-vector 곱(mul(v, M))을 사용합니다.
+    uint4 bi = input.BoneIndices;
+    float4 bw = input.BoneWeights;
+
+    // DirectX11(행벡터) 기준: v' = v * (Σ w_i * M_i)
+    matrix M = bw.x * gBones[bi.x]
+             + bw.y * gBones[bi.y]
+             + bw.z * gBones[bi.z]
+             + bw.w * gBones[bi.w];
+
+    float4 posL = float4(input.Position, 1.0f);
+    float3 nL = input.Normal;
+    float3 tL = input.Tangent;
+    float3 bL = input.Binormal;
+
+    float4 skinnedPos = mul(posL, M);
+    float3x3 M3 = (float3x3)M;
+    float3 skinnedN = normalize(mul(nL, M3));
+    float3 skinnedT = normalize(mul(tL, M3));
+    float3 skinnedB = normalize(mul(bL, M3));
+
+    float4 worldPos = mul(skinnedPos, gWorld);
+    float4 viewPos  = mul(worldPos, gView);
+    output.Position = mul(viewPos, gProj);
+
+    output.WorldPos = worldPos.xyz;
+    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
+    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
+    output.TexCoord = input.TexCoord;
+
+    return output;
+}
+)";
+
+        // PBR Pixel Shader
+        inline static const char* PBRPS = R"(
+Texture2D gDiffuseMap  : register(t0);
+Texture2D gNormalMap   : register(t1);
+Texture2D gSpecularMap : register(t2);
+TextureCube gSkybox    : register(t3);
+SamplerState gSampler  : register(s0);
+
+// 섀도우 맵 (Depth 텍스처)
+Texture2D<float>        gShadowMap     : register(t4);
+SamplerComparisonState  gShadowSampler : register(s1);
+
+// IBL (Image-Based Lighting) 텍스처들
+TextureCube gIBL_Diffuse  : register(t5);
+TextureCube gIBL_Specular : register(t6);
+Texture2D   gIBL_BRDF_LUT : register(t7);
+
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+};
+
+cbuffer CBLighting : register(b1)
+{
+    // Key Light
+    float3 gKeyLightDir;
+    float  gKeyLightPad0;
+
+    float3 gKeyLightColor;
+    float  gKeyLightIntensity;
+
+    // Fill Light
+    float3 gFillLightDir;
+    float  gFillLightPad0;
+
+    float3 gFillLightColor;
+    float  gFillLightIntensity;
+
+    float3 gCameraPos;
+    float  gPad1;
+
+    float4 gMaterialDiffuse;   // rgb: diffuse color
+    float4 gMaterialSpecular;  // rgb: specular color, a: shininess
+
+    int    gShadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon
+    int3   gPad2;
+
+    float4x4 gLightViewProj;   // 섀도우 맵 계산용 라이트 뷰-프로젝션
+
+    // Shadow params (34_ToneMapping 방식)
+    float  gShadowBias;
+    float  gShadowMapSize;
+    float  gShadowPCFRadius;
+    int    gShadowEnabled;
+};
+
+struct PSInput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+float4 main(PSInput input) : SV_TARGET
+{
+	float4 textureColor = gDiffuseMap.Sample(gSampler, input.TexCoord);
+    float alphaTex = textureColor.a * gMaterialColor.a;
+    // 알파 블렌딩
+    clip(alphaTex - 0.1f);
+
+    float3 N = normalize(input.Normal);
+    if (gEnableNormalMap != 0)
+    {
+        // D3D11-AliceTutorial/31_IBL/31_BasicPS.hlsl 의 방식으로 TBN 기반 노말맵 적용
+        float3 T = normalize(input.TangentW);
+        float3 B = normalize(input.BitanW);
+        float handed = dot(cross(T, B), N);
+        if (handed < 0.0f) B = -B;
+        float3x3 TBN = float3x3(T, B, N);
+        float3 N_ts = gNormalMap.Sample(gSampler, input.TexCoord).xyz * 2.0f - 1.0f;
+        N_ts.y = -N_ts.y; // 그린 채널 반전 보정
+        N_ts = normalize(N_ts);
+        N = normalize(mul(N_ts, TBN));
+    }
+
+    float3 V = normalize(gCameraPos - input.WorldPos);
+
+    float3 totalDiffuse  = float3(0.0f, 0.0f, 0.0f);
+    float3 totalSpecular = float3(0.0f, 0.0f, 0.0f);
+
+    // Key Light
+    {
+        float3 L = normalize(-gKeyLightDir);
+        float  NdotL = max(dot(N, L), 0.0f);
+        float3 lightColor = gKeyLightColor * gKeyLightIntensity;
+
+        totalDiffuse += NdotL * lightColor;
+
+        if (gShadingMode != 0 && NdotL > 0.0f)
+        {
+            float specularTerm = 0.0f;
+            if (gShadingMode == 2) // Blinn-Phong
+            {
+                float3 H = normalize(L + V);
+                float NdotH = max(dot(N, H), 0.0f);
+                specularTerm = pow(NdotH, gMaterialSpecular.a);
+            }
+            else // Phong
+            {
+                float3 R = reflect(-L, N);
+                float RdotV = max(dot(R, V), 0.0f);
+                specularTerm = pow(RdotV, gMaterialSpecular.a);
+            }
+
+            totalSpecular += specularTerm * lightColor;
+        }
+    }
+
+    // Fill Light (옵션)
+    {
+        float3 L = normalize(-gFillLightDir);
+        float  NdotL = max(dot(N, L), 0.0f);
+        float3 lightColor = gFillLightColor * gFillLightIntensity;
+
+        totalDiffuse += NdotL * lightColor;
+
+        if (gShadingMode != 0 && NdotL > 0.0f)
+        {
+            float specularTerm = 0.0f;
+            if (gShadingMode == 2) // Blinn-Phong
+            {
+                float3 H = normalize(L + V);
+                float NdotH = max(dot(N, H), 0.0f);
+                specularTerm = pow(NdotH, gMaterialSpecular.a);
+            }
+            else // Phong
+            {
+                float3 R = reflect(-L, N);
+                float RdotV = max(dot(R, V), 0.0f);
+                specularTerm = pow(RdotV, gMaterialSpecular.a);
+            }
+
+            totalSpecular += specularTerm * lightColor;
+        }
+    }
+
+    // 섀도우 팩터 (PCF)
+    float shadow = 1.0f;
+    {
+        if (gShadowEnabled != 0)
+        {
+        float4 shadowPos = mul(float4(input.WorldPos, 1.0f), gLightViewProj);
+        shadowPos.xyz /= shadowPos.w;
+
+        float2 shadowTex;
+        shadowTex.x = shadowPos.x * 0.5f + 0.5f;
+        shadowTex.y = -shadowPos.y * 0.5f + 0.5f;
+        float depth = shadowPos.z;
+
+        // Shadow map texel 크기 및 PCF 반경(텍셀 단위)
+        const float2 texelSize = float2(1.0f, 1.0f) / max(gShadowMapSize, 1.0f);
+        const float2 pcfStep = max(gShadowPCFRadius, 0.0f) * texelSize;
+
+        if (shadowTex.x >= 0.0f && shadowTex.x <= 1.0f &&
+            shadowTex.y >= 0.0f && shadowTex.y <= 1.0f)
+        {
+            float sum = 0.0f;
+            [unroll] for (int y = -1; y <= 1; ++y)
+            {
+                [unroll] for (int x = -1; x <= 1; ++x)
+                {
+                    float2 offset = float2(x, y) * pcfStep;
+                    sum += gShadowMap.SampleCmpLevelZero(
+                        gShadowSampler,
+                        shadowTex + offset,
+                        depth - gShadowBias);
+                }
+            }
+            shadow = sum / 9.0f;
+        }
+        }
+    }
+
+    totalDiffuse  *= shadow;
+    totalSpecular *= shadow;
+
+    // 머티리얼 베이스 컬러
+    float3 albedo = gMaterialColor.rgb;
+    if (gUseTexture != 0)
+    {
+        float3 texSample = gDiffuseMap.Sample(gSampler, input.TexCoord).rgb;
+        albedo *= texSample;
+    }
+    float3 specColor = float3(1.0f, 1.0f, 1.0f);
+
+    float3 ambient = 0.1f * gKeyLightColor;
+
+    // === Toon Shading (shadingMode == 3) ===
+    if (gShadingMode == 3)
+    {
+        float3 Lmain = normalize(-gKeyLightDir);
+        float  NdotL = max(dot(N, Lmain), 0.0f);
+
+        float level = 0.0f;
+        if (NdotL > 0.95f)      level = 1.0f;
+        else if (NdotL > 0.5f)  level = 0.7f;
+        else if (NdotL > 0.2f)  level = 0.4f;
+        else                    level = 0.1f;
+
+        // Toon도 PCF shadow를 반영해야 Phong/Blinn과 동일하게 그림자가 보입니다.
+        float3 toonColor = albedo * (level * shadow) + 0.1f * albedo;
+        return float4(toonColor, alphaTex);
+    }
+
+    // === PBR 경로 (shadingMode == 4) ===
+    if (gShadingMode == 4)
+    {
+        float roughness = saturate(gRoughness);
+        float metalness = saturate(gMetalness);
+
+        float3 Np = N;
+        float3 Vp = V;
+        float3 Lp = normalize(-gKeyLightDir);
+        float3 Hp = normalize(Vp + Lp);
+
+        float NdotL = max(dot(Np, Lp), 0.0f);
+        float NdotV = max(dot(Np, Vp), 0.0f);
+        float NdotH = max(dot(Np, Hp), 0.0f);
+        float VdotH = max(dot(Vp, Hp), 0.0f);
+
+        float3 lightColor = gKeyLightColor * gKeyLightIntensity;
+
+        float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metalness);
+
+        float  a      = roughness * roughness;
+        float  a2     = a * a;
+        float  denomD = (NdotH * NdotH) * (a2 - 1.0f) + 1.0f;
+        float  D      = a2 / max(3.14159f * denomD * denomD, 1e-4f);
+
+        float  k      = (roughness + 1.0f);
+        k             = (k * k) / 8.0f;
+        float  Gv     = NdotV / (NdotV * (1.0f - k) + k);
+        float  Gl     = NdotL / (NdotL * (1.0f - k) + k);
+        float  G      = Gv * Gl;
+
+        float3 F      = F0 + (1.0f - F0) * pow(1.0f - VdotH, 5.0f);
+
+        float3 numerator    = D * G * F;
+        float  denomSpec    = max(4.0f * NdotV * NdotL, 1e-4f);
+        float3 specularTerm = numerator / denomSpec;
+
+        float3 kd = (1.0f - F) * (1.0f - metalness);
+        float3 diffuseTerm = kd * albedo / 3.14159f;
+
+        float3 radiance = lightColor * NdotL;
+
+        float3 Lo = (diffuseTerm + specularTerm) * radiance * shadow;
+
+        // === IBL (Image-Based Lighting) 계산 ===
+        float3 diffuseIBL = kd * gIBL_Diffuse.Sample(gSampler, Np).rgb * albedo;
+
+        float3 Renv = reflect(-Vp, Np);
+        const float kMaxSpecularMip = 8.0f;
+        float3 prefilteredColor = gIBL_Specular.SampleLevel(gSampler, Renv, roughness * kMaxSpecularMip).rgb;
+        float2 specBRDF = gIBL_BRDF_LUT.Sample(gSampler, float2(NdotV, roughness)).rg;
+        float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
+
+        // 최종 색상 = 직접광 + 간접광(IBL)
+        float shadowIBL = lerp(0.35f, 1.0f, shadow);
+        float3 colorPbr = Lo + (diffuseIBL * shadowIBL + specularIBL);
+
+        return float4(colorPbr, alphaTex);
+    }
+
+    // 기본 Phong/Blinn-Phong/Lambert 경로
+    float3 baseColor =
+        ambient * albedo +
+        totalDiffuse * albedo +
+        totalSpecular * specColor;
+
+    return float4(baseColor, alphaTex);
+}
+)";
+
+        // Tone Mapping Pixel Shader - HDR (포워드 전용)
+        inline static const char* ToneMappingPS_HDR = R"(
+Texture2D g_SceneHDR : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer PostProcessConstantBuffer : register(b2)
+{
+    float g_Exposure;
+    float g_MaxHDRNits;
+    float2 g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+// ACES Filmic Tone Mapping
+float3 ACESFilm(float3 x)
+{
+    float a = 2.51f;
+    float b = 0.03f;
+    float c = 2.43f;
+    float d = 0.59f;
+    float e = 0.14f;
+    return saturate(x * (a * x + b) / (x * (c * x + d) + e));
+}
+
+// Rec709 to Rec2020 색공간 변환
+float3 Rec709ToRec2020(float3 color)
+{
+    static const float3x3 conversion =
+    {
+        0.627402, 0.329292, 0.043306,
+        0.069095, 0.919544, 0.011360,
+        0.016394, 0.088028, 0.895578
+    };
+    return mul(conversion, color);
+}
+
+// Linear to ST2084 (PQ 인코딩)
+float3 LinearToST2084(float3 color)
+{
+    // g_MaxHDRNits를 반영하여 HDR 스케일링 (10000 nits 기준으로 정규화)
+    const float st2084max = 10000.0;
+    float hdrScalar = g_MaxHDRNits / st2084max;
+    float3 scaledColor = color * hdrScalar;
+    
+    float m1 = 2610.0 / 4096.0 / 4;
+    float m2 = 2523.0 / 4096.0 * 128;
+    float c1 = 3424.0 / 4096.0;
+    float c2 = 2413.0 / 4096.0 * 32;
+    float c3 = 2392.0 / 4096.0 * 32;
+    float3 cp = pow(abs(scaledColor), m1);
+    return pow((c1 + c2 * cp) / (1 + c3 * cp), m2);
+}
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    // 예제 프로젝트 36_ToneMappingPS_HDR.hlsl와 동일한 로직
+    float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
+    float3 C_exposure = C_linear709 * pow(2.0f, g_Exposure);
+    float3 C_tonemapped = ACESFilm(C_exposure);
+    
+    // Rec709 → Rec2020 색공간 변환 (LinearToST2084 내부에서 g_MaxHDRNits 처리)
+    float3 C_Rec2020 = Rec709ToRec2020(C_tonemapped);
+    float3 C_ST2084 = LinearToST2084(C_Rec2020);
+    
+    // 최종 PQ 인코딩된 값 [0.0, 1.0]을 R10G10B10A2_UNORM 백버퍼에 출력
+    return float4(C_ST2084, 1.0);
+}
+)";
+    };
+}

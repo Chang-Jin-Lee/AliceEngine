@@ -3,6 +3,8 @@
 #include <cassert>
 #include "Core/Logger.h"
 #include <dxgi1_3.h>
+#include <dxgi1_6.h>
+#include <comdef.h>
 
 namespace Alice
 {
@@ -15,17 +17,23 @@ namespace Alice
         m_width  = width;
         m_height = height;
 
-        // 2) 스왑 체인 설명 구조체 설정
+        // 2) HDR 지원 여부 확인
+        float maxNits = 100.0f;
+        bool isHDRSupported = IsHDRSupported(maxNits);
+        m_maxHDRNits = maxNits;
+        m_backBufferFormat = isHDRSupported ? DXGI_FORMAT_R10G10B10A2_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM;
+
+        // 3) 스왑 체인 설명 구조체 설정
         DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
         swapChainDesc.BufferCount = 2; // 더블 버퍼링
         swapChainDesc.BufferDesc.Width  = width;
         swapChainDesc.BufferDesc.Height = height;
-        swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        swapChainDesc.BufferDesc.Format = m_backBufferFormat;
         swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         swapChainDesc.OutputWindow = window;
         swapChainDesc.SampleDesc.Count = 1; // 멀티 샘플링 없음(간단 버전)
         swapChainDesc.Windowed = TRUE;
-        swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+        swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // HDR 지원을 위해 FLIP_DISCARD 사용
 
         UINT createDeviceFlags = 0;
 #ifdef _DEBUG
@@ -35,7 +43,7 @@ namespace Alice
 
         D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
 
-        // 3) 디바이스 + 스왑 체인을 한 번에 생성
+        // 4) 디바이스 + 스왑 체인을 한 번에 생성
         HRESULT hr = D3D11CreateDeviceAndSwapChain(
             nullptr,                    // 기본 어댑터 사용
             D3D_DRIVER_TYPE_HARDWARE,   // 하드웨어 가속
@@ -56,21 +64,39 @@ namespace Alice
             return false;
         }
 
-        // 4) 렌더 타깃 생성
+        // 5) HDR인 경우 색 공간 설정
+        if (isHDRSupported)
+        {
+            Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
+            if (SUCCEEDED(m_swapChain.As(&swapChain3)))
+            {
+                HRESULT hr = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+                if (SUCCEEDED(hr))
+                {
+                    ALICE_LOG_INFO("D3D11RenderDevice: HDR 색 공간 설정 완료. MaxNits: %.1f", maxNits);
+                }
+                else
+                {
+                    ALICE_LOG_WARN("D3D11RenderDevice: HDR 색 공간 설정 실패. hr=0x%08X", hr);
+                }
+            }
+        }
+
+        // 6) 렌더 타깃 생성
         if (!CreateRenderTarget())
         {
             ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: CreateRenderTarget failed.");
             return false;
         }
 
-        // 5) 깊이/스텐실 버퍼 생성
+        // 7) 깊이/스텐실 버퍼 생성
         if (!CreateDepthStencil(m_width, m_height))
         {
             ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: CreateDepthStencil failed.");
             return false;
         }
 
-        // 6) 깊이 스텐실 상태 객체 생성 (한 번만 생성)
+        // 8) 깊이 스텐실 상태 객체 생성 (한 번만 생성)
         D3D11_DEPTH_STENCIL_DESC dsDesc = {};
         dsDesc.DepthEnable = TRUE;
         dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -84,7 +110,7 @@ namespace Alice
             return false;
         }
 
-        // 7) 래스터라이저 상태 생성
+        // 8) 래스터라이저 상태 생성
         //    - CCW를 앞면으로 간주 (우리 큐브 정점 데이터가 CCW 기준이기 때문)
         //    - 뒷면을 컬링(CULL_BACK) 하여, 앞면만 보이도록 합니다.
         D3D11_RASTERIZER_DESC rsDesc = {};
@@ -246,6 +272,53 @@ namespace Alice
             }
         }
     }
+
+	bool D3D11RenderDevice::IsHDRSupported(float& outMaxNits) const
+	{
+		using Microsoft::WRL::ComPtr;
+		outMaxNits = 100.0f; // 기본값(SDR) 설정. 실패 시 이 값이 유지됨.
+
+		ComPtr<IDXGIFactory4> factory;
+		if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
+		{
+			ALICE_LOG_ERRORF("IsHDRSupported: Factory 생성 실패");
+			return false;
+		}
+
+		// 하드웨어 어댑터 탐색 (소프트웨어 렌더러 제외)
+		ComPtr<IDXGIAdapter1> adapter;
+		DXGI_ADAPTER_DESC1 adpDesc;
+		for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+		{
+			adapter->GetDesc1(&adpDesc);
+			if (!(adpDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) break;
+		}
+
+		if (!adapter) return false;
+
+		// 주 모니터(0) 및 HDR 인터페이스(Output6) 쿼리
+		ComPtr<IDXGIOutput> output;
+		ComPtr<IDXGIOutput6> output6;
+		if (FAILED(adapter->EnumOutputs(0, &output)) || FAILED(output.As(&output6)))
+		{
+			return false; // 모니터가 없거나 OS/드라이버가 구형
+		}
+
+		DXGI_OUTPUT_DESC1 desc1{}; // C++20 zero initialization
+		if (FAILED(output6->GetDesc1(&desc1))) return false;
+
+		// HDR 활성 조건: 색공간 일치 및 밝기 > 100.0f
+		const bool bIsHDR = (desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) &&
+			(desc1.MaxLuminance > 100.0f);
+
+		if (bIsHDR)
+		{
+			outMaxNits = static_cast<float>(desc1.MaxLuminance);
+			ALICE_LOG_INFO("IsHDRSupported: HDR ON (Max: %.1f)", outMaxNits);
+		}
+
+		return bIsHDR;
+	}
 }
 
 

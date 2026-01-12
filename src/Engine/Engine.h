@@ -54,6 +54,10 @@ namespace Alice
 
         void TrimVideoMemory();
 
+        /// 렌더링 모드를 설정합니다 (true: Forward, false: Deferred)
+        void SetUseForwardRendering(bool useForward);
+        bool GetUseForwardRendering() const;
+
     private:
         struct Impl;
 		std::unique_ptr<Impl> pImpl;
