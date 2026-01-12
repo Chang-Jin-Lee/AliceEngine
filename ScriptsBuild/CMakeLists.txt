@@ -1,54 +1,76 @@
 cmake_minimum_required(VERSION 3.20)
 
 # ============================================================================
-# AliceRenderer - User Script Àü¿ë CMake ÇÁ·ÎÁ§Æ®
-# - Assets/Scripts/*.cpp ¸¦ ºôµåÇØ¼­ AliceScripts.dll À» »ı¼ºÇÕ´Ï´Ù.
-# - ¿£Áø(Engine.lib)Àº ÀÌ¹Ì »óÀ§ ÇÁ·ÎÁ§Æ®¿¡¼­ ºôµåµÇ¾î ÀÖ´Ù°í °¡Á¤ÇÕ´Ï´Ù.
-# - Editor ÀÇ "Reload Scripts" ¹öÆ°ÀÌ ÀÌ ÇÁ·ÎÁ§Æ®¸¦ cmake --build ·Î È£ÃâÇÕ´Ï´Ù.
+# AliceRenderer - User Script ì „ìš© CMake í”„ë¡œì íŠ¸
 # ============================================================================
 project(AliceUserScripts LANGUAGES CXX)
+
+# =========================================================================
+# VCPKG ê²½ë¡œ ì„¤ì • (ìë™ ê°ì§€)
+# =========================================================================
+set(ALICE_VCPKG_PATH_OPTION "AUTO")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ============================================================================
-# [ÇÙ½É ¼öÁ¤] °æ·Î¸¦ 'ÁøÂ¥ Àı´ë °æ·Î(Real Path)'·Î È®Á¤ÇÕ´Ï´Ù.
+# ê²½ë¡œë¥¼ 'ì§„ì§œ ì ˆëŒ€ ê²½ë¡œ(Real Path)'ë¡œ í™•ì •
 # ============================================================================
-# CMAKE_CURRENT_LIST_DIRÀÌ "D:/Github/AliceRenderer/ScriptsBuild" ¶ó¸é
-# ALICE_ROOT´Â "D:/Github/AliceRenderer" ·Î ±ò²ûÇÏ°Ô º¯È¯µË´Ï´Ù. (.. Á¦°ÅµÊ)
 get_filename_component(ALICE_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." REALPATH)
 
-# ·Î±×·Î °æ·Î°¡ ¸Â´ÂÁö È®ÀÎ (CMake ½ÇÇà ½Ã Ãâ·ÂµÊ)
 message(STATUS "-----------------------------------------------------------")
 message(STATUS ">> Alice Root Path (Absolute): ${ALICE_ROOT}")
 
+# ============================================================================
+# [1] VCPKG ê²½ë¡œ ê°ì§€ (ë³€ìˆ˜ ì„¤ì •ë§Œ ë¨¼ì € ìˆ˜í–‰)
+# ============================================================================
+if(MSVC)
+    if(ALICE_VCPKG_PATH_OPTION STREQUAL "AUTO")
+        if(DEFINED ENV{VCPKG_ROOT})
+            set(VCPKG_ROOT_DETECTED $ENV{VCPKG_ROOT})
+            message(STATUS ">> [ScriptBuild] VCPKG: í™˜ê²½ë³€ìˆ˜ ê°ì§€ -> ${VCPKG_ROOT_DETECTED}")
+        elseif(EXISTS "D:/vcpkg/vcpkg.exe")
+            set(VCPKG_ROOT_DETECTED "D:/vcpkg")
+            message(STATUS ">> [ScriptBuild] VCPKG: Dë“œë¼ì´ë¸Œ ê°ì§€ -> ${VCPKG_ROOT_DETECTED}")
+        elseif(EXISTS "C:/vcpkg/vcpkg.exe")
+            set(VCPKG_ROOT_DETECTED "C:/vcpkg")
+            message(STATUS ">> [ScriptBuild] VCPKG: Cë“œë¼ì´ë¸Œ ê°ì§€ -> ${VCPKG_ROOT_DETECTED}")
+        else()
+            message(FATAL_ERROR ">> [ScriptBuild] ì˜¤ë¥˜: vcpkgë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.")
+        endif()
+    else()
+        set(VCPKG_ROOT_DETECTED ${ALICE_VCPKG_PATH_OPTION})
+        message(STATUS ">> [ScriptBuild] VCPKG: ì‚¬ìš©ì ì§€ì • ê²½ë¡œ ì‚¬ìš© -> ${VCPKG_ROOT_DETECTED}")
+    endif()
+
+    # ë³€ìˆ˜ í™•ì •
+    set(VCPKG_ROOT "${VCPKG_ROOT_DETECTED}" CACHE PATH "Path to vcpkg root" FORCE)
+    set(VCPKG_TRIPLET_STATIC "x64-windows-static-md" CACHE STRING "vcpkg static triplet")
+    set(VCPKG_TRIPLET_DYNAMIC "x64-windows"          CACHE STRING "vcpkg dynamic triplet")
+endif()
+
 # ==========================================
-# [¼³Á¤] RTTR ¶óÀÌºê·¯¸® (½ºÅ©¸³Æ® ÇÁ·ÎÁ§Æ®¿¡ ÅëÇÕ)
+# RTTR ë¼ì´ë¸ŒëŸ¬ë¦¬ ì„¤ì •
 # ==========================================
-# Boost/Doxygen ÀÇÁ¸¼ºÀ» Á¦°ÅÇÏ°í °¡º±°Ô ºôµåÇÏ±â À§ÇÑ ¿É¼Çµé
 set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
 set(BUILD_INSTALLER OFF CACHE BOOL "" FORCE)
 set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-# RTTRÀº shared·Î ºôµåÇØ¾ß Launch.exe, AliceScripts.dll »çÀÌ¿¡¼­
-# µî·ÏµÈ ÇÁ·ÎÆÛÆ¼°¡ °°Àº registry·Î ÇÕÃÄÁı´Ï´Ù.
 set(BUILD_STATIC OFF CACHE BOOL "" FORCE)
 set(BUILD_RTTR_DYNAMIC ON CACHE BOOL "" FORCE)
-
-# ·±Å¸ÀÓ ¶óÀÌºê·¯¸® ¼³Á¤ (vcpkg ¹× ¿£Áø°ú ¸ÂÃß±â À§ÇØ Static Runtime ²û -> MD/MDd »ç¿ë)
 set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
 
-# RTTR ¼­ºê¸ğµâ Ãß°¡ (°æ·Î: ThirdParty/rttr)
+# RTTR ì„œë¸Œëª¨ë“ˆ ì¶”ê°€
 add_subdirectory("${ALICE_ROOT}/ThirdParty/rttr" "${CMAKE_BINARY_DIR}/ThirdParty/rttr")
 
 message(STATUS "-----------------------------------------------------------")
 
-
-
-# À¯Àú ½ºÅ©¸³Æ® ¼Ò½º (¿¡µğÅÍ¿¡¼­ »ı¼ºµÇ´Â C++ ½ºÅ©¸³Æ®µé)
+# ============================================================================
+# [2] ë¼ì´ë¸ŒëŸ¬ë¦¬ ìƒì„± (ë°˜ë“œì‹œ ì„¤ì • ì ìš©ë³´ë‹¤ ë¨¼ì € ì™€ì•¼ í•¨)
+# ============================================================================
 file(GLOB_RECURSE USER_SCRIPT_SOURCES CONFIGURE_DEPENDS
     "${ALICE_ROOT}/Assets/Scripts/*.cpp"
     "${ALICE_ROOT}/Assets/Scripts/*.h"
@@ -59,43 +81,23 @@ if(NOT USER_SCRIPT_SOURCES)
     message(STATUS "AliceUserScripts: no user script sources found under Assets/Scripts")
 endif()
 
-# AliceScripts.dll (µ¿Àû ½ºÅ©¸³Æ® DLL)
+# â˜… ì—¬ê¸°ì„œ íƒ€ê²Ÿì„ ë¨¼ì € ë§Œë“­ë‹ˆë‹¤
 add_library(AliceScripts SHARED
     ${USER_SCRIPT_SOURCES}
 )
 
 # ============================================================================
-# [Çì´õ °æ·Î ¼³Á¤]
+# [3] VCPKG ë° Include ì„¤ì • ì ìš© (íƒ€ê²Ÿ ìƒì„± í›„ ì‹¤í–‰)
 # ============================================================================
-
-target_include_directories(AliceScripts
-    PRIVATE
-        "${ALICE_ROOT}/src"
-        "${ALICE_ROOT}/ThirdParty/ImGui"
-        "${ALICE_ROOT}/ThirdParty/ImGui/backends"
-	"${ALICE_ROOT}/ThirdParty/rttr/src"
-)
-
-# ============================================================================
-# [VCPKG ¼³Á¤]
-# ============================================================================
-# vcpkg / ¿ÜºÎ ¶óÀÌºê·¯¸®(DirectXTK, DirectXTex, Assimp) ¼³Á¤
 if(MSVC)
-    set(VCPKG_ROOT_DEFAULT "D:/vcpkg")
-    if(DEFINED ENV{VCPKG_ROOT})
-        set(VCPKG_ROOT_DEFAULT "$ENV{VCPKG_ROOT}")
-    endif()
-    set(VCPKG_ROOT "${VCPKG_ROOT_DEFAULT}" CACHE PATH "Path to vcpkg root (ex: D:/vcpkg)")
-
-    set(VCPKG_TRIPLET_STATIC "x64-windows-static-md" CACHE STRING "vcpkg static triplet")
-    set(VCPKG_TRIPLET_DYNAMIC "x64-windows"          CACHE STRING "vcpkg dynamic triplet")
-
+    # Include ê²½ë¡œ ì„¤ì •
     target_include_directories(AliceScripts
         PRIVATE
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
     )
 
+    # Lib ê²½ë¡œ ì„¤ì •
     target_link_directories(AliceScripts
         PRIVATE
             "$<$<CONFIG:Debug>:${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/debug/lib>"
@@ -105,15 +107,19 @@ if(MSVC)
     )
 endif()
 
-# ============================================================================
-# [¶óÀÌºê·¯¸® ¸µÅ©]
-# ============================================================================
+# ë‚˜ë¨¸ì§€ í—¤ë” ê²½ë¡œ ì„¤ì •
+target_include_directories(AliceScripts
+    PRIVATE
+        "${ALICE_ROOT}/src"
+        "${ALICE_ROOT}/ThirdParty/ImGui"
+        "${ALICE_ROOT}/ThirdParty/ImGui/backends"
+        "${ALICE_ROOT}/ThirdParty/rttr/src"
+)
 
-# Engine(Á¤Àû)¿¡ Æ÷ÇÔµÈ ÄÚµå°¡ »ç¿ëÇÏ´Â ¿ÜºÎ ¶óÀÌºê·¯¸®µéÀ»
-# AliceScripts.dll ¸µÅ© ´Ü°è¿¡¼­µµ ¹İµå½Ã °°ÀÌ ¸µÅ©ÇØ¾ß ÇÕ´Ï´Ù.
+# ë¼ì´ë¸ŒëŸ¬ë¦¬ ë§í¬
 target_link_libraries(AliceScripts
     PRIVATE
-	"${ALICE_ROOT}/build/$<CONFIG>/Engine.lib"
+        "${ALICE_ROOT}/build/$<CONFIG>/Engine.lib"
         RTTR::Core
 
         d3d11
@@ -130,10 +136,7 @@ set_target_properties(AliceScripts PROPERTIES
     OUTPUT_NAME "AliceScripts"
 )
 
-# Visual Studio µğ¹ö±× ¼¼¼Ç¿¡¼­ PDB ÆÄÀÏ Àá±İ(LNK1201)À» ÇÇÇÏ±â À§ÇØ
-# ScriptsBuild Àü¿ë DLL ¿¡ ´ëÇØ¼­´Â µğ¹ö±× Á¤º¸(.pdb)¸¦ »ı¼ºÇÏÁö ¾Ê½À´Ï´Ù.
+# í•«ë¦¬ë¡œë“œì‹œ PDB ì ê¸ˆ ë°©ì§€ (/DEBUG:NONE)
 if(MSVC)
     target_link_options(AliceScripts PRIVATE "/DEBUG:NONE")
 endif()
-
-
