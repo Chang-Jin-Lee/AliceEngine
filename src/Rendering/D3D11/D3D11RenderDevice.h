@@ -29,6 +29,8 @@ namespace Alice
         ID3D11RenderTargetView* GetBackBufferRTV() override { return m_renderTargetView.Get(); }
         ID3D11DepthStencilView* GetBackBufferDSV() override { return m_depthStencilView.Get(); }
         void TrimVideoMemory();
+        bool IsHDRSupported(float& outMaxNits) const override;
+        DXGI_FORMAT GetBackBufferFormat() const override { return m_backBufferFormat; }
 
     private:
         using ComPtr = Microsoft::WRL::ComPtr<IUnknown>;
@@ -45,6 +47,8 @@ namespace Alice
 
         std::uint32_t m_width  = 0;
         std::uint32_t m_height = 0;
+        DXGI_FORMAT m_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM; // 기본값: LDR
+        float m_maxHDRNits = 100.0f; // 기본값: SDR
 
         /// 백버퍼로부터 렌더 타깃 뷰를 생성합니다.
         bool CreateRenderTarget();
