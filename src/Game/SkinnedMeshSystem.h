@@ -9,10 +9,10 @@
 
 namespace Alice
 {
-    /// World ÀÇ SkinnedMeshComponent µéÀ» ÈÈ¾î¼­,
-    /// ForwardRenderSystem ÀÌ ÀÌÇØÇÒ ¼ö ÀÖ´Â SkinnedDrawCommand ¸®½ºÆ®¸¦ ¸¸µå´Â ½Ã½ºÅÛÀÔ´Ï´Ù.
-    /// - °ÔÀÓ ·ÎÁ÷/¾Ö´Ï¸ŞÀÌ¼Ç ÂÊ¿¡¼­ boneMatrices ¸¦ Ã¤¿ö ³ÖÀ¸¸é,
-    ///   ÀÌ ½Ã½ºÅÛÀÌ ±×°ÍÀ» ·»´õ ¸í·ÉÀ¸·Î º¯È¯ÇÕ´Ï´Ù.
+    /// World ì˜ SkinnedMeshComponent ë“¤ì„ í›‘ì–´ì„œ,
+    /// ForwardRenderSystem ì´ ì´í•´í•  ìˆ˜ ìˆëŠ” SkinnedDrawCommand ë¦¬ìŠ¤íŠ¸ë¥¼ ë§Œë“œëŠ” ì‹œìŠ¤í…œì…ë‹ˆë‹¤.
+    /// - ê²Œì„ ë¡œì§/ì• ë‹ˆë©”ì´ì…˜ ìª½ì—ì„œ boneMatrices ë¥¼ ì±„ì›Œ ë„£ìœ¼ë©´,
+    ///   ì´ ì‹œìŠ¤í…œì´ ê·¸ê²ƒì„ ë Œë” ëª…ë ¹ìœ¼ë¡œ ë³€í™˜í•©ë‹ˆë‹¤.
     class SkinnedMeshSystem
     {
     public:
@@ -21,22 +21,22 @@ namespace Alice
         {
         }
 
-        /// World + Registry ¸¦ ±â¹İÀ¸·Î ½ºÅ°´× µå·Î¿ì ¸í·É ¸®½ºÆ®¸¦ ±¸¼ºÇÕ´Ï´Ù.
+        /// World + Registry ë¥¼ ê¸°ë°˜ìœ¼ë¡œ ìŠ¤í‚¤ë‹ ë“œë¡œìš° ëª…ë ¹ ë¦¬ìŠ¤íŠ¸ë¥¼ êµ¬ì„±í•©ë‹ˆë‹¤.
         void BuildDrawList(const World& world,
-                           std::vector<SkinnedDrawCommand>& outCommands) const
+            std::vector<SkinnedDrawCommand>& outCommands) const
         {
             outCommands.clear();
 
             const auto& skinnedMap = world.GetComponents<SkinnedMeshComponent>();
             if (skinnedMap.empty())
             {
-                // µğÆúÆ® »óÅÂ(½ºÅ°´× ÄÄÆ÷³ÍÆ®°¡ ÇÏ³ªµµ ¾øÀ» ¶§)´Â ·Î±×¸¦ ÂïÁö ¾Ê½À´Ï´Ù.
+                // ë””í´íŠ¸ ìƒíƒœ(ìŠ¤í‚¤ë‹ ì»´í¬ë„ŒíŠ¸ê°€ í•˜ë‚˜ë„ ì—†ì„ ë•Œ)ëŠ” ë¡œê·¸ë¥¼ ì°ì§€ ì•ŠìŠµë‹ˆë‹¤.
                 return;
             }
 
             {
-               //ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: skinnedComponents=%zu",
-               //               skinnedMap.size());
+                //ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: skinnedComponents=%zu",
+                //               skinnedMap.size());
             }
 
             for (const auto& [entityId, comp] : skinnedMap)
@@ -64,7 +64,7 @@ namespace Alice
                     continue;
                 }
 
-                // ¿ùµå Çà·Ä ±¸¼º (S * R * T)
+                // ì›”ë“œ í–‰ë ¬ êµ¬ì„± (S * R * T)
                 using namespace DirectX;
                 XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
                 XMMATRIX R = XMMatrixRotationRollPitchYaw(t->rotation.x, t->rotation.y, t->rotation.z);
@@ -73,21 +73,21 @@ namespace Alice
 
                 SkinnedDrawCommand cmd = {};
                 cmd.vertexBuffer = mesh->vertexBuffer.Get();
-                cmd.indexBuffer  = mesh->indexBuffer.Get();
-                cmd.stride       = mesh->stride;
-                cmd.indexCount   = mesh->indexCount;
-                cmd.startIndex   = mesh->startIndex;
-                cmd.baseVertex   = mesh->baseVertex;
-                cmd.world        = worldM;
-                cmd.bones        = comp.boneMatrices;
-                cmd.boneCount    = comp.boneCount;
-                cmd.meshKey      = comp.meshAssetPath;
+                cmd.indexBuffer = mesh->indexBuffer.Get();
+                cmd.stride = mesh->stride;
+                cmd.indexCount = mesh->indexCount;
+                cmd.startIndex = mesh->startIndex;
+                cmd.baseVertex = mesh->baseVertex;
+                cmd.world = worldM;
+                cmd.bones = comp.boneMatrices;
+                cmd.boneCount = comp.boneCount;
+                cmd.meshKey = comp.meshAssetPath;
 
                 if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(entityId))
                 {
-                    cmd.color             = mat->color;
-                    cmd.roughness         = mat->roughness;
-                    cmd.metalness         = mat->metalness;
+                    cmd.color = mat->color;
+                    cmd.roughness = mat->roughness;
+                    cmd.metalness = mat->metalness;
                     cmd.albedoTexturePath = mat->albedoTexturePath;
 
                     if (!mat->albedoTexturePath.empty())
@@ -104,7 +104,7 @@ namespace Alice
 
             //if (!outCommands.empty())
             //{
-            //    // ½ÇÁ¦·Î µå·Î¿ì Ä¿¸Çµå°¡ »ı°åÀ» ¶§¸¸ 1È¸ ·Î±×¸¦ ³²±é´Ï´Ù.
+            //    // ì‹¤ì œë¡œ ë“œë¡œìš° ì»¤ë§¨ë“œê°€ ìƒê²¼ì„ ë•Œë§Œ 1íšŒ ë¡œê·¸ë¥¼ ë‚¨ê¹ë‹ˆë‹¤.
             //    ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: commands=%zu",
             //                   outCommands.size());
             //}
@@ -114,6 +114,3 @@ namespace Alice
         SkinnedMeshRegistry& m_registry;
     };
 }
-
-
-
