@@ -1,4 +1,4 @@
-#ifndef NOMINMAX
+ï»¿#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -16,7 +16,7 @@
 
 namespace Alice
 {
-    // === IScript ±âº» ÇïÆÛ ±¸Çö ===
+    // === IScript ê¸°ë³¸ í—¬í¼ êµ¬í˜„ ===
 
     TransformComponent* IScript::GetTransform()
     {
@@ -33,20 +33,20 @@ namespace Alice
 
     namespace
     {
-        // Àü¿ª ½ºÅ©¸³Æ® ·¹Áö½ºÆ®¸® (°£´ÜÇÑ ÀÌ¸§ ¡æ »ı¼º ÇÔ¼ö ¸ÅÇÎ)
+        // ì „ì—­ ìŠ¤í¬ë¦½íŠ¸ ë ˆì§€ìŠ¤íŠ¸ë¦¬ (ê°„ë‹¨í•œ ì´ë¦„ â†’ ìƒì„± í•¨ìˆ˜ ë§¤í•‘)
         std::unordered_map<std::string, ScriptCreateFunc>& GetScriptRegistry()
         {
             static std::unordered_map<std::string, ScriptCreateFunc> s_registry;
             return s_registry;
         }
 
-        // µ¿Àû ½ºÅ©¸³Æ® DLL (¶óÀÌºê ÄÚµù)¿¡¼­ Á¦°øÇÏ´Â ÇÔ¼ö Æ÷ÀÎÅÍµé
+        // ë™ì  ìŠ¤í¬ë¦½íŠ¸ DLL (ë¼ì´ë¸Œ ì½”ë”©)ì—ì„œ ì œê³µí•˜ëŠ” í•¨ìˆ˜ í¬ì¸í„°ë“¤
         DynamicScriptCreateFunc   g_DynCreate  = nullptr;
         DynamicScriptCountFunc    g_DynCount   = nullptr;
         DynamicScriptGetNameFunc  g_DynGetName = nullptr;
     }
 
-    // === ScriptFactory ±¸Çö ¹× µ¿Àû ½ºÅ©¸³Æ® ÇÔ¼ö ===
+    // === ScriptFactory êµ¬í˜„ ë° ë™ì  ìŠ¤í¬ë¦½íŠ¸ í•¨ìˆ˜ ===
 
     void SetDynamicScriptFunctions(DynamicScriptCreateFunc   createFn,
                                    DynamicScriptCountFunc    countFn,
@@ -70,7 +70,7 @@ namespace Alice
     {
         if (!name) return nullptr;
 
-        // 1) Á¤Àû(³»Àå) ½ºÅ©¸³Æ® ·¹Áö½ºÆ®¸®¿¡¼­ ¸ÕÀú Ã£½À´Ï´Ù.
+        // 1) ì •ì (ë‚´ì¥) ìŠ¤í¬ë¦½íŠ¸ ë ˆì§€ìŠ¤íŠ¸ë¦¬ì—ì„œ ë¨¼ì € ì°¾ìŠµë‹ˆë‹¤.
         auto& registry = GetScriptRegistry();
         auto  it       = registry.find(name);
         if (it != registry.end())
@@ -79,7 +79,7 @@ namespace Alice
             return std::unique_ptr<IScript>(raw);
         }
 
-        // 2) µ¿Àû ½ºÅ©¸³Æ® DLL ÀÌ ÀÖ´Ù¸é, ±×ÂÊ¿¡¼­ »ı¼º ½Ãµµ
+        // 2) ë™ì  ìŠ¤í¬ë¦½íŠ¸ DLL ì´ ìˆë‹¤ë©´, ê·¸ìª½ì—ì„œ ìƒì„± ì‹œë„
         if (g_DynCreate)
         {
             IScript* raw = g_DynCreate(name);
@@ -96,7 +96,7 @@ namespace Alice
     {
         std::vector<std::string> result;
 
-        // 1) Á¤Àû(³»Àå) ½ºÅ©¸³Æ®µé
+        // 1) ì •ì (ë‚´ì¥) ìŠ¤í¬ë¦½íŠ¸ë“¤
         auto& registry = GetScriptRegistry();
         result.reserve(registry.size());
 
@@ -105,7 +105,7 @@ namespace Alice
             result.push_back(name);
         }
 
-        // 2) µ¿Àû ½ºÅ©¸³Æ® DLL ÀÌ Á¦°øÇÏ´Â ½ºÅ©¸³Æ®µé
+        // 2) ë™ì  ìŠ¤í¬ë¦½íŠ¸ DLL ì´ ì œê³µí•˜ëŠ” ìŠ¤í¬ë¦½íŠ¸ë“¤
         if (g_DynCount && g_DynGetName)
         {
             const int count = g_DynCount();
@@ -122,7 +122,7 @@ namespace Alice
         return result;
     }
 
-    // === ScriptSystem ±¸Çö ===
+    // === ScriptSystem êµ¬í˜„ ===
 
     void ScriptSystem::SetServices(InputSystem* input,
                                    SceneManager* scenes,
@@ -142,18 +142,18 @@ namespace Alice
 
     void ScriptSystem::BeginInputFrame()
     {
-        // Å°º¸µå »óÅÂ °»½Å
+        // í‚¤ë³´ë“œ ìƒíƒœ ê°±ì‹ 
         m_prevKeys = m_currKeys;
         m_currKeys.fill(false);
 
-        // ¸¶¿ì½º ¹öÆ° »óÅÂ °»½Å
+        // ë§ˆìš°ìŠ¤ ë²„íŠ¼ ìƒíƒœ ê°±ì‹ 
         m_prevMouseButtons = m_currMouseButtons;
         m_currMouseButtons.fill(false);
 
         if (!m_input)
             return;
 
-        // Å°º¸µå »óÅÂ ÀĞ±â
+        // í‚¤ë³´ë“œ ìƒíƒœ ì½ê¸°
         for (std::size_t i = 0; i < m_currKeys.size(); ++i)
         {
             const auto key = static_cast<KeyCode>(i);
@@ -163,7 +163,7 @@ namespace Alice
             m_currKeys[i] = m_input->IsKeyDown(dx);
         }
 
-        // ¸¶¿ì½º ¹öÆ° »óÅÂ ÀĞ±â
+        // ë§ˆìš°ìŠ¤ ë²„íŠ¼ ìƒíƒœ ì½ê¸°
         for (std::size_t i = 0; i < m_currMouseButtons.size(); ++i)
         {
             m_currMouseButtons[i] = m_input->IsMouseButtonDown(static_cast<int>(i));
@@ -255,7 +255,7 @@ namespace Alice
         return !now && prev;
     }
 
-    // ¸¶¿ì½º ¹öÆ° »óÅÂ È®ÀÎ (³»ºÎ ÇïÆÛ)
+    // ë§ˆìš°ìŠ¤ ë²„íŠ¼ ìƒíƒœ í™•ì¸ (ë‚´ë¶€ í—¬í¼)
     bool ScriptSystem::GetMouseButtonInternal(MouseCode button) const
     {
         const std::size_t i = static_cast<std::size_t>(button);
@@ -327,18 +327,18 @@ namespace Alice
 
         std::string path = filename;
 
-        // ¸¸¾à ÀÔ·Â°ª¿¡ ÀÌ¹Ì °æ·Î³ª ½½·¡½Ã°¡ Æ÷ÇÔµÇ¾î ÀÖ´Ù¸é ±×´ë·Î ¾µ ¼öµµ ÀÖ°ÚÁö¸¸,
-        // ¿©±â¼­´Â ¿äÃ»ÇÏ½Å ´ë·Î "ÆÄÀÏ¸í¸¸ µé¾î¿Â´Ù"°í °¡Á¤ÇÏ°í ¹«Á¶°Ç °æ·Î¸¦ ºÙÀÔ´Ï´Ù.
+        // ë§Œì•½ ì…ë ¥ê°’ì— ì´ë¯¸ ê²½ë¡œë‚˜ ìŠ¬ë˜ì‹œê°€ í¬í•¨ë˜ì–´ ìˆë‹¤ë©´ ê·¸ëŒ€ë¡œ ì“¸ ìˆ˜ë„ ìˆê² ì§€ë§Œ,
+        // ì—¬ê¸°ì„œëŠ” ìš”ì²­í•˜ì‹  ëŒ€ë¡œ "íŒŒì¼ëª…ë§Œ ë“¤ì–´ì˜¨ë‹¤"ê³  ê°€ì •í•˜ê³  ë¬´ì¡°ê±´ ê²½ë¡œë¥¼ ë¶™ì…ë‹ˆë‹¤.
         if (m_editorMode)
         {
-            // ¿¡µğÅÍ ½ÇÇà Áß: ½ÇÇà ÆÄÀÏ À§Ä¡ ±âÁØ ÇÑ ´Ü°è »óÀ§ÀÇ ¿øº» ¼Ò½º Æú´õ ÂüÁ¶
-            // ¿¹: "../Assets/Scenes/Stage1.scene"
+            // ì—ë””í„° ì‹¤í–‰ ì¤‘: ì‹¤í–‰ íŒŒì¼ ìœ„ì¹˜ ê¸°ì¤€ í•œ ë‹¨ê³„ ìƒìœ„ì˜ ì›ë³¸ ì†ŒìŠ¤ í´ë” ì°¸ì¡°
+            // ì˜ˆ: "../Assets/Scenes/Stage1.scene"
             return "../Assets/Scenes/" + path;
         }
         else
         {
-            // ºôµåµÈ °ÔÀÓ ½ÇÇà Áß: ½ÇÇà ÆÄÀÏ ¿·ÀÇ ¹èÆ÷µÈ Æú´õ ÂüÁ¶
-            // ¿¹: "Assets/Scenes/Stage1.scene"
+            // ë¹Œë“œëœ ê²Œì„ ì‹¤í–‰ ì¤‘: ì‹¤í–‰ íŒŒì¼ ì˜†ì˜ ë°°í¬ëœ í´ë” ì°¸ì¡°
+            // ì˜ˆ: "Assets/Scenes/Stage1.scene"
             return "Assets/Scenes/" + path;
         }
     }
@@ -361,7 +361,7 @@ namespace Alice
             {
                 if (!comp.instance) continue;
 
-                // .meta ±âº»°ª 1È¸ ÁÖÀÔ (¾À/ÇÁ¸®ÆÕ¿¡¼­ props°¡ ÀÌ¹Ì µé¾î°£ °æ¿ì defaultsApplied=true·Î ¸·½À´Ï´Ù)
+                // .meta ê¸°ë³¸ê°’ 1íšŒ ì£¼ì… (ì”¬/í”„ë¦¬íŒ¹ì—ì„œ propsê°€ ì´ë¯¸ ë“¤ì–´ê°„ ê²½ìš° defaultsApplied=trueë¡œ ë§‰ìŠµë‹ˆë‹¤)
                 if (!comp.defaultsApplied && m_resources && !comp.scriptName.empty())
                 {
                     const std::filesystem::path metaLogical = std::filesystem::path("Assets/Scripts") / (comp.scriptName + ".meta");
@@ -398,17 +398,17 @@ namespace Alice
             EntityId entityId = it->first;
             auto& list = it->second;
 
-            // º¤ÅÍ¸¦ ¼øÈ¸ÇÒ ¶§ size¸¦ ¸Å¹ø Ã¼Å©ÇÏ¸ç ÀÎµ¦½º·Î Á¢±Ù
+            // ë²¡í„°ë¥¼ ìˆœíšŒí•  ë•Œ sizeë¥¼ ë§¤ë²ˆ ì²´í¬í•˜ë©° ì¸ë±ìŠ¤ë¡œ ì ‘ê·¼
             for (size_t i = 0; i < list.size(); ++i)
             {
                 auto& comp = list[i];
 
                 if (!comp.instance) continue;
 
-                // Update µµÁß RemoveComponent°¡ È£ÃâµÇ¾î ÇöÀç ÀÎµ¦½º°¡ »èÁ¦µÉ ¼ö ÀÖÀ½
-                // ÇÏÁö¸¸ ¿©±â¼­´Â °£´ÜÈ÷ null Ã¼Å©³ª enabled Ã¼Å©·Î ³Ñ¾î°¨
-                // ´õ ¾ö°İÇÏ°Ô ÇÏ·Á¸é »èÁ¦µÈ ¿ä¼Ò¸¦ °Ç³Ê¶Ù´Â ·ÎÁ÷À» ³ªÁß¿¡ ³Ö¾î¾ßÇÔ.
-                // ÀÏ´ÜÀº ÀÌ·¸°Ô Ã³¸®ÇØµÒ. ¹®Á¦ »ı±â¸é ±×¶§ ¼öÁ¤.
+                // Update ë„ì¤‘ RemoveComponentê°€ í˜¸ì¶œë˜ì–´ í˜„ì¬ ì¸ë±ìŠ¤ê°€ ì‚­ì œë  ìˆ˜ ìˆìŒ
+                // í•˜ì§€ë§Œ ì—¬ê¸°ì„œëŠ” ê°„ë‹¨íˆ null ì²´í¬ë‚˜ enabled ì²´í¬ë¡œ ë„˜ì–´ê°
+                // ë” ì—„ê²©í•˜ê²Œ í•˜ë ¤ë©´ ì‚­ì œëœ ìš”ì†Œë¥¼ ê±´ë„ˆë›°ëŠ” ë¡œì§ì„ ë‚˜ì¤‘ì— ë„£ì–´ì•¼í•¨.
+                // ì¼ë‹¨ì€ ì´ë ‡ê²Œ ì²˜ë¦¬í•´ë‘ . ë¬¸ì œ ìƒê¸°ë©´ ê·¸ë•Œ ìˆ˜ì •.
 
                 comp.instance->SetContext(&world, entityId);
                 comp.instance->SetServices(&m_services);
@@ -420,17 +420,17 @@ namespace Alice
 
                     comp.instance->Awake();
 
-                    // Awake µµÁß ½ºÅ©¸³Æ®°¡ »èÁ¦µÇ¾úÀ» ¼öµµ ÀÖÀ¸¹Ç·Î Ã¼Å©
+                    // Awake ë„ì¤‘ ìŠ¤í¬ë¦½íŠ¸ê°€ ì‚­ì œë˜ì—ˆì„ ìˆ˜ë„ ìˆìœ¼ë¯€ë¡œ ì²´í¬
                     if (i >= list.size()) break;
-                    if (!list[i].instance) continue; // »èÁ¦µÈ °æ¿ì
+                    if (!list[i].instance) continue; // ì‚­ì œëœ ê²½ìš°
 
                     if (comp.enabled) comp.instance->OnEnable();
                 }
 
-                // Áß°£¿¡ »èÁ¦µÇ¾ú´ÂÁö ´Ù½Ã È®ÀÎ
+                // ì¤‘ê°„ì— ì‚­ì œë˜ì—ˆëŠ”ì§€ ë‹¤ì‹œ í™•ì¸
                 if (i >= list.size()) break;
 
-                // ÂüÁ¶ ´Ù½Ã È¹µæ º¤ÅÍ ÀçÇÒ´ç °¡´É¼ºÀ» ¹èÁ¦ÇÒ ¼ø ¾øÀ½
+                // ì°¸ì¡° ë‹¤ì‹œ íšë“ ë²¡í„° ì¬í• ë‹¹ ê°€ëŠ¥ì„±ì„ ë°°ì œí•  ìˆœ ì—†ìŒ
                 auto& currentComp = list[i];
 
                 if (currentComp.enabled != currentComp.wasEnabled)
@@ -452,7 +452,7 @@ namespace Alice
                     currentComp.instance->Start();
                 }
 
-                // Start µî¿¡¼­ º¤ÅÍ°¡ ÀçÇÒ´çµÇ¾úÀ» ¼ö ÀÖÀ¸¹Ç·Î ´Ù½Ã ÂüÁ¶ °»½Å
+                // Start ë“±ì—ì„œ ë²¡í„°ê°€ ì¬í• ë‹¹ë˜ì—ˆì„ ìˆ˜ ìˆìœ¼ë¯€ë¡œ ë‹¤ì‹œ ì°¸ì¡° ê°±ì‹ 
                 if (i < list.size() && list[i].instance)
                 {
                     list[i].instance->Update(deltaTime);
@@ -500,7 +500,7 @@ namespace Alice
         if (m_pendingSwitch.empty() && m_pendingSceneFile.empty())
             return;
 
-        // 1) ÄÚµå ¾À ÀüÈ¯
+        // 1) ì½”ë“œ ì”¬ ì „í™˜
         if (m_scenes)
         {
             if (!m_pendingSwitch.empty())
@@ -511,7 +511,7 @@ namespace Alice
             }
         }
 
-        // 2) .scene ÆÄÀÏ ·Îµå
+        // 2) .scene íŒŒì¼ ë¡œë“œ
         {
             if (!m_pendingSceneFile.empty())
             {
@@ -547,7 +547,10 @@ namespace Alice
         // LateUpdate
         CallLateUpdate(world, deltaTime);
 
-        // ¾À ¿äÃ»Àº ÇÁ·¹ÀÓ ³¡¿¡ ¹İ¿µ
+        // ì§€ì—° íŒŒê´´ ì—…ë°ì´íŠ¸
+        world.UpdateDelayedDestruction(deltaTime);
+
+        // ì”¬ ìš”ì²­ì€ í”„ë ˆì„ ëì— ë°˜ì˜
         ProcessSceneRequests(world);
     }
 

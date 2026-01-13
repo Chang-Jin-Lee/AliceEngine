@@ -35,6 +35,33 @@ namespace Alice
             return m_world->GetComponent<T>(m_id);
         }
 
+        /// 게임 오브젝트를 즉시 파괴합니다
+        void destroy()
+        {
+            if (!m_world || m_id == InvalidEntityId)
+                return;
+
+            m_world->DestroyEntity(m_id);
+            m_id = InvalidEntityId; // 파괴 후 무효화
+        }
+
+        /// 게임 오브젝트를 지연 파괴합니다 (delay 초 후에 파괴)
+        void destroy(float delay)
+        {
+            if (!m_world || m_id == InvalidEntityId)
+                return;
+
+            if (delay <= 0.0f)
+            {
+                // 지연 시간이 0 이하면 즉시 파괴
+                destroy();
+                return;
+            }
+
+            m_world->ScheduleDelayedDestruction(m_id, delay);
+            // 지연 파괴는 예약만 하고, 실제 파괴는 UpdateDelayedDestruction에서 수행
+            // 따라서 m_id는 아직 유효하지만, 파괴 예약이 되어있음
+        }
         /// Animator 핸들(엔티티 단위)
         class Animator
         {

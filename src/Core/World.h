@@ -242,6 +242,13 @@ namespace Alice
         // 필요하다면 별도 헬퍼 함수 유지
         EntityId GetMainCameraEntityId();
 
+        // ==== 지연 파괴 시스템 ====
+        /// 지연 파괴를 예약합니다. (delay 초 후에 파괴)
+        void ScheduleDelayedDestruction(EntityId id, float delay);
+        
+        /// 지연 파괴 시스템을 업데이트합니다. (매 프레임 호출 필요)
+        void UpdateDelayedDestruction(float deltaTime);
+
     private:
         // if constexpr을 사용하여 타입에 맞는 맵을 반환
         template <typename T>
@@ -281,6 +288,9 @@ namespace Alice
 
         // 스크립트는 vector를 값으로 가지므로 일반 T와 구조가 달라 따로 둠
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
+
+        // 지연 파괴 시스템 (EntityId -> 남은 시간)
+        std::unordered_map<EntityId, float> m_delayedDestructions;
     };
 
     template <typename T>

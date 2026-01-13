@@ -14,6 +14,7 @@ namespace Alice {
 		m_skinnedMeshes.clear();
 		m_skinnedAnimations.clear();
 		m_cameras.clear();
+		m_delayedDestructions.clear();
 
 		// 3. 엔티티 ID 카운터 초기화 (선택 사항이지만 권장)
 		//    새 씬을 로드할 때 ID가 1번부터 다시 시작하도록 함.
@@ -30,6 +31,9 @@ namespace Alice {
 	{
 		if (id == InvalidEntityId)
 			return;
+
+		// 지연 파괴 예약이 있으면 제거
+		m_delayedDestructions.erase(id);
 
 		m_names.erase(id);
 		m_transforms.erase(id);
@@ -149,5 +153,45 @@ namespace Alice {
 		if (m_cameras.empty())
 			return InvalidEntityId;
 		return m_cameras.begin()->first;
+	}
+
+	void World::ScheduleDelayedDestruction(EntityId id, float delay)
+	{
+		if (id == InvalidEntityId || delay <= 0.0f)
+			return;
+
+		// 이미 예약된 파괴가 있으면 더 짧은 시간으로 업데이트
+		auto it = m_delayedDestructions.find(id);
+		if (it != m_delayedDestructions.end())
+		{
+			it->second = std::min(it->second, delay);
+		}
+		else
+		{
+			m_delayedDestructions[id] = delay;
+		}
+	}
+
+	void World::UpdateDelayedDestruction(float deltaTime)
+	{
+		// 역순으로 순회하여 삭제 시 iterator 무효화 방지
+		std::vector<EntityId> toDestroy;
+		toDestroy.reserve(m_delayedDestructions.size());
+
+		for (auto& [id, remainingTime] : m_delayedDestructions)
+		{
+			remainingTime -= deltaTime;
+			if (remainingTime <= 0.0f)
+			{
+				toDestroy.push_back(id);
+			}
+		}
+
+		// 시간이 지난 엔티티들을 파괴
+		for (EntityId id : toDestroy)
+		{
+			m_delayedDestructions.erase(id);
+			DestroyEntity(id);
+		}
 	}
 } // namespace Alice
