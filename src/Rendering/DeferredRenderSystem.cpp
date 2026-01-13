@@ -1179,12 +1179,6 @@ namespace Alice
 
         // 1. 정적 메시 (큐브) 렌더링
         // ForwardRenderSystem::SimpleVertex와 동일한 구조체 (private이므로 로컬 정의)
-        struct SimpleVertex
-        {
-            XMFLOAT3 Position;
-            XMFLOAT3 Normal;
-            XMFLOAT2 TexCoord;
-        };
         UINT stride = sizeof(SimpleVertex);
         UINT offset = 0;
         ID3D11Buffer* vb = m_cubeVB.Get();
@@ -1246,8 +1240,8 @@ namespace Alice
 
                 const XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
 
-                std::shared_ptr<SkinnedMeshGPU> mesh =
-                    (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
+				std::shared_ptr<SkinnedMeshGPU> mesh =
+					(m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
 
                 if (mesh && !mesh->subsets.empty())
                 {
