@@ -997,36 +997,23 @@ namespace Alice
             }
             if (ImGui::BeginPopup("CreateObjectPopup"))
             {
+                if (ImGui::MenuItem("Empty"))
+                {
+                    EntityId e = world.CreateEmpty();
+                    selectedEntity = e;
+                    g_SceneDirty   = true;
+                    ImGui::CloseCurrentPopup();
+                }
                 if (ImGui::MenuItem("Cube"))
                 {
-                    EntityId e = world.CreateEntity();
-					auto& t = world.AddComponent<TransformComponent>(e);
-                    t.SetPosition(0.0f, 0.0f, 0.0f)
-                     .SetScale(1.0f, 1.0f, 1.0f);
-                    // 기본 회색 머티리얼을 함께 추가합니다.
-                    DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-					world.AddComponent<MaterialComponent>(e, defaultColor);
-                    world.SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
+                    EntityId e = world.CreateCube();
                     selectedEntity = e;
                     g_SceneDirty   = true;
                     ImGui::CloseCurrentPopup();
                 }
                 if (ImGui::MenuItem("Camera"))
                 {
-                    const bool hasCamera = world.GetComponents<CameraComponent>().empty();
-                    const bool camIndex = world.GetComponents<CameraComponent>().size() + 1;
-
-                    EntityId e = world.CreateEntity();
-					auto& t = world.AddComponent<TransformComponent>(e);
-                    t.position = { 0.0f, 2.0f, -5.0f };
-                    t.rotation = { 0.0f, 0.0f, 0.0f };
-                    t.scale = { 1.0f, 1.0f, 1.0f };
-
-					auto& c = world.AddComponent<CameraComponent>(e);
-                    c.primary = !hasCamera;
-
-                    world.SetEntityName(e, "Camera" + std::to_string(camIndex));
-
+                    EntityId e = world.CreateCamera();
                     selectedEntity = e;
                     g_SceneDirty = true;
                     ImGui::CloseCurrentPopup();
