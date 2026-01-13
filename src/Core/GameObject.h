@@ -21,15 +21,30 @@ namespace Alice
         GameObject(World* world, EntityId id, ScriptServices* services)
             : m_world(world), m_id(id), m_services(services)
         {
+            // SlotMap: 생성 시점의 generation 저장
+            if (m_world && m_id != InvalidEntityId)
+            {
+                m_generation = m_world->GetEntityGeneration(m_id);
+            }
         }
 
-        bool IsValid() const { return m_world && m_id != InvalidEntityId; }
+        /// SlotMap 기반 유효성 검사: generation이 일치하는지 확인
+        bool IsValid() const 
+        { 
+            if (!m_world || m_id == InvalidEntityId)
+                return false;
+            
+            // World에서 현재 generation과 저장된 generation 비교
+            return m_world->IsEntityValid(m_id, m_generation);
+        }
+        
         EntityId id() const { return m_id; }
 
         template <typename T>
         T* GetComponent() const
         {
-            if (!m_world || m_id == InvalidEntityId)
+            // SlotMap: 유효성 체크 후 컴포넌트 접근
+            if (!IsValid())
                 return nullptr;
 
             return m_world->GetComponent<T>(m_id);
@@ -38,17 +53,18 @@ namespace Alice
         /// 게임 오브젝트를 즉시 파괴합니다
         void destroy()
         {
-            if (!m_world || m_id == InvalidEntityId)
+            if (!IsValid())
                 return;
 
             m_world->DestroyEntity(m_id);
             m_id = InvalidEntityId; // 파괴 후 무효화
+            m_generation = 0; // generation도 초기화
         }
 
         /// 게임 오브젝트를 지연 파괴합니다 (delay 초 후에 파괴)
         void destroy(float delay)
         {
-            if (!m_world || m_id == InvalidEntityId)
+            if (!IsValid())
                 return;
 
             if (delay <= 0.0f)
@@ -70,11 +86,23 @@ namespace Alice
             Animator(World* world, EntityId id, ScriptServices* services)
                 : m_world(world), m_id(id), m_services(services)
             {
+                // SlotMap: 생성 시점의 generation 저장
+                if (m_world && m_id != InvalidEntityId)
+                {
+                    m_generation = m_world->GetEntityGeneration(m_id);
+                }
             }
 
             bool IsValid() const
             {
-                if (!m_world || m_id == InvalidEntityId || !m_services || !m_services->skinnedRegistry)
+                // SlotMap: 먼저 엔티티 유효성 체크
+                if (!m_world || m_id == InvalidEntityId)
+                    return false;
+                
+                if (!m_world->IsEntityValid(m_id, m_generation))
+                    return false;
+
+                if (!m_services || !m_services->skinnedRegistry)
                     return false;
 
                 auto* skinned = m_world->GetComponent<SkinnedMeshComponent>(m_id);
@@ -189,7 +217,14 @@ namespace Alice
         private:
             std::shared_ptr<FbxModel> SourceModel() const
             {
-                if (!m_world || !m_services || !m_services->skinnedRegistry)
+                // SlotMap: 유효성 체크
+                if (!m_world || m_id == InvalidEntityId)
+                    return nullptr;
+                
+                if (!m_world->IsEntityValid(m_id, m_generation))
+                    return nullptr;
+
+                if (!m_services || !m_services->skinnedRegistry)
                     return nullptr;
                 auto* skinned = m_world->GetComponent<SkinnedMeshComponent>(m_id);
                 if (!skinned) return nullptr;
@@ -200,7 +235,13 @@ namespace Alice
 
             SkinnedAnimationComponent* AnimComp(bool create) const
             {
-                if (!m_world) return nullptr;
+                // SlotMap: 유효성 체크
+                if (!m_world || m_id == InvalidEntityId)
+                    return nullptr;
+                
+                if (!m_world->IsEntityValid(m_id, m_generation))
+                    return nullptr;
+
                 if (auto* a = m_world->GetComponent<SkinnedAnimationComponent>(m_id))
                     return a;
                 return create ? &m_world->AddComponent<SkinnedAnimationComponent>(m_id) : nullptr;
@@ -208,6 +249,7 @@ namespace Alice
 
             World* m_world = nullptr;
             EntityId m_id = InvalidEntityId;
+            std::uint32_t m_generation = 0; // SlotMap: Animator도 generation 저장
             ScriptServices* m_services = nullptr;
         };
 
@@ -223,6 +265,7 @@ namespace Alice
             {
                 if (id == InvalidEntityId) continue;
                 if (comp.meshAssetPath.empty()) continue;
+                // GameObject 생성 시 자동으로 generation이 저장됨
                 return GameObject(m_world, id, m_services);
             }
             return {};
@@ -231,6 +274,7 @@ namespace Alice
     private:
         World* m_world = nullptr;
         EntityId m_id = InvalidEntityId;
+        std::uint32_t m_generation = 0; // SlotMap: 엔티티 생성 시점의 generation 저장
         ScriptServices* m_services = nullptr;
     };
 }
