@@ -23,7 +23,7 @@ namespace Alice
 
         /// World + Registry 를 기반으로 스키닝 드로우 명령 리스트를 구성합니다.
         void BuildDrawList(const World& world,
-                           std::vector<ForwardRenderSystem::SkinnedDrawCommand>& outCommands) const
+                           std::vector<SkinnedDrawCommand>& outCommands) const
         {
             outCommands.clear();
 
@@ -71,7 +71,7 @@ namespace Alice
                 XMMATRIX Tm = XMMatrixTranslation(t->position.x, t->position.y, t->position.z);
                 XMMATRIX worldM = S * R * Tm;
 
-                ForwardRenderSystem::SkinnedDrawCommand cmd = {};
+                SkinnedDrawCommand cmd = {};
                 cmd.vertexBuffer = mesh->vertexBuffer.Get();
                 cmd.indexBuffer  = mesh->indexBuffer.Get();
                 cmd.stride       = mesh->stride;
