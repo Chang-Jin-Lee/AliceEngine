@@ -1042,6 +1042,7 @@ namespace Alice
                 // ImGui Begin/End 짝을 깨지 않기 위해,
                 // 실제 빌드/복사/리로드 로직은 별도 헬퍼 함수에서 처리합니다.
                 ReloadScripts_FromButton(world);
+                m_scriptBuilded = true;
             }
 
             ImGui::Separator();
@@ -2307,7 +2308,8 @@ namespace Alice
     {
         static std::vector<std::string> scriptNames;
         if (ImGui::BeginCombo("Add Script", "Select Script...")) {
-            if (scriptNames.empty()) {
+            if (scriptNames.empty() || m_scriptBuilded) {
+                m_scriptBuilded = false;
                 scriptNames = ScriptFactory::GetRegisteredScriptNames();
                 std::sort(scriptNames.begin(), scriptNames.end());
                 scriptNames.erase(std::unique(scriptNames.begin(), scriptNames.end()),

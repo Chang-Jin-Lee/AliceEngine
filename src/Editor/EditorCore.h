@@ -92,6 +92,8 @@ namespace Alice
         ResourceManager*    m_resources    = nullptr;
         SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
         InputSystem*        m_inputSystem = nullptr;
+
+        bool               m_scriptBuilded = false;
     };
 }
 
