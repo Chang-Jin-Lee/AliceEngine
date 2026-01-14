@@ -1,6 +1,7 @@
 #include "RotateAndScale.h"
 #include "Core/World.h"
-
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include <cmath> // std::sin
 #include <Core/Logger.h>
 

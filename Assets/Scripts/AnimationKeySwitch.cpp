@@ -1,5 +1,6 @@
 #include "AnimationKeySwitch.h"
-
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include "Core/GameObject.h"
 
 namespace Alice
