@@ -7,7 +7,8 @@
 #include <cstdint>
 
 #include "Core/Entity.h"
-#include "Core/Script.h"
+#include "Core/IScript.h"
+#include "Components/ScriptComponent.h"
 
 // 컴포넌트 헤더들
 #include "Components/ComponentStorage.h"

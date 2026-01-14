@@ -1,4 +1,4 @@
-﻿#include "Engine/Engine.h"
+#include "Engine/Engine.h"
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
@@ -27,7 +27,7 @@
 #include "Core/TimeSystem.h"
 #include "Core/ResourceManager.h"
 #include "Core/Scene.h"
-#include "Core/Script.h"
+#include "Core/ScriptSystem.h"
 #include "Core/Delegate.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"

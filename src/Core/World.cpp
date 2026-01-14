@@ -1,5 +1,6 @@
 #include "Core/World.h"
 #include "Core/GameObject.h"
+#include "Core/ScriptFactory.h"
 
 namespace Alice {
 	void World::Clear()

@@ -15,7 +15,7 @@
 #include <Windows.h>
 
 #include "Core/World.h"
-#include "Core/Script.h"
+#include "Components/ScriptComponent.h"
 #include <wrl/client.h>
 #include <dxgi.h>
 #include <dxgi1_3.h>
