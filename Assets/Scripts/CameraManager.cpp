@@ -10,32 +10,34 @@ namespace Alice
 
     void CameraManager::Awake()
     {
-		auto* camFollow = GetComponent<CameraFollow>();
+        // 이미 CameraFollow 스크립트가 붙어 있으면 재생만 제어
+        auto* camFollow = GetComponent<CameraFollow>();
         if (camFollow)
         {
             ALICE_LOG_INFO("[CameraManager] CameraFollow script is attached. {%f}", camFollow->Get_m_smoothSpeed());
 			return;
         }
 
-        auto go = gameObject();
-        if (!go.IsValid())
-            return;
-
-        // CameraComponent가 없으면 생성
-        auto* cam = go.GetComponent<CameraComponent>();
-        if (!cam)
+        // 나 자신이 붙어 있는 GameObject 가져오기
+        if (auto* owner = GetOwner())
         {
-            auto* world = GetWorld();
-            if (!world)
-                return;
-            cam = &world->AddComponent<CameraComponent>(GetOwner());
-        }
+            // CameraComponent가 없으면 생성
+            auto* cam = owner->GetComponent<CameraComponent>();
+            if (!cam)
+            {
+                auto* world = GetWorld();
+                if (!world)
+                    return;
+                cam = &world->AddComponent<CameraComponent>(GetOwnerId());
+            }
 
-        cam->primary = true;
-        ALICE_LOG_INFO("[CameraManager] Ready. primary=1");
+            // 메인 카메라로 설정
+            cam->primary = true;
+            ALICE_LOG_INFO("[CameraManager] Ready. primary=1");
+        }
     }
 
-	void CameraManager::Update(float deltaTime)
+    void CameraManager::Update(float /*deltaTime*/)
     {
         if (Input()->GetKeyDown(KeyCode::H))
         {
@@ -43,14 +45,12 @@ namespace Alice
         }
         if (Input()->GetKeyDown(KeyCode::J))
         {
-			RemoveComponent<AddGetRemoveComponentTest>();
+            RemoveComponent<AddGetRemoveComponentTest>();
         }
-        if (Input()->GetKeyDown(KeyCode::K))
+        if (Input()->GetMouseButtonDown(KeyCode::K))
         {
-            std::vector<AddGetRemoveComponentTest*> t = GetComponents<AddGetRemoveComponentTest>();
-			ALICE_LOG_INFO("Found {%d} AddGetRemoveComponentTest components.", t.size());
+            auto comps = GetComponents<AddGetRemoveComponentTest>();
+            ALICE_LOG_INFO("[CameraManager] Found {%d} AddGetRemoveComponentTest components.", comps.size());
         }
-	}
+    }
 }
-
-

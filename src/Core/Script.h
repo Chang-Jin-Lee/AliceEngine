@@ -75,7 +75,11 @@ namespace Alice
         World* GetWorld() const { return m_world; }
 
         /// 소유 엔티티 ID (Unity 의 gameObject / this.Entity 느낌)
-        EntityId GetOwner() const { return m_entity; }
+        EntityId GetOwnerId() const { return m_entity; }
+
+        /// 소유 게임오브젝트 핸들을 안전하게 반환합니다.
+        /// - 엔티티 또는 월드가 유효하지 않으면 nullptr 을 반환합니다.
+        GameObject* GetOwner();
 
         /// 소유 엔티티의 Transform 컴포넌트를 가져옵니다. (없으면 nullptr)
         TransformComponent* GetTransform();

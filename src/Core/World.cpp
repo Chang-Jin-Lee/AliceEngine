@@ -8,12 +8,12 @@ namespace Alice {
 		RemoveAllScript();
 		// 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
 		m_names.clear();
-		m_transforms.clear();
+		m_transforms.Clear();
 		m_scripts.clear();
-		m_materials.clear();
-		m_skinnedMeshes.clear();
-		m_skinnedAnimations.clear();
-		m_cameras.clear();
+		m_materials.Clear();
+		m_skinnedMeshes.Clear();
+		m_skinnedAnimations.Clear();
+		m_cameras.Clear();
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
@@ -46,7 +46,7 @@ namespace Alice {
 		}
 
 		m_names.erase(id);
-		m_transforms.erase(id);
+		m_transforms.Remove(id);
 		auto it = m_scripts.find(id);
 		if (it != m_scripts.end()) {
 			for (auto& sc : it->second)
@@ -58,10 +58,10 @@ namespace Alice {
 			}
 			m_scripts.erase(it);
 		}
-		m_materials.erase(id);
-		m_skinnedMeshes.erase(id);
-		m_skinnedAnimations.erase(id);
-		m_cameras.erase(id);
+		m_materials.Remove(id);
+		m_skinnedMeshes.Remove(id);
+		m_skinnedAnimations.Remove(id);
+		m_cameras.Remove(id);
 	}
 
 	GameObject World::FindGameObject(const std::string& name)
@@ -160,9 +160,11 @@ namespace Alice {
 	}
 
 	EntityId World::GetMainCameraEntityId() {
-		if (m_cameras.empty())
+		// Sparse Set 기반: 카메라 컴포넌트 뷰에서 첫 번째 EntityId를 반환
+		auto cameras = GetComponents<CameraComponent>();
+		if (cameras.empty())
 			return InvalidEntityId;
-		return m_cameras.begin()->first;
+		return cameras.begin()->first;
 	}
 
 	void World::ScheduleDelayedDestruction(EntityId id, float delay)
