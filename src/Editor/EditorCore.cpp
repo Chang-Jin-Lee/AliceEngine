@@ -31,7 +31,9 @@
 #include <thread>
 #include <mutex>
 #include <Core/Prefab.h>
-#include <Core/Script.h>
+#include <Core/IScript.h>
+#include <Core/ScriptSystem.h>
+#include <Core/ScriptFactory.h>
 #include <Core/Material.h>
 #include <Core/SceneFile.h>
 #include <shellapi.h>
@@ -2587,7 +2589,7 @@ namespace Alice
                         if (hfs.is_open())
                         {
                             hfs << "#pragma once\n\n";
-                            hfs << "#include \"Core/Script.h\"\n";
+                            hfs << "#include \"Core/IScript.h\"\n";
                             hfs << "#include \"Core/ScriptReflection.h\"\n\n";
                             hfs << "namespace Alice\n";
                             hfs << "{\n";

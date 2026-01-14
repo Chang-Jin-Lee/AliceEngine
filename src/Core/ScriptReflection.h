@@ -5,7 +5,7 @@
 // - 대신 매크로로 (이름 문자열/Getter/Setter/메타데이터)를 한 번에 묶어서 짧게 씁니다.
 #include <rttr/type>
 #include <rttr/registration.h>
-#include "Core/Script.h"
+#include "Core/IScript.h"
 
 // ---- Field declaration helpers (in .h) ----
 // private 필드는 RTTR이 직접 주소를 못 잡으므로, getter/setter를 자동 생성해서 등록합니다.

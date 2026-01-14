@@ -12,7 +12,7 @@
 #include "Core/Entity.h"
 #include "Core/World.h"
 #include "Core/Scene.h"
-#include "Core/Script.h"
+#include "Core/IScript.h"
 #include "Rendering/Camera.h"
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"

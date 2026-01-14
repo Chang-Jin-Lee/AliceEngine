@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <string>
 
-#include "Core/Script.h"
+#include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 
 namespace Alice
