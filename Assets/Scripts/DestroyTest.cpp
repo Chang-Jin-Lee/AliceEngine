@@ -1,5 +1,6 @@
 #include "DestroyTest.h"
 #include "Core/World.h"
+#include "Core/GameObject.h"
 
 namespace Alice
 {
@@ -21,8 +22,12 @@ namespace Alice
         // 리플렉션으로 등록된 함수 예시입니다.
         // 이 함수는 에디터에서 호출할 수 있습니다.
         
-        // 예시: Transform 컴포넌트 가져오기
-        if (auto* transform = GetComponent<TransformComponent>())
+        // 예시: 현재 gameObject에 붙은 Transform 컴포넌트를 가져옵니다.
+        auto go = gameObject();
+        if (!go.IsValid())
+            return;
+
+        if (auto* transform = go.GetComponent<TransformComponent>())
         {
             // 위치를 (0, 0, 0)으로 리셋하는 예시
             transform->position = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
