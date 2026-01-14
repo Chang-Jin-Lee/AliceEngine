@@ -1,4 +1,6 @@
 #include "AddGetRemoveComponentTest.h"
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include "Core/World.h"
 
 namespace Alice

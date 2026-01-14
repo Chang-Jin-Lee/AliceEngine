@@ -1,4 +1,6 @@
 #include "DestroyTest.h"
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include "Core/World.h"
 #include "Core/GameObject.h"
 

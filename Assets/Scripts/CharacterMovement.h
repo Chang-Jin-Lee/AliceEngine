@@ -1,5 +1,5 @@
 #pragma once
-#include "Core/Script.h"
+#include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
 
 namespace Alice
