@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "Core/Entity.h"
 #include "Core/ScriptAPI.h"
@@ -8,12 +9,12 @@
 #include "Core/Logger.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 
-// FbxModelÀº Àü¿ª ³×ÀÓ½ºÆäÀÌ½º¿¡ ÀÖ½À´Ï´Ù.
+// FbxModelì€ ì „ì—­ ë„¤ì„ìŠ¤í˜ì´ìŠ¤ì— ìˆìŠµë‹ˆë‹¤.
 #include "3Dmodel/FbxModel.h"
 
 namespace Alice
 {
-    /// Unity ´À³¦ÀÇ ¿£Æ¼Æ¼ ·¡ÆÛ (½ºÅ©¸³Æ®¿¡¼­ GetComponent<> »ç¿ë)
+    /// Unity ëŠë‚Œì˜ ì—”í‹°í‹° ë˜í¼ (ìŠ¤í¬ë¦½íŠ¸ì—ì„œ GetComponent<> ì‚¬ìš©)
     class GameObject
     {
     public:
@@ -21,20 +22,20 @@ namespace Alice
         GameObject(World* world, EntityId id, ScriptServices* services)
             : m_world(world), m_id(id), m_services(services)
         {
-            // SlotMap: »ı¼º ½ÃÁ¡ÀÇ generation ÀúÀå
+            // SlotMap: ìƒì„± ì‹œì ì˜ generation ì €ì¥
             if (m_world && m_id != InvalidEntityId)
             {
                 m_generation = m_world->GetEntityGeneration(m_id);
             }
         }
 
-        /// SlotMap ±â¹İ À¯È¿¼º °Ë»ç: generationÀÌ ÀÏÄ¡ÇÏ´ÂÁö È®ÀÎ
+        /// SlotMap ê¸°ë°˜ ìœ íš¨ì„± ê²€ì‚¬: generationì´ ì¼ì¹˜í•˜ëŠ”ì§€ í™•ì¸
         bool IsValid() const 
         { 
             if (!m_world || m_id == InvalidEntityId)
                 return false;
             
-            // World¿¡¼­ ÇöÀç generation°ú ÀúÀåµÈ generation ºñ±³
+            // Worldì—ì„œ í˜„ì¬ generationê³¼ ì €ì¥ëœ generation ë¹„êµ
             return m_world->IsEntityValid(m_id, m_generation);
         }
         
@@ -43,25 +44,58 @@ namespace Alice
         template <typename T>
         T* GetComponent() const
         {
-            // SlotMap: À¯È¿¼º Ã¼Å© ÈÄ ÄÄÆ÷³ÍÆ® Á¢±Ù
+            // SlotMap: ìœ íš¨ì„± ì²´í¬ í›„ ì»´í¬ë„ŒíŠ¸ ì ‘ê·¼
             if (!IsValid())
                 return nullptr;
 
             return m_world->GetComponent<T>(m_id);
         }
 
-        /// °ÔÀÓ ¿ÀºêÁ§Æ®¸¦ Áï½Ã ÆÄ±«ÇÕ´Ï´Ù
+        /// í˜„ì¬ ê²Œì„ì˜¤ë¸Œì íŠ¸ì— T íƒ€ì… ì»´í¬ë„ŒíŠ¸ë¥¼ ì¶”ê°€í•©ë‹ˆë‹¤. (World::AddComponent ë˜í•‘)
+        /// - ìœ íš¨í•˜ì§€ ì•Šì€ GameObject(IsValid()==false) ì—ì„œ í˜¸ì¶œ ì‹œ ì•„ë¬´ ê²ƒë„ í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
+        template <typename T, typename... Args>
+        T& AddComponent(Args&&... args) const
+        {
+            if (!IsValid() || !m_world)
+            {
+                ALICE_LOG_WARN("GameObject::AddComponent called on invalid GameObject.");
+                // í¬ë˜ì‹œë¥¼ ë§‰ê¸° ìœ„í•´ static dummy ë°˜í™˜ (ì‚¬ìš© ì „ ë°˜ë“œì‹œ IsValid() ì²´í¬ ê¶Œì¥)
+                static T dummy{};
+                return dummy;
+            }
+            return m_world->AddComponent<T>(m_id, std::forward<Args>(args)...);
+        }
+
+        /// í˜„ì¬ ê²Œì„ì˜¤ë¸Œì íŠ¸ì—ì„œ T íƒ€ì… ì»´í¬ë„ŒíŠ¸ë¥¼ ì œê±°í•©ë‹ˆë‹¤.
+        template <typename T>
+        void RemoveComponent() const
+        {
+            if (!IsValid() || !m_world)
+                return;
+            m_world->RemoveComponent<T>(m_id);
+        }
+
+        /// í˜„ì¬ ê²Œì„ì˜¤ë¸Œì íŠ¸ì— ë¶™ì–´ìˆëŠ” T íƒ€ì… ì»´í¬ë„ŒíŠ¸ë“¤ì„ ëª¨ë‘ ë°˜í™˜í•©ë‹ˆë‹¤.
+        template <typename T>
+        std::vector<T*> GetComponents() const
+        {
+            if (!IsValid() || !m_world)
+                return {};
+            return m_world->GetComponents<T>(m_id);
+        }
+
+        // ê²Œì„ ì˜¤ë¸Œì íŠ¸ë¥¼ ì¦‰ì‹œ íŒŒê´´í•©ë‹ˆë‹¤.
         void destroy()
         {
             if (!IsValid())
                 return;
 
             m_world->DestroyEntity(m_id);
-            m_id = InvalidEntityId; // ÆÄ±« ÈÄ ¹«È¿È­
-            m_generation = 0; // generationµµ ÃÊ±âÈ­
+            m_id = InvalidEntityId; // íŒŒê´´ í›„ ë¬´íš¨í™”
+            m_generation = 0; // generationë„ ì´ˆê¸°í™”
         }
 
-        /// °ÔÀÓ ¿ÀºêÁ§Æ®¸¦ Áö¿¬ ÆÄ±«ÇÕ´Ï´Ù (delay ÃÊ ÈÄ¿¡ ÆÄ±«)
+        // ê²Œì„ ì˜¤ë¸Œì íŠ¸ë¥¼ ì§€ì—° íŒŒê´´í•©ë‹ˆë‹¤ (delay ì´ˆ í›„ì— íŒŒê´´)
         void destroy(float delay)
         {
             if (!IsValid())
@@ -69,16 +103,16 @@ namespace Alice
 
             if (delay <= 0.0f)
             {
-                // Áö¿¬ ½Ã°£ÀÌ 0 ÀÌÇÏ¸é Áï½Ã ÆÄ±«
+                // ì§€ì—° ì‹œê°„ì´ 0 ì´í•˜ë©´ ì¦‰ì‹œ íŒŒê´´
                 destroy();
                 return;
             }
 
             m_world->ScheduleDelayedDestruction(m_id, delay);
-            // Áö¿¬ ÆÄ±«´Â ¿¹¾à¸¸ ÇÏ°í, ½ÇÁ¦ ÆÄ±«´Â UpdateDelayedDestruction¿¡¼­ ¼öÇà
-            // µû¶ó¼­ m_id´Â ¾ÆÁ÷ À¯È¿ÇÏÁö¸¸, ÆÄ±« ¿¹¾àÀÌ µÇ¾îÀÖÀ½
+            // ì§€ì—° íŒŒê´´ëŠ” ì˜ˆì•½ë§Œ í•˜ê³ , ì‹¤ì œ íŒŒê´´ëŠ” UpdateDelayedDestructionì—ì„œ ìˆ˜í–‰
+            // ë”°ë¼ì„œ m_idëŠ” ì•„ì§ ìœ íš¨í•˜ì§€ë§Œ, íŒŒê´´ ì˜ˆì•½ì´ ë˜ì–´ìˆìŒ
         }
-        /// Animator ÇÚµé(¿£Æ¼Æ¼ ´ÜÀ§)
+        /// Animator í•¸ë“¤(ì—”í‹°í‹° ë‹¨ìœ„)
         class Animator
         {
         public:
@@ -86,7 +120,7 @@ namespace Alice
             Animator(World* world, EntityId id, ScriptServices* services)
                 : m_world(world), m_id(id), m_services(services)
             {
-                // SlotMap: »ı¼º ½ÃÁ¡ÀÇ generation ÀúÀå
+                // SlotMap: ìƒì„± ì‹œì ì˜ generation ì €ì¥
                 if (m_world && m_id != InvalidEntityId)
                 {
                     m_generation = m_world->GetEntityGeneration(m_id);
@@ -95,7 +129,7 @@ namespace Alice
 
             bool IsValid() const
             {
-                // SlotMap: ¸ÕÀú ¿£Æ¼Æ¼ À¯È¿¼º Ã¼Å©
+                // SlotMap: ë¨¼ì € ì—”í‹°í‹° ìœ íš¨ì„± ì²´í¬
                 if (!m_world || m_id == InvalidEntityId)
                     return false;
                 
@@ -167,7 +201,7 @@ namespace Alice
                 auto* a = AnimComp(true);
                 if (!a) return;
 
-                // ÀÌ¹Ì Àç»ı ÁßÀÌ°í, ¿äÃ»ÇÑ Å¬¸³ÀÌ ÇöÀç Å¬¸³°ú °°À¸¸ç, °­Á¦ Àç½ÃÀÛÀÌ ¾Æ´Ï¶ó¸é ¾Æ¹«°Íµµ ÇÏÁö ¾Ê°í ¸®ÅÏ (¾Ö´Ï¸ŞÀÌ¼Ç ²÷±è ¹æÁö)
+                // ì´ë¯¸ ì¬ìƒ ì¤‘ì´ê³ , ìš”ì²­í•œ í´ë¦½ì´ í˜„ì¬ í´ë¦½ê³¼ ê°™ìœ¼ë©°, ê°•ì œ ì¬ì‹œì‘ì´ ì•„ë‹ˆë¼ë©´ ì•„ë¬´ê²ƒë„ í•˜ì§€ ì•Šê³  ë¦¬í„´ (ì• ë‹ˆë©”ì´ì…˜ ëŠê¹€ ë°©ì§€)
                 if (a->playing && a->clipIndex == idx && !forceRestart) return;
                 SetClip(idx);
                 a->playing = true;
@@ -217,7 +251,7 @@ namespace Alice
         private:
             std::shared_ptr<FbxModel> SourceModel() const
             {
-                // SlotMap: À¯È¿¼º Ã¼Å©
+                // SlotMap: ìœ íš¨ì„± ì²´í¬
                 if (!m_world || m_id == InvalidEntityId)
                     return nullptr;
                 
@@ -235,7 +269,7 @@ namespace Alice
 
             SkinnedAnimationComponent* AnimComp(bool create) const
             {
-                // SlotMap: À¯È¿¼º Ã¼Å©
+                // SlotMap: ìœ íš¨ì„± ì²´í¬
                 if (!m_world || m_id == InvalidEntityId)
                     return nullptr;
                 
@@ -249,13 +283,13 @@ namespace Alice
 
             World* m_world = nullptr;
             EntityId m_id = InvalidEntityId;
-            std::uint32_t m_generation = 0; // SlotMap: Animatorµµ generation ÀúÀå
+            std::uint32_t m_generation = 0; // SlotMap: Animatorë„ generation ì €ì¥
             ScriptServices* m_services = nullptr;
         };
 
         Animator GetAnimator() const { return Animator(m_world, m_id, m_services); }
 
-        /// ¾À¿¡¼­ "Ã¹¹øÂ° SkinnedMesh" ¿£Æ¼Æ¼¸¦ Ã£½À´Ï´Ù. (Ä³¸¯ÅÍ 1ÀÎ °ÔÀÓ¿ë °£´Ü À¯Æ¿)
+        /// ì”¬ì—ì„œ "ì²«ë²ˆì§¸ SkinnedMesh" ì—”í‹°í‹°ë¥¼ ì°¾ìŠµë‹ˆë‹¤. (ìºë¦­í„° 1ì¸ ê²Œì„ìš© ê°„ë‹¨ ìœ í‹¸)
         GameObject FindFirstSkinnedMesh() const
         {
             if (!m_world)
@@ -265,7 +299,7 @@ namespace Alice
             {
                 if (id == InvalidEntityId) continue;
                 if (comp.meshAssetPath.empty()) continue;
-                // GameObject »ı¼º ½Ã ÀÚµ¿À¸·Î generationÀÌ ÀúÀåµÊ
+                // GameObject ìƒì„± ì‹œ ìë™ìœ¼ë¡œ generationì´ ì €ì¥ë¨
                 return GameObject(m_world, id, m_services);
             }
             return {};
@@ -274,7 +308,7 @@ namespace Alice
     private:
         World* m_world = nullptr;
         EntityId m_id = InvalidEntityId;
-        std::uint32_t m_generation = 0; // SlotMap: ¿£Æ¼Æ¼ »ı¼º ½ÃÁ¡ÀÇ generation ÀúÀå
+        std::uint32_t m_generation = 0; // SlotMap: ì—”í‹°í‹° ìƒì„± ì‹œì ì˜ generation ì €ì¥
         ScriptServices* m_services = nullptr;
     };
 }
