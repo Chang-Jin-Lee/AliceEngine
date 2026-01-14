@@ -33,6 +33,16 @@ namespace Alice
         void SetEntityName(EntityId id, const std::string& name);
         std::string GetEntityName(EntityId id) const;
 
+        // ==== 게임 오브젝트 생성 헬퍼 ====
+        /// 빈 게임 오브젝트를 생성합니다 (Transform만 가짐)
+        EntityId CreateEmpty();
+        
+        /// 큐브 게임 오브젝트를 생성합니다 (Transform + Material)
+        EntityId CreateCube();
+        
+        /// 카메라 게임 오브젝트를 생성합니다 (Transform + Camera)
+        EntityId CreateCamera();
+
         // ==== 제네릭 컴포넌트 관리 시스템 ====
         // 컴포넌트 타입 T에 따라 올바른 Map을 자동으로 찾아줍니다.
 
@@ -242,6 +252,20 @@ namespace Alice
         // 필요하다면 별도 헬퍼 함수 유지
         EntityId GetMainCameraEntityId();
 
+        // ==== 지연 파괴 시스템 ====
+        /// 지연 파괴를 예약합니다. (delay 초 후에 파괴)
+        void ScheduleDelayedDestruction(EntityId id, float delay);
+        
+        /// 지연 파괴 시스템을 업데이트합니다. (매 프레임 호출 필요)
+        void UpdateDelayedDestruction(float deltaTime);
+
+        // ==== SlotMap 기반 유효성 검사 ====
+        /// 엔티티의 현재 generation을 가져옵니다. (없으면 0)
+        std::uint32_t GetEntityGeneration(EntityId id) const;
+        
+        /// 엔티티가 유효한지 확인합니다. (generation 비교)
+        bool IsEntityValid(EntityId id, std::uint32_t generation) const;
+
     private:
         // if constexpr을 사용하여 타입에 맞는 맵을 반환
         template <typename T>
@@ -281,6 +305,13 @@ namespace Alice
 
         // 스크립트는 vector를 값으로 가지므로 일반 T와 구조가 달라 따로 둠
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
+
+        // 지연 파괴 시스템 (EntityId -> 남은 시간)
+        std::unordered_map<EntityId, float> m_delayedDestructions;
+
+        // SlotMap 기반 유효성 검사 (EntityId -> Generation)
+        // 엔티티가 생성될 때 0으로 시작하고, 파괴될 때마다 증가합니다.
+        std::unordered_map<EntityId, std::uint32_t> m_entityGenerations;
     };
 
     template <typename T>

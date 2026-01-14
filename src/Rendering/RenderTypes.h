@@ -258,5 +258,4 @@ namespace Alice
 		float             shadowPcfRadius;   // PCF ¹Ý°æ(texel)
 		int               shadowEnabled;     // 0/1
 	};
-
 }
