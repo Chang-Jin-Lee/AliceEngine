@@ -117,6 +117,19 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
+
+	
+	#PhysX
+    ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Actors.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Core.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Joints.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Queries.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/
+    #Physx Module
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.cpp
     
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
@@ -198,6 +211,20 @@ set(ENGINE_HEADERS
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
+	
+	#PhysX ����
+    ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
+    ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
+    #Module
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.h
+    #Components
+    ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
 )
 
 # [변경] AliceEngine -> Engine
@@ -444,3 +471,54 @@ foreach(target Launch AlicePlayer)
             "$<TARGET_FILE_DIR:${target}>/assimp-vc143-mt.dll"
     )
 endforeach()
+
+
+# ==========================================
+# PhysX
+# ==========================================
+if(MSVC)
+
+  foreach(t Launch AlicePlayer)
+    target_link_options(${t} PRIVATE
+      "$<$<CONFIG:Debug>:/NODEFAULTLIB:PhysXExtensions_static_64.lib>"
+    )
+  endforeach()
+  
+    # vcpkg toolchain�� �� ���� �����̶��, find_package�� ã�� �� �ְ� prefix�� �߰�
+    list(PREPEND CMAKE_PREFIX_PATH
+        "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}"
+    )
+
+    # vcpkg physx ��Ʈ�� �������� ��Ű��/Ÿ��
+    find_package(unofficial-omniverse-physx-sdk CONFIG REQUIRED)
+
+    # ������ PhysX ���� (Debug/Release �ùٸ� lib ������ Ÿ���� �˾Ƽ� ó��)
+    target_link_libraries(Engine PUBLIC unofficial::omniverse-physx-sdk::sdk)
+
+    # include ����
+    target_include_directories(Engine PRIVATE
+        "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
+        "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include/physx"
+    )
+
+    # PhysX ��Ÿ�� DLL ���� (�ʿ��� �͸� �ּҷ�)
+    set(PHYSX_BINDIR_DEBUG "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/bin")
+    set(PHYSX_BINDIR_REL   "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/bin")
+
+    foreach(target Launch AlicePlayer)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<$<CONFIG:Debug>:${PHYSX_BINDIR_DEBUG}/PhysXFoundation_64.dll>$<$<NOT:$<CONFIG:Debug>>:${PHYSX_BINDIR_REL}/PhysXFoundation_64.dll>"
+                "$<TARGET_FILE_DIR:${target}>/PhysXFoundation_64.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<$<CONFIG:Debug>:${PHYSX_BINDIR_DEBUG}/PhysXCommon_64.dll>$<$<NOT:$<CONFIG:Debug>>:${PHYSX_BINDIR_REL}/PhysXCommon_64.dll>"
+                "$<TARGET_FILE_DIR:${target}>/PhysXCommon_64.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<$<CONFIG:Debug>:${PHYSX_BINDIR_DEBUG}/PhysX_64.dll>$<$<NOT:$<CONFIG:Debug>>:${PHYSX_BINDIR_REL}/PhysX_64.dll>"
+                "$<TARGET_FILE_DIR:${target}>/PhysX_64.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<$<CONFIG:Debug>:${PHYSX_BINDIR_DEBUG}/PhysXCooking_64.dll>$<$<NOT:$<CONFIG:Debug>>:${PHYSX_BINDIR_REL}/PhysXCooking_64.dll>"
+                "$<TARGET_FILE_DIR:${target}>/PhysXCooking_64.dll"
+        )
+    endforeach()
+endif()
