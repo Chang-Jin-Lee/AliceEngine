@@ -78,6 +78,11 @@ public:
 	const std::vector<DirectX::XMFLOAT4X4>& GetBoneOffsets() const;
 	const DirectX::XMFLOAT4X4& GetGlobalInverse() const;
 
+	// Bounds (local space)
+	// - 로드 시점에 CPU-side bindVertices(pos) 기준으로 계산된 로컬 AABB입니다.
+	// - World Transform(TransformComponent)이 적용되기 전의 순수 모델 공간 바운딩입니다.
+	bool GetLocalBounds(DirectX::XMFLOAT3& outMin, DirectX::XMFLOAT3& outMax) const;
+
 private:
 	struct Impl; std::unique_ptr<Impl> m_;
 };

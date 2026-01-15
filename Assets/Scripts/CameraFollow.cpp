@@ -1,4 +1,6 @@
 //#include "CameraFollow.h"
+// #include "Core/ScriptFactory.h"
+//#include "Core/Logger.h"
 //#include "Core/GameObject.h"
 //#include <algorithm> // std::clamp
 //#include <cmath>     // sin, cos
@@ -78,6 +80,8 @@
 
 // 카메라가 그냥 플레이어를 따라다니는 스크립트
 #include "CameraFollow.h"
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include "Core/GameObject.h"
 #include <algorithm>
 #include <cmath>

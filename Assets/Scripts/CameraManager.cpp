@@ -1,5 +1,6 @@
 #include "CameraManager.h"
-
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include "Core/GameObject.h"
 #include "CameraFollow.h"
 #include "AddGetRemoveComponentTest.h"
@@ -10,47 +11,47 @@ namespace Alice
 
     void CameraManager::Awake()
     {
-		auto* camFollow = GetComponent<CameraFollow>();
-        if (camFollow)
-        {
-            ALICE_LOG_INFO("[CameraManager] CameraFollow script is attached. {%f}", camFollow->Get_m_smoothSpeed());
-			return;
-        }
-
         auto go = gameObject();
         if (!go.IsValid())
             return;
 
-        // CameraComponent가 없으면 생성
+        // 현재 GameObject에 붙어 있는 CameraComponent를 가져옵니다.
         auto* cam = go.GetComponent<CameraComponent>();
         if (!cam)
         {
-            auto* world = GetWorld();
-            if (!world)
-                return;
-            cam = &world->AddComponent<CameraComponent>(GetOwner());
+            // CameraComponent가 없으면 gameObject().AddComponent<>()로 추가 (Unity 스타일)
+            cam = &go.AddComponent<CameraComponent>();
         }
 
+        // 메인 카메라로 설정
         cam->primary = true;
         ALICE_LOG_INFO("[CameraManager] Ready. primary=1");
     }
 
-	void CameraManager::Update(float deltaTime)
+    void CameraManager::Update(float /*deltaTime*/)
     {
-        if (Input()->GetKeyDown(KeyCode::H))
+        auto go = gameObject();
+        if (!go.IsValid())
+            return;
+
+        auto* input = Input();
+        if (!input)
+            return;
+
+        if (input->GetKeyDown(KeyCode::H))
         {
-            AddComponent<AddGetRemoveComponentTest>();
+            // 현재 GameObject에 AddGetRemoveComponentTest 컴포넌트 추가
+            go.AddComponent<AddGetRemoveComponentTest>();
         }
-        if (Input()->GetKeyDown(KeyCode::J))
+        if (input->GetKeyDown(KeyCode::J))
         {
-			RemoveComponent<AddGetRemoveComponentTest>();
+            // 현재 GameObject에서 AddGetRemoveComponentTest 컴포넌트 제거
+            go.RemoveComponent<AddGetRemoveComponentTest>();
         }
-        if (Input()->GetKeyDown(KeyCode::K))
+        if (input->GetMouseButtonDown(MouseCode::Right))
         {
-            std::vector<AddGetRemoveComponentTest*> t = GetComponents<AddGetRemoveComponentTest>();
-			ALICE_LOG_INFO("Found {%d} AddGetRemoveComponentTest components.", t.size());
+            auto comps = go.GetComponents<AddGetRemoveComponentTest>();
+            ALICE_LOG_INFO("[CameraManager] Found {%d} AddGetRemoveComponentTest components.", static_cast<int>(comps.size()));
         }
-	}
+    }
 }
-
-
