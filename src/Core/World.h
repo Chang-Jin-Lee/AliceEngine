@@ -4,16 +4,24 @@
 #include <vector>
 #include <string>
 #include <type_traits> // for std::is_same_v
+#include <cstdint>
 
 #include "Core/Entity.h"
-#include "Core/Script.h"
+#include "Core/IScript.h"
+#include "Components/ScriptComponent.h"
 
 // 컴포넌트 헤더들
+#include "Components/ComponentStorage.h"
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/CameraComponent.h"
+
+// 물리 컴포넌트
+#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
+
+class IPhysicsWorld; // 물리
 
 namespace Alice
 {
@@ -32,6 +40,16 @@ namespace Alice
         GameObject FindGameObject(const std::string& name);
         void SetEntityName(EntityId id, const std::string& name);
         std::string GetEntityName(EntityId id) const;
+
+        // ==== 게임 오브젝트 생성 헬퍼 ====
+        /// 빈 게임 오브젝트를 생성합니다 (Transform만 가짐)
+        EntityId CreateEmpty();
+        
+        /// 큐브 게임 오브젝트를 생성합니다 (Transform + Material)
+        EntityId CreateCube();
+        
+        /// 카메라 게임 오브젝트를 생성합니다 (Transform + Camera)
+        EntityId CreateCamera();
 
         // ==== 제네릭 컴포넌트 관리 시스템 ====
         // 컴포넌트 타입 T에 따라 올바른 Map을 자동으로 찾아줍니다.
@@ -66,20 +84,18 @@ namespace Alice
             }
             else
             {
-                auto& map = GetMap<T>();
-                // emplace는 키가 이미 있으면 삽입하지 않고 iterator를 반환함
-                // or_insert_assign 등의 로직이 필요하면 [] 연산자 사용
-                // 여기서는 깔끔하게 []로 접근하여 생성 또는 갱신
+                auto& storage = GetStorage<T>();
                 if constexpr (std::is_default_constructible_v<T> && sizeof...(Args) == 0)
                 {
-                    return map[id];
+                    // 기본 생성자만 호출
+                    T defaultComp{};
+                    return storage.Add(id, std::move(defaultComp));
                 }
                 else
                 {
-                    // 인자가 있는 경우 덮어쓰기
+                    // 인자가 있는 경우 생성 후 추가
                     T newComp(std::forward<Args>(args)...);
-                    map[id] = std::move(newComp);
-                    return map[id];
+                    return storage.Add(id, std::move(newComp));
                 }
             }
         }
@@ -110,10 +126,8 @@ namespace Alice
             }
             else
             {
-                auto& map = GetMap<T>();
-                auto it = map.find(id);
-                if (it == map.end()) return nullptr;
-                return &it->second;
+                auto& storage = GetStorage<T>();
+                return storage.Get(id);
             }
         }
 
@@ -121,10 +135,26 @@ namespace Alice
         template <typename T>
         const T* GetComponent(EntityId id) const
         {
-            // const_cast를 피해 const 맵을 가져오는 헬퍼 필요하지만, 
-            // 간단하게 const_cast로 처리하거나 별도 GetMapConst 구현.
-            // 여기선 코드 단축을 위해 const_cast 활용 (안전함)
-            return const_cast<World*>(this)->GetComponent<T>(id);
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                auto it = m_scripts.find(id);
+                if (it == m_scripts.end()) return nullptr;
+
+                for (const auto& scriptComp : it->second)
+                {
+                    if (scriptComp.instance)
+                    {
+                        const T* casted = dynamic_cast<const T*>(scriptComp.instance.get());
+                        if (casted) return casted;
+                    }
+                }
+                return nullptr;
+            }
+            else
+            {
+                const auto& storage = GetStorageConst<T>();
+                return storage.Get(id);
+            }
         }
 
         /// 사용법: std::vector<MonsterScript*> list = world.GetComponents<MonsterScript>(id);
@@ -217,21 +247,68 @@ namespace Alice
             }
             else
             {
-                GetMap<T>().erase(id);
+                auto& storage = GetStorage<T>();
+                storage.Remove(id);
             }
         }
 
-        // 전체 맵 접근 (시스템/에디터용)
+        // ==== 전체 컴포넌트 순회 (시스템/에디터용) ====
+        // 
+        // 사용 예시 (읽기 전용):
+        //   for (const auto& [entityId, transform] : world.GetComponents<TransformComponent>())
+        //   {
+        //       // transform은 const TransformComponent&
+        //       // 연속 메모리에서 효율적으로 순회됨 (캐시 친화적)
+        //   }
+        //
+        // 사용 예시 (수정 가능):
+        //   for (auto& [entityId, transform] : world.GetComponents<TransformComponent>())
+        //   {
+        //       // transform은 TransformComponent&
+        //       transform.position.x += 1.0f; // 수정 가능
+        //   }
+        //
+        // 성능 최적화:
+        //   - 모든 TransformComponent가 연속 메모리에 저장되어 캐시 효율 극대화
+        //   - 순회 시 해시맵 조회 없이 직접 접근
+        //   - O(1) 삭제로 인한 순회 중 삭제 안전성 보장
         template <typename T>
-        const auto& GetComponents() const { return GetMapConst<T>(); }
+        auto GetComponents() const
+        {
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                // 스크립트는 별도 처리 필요 (현재 구조 유지)
+                static_assert(std::is_same_v<T, void>, "스크립트는 GetComponents()로 전체 순회할 수 없습니다.");
+            }
+            else
+            {
+                const auto& storage = GetStorageConst<T>();
+                return storage.GetView();
+            }
+        }
+
+        // 비상수 버전 (수정 가능한 순회)
+        template <typename T>
+        auto GetComponents()
+        {
+            if constexpr (std::is_base_of_v<IScript, T>)
+            {
+                static_assert(std::is_same_v<T, void>, "스크립트는 GetComponents()로 전체 순회할 수 없습니다.");
+            }
+            else
+            {
+                auto& storage = GetStorage<T>();
+                return storage.GetView(); // const 오버로딩으로 자동 판단
+            }
+        }
 
         // ==== 스크립트 (특수 케이스) ====
         // 스크립트는 1개 엔티티에 여러 개가 붙을 수 있어 별도 관리 추천
         ScriptComponent& AddScript(EntityId id, const std::string& scriptName);
 
         /// 전체 Script 컨테이너 ScriptSystem에서 사용
-        const std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() const { return m_scripts;  }
-        std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScripts() { return m_scripts; }
+        const std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScriptsInWorld() const { return m_scripts;  }
+        std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScriptsInWorld() { return m_scripts; }
 
         std::vector<ScriptComponent>* GetScripts(EntityId id);
         const std::vector<ScriptComponent>* GetScripts(EntityId id) const;
@@ -242,27 +319,53 @@ namespace Alice
         // 필요하다면 별도 헬퍼 함수 유지
         EntityId GetMainCameraEntityId();
 
+		//==============================================================
+		// 물리 씬 함수
+		void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
+		IPhysicsWorld* GetPhysicsWorld();
+		const IPhysicsWorld* GetPhysicsWorld() const;
+	private:
+		std::shared_ptr<IPhysicsWorld> m_physicsWorld;
+		//==============================================================
+
+	public:				
+        // ==== 지연 파괴 시스템 ====
+        /// 지연 파괴를 예약합니다. (delay 초 후에 파괴)
+        void ScheduleDelayedDestruction(EntityId id, float delay);
+        
+        /// 지연 파괴 시스템을 업데이트합니다. (매 프레임 호출 필요)
+        void UpdateDelayedDestruction(float deltaTime);
+
+        // ==== SlotMap 기반 유효성 검사 ====
+        /// 엔티티의 현재 generation을 가져옵니다. (없으면 0)
+        std::uint32_t GetEntityGeneration(EntityId id) const;
+        
+        /// 엔티티가 유효한지 확인합니다. (generation 비교)
+        bool IsEntityValid(EntityId id, std::uint32_t generation) const;
+
     private:
-        // if constexpr을 사용하여 타입에 맞는 맵을 반환
+        // if constexpr을 사용하여 타입에 맞는 저장소를 반환
         template <typename T>
-        auto& GetMap()
+        auto& GetStorage()
         {
             if constexpr (std::is_same_v<T, TransformComponent>) return m_transforms;
             else if constexpr (std::is_same_v<T, MaterialComponent>) return m_materials;
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
             else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
         }
 
-        // const 버전 맵 반환
+        // const 버전 저장소 반환
         template <typename T>
-        const auto& GetMapConst() const
+        const auto& GetStorageConst() const
         {
             if constexpr (std::is_same_v<T, TransformComponent>) return m_transforms;
             else if constexpr (std::is_same_v<T, MaterialComponent>) return m_materials;
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
+            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
             else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
         }
@@ -272,16 +375,26 @@ namespace Alice
 
         std::unordered_map<EntityId, std::string> m_names;
 
-        // 데이터 컨테이너들 (메모리 연속성을 위해 map<id, struct> 유지)
-        std::unordered_map<EntityId, TransformComponent> m_transforms;
-        std::unordered_map<EntityId, MaterialComponent> m_materials;
-        std::unordered_map<EntityId, SkinnedMeshComponent> m_skinnedMeshes;
-        std::unordered_map<EntityId, SkinnedAnimationComponent> m_skinnedAnimations;
-        std::unordered_map<EntityId, CameraComponent> m_cameras;
+        // Sparse Set 기반 컴포넌트 저장소들 (메모리 연속성 확보)
+        ComponentStorage<TransformComponent> m_transforms;
+        ComponentStorage<MaterialComponent> m_materials;
+        ComponentStorage<SkinnedMeshComponent> m_skinnedMeshes;
+        ComponentStorage<SkinnedAnimationComponent> m_skinnedAnimations;
+        ComponentStorage<CameraComponent> m_cameras;
 
+		// 물리		
+        ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
         // 스크립트는 vector를 값으로 가지므로 일반 T와 구조가 달라 따로 둠
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
-    };
+
+        // 지연 파괴 시스템 (EntityId -> 남은 시간)
+        std::unordered_map<EntityId, float> m_delayedDestructions;
+
+        // SlotMap 기반 유효성 검사 (EntityId -> Generation)
+        // 엔티티가 생성될 때 0으로 시작하고, 파괴될 때마다 증가합니다.
+        std::unordered_map<EntityId, std::uint32_t> m_entityGenerations;
+		
+	};
 
     template <typename T>
     T* IScript::GetComponent()

@@ -1,4 +1,4 @@
-﻿#include "Engine/Engine.h"
+#include "Engine/Engine.h"
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
@@ -22,21 +22,24 @@
 #include "json/json.hpp"
 
 // Core
-#include "Core/World.h"
+#include "Core/World.h" // 여기 컴포넌트 있찌롱
 #include "Core/InputSystem.h"
 #include "Core/TimeSystem.h"
 #include "Core/ResourceManager.h"
 #include "Core/Scene.h"
-#include "Core/Script.h"
+#include "Core/ScriptSystem.h"
 #include "Core/Delegate.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
+#include "Rendering/DeferredRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
+
+#include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 
 // 문자열 변환 / ImGui 래퍼
 #include "Core/StringUtils.h"
@@ -82,6 +85,19 @@ namespace Alice
 		ResourceManager m_resourceManager;
 		std::unique_ptr<SceneManager> m_sceneManager;
 
+		//===============================		
+		PhysicsModule m_physics; // 물리 모듈
+		//테스트용
+		std::unique_ptr<IRigidBody>    m_testBox;
+		std::unique_ptr<IPhysicsActor> m_testGround; // 옵션
+		EntityId                       m_testEntity = InvalidEntityId;
+
+		float m_physAccum = 0.0f;
+		float m_physFixedDt = 1.0f / 60.0f;
+		int   m_physMaxSubsteps = 4;
+		//===============================
+
+
 		ScriptSystem   m_scriptSystem;
 
 		ViewportPicker m_viewportPicker;
@@ -100,13 +116,21 @@ namespace Alice
 
 		std::unique_ptr<ID3D11RenderDevice>  m_renderDevice;
 		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
+		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+
+		// 렌더링 모드 전환 (true: Forward, false: Deferred)
+		bool m_useForwardRendering = false;
+
+		// 렌더링 시스템 전환 지연 처리 (안전한 전환을 위해)
+		bool m_pendingRenderSystemChange = false;
+		bool m_pendingUseForwardRendering = true;
 
 		// Skinned FBX 메시 렌더링용 레지스트리/시스템
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
-		std::vector<ForwardRenderSystem::SkinnedDrawCommand> m_skinnedDrawCommands;
+		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
 	};
 	namespace
 	{
@@ -156,6 +180,41 @@ namespace Alice
 			return true;
 		}
 	}
+	namespace
+	{
+		inline Alice::EntityId DecodeEntityId(void* p)
+		{
+			return static_cast<Alice::EntityId>(reinterpret_cast<std::uintptr_t>(p));
+		}
+
+		// 축 맞는지 확인해야함, 아니면 조율해줘야함
+		inline DirectX::XMFLOAT3 QuatToEulerXYZ(const Quat& qIn)
+		{
+			// normalize
+			Quat q = qIn;
+			const float len2 = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
+			if (len2 > 0.0f)
+			{
+				const float inv = 1.0f / std::sqrt(len2);
+				q.x *= inv; q.y *= inv; q.z *= inv; q.w *= inv;
+			}
+
+			// Tait–Bryan angles (X=pitch, Y=yaw, Z=roll) 근사
+			const float sinp = 2.0f * (q.w * q.x + q.y * q.z);
+			const float cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
+			const float pitch = std::atan2(sinp, cosp);
+
+			float siny = 2.0f * (q.w * q.y - q.z * q.x);
+			siny = std::clamp(siny, -1.0f, 1.0f);
+			const float yaw = std::asin(siny);
+
+			const float sinr = 2.0f * (q.w * q.z + q.x * q.y);
+			const float cosr = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+			const float roll = std::atan2(sinr, cosr);
+
+			return { pitch, yaw, roll };
+		}
+	}
 
 	Engine::Engine(bool editorMode) : pImpl(std::make_unique<Impl>())
 	{
@@ -165,6 +224,7 @@ namespace Alice
 
 	Engine::~Engine()
 	{
+		pImpl->m_physics.ShutdownContext();
 		pImpl->m_editorCore.Shutdown();
 	}
 
@@ -183,6 +243,11 @@ namespace Alice
 
 		// Editor: 프로젝트 루트 기준, Game: 실행 파일 기준
 		pImpl->m_resourceManager.Configure(!pImpl->m_editorMode, exeDir);
+
+		//===============================================================
+		// 물리 초기화(씬 초기화보다 선행되어야함 - 중요함)
+		PhysicsModule::ContextInitDesc ctx{};
+		if (!pImpl->m_physics.InitializeContext(ctx)) return false;
 
 		// ============================================= 시스템 초기화 =============================================
 		// 윈도우, 입력, 렌더 디바이스 생성
@@ -216,6 +281,13 @@ namespace Alice
 
 		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
 
+		// Deferred 렌더러 설정
+		pImpl->m_deferredRenderSystem = std::make_unique<DeferredRenderSystem>(*pImpl->m_renderDevice);
+		pImpl->m_deferredRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
+		pImpl->m_deferredRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
+
+		if (!pImpl->m_deferredRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
+
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
 		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
 
@@ -244,6 +316,8 @@ namespace Alice
 			ALICE_LOG_INFO("Engine::Initialize: Loaded SampleScene (Fallback or Editor).");
 		}
 
+		RefreshPhysicsForCurrentWorld(); // 물리 1회 수동호출 (씬 로드 이후 1회)
+
 		// ============================================= 후처리 =============================================
 		// 스키닝 레지스트리 확인 및 스크립트 서비스 바인딩
 		// 씬 전환할 때 실행될 TrimVideoMemory 바인딩
@@ -251,7 +325,9 @@ namespace Alice
 
 		pImpl->m_scriptSystem.SetServices(&pImpl->m_inputSystem, pImpl->m_sceneManager.get(), &pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
+		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::RefreshPhysicsForCurrentWorld); // 씬 로드 직후 추가작업 등록하는거 같음
 		pImpl->m_scriptSystem.onTrimVideoMemory.BindObject(this, &Engine::TrimVideoMemory);
+
 
 		ALICE_LOG_INFO("Engine::Initialize: Success (Entities: %zu)", pImpl->m_world.GetComponents<TransformComponent>().size());
 		return true;
@@ -375,12 +451,187 @@ namespace Alice
 		{
 			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
 			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
+
+			TickPhysics(dt); // 물리
 		}
 	}
 
+	//=========================================================
+	// 물리
+	void Alice::Engine::RefreshPhysicsForCurrentWorld()
+	{
+		// settings가 없으면, 물리월드 제거(비물리 씬)
+		const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
+
+		if (settingsMap.empty())
+		{
+			pImpl->m_world.SetPhysicsWorld(nullptr);
+
+			return;
+		}
+
+		const auto& settings = settingsMap.begin()->second;
+		if (!settings.enablePhysics)
+		{
+			pImpl->m_world.SetPhysicsWorld(nullptr);
+			return;
+		}
+
+		if (pImpl->m_world.GetPhysicsWorld())
+			return;
+
+		PhysicsModule::WorldDesc desc{};
+		desc.gravity = Vec3(settings.gravity.x, settings.gravity.y, settings.gravity.z);
+		// 필요하면 여기서 CCD / 이벤트 옵션들 설정
+
+		std::shared_ptr<IPhysicsWorld> world = pImpl->m_physics.CreateWorld(desc); // shared_ptr<IPhysicsWorld> 반환
+		ALICE_LOG_INFO("PhysicsWorld created: %p", world.get());
+		pImpl->m_world.SetPhysicsWorld(world);
+
+		// fixedDt/maxSubsteps도 엔진이 기억해야 한다면 Engine::Impl에 저장해 둬라.
+
+		//테스트용 바디 생성
+		// settings 반영
+		pImpl->m_physFixedDt = settings.fixedDt;
+		pImpl->m_physMaxSubsteps = settings.maxSubsteps;
+		pImpl->m_physAccum = 0.0f;
+
+		// ---- Smoke test (딱 한번만) ----
+		if (!pImpl->m_testBox)
+		{
+			IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
+			if (pw)
+			{
+				// 바닥
+				pImpl->m_testGround = pw->CreateStaticPlaneActor();
+
+				// 테스트 엔티티 하나 만들고 Transform 추가(이미 있으면 스킵 가능)
+				pImpl->m_testEntity = pImpl->m_world.CreateEntity();
+				auto& tr = pImpl->m_world.AddComponent<TransformComponent>(pImpl->m_testEntity);
+				tr.position = { 0.f, 5.f, 0.f };
+				tr.rotation = { 0.f, 0.f, 0.f };
+
+				// 동적 박스
+				RigidBodyDesc rb{};
+				rb.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(pImpl->m_testEntity));
+
+				BoxColliderDesc box{};
+				box.halfExtents = { 0.5f, 0.5f, 0.5f };
+				box.userData = rb.userData;
+
+				pImpl->m_testBox = pw->CreateDynamicBox(
+					Vec3(0.f, 5.f, 0.f),
+					Quat::Identity,
+					rb,
+					box
+				);
+
+				ALICE_LOG_INFO("SmokeTest box created. entity=%llu", (unsigned long long)pImpl->m_testEntity);
+			}
+		}
+		//----------여기까지 테스트용
+
+	}
+
+	void Engine::TickPhysics(float dt)
+	{
+		IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
+		if (!pw) return;
+
+		dt = std::min(dt, 0.25f);
+
+		pImpl->m_physAccum += dt;
+		int steps = 0;
+
+		std::vector<ActiveTransform> moved;
+
+		while (pImpl->m_physAccum >= pImpl->m_physFixedDt && steps < pImpl->m_physMaxSubsteps)
+		{
+			pw->Step(pImpl->m_physFixedDt);
+
+			moved.clear();
+			pw->DrainActiveTransforms(moved);
+
+			for (const auto& at : moved)
+			{
+				if (!at.userData) continue;
+				const EntityId id = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(at.userData));
+
+				auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
+				if (!tr) continue;
+
+				tr->position = { at.position.x, at.position.y, at.position.z };
+				// 회전은 나중에(일단 위치만 확인해도 스모크 테스트 충분)
+			}
+
+			pImpl->m_physAccum -= pImpl->m_physFixedDt;
+			++steps;
+		}
+
+		if (steps == pImpl->m_physMaxSubsteps)
+			pImpl->m_physAccum = 0.0f;
+
+		// 로그로 떨어지는지 확인 (1초에 1번만)
+		static float logAccum = 0.f;
+		logAccum += dt;
+		if (logAccum > 1.f && pImpl->m_testBox)
+		{
+			logAccum = 0.f;
+			auto p = pImpl->m_testBox->GetPosition();
+			ALICE_LOG_INFO("TestBox Y = %.3f", p.y);
+		}
+	}
+
+	//=========================================================
+
 	void Engine::Render()
 	{
-		if (!pImpl->m_renderDevice || !pImpl->m_forwardRenderSystem) return;
+		if (!pImpl->m_renderDevice) return;
+
+		// ============================================= 렌더링 시스템 전환 처리 =============================================
+		// 렌더링 시작 전에 전환 요청이 있으면 안전하게 전환합니다.
+		if (pImpl->m_pendingRenderSystemChange)
+		{
+			// GPU 컨텍스트의 모든 리소스 바인딩 해제 (안전한 전환을 위해)
+			auto* context = pImpl->m_renderDevice->GetImmediateContext();
+			if (context)
+			{
+				// 모든 렌더 타겟 해제
+				ID3D11RenderTargetView* nullRTVs[8] = { nullptr };
+				context->OMSetRenderTargets(8, nullRTVs, nullptr);
+
+				// 모든 셰이더 리소스 해제
+				ID3D11ShaderResourceView* nullSRVs[16] = { nullptr };
+				context->VSSetShaderResources(0, 16, nullSRVs);
+				context->PSSetShaderResources(0, 16, nullSRVs);
+
+				// 모든 상수 버퍼 해제
+				ID3D11Buffer* nullCBs[16] = { nullptr };
+				context->VSSetConstantBuffers(0, 16, nullCBs);
+				context->PSSetConstantBuffers(0, 16, nullCBs);
+
+				// 모든 셰이더 해제
+				context->VSSetShader(nullptr, nullptr, 0);
+				context->PSSetShader(nullptr, nullptr, 0);
+				context->GSSetShader(nullptr, nullptr, 0);
+				context->HSSetShader(nullptr, nullptr, 0);
+				context->DSSetShader(nullptr, nullptr, 0);
+				context->CSSetShader(nullptr, nullptr, 0);
+
+				// Flush (모든 명령이 완료될 때까지 대기)
+				context->Flush();
+			}
+
+			// 렌더링 시스템 전환
+			pImpl->m_useForwardRendering = pImpl->m_pendingUseForwardRendering;
+			pImpl->m_pendingRenderSystemChange = false;
+
+			ALICE_LOG_INFO("Engine::Render: 렌더링 시스템 전환 완료 (Forward: %s)",
+				pImpl->m_useForwardRendering ? "true" : "false");
+		}
+
+		if (pImpl->m_useForwardRendering && !pImpl->m_forwardRenderSystem) return;
+		if (!pImpl->m_useForwardRendering && !pImpl->m_deferredRenderSystem) return;
 
 		float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
 		pImpl->m_renderDevice->BeginFrame(clearColor); // Clear Color: Dark Blue
@@ -394,10 +645,11 @@ namespace Alice
 			// 에디터 UI 그리기 (인자 전달 간소화)
 			int shadingMode = static_cast<int>(pImpl->m_shadingMode);
 			pImpl->m_editorCore.DrawEditorUI(
-				pImpl->m_world, pImpl->m_camera, *pImpl->m_forwardRenderSystem, pImpl->m_sceneManager.get(),
+				pImpl->m_world, pImpl->m_camera, *pImpl->m_forwardRenderSystem, *pImpl->m_deferredRenderSystem, pImpl->m_sceneManager.get(),
 				pImpl->m_timer.DeltaTime(), (pImpl->m_timer.DeltaTime() > 0) ? (1.0f / pImpl->m_timer.DeltaTime()) : 0.0f,
 				pImpl->m_isPlaying, shadingMode, pImpl->m_useFillLight,
-				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed
+				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
+				pImpl->m_useForwardRendering
 			);
 			pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
 
@@ -418,29 +670,54 @@ namespace Alice
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
 		// ============================================= 렌더링 =============================================
-		// Forward Pass 수행
-		// 게임 모드: 강제 PBR, 에디터: 선택된 쉐이딩 모드
-		const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
-
+		// Forward/Deferred 렌더링 모드에 따라 분기
 		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
 
 		// 카메라 엔티티 ID 집합 구성
 		std::unordered_set<EntityId> cameraIDs;
 		for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
 
-		pImpl->m_forwardRenderSystem->Render(
-			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
-		);
+		const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
 
-		// ============================================= 복사 =============================================
-		// 렌더 타겟 -> 백버퍼 복사
+		if (pImpl->m_useForwardRendering)
 		{
-			Microsoft::WRL::ComPtr<ID3D11Resource> src, dst;
-			pImpl->m_forwardRenderSystem->GetSceneSRV()->GetResource(src.GetAddressOf());
-			pImpl->m_renderDevice->GetBackBufferRTV()->GetResource(dst.GetAddressOf());
-			pImpl->m_renderDevice->GetImmediateContext()->CopyResource(dst.Get(), src.Get());
+			// Forward 렌더링
+			pImpl->m_forwardRenderSystem->Render(
+				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+			);
 		}
+		else
+		{
+			// Deferred 렌더링
+			pImpl->m_deferredRenderSystem->Render(
+				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+			);
+		}
+
+		// 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
+		if (!pImpl->m_editorMode)
+		{
+			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
+			if (backBufferRTV)
+			{
+				D3D11_VIEWPORT viewport = {};
+				viewport.Width = static_cast<float>(pImpl->m_width);
+				viewport.Height = static_cast<float>(pImpl->m_height);
+				viewport.MaxDepth = 1.0f;
+
+				if (pImpl->m_useForwardRendering)
+				{
+					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+				}
+				else
+				{
+					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+				}
+			}
+		}
+
 
 		// ============================================= 오버레이 =============================================
 		// 디버그 드로우 및 ImGui(에디터 전용)
@@ -492,6 +769,22 @@ namespace Alice
 	void Engine::TrimVideoMemory()
 	{
 		pImpl->m_renderDevice->TrimVideoMemory();
+	}
+
+	void Engine::SetUseForwardRendering(bool useForward)
+	{
+		// 즉시 전환하지 않고, 다음 프레임 시작 시 전환하도록 플래그만 설정
+		// 이렇게 하면 렌더링 중간에 리소스 상태가 꼬이는 것을 방지할 수 있습니다.
+		if (pImpl->m_useForwardRendering != useForward)
+		{
+			pImpl->m_pendingRenderSystemChange = true;
+			pImpl->m_pendingUseForwardRendering = useForward;
+		}
+	}
+
+	bool Engine::GetUseForwardRendering() const
+	{
+		return pImpl->m_useForwardRendering;
 	}
 
 	void Engine::UpdateIblForScene()
@@ -569,6 +862,10 @@ namespace Alice
 		if (pImpl->m_forwardRenderSystem)
 		{
 			pImpl->m_forwardRenderSystem->Resize(width, height);
+		}
+		if (pImpl->m_deferredRenderSystem)
+		{
+			pImpl->m_deferredRenderSystem->Resize(width, height);
 		}
 	}
 
