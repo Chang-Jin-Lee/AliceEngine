@@ -1740,6 +1740,8 @@ namespace Alice
                 }
 
                 // 엔티티 선택 (Gizmo 위에 있지 않을 때만)
+                // 최종 빌드(Release)에서는 뷰포트 피커가 작동하지 않도록 함
+#ifdef _DEBUG
                 if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 {
                     // Gizmo 위에 있지 않고 사용 중이 아닐 때만 선택 처리
@@ -1758,11 +1760,12 @@ namespace Alice
                             // UV 좌표를 실제 이미지 크기 기준으로 계산
                             const float u = (imgSize.x > 0.0f) ? (localX / imgSize.x) : 0.0f;
                             const float v = (imgSize.y > 0.0f) ? (localY / imgSize.y) : 0.0f;
-                            EntityId hit = picker.Pick(world, camera, u, v);
+                            EntityId hit = picker.Pick(world, camera, m_skinnedRegistry, u, v);
                             selectedEntity = hit;
                         }
                     }
                 }
+#endif // _DEBUG
             }
             else
             {

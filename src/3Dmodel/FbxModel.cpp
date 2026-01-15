@@ -33,6 +33,11 @@ struct FbxModel::Impl
 	std::unordered_map<std::string,int> nodeIndexOfName; // same as skeleton.NodeIndexOfName
 
 	FbxModel::AnimationType animType = FbxModel::AnimationType::None;
+
+	// Local bounds (computed from CPU vertices)
+	bool     boundsValid = false;
+	XMFLOAT3 boundsMin{ 0,0,0 };
+	XMFLOAT3 boundsMax{ 0,0,0 };
 };
 
 FbxModel::FbxModel() : m_(new Impl) {}
@@ -48,15 +53,46 @@ void FbxModel::Release()
 	m_->scene = nullptr;
 	m_->importer.reset();
 	m_->animType = AnimationType::None;
+	m_->boundsValid = false;
+	m_->boundsMin = { 0,0,0 };
+	m_->boundsMax = { 0,0,0 };
 }
 
-// pathW´Â Àý´ë°æ·Î°¡ µé¾î¿Â´Ù.
+namespace
+{
+	static void ComputeLocalBoundsFromVertices(const std::vector<VertexSkinnedTBN>& verts,
+	                                          bool& ioValid,
+	                                          DirectX::XMFLOAT3& ioMin,
+	                                          DirectX::XMFLOAT3& ioMax)
+	{
+		if (verts.empty())
+		{
+			ioValid = false;
+			ioMin = { 0,0,0 };
+			ioMax = { 0,0,0 };
+			return;
+		}
+
+		DirectX::XMFLOAT3 mn{ FLT_MAX, FLT_MAX, FLT_MAX };
+		DirectX::XMFLOAT3 mx{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
+		for (const auto& v : verts)
+		{
+			mn.x = (std::min)(mn.x, v.pos.x); mn.y = (std::min)(mn.y, v.pos.y); mn.z = (std::min)(mn.z, v.pos.z);
+			mx.x = (std::max)(mx.x, v.pos.x); mx.y = (std::max)(mx.y, v.pos.y); mx.z = (std::max)(mx.z, v.pos.z);
+		}
+		ioValid = true;
+		ioMin = mn;
+		ioMax = mx;
+	}
+}
+
+// pathWï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Î°ï¿½ ï¿½ï¿½ï¿½Â´ï¿½.
 bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 {
 	Release();
 	m_->importer = std::make_unique<Assimp::Importer>();
-    // FBX ÇÇ¹þ/ÇÁ¸®/Æ÷½ºÆ® È¸Àü º¸Á¸À» ²ô¸é Assimp°¡ »ý¼ºÇÏ´Â _$AssimpFbx$* ÇïÆÛ ³ëµå°¡ Á¦°ÅµÇ¾î
-    // º»/³ëµå ¼ö°¡ DCC(Blender)¿Í ´õ ÀÏÄ¡ÇÏ°Ô µË´Ï´Ù.
+    // FBX ï¿½Ç¹ï¿½/ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½Æ® È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Assimpï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ _$AssimpFbx$* ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½å°¡ ï¿½ï¿½ï¿½ÅµÇ¾ï¿½
+    // ï¿½ï¿½/ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ DCC(Blender)ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Ï°ï¿½ ï¿½Ë´Ï´ï¿½.
     m_->importer->SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
 	m_->importer->SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, 4);
 	std::string pathA = Utf8FromWString(pathW);
@@ -81,7 +117,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 	auto baseDir = std::filesystem::path(pathW).parent_path().wstring();
 
 	// Build subsystems
-	// ÇØ´çÇÏ´Â Æú´õ¿¡ ÀÖ´Â ¸ðµç ÅØ½ºÃÄ¸¦ ÀÐ¾îº½.
+	// ï¿½Ø´ï¿½ï¿½Ï´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½ï¿½ ï¿½Ø½ï¿½ï¿½Ä¸ï¿½ ï¿½Ð¾îº½.
 	if (!m_->materials.Load(device, m_->scene, baseDir)) return false;
 	if (!m_->geometry.Build(device, m_->scene)) return false;
 	m_->skeleton.BuildFromScene(m_->scene);
@@ -90,7 +126,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 
 	// Decide animation mode and prepare
 	bool hasBones = m_->skeleton.HasBones();
-	// º»Àº ¾ø´Âµ¥ ¾Ö´Ï¸ÞÀÌ¼ÇÀÌ ÀÖ´Â°æ¿ì. Áï ¸®Áöµå ¾Ö´Ï¸ÞÀÌ¼ÇÀÏ¶§
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Âµï¿½ ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ï¿½ï¿½ ï¿½Ö´Â°ï¿½ï¿½. ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ï¿½Ï¶ï¿½
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{
 		m_->animType = AnimationType::Rigid;
@@ -134,7 +170,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			}
 		}
 	}
-	// º»µµ ÀÖ°í ¾Ö´Ï¸ÞÀÌ¼Çµµ ÀÖ´Â °æ¿ì. Skinned ¾Ö´Ï¸ÞÀÌ¼Ç ÀÏ¶§.
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ö°ï¿½ ï¿½Ö´Ï¸ï¿½ï¿½Ì¼Çµï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½ï¿½. Skinned ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ ï¿½Ï¶ï¿½.
 	else if (hasBones)
 	{
 		m_->animType = AnimationType::Skinned;
@@ -167,21 +203,21 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 
 			//while (!q.empty()) {
 			//	const aiNode* node = q.front(); q.pop();
-			//	// ¸Þ½Ã Ã³¸®
+			//	// ï¿½Þ½ï¿½ Ã³ï¿½ï¿½
 			//	// NOTE:
-			//	// - node->mMeshes ´Â "¸Þ½Ã ÀÎµ¦½º ¹è¿­"ÀÔ´Ï´Ù.
-			//	// - std::views::counted(node->mMeshes, node->mNumMeshes) ¸¦ for-each ÇÏ¸é
-			//	//   mi ÀÚÃ¼°¡ meshIdx °ªÀÎµ¥, ¾Æ·¡¿¡¼­ node->mMeshes[mi] ·Î ´Ù½Ã ÀÎµ¦½ÌÇÏ¸é
-			//	//   Àß¸øµÈ ¸Þ¸ð¸®¸¦ ÂüÁ¶ÇÏ¿© baseVertex Å×ÀÌºíÀÌ ±úÁö°í, °á°úÀûÀ¸·Î ½ºÅ°´× °¡ÁßÄ¡°¡
-			//	//   ¾û¶×ÇÑ Á¤Á¡¿¡ ¸ÅÇÎµÇ¾î ¸Þ½Ã°¡ 'ºÎÃª»ì/°¡½Ã'Ã³·³ Âõ¾îÁý´Ï´Ù.
-			//	// - D3D11-AliceTutorial/31_IBL(App.cpp)ÀÇ ¹æ½ÄÃ³·³, ÀÎµ¦½º(0..mNumMeshes-1)·Î ¼øÈ¸ÇÕ´Ï´Ù.
+			//	// - node->mMeshes ï¿½ï¿½ "ï¿½Þ½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½è¿­"ï¿½Ô´Ï´ï¿½.
+			//	// - std::views::counted(node->mMeshes, node->mNumMeshes) ï¿½ï¿½ for-each ï¿½Ï¸ï¿½
+			//	//   mi ï¿½ï¿½Ã¼ï¿½ï¿½ meshIdx ï¿½ï¿½ï¿½Îµï¿½, ï¿½Æ·ï¿½ï¿½ï¿½ï¿½ï¿½ node->mMeshes[mi] ï¿½ï¿½ ï¿½Ù½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ï¿½Ï¸ï¿½
+			//	//   ï¿½ß¸ï¿½ï¿½ï¿½ ï¿½Þ¸ð¸®¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¿ï¿½ baseVertex ï¿½ï¿½ï¿½Ìºï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Å°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½ï¿½
+			//	//   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ÎµÇ¾ï¿½ ï¿½Þ½Ã°ï¿½ 'ï¿½ï¿½Ãªï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½'Ã³ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½.
+			//	// - D3D11-AliceTutorial/31_IBL(App.cpp)ï¿½ï¿½ ï¿½ï¿½ï¿½Ã³ï¿½ï¿½, ï¿½Îµï¿½ï¿½ï¿½(0..mNumMeshes-1)ï¿½ï¿½ ï¿½ï¿½È¸ï¿½Õ´Ï´ï¿½.
 			//	for (unsigned mi = 0; mi < node->mNumMeshes; ++mi)
 			//	{
 			//		const unsigned meshIdx = node->mMeshes[mi];
 			//		baseVertex[meshIdx] = cursor;
 			//		cursor += m_->scene->mMeshes[meshIdx]->mNumVertices;
 			//	}
-			//	// ÀÚ½Ä ³ëµå Å¥¿¡ Ãß°¡
+			//	// ï¿½Ú½ï¿½ ï¿½ï¿½ï¿½ Å¥ï¿½ï¿½ ï¿½ß°ï¿½
 			//	for (const aiNode* child : std::views::counted(node->mChildren, node->mNumChildren)) {
 			//		q.push(child);
 			//	}
@@ -226,7 +262,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 				verts[i].boneWeight = { inf[i].w[0], inf[i].w[1], inf[i].w[2], inf[i].w[3] };
 			}
 
-			// === Debug: ½ºÅ°´× ÀÎµ¦½º/°¡ÁßÄ¡°¡ Á¤»ó ¹üÀ§ÀÎÁö ºü¸£°Ô È®ÀÎ ===
+			// === Debug: ï¿½ï¿½Å°ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ ===
 			// {
 			// 	const auto& boneNamesDbg = m_->skeleton.GetBoneNames();
 			// 	unsigned short maxIdx = 0;
@@ -258,29 +294,29 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			m_->geometry.RebuildVBFromCPU(device);
 		}
 	}
-	// º»µµ ¾ø°í ¾Ö´Ï¸ÞÀÌ¼Çµµ ¾øÀ»¶§. Áï StaticÇÑ ¸ðµ¨ÀÏ¶§.
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ö´Ï¸ï¿½ï¿½Ì¼Çµï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½. ï¿½ï¿½ Staticï¿½ï¿½ ï¿½ï¿½ï¿½Ï¶ï¿½.
 	else
 	{
 		m_->animType = AnimationType::None;
-		// ½ºÅ°´× ¼ÎÀÌ´õ¸¦ Àç»ç¿ëÇÏ±â À§ÇØ, ¸ðµç Á¤Á¡À» 0¹ø º»(Identity)¿¡ °íÁ¤ÇÔ
-		// °¡ÁßÄ¡(Weight)°¡ 0ÀÌ¸é È­¸é¿¡ ±×·ÁÁöÁö ¾ÊÀ¸¹Ç·Î 1.0À¸·Î ¼³Á¤ÇØ¾ß ÇÔ.
+		// ï¿½ï¿½Å°ï¿½ï¿½ ï¿½ï¿½ï¿½Ì´ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï±ï¿½ ï¿½ï¿½ï¿½ï¿½, ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 0ï¿½ï¿½ ï¿½ï¿½(Identity)ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ï¿½ï¿½ï¿½Ä¡(Weight)ï¿½ï¿½ 0ï¿½Ì¸ï¿½ È­ï¿½é¿¡ ï¿½×·ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ 1.0ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ø¾ï¿½ ï¿½ï¿½.
 		auto& verts = m_->geometry.GetCPUVertices();
 		if (!verts.empty())
 		{
 			for (auto& v : verts)
 			{
-				// 0¹ø º» ÀÎµ¦½º »ç¿ë Identity Çà·Ä
+				// 0ï¿½ï¿½ ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ Identity ï¿½ï¿½ï¿½
 				v.boneIdx[0] = 0;
 				v.boneIdx[1] = 0;
 				v.boneIdx[2] = 0;
 				v.boneIdx[3] = 0;
 
-				// Ã¹ ¹øÂ° º»¿¡ °¡ÁßÄ¡ 100% ÇÒ´ç
+				// Ã¹ ï¿½ï¿½Â° ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ä¡ 100% ï¿½Ò´ï¿½
 				v.boneWeight = DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
 			}
 		}
 
-		// º¯°æµÈ Á¤Á¡ µ¥ÀÌÅÍ¸¦ GPU ¹öÆÛ¿¡ ´Ù½Ã ¾÷·Îµå
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Í¸ï¿½ GPU ï¿½ï¿½ï¿½Û¿ï¿½ ï¿½Ù½ï¿½ ï¿½ï¿½ï¿½Îµï¿½
 		m_->geometry.RebuildVBFromCPU(device);
 	}
 
@@ -288,6 +324,12 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 	m_->anim.InitMetadata(m_->scene);
 	m_->anim.SetType((m_->animType == AnimationType::Rigid) ? FbxAnimation::AnimType::Rigid : (m_->animType == AnimationType::Skinned ? FbxAnimation::AnimType::Skinned : FbxAnimation::AnimType::None));
 	m_->anim.EnsureBoneCB(device, 1023);
+
+	// Compute local AABB from CPU vertices (bind pose positions)
+	{
+		const auto& verts = m_->geometry.GetCPUVertices();
+		ComputeLocalBoundsFromVertices(verts, m_->boundsValid, m_->boundsMin, m_->boundsMax);
+	}
 	return true;
 }
 
@@ -309,7 +351,7 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 		aiProcess_GenSmoothNormals | aiProcess_CalcTangentSpace | aiProcess_ConvertToLeftHanded |
 		aiProcess_OptimizeMeshes | aiProcess_OptimizeGraph | aiProcess_LimitBoneWeights;
 
-	// pHint ´Â È®ÀåÀÚ ÈùÆ®(¿¹: "fbx")·Î ¾²ÀÔ´Ï´Ù.
+	// pHint ï¿½ï¿½ È®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®(ï¿½ï¿½: "fbx")ï¿½ï¿½ ï¿½ï¿½ï¿½Ô´Ï´ï¿½.
 	const char* hint = nullptr;
 	std::string ext;
 	{
@@ -340,7 +382,7 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 	m_->skeleton.CollectBonesAndOffsets(m_->scene);
 	m_->nodeIndexOfName = m_->skeleton.NodeIndexOfName();
 
-	// Decide animation mode and prepare (Load()¿Í µ¿ÀÏ)
+	// Decide animation mode and prepare (Load()ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 	bool hasBones = m_->skeleton.HasBones();
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{
@@ -449,31 +491,37 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 	{
 		m_->animType = AnimationType::None;
 
-		// ½ºÅ°´× ¼ÎÀÌ´õ¸¦ Àç»ç¿ëÇÏ±â À§ÇØ, ¸ðµç Á¤Á¡À» 0¹ø º»(Identity)¿¡ °íÁ¤ÇÔ
-		// °¡ÁßÄ¡(Weight)°¡ 0ÀÌ¸é È­¸é¿¡ ±×·ÁÁöÁö ¾ÊÀ¸¹Ç·Î 1.0À¸·Î ¼³Á¤ÇØ¾ß ÇÔ.
+		// ï¿½ï¿½Å°ï¿½ï¿½ ï¿½ï¿½ï¿½Ì´ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï±ï¿½ ï¿½ï¿½ï¿½ï¿½, ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 0ï¿½ï¿½ ï¿½ï¿½(Identity)ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ï¿½ï¿½ï¿½Ä¡(Weight)ï¿½ï¿½ 0ï¿½Ì¸ï¿½ È­ï¿½é¿¡ ï¿½×·ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ 1.0ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ø¾ï¿½ ï¿½ï¿½.
 		auto& verts = m_->geometry.GetCPUVertices();
 		if (!verts.empty())
 		{
 			for (auto& v : verts)
 			{
-				// 0¹ø º» ÀÎµ¦½º »ç¿ë Identity Çà·Ä
+				// 0ï¿½ï¿½ ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ Identity ï¿½ï¿½ï¿½
 				v.boneIdx[0] = 0;
 				v.boneIdx[1] = 0;
 				v.boneIdx[2] = 0;
 				v.boneIdx[3] = 0;
 
-				// Ã¹ ¹øÂ° º»¿¡ °¡ÁßÄ¡ 100% ÇÒ´ç
+				// Ã¹ ï¿½ï¿½Â° ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ä¡ 100% ï¿½Ò´ï¿½
 				v.boneWeight = DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
 			}
 		}
 
-		// º¯°æµÈ Á¤Á¡ µ¥ÀÌÅÍ¸¦ GPU ¹öÆÛ¿¡ ´Ù½Ã ¾÷·Îµå
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Í¸ï¿½ GPU ï¿½ï¿½ï¿½Û¿ï¿½ ï¿½Ù½ï¿½ ï¿½ï¿½ï¿½Îµï¿½
 		m_->geometry.RebuildVBFromCPU(device);
 	}
 
 	m_->anim.InitMetadata(m_->scene);
 	m_->anim.SetType((m_->animType == AnimationType::Rigid) ? FbxAnimation::AnimType::Rigid : (m_->animType == AnimationType::Skinned ? FbxAnimation::AnimType::Skinned : FbxAnimation::AnimType::None));
 	m_->anim.EnsureBoneCB(device, 1023);
+
+	// Compute local AABB from CPU vertices (bind pose positions)
+	{
+		const auto& verts = m_->geometry.GetCPUVertices();
+		ComputeLocalBoundsFromVertices(verts, m_->boundsValid, m_->boundsMin, m_->boundsMax);
+	}
 	return true;
 }
 
@@ -525,5 +573,14 @@ const std::unordered_map<std::string,int>& FbxModel::GetNodeIndexOfName() const 
 const std::vector<std::string>& FbxModel::GetBoneNames() const { return m_->skeleton.GetBoneNames(); }
 const std::vector<XMFLOAT4X4>& FbxModel::GetBoneOffsets() const { return m_->skeleton.GetBoneOffsets(); }
 const XMFLOAT4X4& FbxModel::GetGlobalInverse() const { return m_->globalInverse; }
+
+bool FbxModel::GetLocalBounds(DirectX::XMFLOAT3& outMin, DirectX::XMFLOAT3& outMax) const
+{
+	if (!m_ || !m_->boundsValid)
+		return false;
+	outMin = m_->boundsMin;
+	outMax = m_->boundsMax;
+	return true;
+}
 
 
