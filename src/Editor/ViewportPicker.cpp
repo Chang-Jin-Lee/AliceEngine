@@ -4,6 +4,9 @@
 #include <cfloat>
 #include <cmath>
 
+#include "Rendering/SkinnedMeshRegistry.h"
+#include "3Dmodel/FbxModel.h"
+
 using namespace DirectX;
 
 namespace Alice
@@ -12,11 +15,11 @@ namespace Alice
     {
         struct Ray
         {
-            XMFLOAT3 origin;    // ½ÃÀÛÁ¡
-            XMFLOAT3 direction; // Á¤±ÔÈ­µÈ ¹æÇâ º¤ÅÍ
+            XMFLOAT3 origin;    // ì‹œì‘ì 
+            XMFLOAT3 direction; // ì •ê·œí™”ëœ ë°©í–¥ ë²¡í„°
         };
 
-        // ·ÎÄÃ °ø°£¿¡¼­ÀÇ ·¹ÀÌ - AABB([-1,1]^3) ±³Â÷ Å×½ºÆ®
+        // ë¡œì»¬ ê³µê°„ì—ì„œì˜ ë ˆì´ - AABB([-1,1]^3) êµì°¨ í…ŒìŠ¤íŠ¸
         bool IntersectRayAABB(const Ray& ray,
                               const XMFLOAT3& min,
                               const XMFLOAT3& max,
@@ -28,7 +31,7 @@ namespace Alice
             XMVECTOR boxMin = XMLoadFloat3(&min);
             XMVECTOR boxMax = XMLoadFloat3(&max);
 
-            // ½½·¦(Slab) ¹æ½Ä
+            // ìŠ¬ë©(Slab) ë°©ì‹
             XMVECTOR invD = XMVectorReciprocal(D);
 
             XMVECTOR t1 = XMVectorMultiply(XMVectorSubtract(boxMin, O), invD);
@@ -52,10 +55,11 @@ namespace Alice
 
     EntityId ViewportPicker::Pick(const World& world,
                                   const Camera& camera,
+                                  const SkinnedMeshRegistry* skinnedRegistry,
                                   float u,
                                   float v) const
     {
-        // 1) NDC ÁÂÇ¥ (-1~1) º¯È¯
+        // 1) NDC ì¢Œí‘œ (-1~1) ë³€í™˜
         const float ndcX = 2.0f * u - 1.0f;
         const float ndcY = 1.0f - 2.0f * v;
 
@@ -64,7 +68,7 @@ namespace Alice
         XMMATRIX viewProj    = XMMatrixMultiply(view, projection);
         XMMATRIX invViewProj = XMMatrixInverse(nullptr, viewProj);
 
-        // 2) Å¬¸³ °ø°£ ¡æ ¿ùµå °ø°£
+        // 2) í´ë¦½ ê³µê°„ â†’ ì›”ë“œ ê³µê°„
         XMVECTOR nearPoint = XMVectorSet(ndcX, ndcY, 0.0f, 1.0f);
         XMVECTOR farPoint  = XMVectorSet(ndcX, ndcY, 1.0f, 1.0f);
 
@@ -73,7 +77,7 @@ namespace Alice
 
         XMVECTOR dirWorld = XMVector3Normalize(XMVectorSubtract(farPoint, nearPoint));
 
-        // ·¹ÀÌÀÇ ½ÃÀÛÁ¡Àº Ä«¸Ş¶ó À§Ä¡
+        // ë ˆì´ì˜ ì‹œì‘ì ì€ ì¹´ë©”ë¼ ìœ„ì¹˜
         XMFLOAT3 camPos = camera.GetPosition();
         XMVECTOR originWorld = XMLoadFloat3(&camPos);
 
@@ -88,14 +92,39 @@ namespace Alice
         float   nearestDist = FLT_MAX;
         EntityId hitEntity  = InvalidEntityId;
 
-        // ¿ÀºêÁ§Æ®º°·Î: ¿ùµå Çà·ÄÀÇ ¿ªÇà·ÄÀ» »ç¿ëÇØ ·¹ÀÌ¸¦ ·ÎÄÃ °ø°£À¸·Î º¯È¯ ÈÄ,
-        // ·ÎÄÃ AABB([-1,1]^3)¿¡ ´ëÇÑ ±³Â÷¸¦ °Ë»çÇÕ´Ï´Ù.
-        const XMFLOAT3 boxMin(-1.0f, -1.0f, -1.0f);
-        const XMFLOAT3 boxMax( 1.0f,  1.0f,  1.0f);
+        // ì˜¤ë¸Œì íŠ¸ë³„ë¡œ: ì›”ë“œ í–‰ë ¬ì˜ ì—­í–‰ë ¬ì„ ì‚¬ìš©í•´ ë ˆì´ë¥¼ ë¡œì»¬ ê³µê°„ìœ¼ë¡œ ë³€í™˜ í›„,
+        // ë¡œì»¬ AABB([-1,1]^3)ì— ëŒ€í•œ êµì°¨ë¥¼ ê²€ì‚¬í•©ë‹ˆë‹¤.
+        const XMFLOAT3 defaultBoxMin(-1.0f, -1.0f, -1.0f);
+        const XMFLOAT3 defaultBoxMax( 1.0f,  1.0f,  1.0f);
 
         for (const auto& [entityId, transform] : transforms)
         {
-            // ¿ùµå Çà·Ä = S * R * T (·»´õ·¯¿Í µ¿ÀÏÇÑ ¹æ½Ä)
+            // ì›”ë“œ í–‰ë ¬ = S * R * T (ë Œë”ëŸ¬ì™€ ë™ì¼í•œ ë°©ì‹)
+            XMFLOAT3 boxMin = defaultBoxMin;
+            XMFLOAT3 boxMax = defaultBoxMax;
+
+            // SkinnedMeshComponentê°€ ìˆëŠ” ê²½ìš°, AABBë¥¼ ì°¾ì•„ì„œ ì‚¬ìš©í•©ë‹ˆë‹¤.
+            if (skinnedRegistry)
+            {
+                if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId))
+                {
+                    if (!skinned->meshAssetPath.empty())
+                    {
+                        auto mesh = skinnedRegistry->Find(skinned->meshAssetPath);
+                        if (mesh && mesh->sourceModel)
+                        {
+                            XMFLOAT3 mn{}, mx{};
+                            if (mesh->sourceModel->GetLocalBounds(mn, mx))
+                            {
+                                boxMin = mn;
+                                boxMax = mx;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ì›”ë“œ í–‰ë ¬ = ìŠ¤ì¼€ì¼ * íšŒì „ * ì´ë™
             XMVECTOR S = XMLoadFloat3(&transform.scale);
             XMVECTOR R = XMLoadFloat3(&transform.rotation);
             XMVECTOR T = XMLoadFloat3(&transform.position);
@@ -105,7 +134,7 @@ namespace Alice
                                * XMMatrixTranslationFromVector(T);
             XMMATRIX invWorldM = XMMatrixInverse(nullptr, worldM);
 
-            // ·¹ÀÌ¸¦ ·ÎÄÃ °ø°£À¸·Î º¯È¯
+            // ë ˆì´ë¥¼ ë¡œì»¬ ê³µê°„ìœ¼ë¡œ ë³€í™˜
             XMVECTOR originLocal = XMVector3TransformCoord(originWorld, invWorldM);
             XMVECTOR endWorld    = XMVectorAdd(originWorld, XMVectorScale(dirWorld, 1000.0f));
             XMVECTOR endLocal    = XMVector3TransformCoord(endWorld, invWorldM);
@@ -119,11 +148,11 @@ namespace Alice
             if (!IntersectRayAABB(rayLocal, boxMin, boxMax, tLocal))
                 continue;
 
-            // ·ÎÄÃ È÷Æ® Æ÷ÀÎÆ® ¡æ ¿ùµå ÁÂÇ¥
+            // ë¡œì»¬ íˆíŠ¸ í¬ì¸íŠ¸ â†’ ì›”ë“œ ì¢Œí‘œ
             XMVECTOR hitLocal = XMVectorAdd(originLocal, XMVectorScale(dirLocal, tLocal));
             XMVECTOR hitWorld = XMVector3TransformCoord(hitLocal, worldM);
 
-            // Ä«¸Ş¶ó ±âÁØ °Å¸® °è»ê
+            // ì¹´ë©”ë¼ ê¸°ì¤€ ê±°ë¦¬ ê³„ì‚°
             float dist = XMVectorGetX(XMVector3Length(XMVectorSubtract(hitWorld, originWorld)));
 
             if (dist < nearestDist)

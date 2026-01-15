@@ -1,53 +1,45 @@
 #include "RotateAndScale.h"
 #include "Core/World.h"
-
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include <cmath> // std::sin
 #include <Core/Logger.h>
 
 namespace Alice
 {
-    // ÀÌ ½ºÅ©¸³Æ®¸¦ ¸®ÇÃ·º¼Ç/ÆÑÅä¸® ½Ã½ºÅÛ¿¡ µî·ÏÇÕ´Ï´Ù.
+    // ì´ ìŠ¤í¬ë¦½íŠ¸ë¥¼ ë¦¬í”Œë ‰ì…˜/íŒ©í† ë¦¬ ì‹œìŠ¤í…œì— ë“±ë¡í•©ë‹ˆë‹¤.
     REGISTER_SCRIPT(RotateAndScale);
-
-    /*ALICE_SCRIPT_REFLECT_BEGIN(RotateAndScale)
-        ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_spinSpeed)
-        ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_pulseSpeed)
-        ALICE_SCRIPT_SERIALIZE_FIELD(RotateAndScale, m_pulseAmplitude)
-    ALICE_SCRIPT_REFLECT_END()*/
 
     void RotateAndScale::Start()
     {
-        // Transform ÀÌ ¾øÀ¸¸é ÇÏ³ª Ãß°¡ÇÕ´Ï´Ù.
-        if (auto* t = transform(); !t)
+        // Unity ì˜ this.transform ê³¼ ë™ì¼í•˜ê²Œ, ìš°ì„  í˜„ìž¬ Transform ì„ ê°€ì ¸ì˜µë‹ˆë‹¤.
+        auto* t = transform();
+
+        // Transform ì´ ì—†ìœ¼ë©´ í˜„ìž¬ ê²Œìž„ ì˜¤ë¸Œì íŠ¸ì— í•˜ë‚˜ ì¶”ê°€í•©ë‹ˆë‹¤.
+        if (!t)
         {
-            // ¿ùµå°¡ ¾ø°Å³ª ¿£Æ¼Æ¼°¡ À¯È¿ÇÏÁö ¾ÊÀ¸¸é ¾Æ¹«°Íµµ ÇÏÁö ¾Ê½À´Ï´Ù.
-            if (auto* w = GetWorld())
-                t = &w->AddComponent<TransformComponent>(GetOwner());
+            t = &AddComponent<TransformComponent>();
         }
 
-        if (auto* t = transform())
-        {
-            m_baseScale = (t->scale.x > 0.0f) ? t->scale.x : 1.0f;
-            m_timeSeconds = 0.0f;
-        }
+        m_baseScale = (t->scale.x > 0.0f) ? t->scale.x : 1.0f;
+        m_timeSeconds = 0.0f;
     }
 
     void RotateAndScale::Update(float deltaTime)
     {
-        // °æ°ú ½Ã°£ ´©Àû
+        // ê²½ê³¼ ì‹œê°„ ëˆ„ì 
         m_timeSeconds += deltaTime;
 
         if (auto* t = transform())
         {
-            // (1) Y ÃàÀ¸·Î ÃÊ´ç ¾à 1¶óµð¾È¾¿ È¸Àü
+            // (1) Y ì¶•ìœ¼ë¡œ ì´ˆë‹¹ ì•½ 1ë¼ë””ì•ˆì”© íšŒì „
             t->rotation.y += Get_m_spinSpeed() * deltaTime;
 
-            // (2) ½Ã°£¿¡ µû¶ó ½ºÄÉÀÏÀÌ 0.75 ~ 1.25 ¹è »çÀÌ¿¡¼­ ÃµÃµÈ÷ Áøµ¿
+            // (2) ì‹œê°„ì— ë”°ë¼ ìŠ¤ì¼€ì¼ì´ 0.75 ~ 1.25 ë°° ì‚¬ì´ì—ì„œ ì²œì²œížˆ ì§„ë™
             float s = m_baseScale * (1.0f + Get_m_pulseAmplitude() * std::sin(m_timeSeconds * Get_m_pulseSpeed()));
             t->scale.x = s;
             t->scale.y = s;
             t->scale.z = s;
         }
-
     }
 }

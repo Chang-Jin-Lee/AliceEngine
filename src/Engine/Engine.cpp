@@ -1,4 +1,4 @@
-﻿#include "Engine/Engine.h"
+#include "Engine/Engine.h"
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
@@ -27,7 +27,7 @@
 #include "Core/TimeSystem.h"
 #include "Core/ResourceManager.h"
 #include "Core/Scene.h"
-#include "Core/Script.h"
+#include "Core/ScriptSystem.h"
 #include "Core/Delegate.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
@@ -470,6 +470,78 @@ namespace Alice
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 1.f, 0.f, 0.f }, { 1.f, 0.f, 0.f, 1.f }); // X: Red
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 1.f, 0.f }, { 0.f, 1.f, 0.f, 1.f }); // Y: Green
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f }, { 0.f, 0.f, 1.f, 1.f }); // Z: Blue
+
+				// === FBX/SkinnedMesh 디버그 AABB 박스 ===
+				// - SkinnedMeshRegistry의 sourceModel(FbxModel)에서 로컬 AABB를 얻어,
+				//   엔티티 Transform(S*R*T)을 적용한 OBB(로컬 AABB의 월드 변환)를 라인으로 표시합니다.
+				auto AddBoxLines = [&](const DirectX::XMFLOAT3 corners[8], const DirectX::XMFLOAT4& col)
+				{
+					// bottom
+					dbg->AddLine(corners[0], corners[1], col);
+					dbg->AddLine(corners[1], corners[2], col);
+					dbg->AddLine(corners[2], corners[3], col);
+					dbg->AddLine(corners[3], corners[0], col);
+					// top
+					dbg->AddLine(corners[4], corners[5], col);
+					dbg->AddLine(corners[5], corners[6], col);
+					dbg->AddLine(corners[6], corners[7], col);
+					dbg->AddLine(corners[7], corners[4], col);
+					// sides
+					dbg->AddLine(corners[0], corners[4], col);
+					dbg->AddLine(corners[1], corners[5], col);
+					dbg->AddLine(corners[2], corners[6], col);
+					dbg->AddLine(corners[3], corners[7], col);
+				};
+
+				for (const auto& [entityId, skinned] : pImpl->m_world.GetComponents<SkinnedMeshComponent>())
+				{
+					if (skinned.meshAssetPath.empty())
+						continue;
+
+					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
+					if (!t)
+						continue;
+
+					auto mesh = pImpl->m_skinnedMeshRegistry.Find(skinned.meshAssetPath);
+					if (!mesh || !mesh->sourceModel)
+						continue;
+
+					DirectX::XMFLOAT3 mn{}, mx{};
+					if (!mesh->sourceModel->GetLocalBounds(mn, mx))
+						continue;
+
+					// 로컬 AABB 8 코너
+					DirectX::XMFLOAT3 local[8] = {
+						{mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mn.y, mx.z}, {mn.x, mn.y, mx.z},
+						{mn.x, mx.y, mn.z}, {mx.x, mx.y, mn.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
+					};
+
+					// 월드 행렬 (렌더러/피커와 동일: S*R*T)
+					using namespace DirectX;
+					const XMVECTOR S = XMLoadFloat3(&t->scale);
+					const XMVECTOR R = XMLoadFloat3(&t->rotation);
+					const XMVECTOR T = XMLoadFloat3(&t->position);
+					const XMMATRIX worldM =
+						XMMatrixScalingFromVector(S) *
+						XMMatrixRotationRollPitchYawFromVector(R) *
+						XMMatrixTranslationFromVector(T);
+
+					// 월드 코너로 변환
+					DirectX::XMFLOAT3 worldCorners[8]{};
+					for (int i = 0; i < 8; ++i)
+					{
+						const XMVECTOR p = XMVectorSet(local[i].x, local[i].y, local[i].z, 1.0f);
+						const XMVECTOR pw = XMVector3TransformCoord(p, worldM);
+						XMStoreFloat3(&worldCorners[i], pw);
+					}
+
+					// 선택된 엔티티는 빨강, 나머지는 노랑
+					const DirectX::XMFLOAT4 col = (entityId == pImpl->m_selectedEntity)
+						? DirectX::XMFLOAT4(1.f, 0.f, 0.f, 1.f)
+						: DirectX::XMFLOAT4(1.f, 1.f, 0.f, 1.f);
+
+					AddBoxLines(worldCorners, col);
+				}
 			}
 		}
 
