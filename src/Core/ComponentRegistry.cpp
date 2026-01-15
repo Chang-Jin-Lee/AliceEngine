@@ -85,6 +85,14 @@ namespace Alice
             .property("nearPlane", &CameraComponent::nearPlane)
             .property("farPlane", &CameraComponent::farPlane);
 
+        rttr::registration::class_<PhysicsSceneSettingsComponent>("PhysicsSceneSettingsComponent")
+            .constructor<>()
+            .property("enablePhysics", &PhysicsSceneSettingsComponent::enablePhysics)
+            .property("gravity", &PhysicsSceneSettingsComponent::gravity)
+            .property("fixedDt", &PhysicsSceneSettingsComponent::fixedDt)
+            .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps);
+
+
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();
     }
