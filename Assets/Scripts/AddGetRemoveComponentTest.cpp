@@ -1,42 +1,44 @@
 #include "AddGetRemoveComponentTest.h"
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include "Core/World.h"
 
 namespace Alice
 {
-    // ÀÌ ½ºÅ©¸³Æ®¸¦ ¸®ÇÃ·º¼Ç/ÆÑÅä¸® ½Ã½ºÅÛ¿¡ µî·ÏÇÕ´Ï´Ù.
+    // ì´ ìŠ¤í¬ë¦½íŠ¸ë¥¼ ë¦¬í”Œë ‰ì…˜/íŒ©í† ë¦¬ ì‹œìŠ¤í…œì— ë“±ë¡í•©ë‹ˆë‹¤.
     REGISTER_SCRIPT(AddGetRemoveComponentTest);
 
     void AddGetRemoveComponentTest::Awake()
     {
-        // ÃÊ±âÈ­ ·ÎÁ÷À» ¿©±â¿¡ ÀÛ¼ºÇÏ¼¼¿ä.
+        // ì´ˆê¸°í™” ë¡œì§ì„ ì—¬ê¸°ì— ì‘ì„±í•˜ì„¸ìš”.
 		ALICE_LOG_INFO("[AddGetRemoveComponentTest] Awake called. m_exampleValue = %f", m_exampleValue);
 	}
 
     void AddGetRemoveComponentTest::Start()
     {
-        // ÃÊ±âÈ­ ·ÎÁ÷À» ¿©±â¿¡ ÀÛ¼ºÇÏ¼¼¿ä.
+        // ì´ˆê¸°í™” ë¡œì§ì„ ì—¬ê¸°ì— ì‘ì„±í•˜ì„¸ìš”.
     }
 
     void AddGetRemoveComponentTest::Update(float deltaTime)
     {
-        // ¸Å ÇÁ·¹ÀÓ È£ÃâµÇ´Â ·ÎÁ÷À» ¿©±â¿¡ ÀÛ¼ºÇÏ¼¼¿ä.
+        // ë§¤ í”„ë ˆì„ í˜¸ì¶œë˜ëŠ” ë¡œì§ì„ ì—¬ê¸°ì— ì‘ì„±í•˜ì„¸ìš”.
     }
 
     void AddGetRemoveComponentTest::OnDestroy()
     {
-		// Á¤¸® ·ÎÁ÷À» ¿©±â¿¡ ÀÛ¼ºÇÏ¼¼¿ä.
+		// ì •ë¦¬ ë¡œì§ì„ ì—¬ê¸°ì— ì‘ì„±í•˜ì„¸ìš”.
 		ALICE_LOG_INFO("[AddGetRemoveComponentTest] OnDestroy called.");
     }
 
     void AddGetRemoveComponentTest::ExampleFunction()
     {
-        // ¸®ÇÃ·º¼ÇÀ¸·Î µî·ÏµÈ ÇÔ¼ö ¿¹½ÃÀÔ´Ï´Ù.
-        // ÀÌ ÇÔ¼ö´Â ¿¡µğÅÍ¿¡¼­ È£ÃâÇÒ ¼ö ÀÖ½À´Ï´Ù.
+        // ë¦¬í”Œë ‰ì…˜ìœ¼ë¡œ ë“±ë¡ëœ í•¨ìˆ˜ ì˜ˆì‹œì…ë‹ˆë‹¤.
+        // ì´ í•¨ìˆ˜ëŠ” ì—ë””í„°ì—ì„œ í˜¸ì¶œí•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
         
-        // ¿¹½Ã: Transform ÄÄÆ÷³ÍÆ® °¡Á®¿À±â
+        // ì˜ˆì‹œ: Transform ì»´í¬ë„ŒíŠ¸ ê°€ì ¸ì˜¤ê¸°
         if (auto* transform = GetComponent<TransformComponent>())
         {
-            // À§Ä¡¸¦ (0, 0, 0)À¸·Î ¸®¼ÂÇÏ´Â ¿¹½Ã
+            // ìœ„ì¹˜ë¥¼ (0, 0, 0)ìœ¼ë¡œ ë¦¬ì…‹í•˜ëŠ” ì˜ˆì‹œ
             transform->position = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
         }
     }

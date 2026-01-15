@@ -31,6 +31,15 @@ namespace Alice
 
 		/// 비디오 메모리를 트림(해제)합니다.
 		virtual void TrimVideoMemory() = 0;
+
+        /// HDR 지원 여부를 확인하고 최대 밝기(nits)를 반환합니다.
+        /// @param outMaxNits 모니터 최대 밝기 (nits)
+        /// @return HDR 지원 여부
+        virtual bool IsHDRSupported(float& outMaxNits) const = 0;
+
+        /// 백버퍼 포맷을 반환합니다.
+        /// @return DXGI_FORMAT_R8G8B8A8_UNORM (LDR) 또는 DXGI_FORMAT_R10G10B10A2_UNORM (HDR)
+        virtual DXGI_FORMAT GetBackBufferFormat() const = 0;
     };
 }
 

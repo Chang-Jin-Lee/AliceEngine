@@ -1,3 +1,5 @@
+#pragma once
+
 #include <DirectXMath.h>
 
 // Æ®·£½ºÆû

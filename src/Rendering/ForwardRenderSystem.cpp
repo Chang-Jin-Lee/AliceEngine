@@ -12,6 +12,8 @@
 
 #include <Core/ResourceManager.h>
 #include <Core/Logger.h>
+#include "Rendering/ShaderCode/CommonShaderCode.h"
+#include "Rendering/ShaderCode/ForwardShader.h"
 
 #include <unordered_set>
 
@@ -20,505 +22,6 @@ using Microsoft::WRL::ComPtr;
 
 namespace Alice
 {
-    // 간단한 Lambert / Phong / Blinn-Phong 셰이더 코드
-	namespace
-    {
-        const char* g_PhongVertexShaderSource = R"(
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor; // per-object 머티리얼 색상
-
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-struct VSInput
-{
-    float3 Position : POSITION;
-    float3 Normal   : NORMAL;
-    float2 TexCoord : TEXCOORD0;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : TEXCOORD0;
-    float3 Normal   : TEXCOORD1;
-    float2 TexCoord : TEXCOORD2;
-    float3 TangentW : TEXCOORD3;
-    float3 BitanW   : TEXCOORD4;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput output;
-
-    float4 worldPos = mul(float4(input.Position, 1.0f), gWorld);
-    float4 viewPos  = mul(worldPos, gView);
-    output.Position = mul(viewPos, gProj);
-
-    output.WorldPos = worldPos.xyz;
-    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
-    output.Normal = N;
-    // 정적 지오메트리(큐브 등)는 탄젠트/바이탄젠트가 없으므로
-    // 노말에서 임의의 직교 기저를 만들어 노말맵(TBN) 계산이 가능하게 합니다.
-    float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
-    float3 T = normalize(cross(up, N));
-    float3 B = normalize(cross(N, T));
-    output.TangentW = T;
-    output.BitanW = B;
-    output.TexCoord = input.TexCoord;
-
-    return output;
-}
-)";
-
-        // 스키닝 전용 버텍스 셰이더
-        // - BLENDINDICES / BLENDWEIGHT / gBones 를 사용하여 4본 스키닝을 적용합니다.
-        // - gBones 는 CPU에서 매 프레임 갱신되며, 엔티티별 애니메이션 재생 상태를 반영합니다.
-        const char* g_SkinnedVertexShaderSource = R"(
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-cbuffer CBBones : register(b2)
-{
-    float4x4 gBones[1023];
-    uint     gBoneCount;
-    float3   _padBones;
-};
-
-struct VSInput
-{
-    float3 Position     : POSITION;
-    float3 Normal       : NORMAL;
-    float3 Tangent      : TANGENT;
-    float3 Binormal     : BINORMAL;
-    uint4  BoneIndices  : BLENDINDICES;
-    float4 BoneWeights  : BLENDWEIGHT;
-    float2 TexCoord     : TEXCOORD0;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : TEXCOORD0;
-    float3 Normal   : TEXCOORD1;
-    float2 TexCoord : TEXCOORD2;
-    float3 TangentW : TEXCOORD3;
-    float3 BitanW   : TEXCOORD4;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput output;
-
-    // D3D11-AliceTutorial/31_IBL 방식으로 스키닝
-    // - CPU에서 전치 업로드된 본 팔레트에 대해 row-vector 곱(mul(v, M))을 사용합니다.
-    uint4 bi = input.BoneIndices;
-    float4 bw = input.BoneWeights;
-
-    // DirectX11(행벡터) 기준: v' = v * (Σ w_i * M_i)
-    matrix M = bw.x * gBones[bi.x]
-             + bw.y * gBones[bi.y]
-             + bw.z * gBones[bi.z]
-             + bw.w * gBones[bi.w];
-
-    float4 posL = float4(input.Position, 1.0f);
-    float3 nL = input.Normal;
-    float3 tL = input.Tangent;
-    float3 bL = input.Binormal;
-
-    float4 skinnedPos = mul(posL, M);
-    float3x3 M3 = (float3x3)M;
-    float3 skinnedN = normalize(mul(nL, M3));
-    float3 skinnedT = normalize(mul(tL, M3));
-    float3 skinnedB = normalize(mul(bL, M3));
-
-    float4 worldPos = mul(skinnedPos, gWorld);
-    float4 viewPos  = mul(worldPos, gView);
-    output.Position = mul(viewPos, gProj);
-
-    output.WorldPos = worldPos.xyz;
-    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
-    output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
-    output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
-    output.TexCoord = input.TexCoord;
-
-    return output;
-}
-)";
-
-        const char* g_PhongPixelShaderSource = R"(
-Texture2D gDiffuseMap  : register(t0);
-Texture2D gNormalMap   : register(t1);
-Texture2D gSpecularMap : register(t2);
-TextureCube gSkybox    : register(t3);
-SamplerState gSampler  : register(s0);
-
-// 섀도우 맵 (Depth 텍스처)
-Texture2D<float>        gShadowMap     : register(t4);
-SamplerComparisonState  gShadowSampler : register(s1);
-
-// IBL (Image-Based Lighting) 텍스처들
-// - gIBL_Diffuse  : Diffuse IBL (Irradiance map, N 방향 샘플)
-// - gIBL_Specular : Specular IBL (Prefiltered env map, R 방향 + roughness)
-// - gIBL_BRDF_LUT : BRDF LUT (RG = A,B, NdotV/Roughness → 평균 F,G 계수)
-TextureCube gIBL_Diffuse  : register(t5);
-TextureCube gIBL_Specular : register(t6);
-Texture2D   gIBL_BRDF_LUT : register(t7);
-
-// VS 와 동일한 CBPerObject 레이아웃 (materialColor 포함)
-cbuffer CBPerObject : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gView;
-    float4x4 gProj;
-    float4   gMaterialColor;
-
-    float    gRoughness;
-    float    gMetalness;
-    int      gUseTexture;
-    int      gEnableNormalMap;
-};
-
-cbuffer CBLighting : register(b1)
-{
-    // Key Light
-    float3 gKeyLightDir;
-    float  gKeyLightPad0;
-
-    float3 gKeyLightColor;
-    float  gKeyLightIntensity;
-
-    // Fill Light
-    float3 gFillLightDir;
-    float  gFillLightPad0;
-
-    float3 gFillLightColor;
-    float  gFillLightIntensity;
-
-    float3 gCameraPos;
-    float  gPad1;
-
-    float4 gMaterialDiffuse;   // rgb: diffuse color
-    float4 gMaterialSpecular;  // rgb: specular color, a: shininess
-
-    int    gShadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon
-    int3   gPad2;
-
-    float4x4 gLightViewProj;   // 섀도우 맵 계산용 라이트 뷰-프로젝션
-
-    // Shadow params (34_ToneMapping 방식)
-    float  gShadowBias;
-    float  gShadowMapSize;
-    float  gShadowPCFRadius;
-    int    gShadowEnabled;
-};
-
-struct PSInput
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : TEXCOORD0;
-    float3 Normal   : TEXCOORD1;
-    float2 TexCoord : TEXCOORD2;
-    float3 TangentW : TEXCOORD3;
-    float3 BitanW   : TEXCOORD4;
-};
-
-float4 main(PSInput input) : SV_TARGET
-{
-	float4 textureColor = gDiffuseMap.Sample(gSampler, input.TexCoord);
-    float alphaTex = textureColor.a * gMaterialColor.a;
-    // 알파 블렌딩
-    clip(alphaTex - 0.1f);
-
-    float3 N = normalize(input.Normal);
-    if (gEnableNormalMap != 0)
-    {
-        // D3D11-AliceTutorial/31_IBL/31_BasicPS.hlsl 의 방식으로 TBN 기반 노말맵 적용
-        float3 T = normalize(input.TangentW);
-        float3 B = normalize(input.BitanW);
-        float handed = dot(cross(T, B), N);
-        if (handed < 0.0f) B = -B;
-        float3x3 TBN = float3x3(T, B, N);
-        float3 N_ts = gNormalMap.Sample(gSampler, input.TexCoord).xyz * 2.0f - 1.0f;
-        N_ts.y = -N_ts.y; // 그린 채널 반전 보정
-        N_ts = normalize(N_ts);
-        N = normalize(mul(N_ts, TBN));
-    }
-
-    float3 V = normalize(gCameraPos - input.WorldPos);
-
-    float3 totalDiffuse  = float3(0.0f, 0.0f, 0.0f);
-    float3 totalSpecular = float3(0.0f, 0.0f, 0.0f);
-
-    // Key Light
-    {
-        float3 L = normalize(-gKeyLightDir);
-        float  NdotL = max(dot(N, L), 0.0f);
-        float3 lightColor = gKeyLightColor * gKeyLightIntensity;
-
-        totalDiffuse += NdotL * lightColor;
-
-        if (gShadingMode != 0 && NdotL > 0.0f)
-        {
-            float specularTerm = 0.0f;
-            if (gShadingMode == 2) // Blinn-Phong
-            {
-                float3 H = normalize(L + V);
-                float NdotH = max(dot(N, H), 0.0f);
-                specularTerm = pow(NdotH, gMaterialSpecular.a);
-            }
-            else // Phong
-            {
-                float3 R = reflect(-L, N);
-                float RdotV = max(dot(R, V), 0.0f);
-                specularTerm = pow(RdotV, gMaterialSpecular.a);
-            }
-
-            totalSpecular += specularTerm * lightColor;
-        }
-    }
-
-    // Fill Light (옵션)
-    {
-        float3 L = normalize(-gFillLightDir);
-        float  NdotL = max(dot(N, L), 0.0f);
-        float3 lightColor = gFillLightColor * gFillLightIntensity;
-
-        totalDiffuse += NdotL * lightColor;
-
-        if (gShadingMode != 0 && NdotL > 0.0f)
-        {
-            float specularTerm = 0.0f;
-            if (gShadingMode == 2) // Blinn-Phong
-            {
-                float3 H = normalize(L + V);
-                float NdotH = max(dot(N, H), 0.0f);
-                specularTerm = pow(NdotH, gMaterialSpecular.a);
-            }
-            else // Phong
-            {
-                float3 R = reflect(-L, N);
-                float RdotV = max(dot(R, V), 0.0f);
-                specularTerm = pow(RdotV, gMaterialSpecular.a);
-            }
-
-            totalSpecular += specularTerm * lightColor;
-        }
-    }
-
-    // 섀도우 팩터 (PCF)
-    float shadow = 1.0f;
-    {
-        if (gShadowEnabled != 0)
-        {
-        float4 shadowPos = mul(float4(input.WorldPos, 1.0f), gLightViewProj);
-        shadowPos.xyz /= shadowPos.w;
-
-        float2 shadowTex;
-        shadowTex.x = shadowPos.x * 0.5f + 0.5f;
-        shadowTex.y = -shadowPos.y * 0.5f + 0.5f;
-        float depth = shadowPos.z;
-
-        // Shadow map texel 크기 및 PCF 반경(텍셀 단위)
-        const float2 texelSize = float2(1.0f, 1.0f) / max(gShadowMapSize, 1.0f);
-        const float2 pcfStep = max(gShadowPCFRadius, 0.0f) * texelSize;
-
-        if (shadowTex.x >= 0.0f && shadowTex.x <= 1.0f &&
-            shadowTex.y >= 0.0f && shadowTex.y <= 1.0f)
-        {
-            float sum = 0.0f;
-            [unroll] for (int y = -1; y <= 1; ++y)
-            {
-                [unroll] for (int x = -1; x <= 1; ++x)
-                {
-                    float2 offset = float2(x, y) * pcfStep;
-                    sum += gShadowMap.SampleCmpLevelZero(
-                        gShadowSampler,
-                        shadowTex + offset,
-                        depth - gShadowBias);
-                }
-            }
-            shadow = sum / 9.0f;
-        }
-        }
-    }
-
-    totalDiffuse  *= shadow;
-    totalSpecular *= shadow;
-
-    // 머티리얼 베이스 컬러
-    // - gUseTexture != 0 인 경우에만 디퓨즈 텍스처를 곱해주고,
-    //   그렇지 않으면 순수한 머티리얼 색만 사용합니다.
-    float3 albedo = gMaterialColor.rgb;
-    if (gUseTexture != 0)
-    {
-        float3 texSample = gDiffuseMap.Sample(gSampler, input.TexCoord).rgb;
-        albedo *= texSample;
-    }
-    float3 specColor = float3(1.0f, 1.0f, 1.0f);
-
-    float3 ambient = 0.1f * gKeyLightColor;
-
-    // === Toon Shading (shadingMode == 3) ===
-    if (gShadingMode == 3)
-    {
-        float3 Lmain = normalize(-gKeyLightDir);
-        float  NdotL = max(dot(N, Lmain), 0.0f);
-
-        float level = 0.0f;
-        if (NdotL > 0.95f)      level = 1.0f;
-        else if (NdotL > 0.5f)  level = 0.7f;
-        else if (NdotL > 0.2f)  level = 0.4f;
-        else                    level = 0.1f;
-
-        float3 toonColor = albedo * level + 0.1f * albedo;
-        return float4(toonColor, 1.0f);
-    }
-
-    // === PBR 경로 (shadingMode == 4) ===
-    if (gShadingMode == 4)
-    {
-        float roughness = saturate(gRoughness);
-        float metalness = saturate(gMetalness);
-
-        float3 Np = N;
-        float3 Vp = V;
-        float3 Lp = normalize(-gKeyLightDir);
-        float3 Hp = normalize(Vp + Lp);
-
-        float NdotL = max(dot(Np, Lp), 0.0f);
-        float NdotV = max(dot(Np, Vp), 0.0f);
-        float NdotH = max(dot(Np, Hp), 0.0f);
-        float VdotH = max(dot(Vp, Hp), 0.0f);
-
-        float3 lightColor = gKeyLightColor * gKeyLightIntensity;
-
-        float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metalness);
-
-        float  a      = roughness * roughness;
-        float  a2     = a * a;
-        float  denomD = (NdotH * NdotH) * (a2 - 1.0f) + 1.0f;
-        float  D      = a2 / max(3.14159f * denomD * denomD, 1e-4f);
-
-        float  k      = (roughness + 1.0f);
-        k             = (k * k) / 8.0f;
-        float  Gv     = NdotV / (NdotV * (1.0f - k) + k);
-        float  Gl     = NdotL / (NdotL * (1.0f - k) + k);
-        float  G      = Gv * Gl;
-
-        float3 F      = F0 + (1.0f - F0) * pow(1.0f - VdotH, 5.0f);
-
-        float3 numerator    = D * G * F;
-        float  denomSpec    = max(4.0f * NdotV * NdotL, 1e-4f);
-        float3 specularTerm = numerator / denomSpec;
-
-        float3 kd = (1.0f - F) * (1.0f - metalness);
-        float3 diffuseTerm = kd * albedo / 3.14159f;
-
-        float3 radiance = lightColor * NdotL;
-
-        float3 Lo = (diffuseTerm + specularTerm) * radiance * shadow;
-
-        // === IBL (Image-Based Lighting) 계산 ===
-        // Diffuse IBL: Irradiance map을 법선 방향으로 샘플링
-        float3 diffuseIBL = kd * gIBL_Diffuse.Sample(gSampler, Np).rgb * albedo;
-
-        // Specular IBL: Prefiltered env map + BRDF LUT (split-sum 근사)
-        float3 Renv = reflect(-Vp, Np);
-        const float kMaxSpecularMip = 8.0f;
-        float3 prefilteredColor = gIBL_Specular.SampleLevel(gSampler, Renv, roughness * kMaxSpecularMip).rgb;
-        float2 specBRDF = gIBL_BRDF_LUT.Sample(gSampler, float2(NdotV, roughness)).rg;
-        float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
-
-        // 최종 색상 = 직접광 + 간접광(IBL)
-        float3 colorPbr = Lo + (diffuseIBL + specularIBL);
-
-        return float4(colorPbr, alphaTex);
-    }
-
-    // 기본 Phong/Blinn-Phong/Lambert 경로
-    float3 baseColor =
-        ambient * albedo +
-        totalDiffuse * albedo +
-        totalSpecular * specColor;
-
-    return float4(baseColor, alphaTex);
-}
-)";
-
-        // 스카이박스 전용 셰이더
-        // - 불필요한 역행렬 연산 제거, input.Position을 그대로 Direction으로 사용
-        // - z/w = 1.0으로 고정하여 항상 배경으로 렌더링
-        const char* g_SkyboxVertexShaderSource = R"(
-cbuffer CBSkybox : register(b0)
-{
-    float4x4 gWorldViewProj; // View(회전only) * Proj
-};
-
-struct VSInput
-{
-    float3 Position : POSITION;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-    float3 Direction : TEXCOORD0;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput o;
-
-    // 방향 벡터: 큐브의 로컬 위치가 곧 월드 상의 방향입니다.
-    o.Direction = input.Position;
-
-    // 위치 변환: 이동 성분이 제거된 ViewProj 행렬을 곱합니다.
-    float4 posH = mul(float4(input.Position, 1.0f), gWorldViewProj);
-    
-    // Z-Fighting 방지 및 배경 처리 최적화
-    // z를 w로 치환하면, Perspective Divide(z/w) 후 깊이 값이 항상 1.0(Far Plane)이 됩니다.
-    o.Position = posH.xyww;
-    
-    return o;
-}
-)";
-
-        const char* g_SkyboxPixelShaderSource = R"(
-TextureCube g_TexCube : register(t0);
-SamplerState g_Sam : register(s0);
-
-struct PSInput
-{
-    float4 Position : SV_POSITION;
-    float3 Direction : TEXCOORD0;
-};
-
-float4 main(PSInput input) : SV_TARGET
-{
-    // 방향 벡터로 큐브맵 샘플링 (참고 프로젝트와 동일)
-    // Sample 함수가 자동으로 정규화하므로 명시적 정규화 불필요
-    return g_TexCube.Sample(g_Sam, input.Direction);
-}
-)";
-    }
 
     ForwardRenderSystem::ForwardRenderSystem(ID3D11RenderDevice& renderDevice)
         : m_renderDevice(renderDevice)
@@ -596,6 +99,11 @@ float4 main(PSInput input) : SV_TARGET
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateIblResources failed.");
             return false;
         }
+        if (!CreateToneMappingResources())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateToneMappingResources failed.");
+            return false;
+        }
 
         ALICE_LOG_INFO("ForwardRenderSystem::Initialize: success.");
         return true;
@@ -609,6 +117,9 @@ float4 main(PSInput input) : SV_TARGET
         m_sceneColorTex.Reset();
         m_sceneRTV.Reset();
         m_sceneSRV.Reset();
+        m_viewportTex.Reset();
+        m_viewportRTV.Reset();
+        m_viewportSRV.Reset();
         m_sceneDepthTex.Reset();
         m_sceneDSV.Reset();
 
@@ -620,12 +131,19 @@ float4 main(PSInput input) : SV_TARGET
         m_sceneWidth = width; m_sceneHeight = height;
         if (width == 0 || height == 0) return false;
 
-        // 1. Scene Color Texture & Views (RTV, SRV)
+        // 1. Scene Color Texture & Views (RTV, SRV) - HDR 포맷: 톤매핑을 위해 R16G16B16A16_FLOAT 사용
         // 순서: Width, Height, MipLevels, ArraySize, Format, SampleDesc{Count, Quality}, Usage, BindFlags, CPUAccess, Misc
-        D3D11_TEXTURE2D_DESC cDesc = { width, height, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+        D3D11_TEXTURE2D_DESC cDesc = { width, height, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
         if (FAILED(m_device->CreateTexture2D(&cDesc, nullptr, m_sceneColorTex.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreateRenderTargetView(m_sceneColorTex.Get(), nullptr, m_sceneRTV.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreateShaderResourceView(m_sceneColorTex.Get(), nullptr, m_sceneSRV.ReleaseAndGetAddressOf()))) return false;
+
+        // 1-1. Editor Viewport Output (ToneMapped LDR)
+        // - ImGui::Image 표시용 (UNORM, 감마 적용된 값이 들어갈 예정)
+        D3D11_TEXTURE2D_DESC vDesc = { width, height, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+        if (FAILED(m_device->CreateTexture2D(&vDesc, nullptr, m_viewportTex.ReleaseAndGetAddressOf()))) return false;
+        if (FAILED(m_device->CreateRenderTargetView(m_viewportTex.Get(), nullptr, m_viewportRTV.ReleaseAndGetAddressOf()))) return false;
+        if (FAILED(m_device->CreateShaderResourceView(m_viewportTex.Get(), nullptr, m_viewportSRV.ReleaseAndGetAddressOf()))) return false;
 
         // 2. Depth Texture & View (DSV)
         D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_D24_UNORM_S8_UINT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL, 0, 0 };
@@ -670,8 +188,8 @@ float4 main(PSInput input) : SV_TARGET
         ComPtr<ID3DBlob> vsBlob, psBlob;
 
         // 1. 셰이더 컴파일 및 생성 (ErrorBlob 생략)
-        if (FAILED(D3DCompile(g_SkyboxVertexShaderSource, strlen(g_SkyboxVertexShaderSource), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
-        if (FAILED(D3DCompile(g_SkyboxPixelShaderSource, strlen(g_SkyboxPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
+        if (FAILED(D3DCompile(CommonShaderCode::SkyboxVS, strlen(CommonShaderCode::SkyboxVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
+        if (FAILED(D3DCompile(CommonShaderCode::SkyboxPS, strlen(CommonShaderCode::SkyboxPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
 
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_skyboxVS.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_skyboxPS.ReleaseAndGetAddressOf()))) return false;
@@ -784,12 +302,12 @@ float4 main(PSInput input) : SV_TARGET
         ComPtr<ID3DBlob> vsBlob, psBlob;
 
         // 1. Vertex Shader 컴파일 및 생성
-        if (FAILED(D3DCompile(g_PhongVertexShaderSource, strlen(g_PhongVertexShaderSource), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr)))
+        if (FAILED(D3DCompile(ForwardShader::PhongVS, strlen(ForwardShader::PhongVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr)))
             return false;
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vertexShader.ReleaseAndGetAddressOf()))) return false;
 
         // 2. Pixel Shader 컴파일 및 생성
-        if (FAILED(D3DCompile(g_PhongPixelShaderSource, strlen(g_PhongPixelShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) 
+        if (FAILED(D3DCompile(ForwardShader::PBRPS, strlen(ForwardShader::PBRPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) 
             return false;
         if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_pixelShader.ReleaseAndGetAddressOf()))) return false;
 
@@ -822,13 +340,19 @@ float4 main(PSInput input) : SV_TARGET
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbSkybox.ReleaseAndGetAddressOf()))) return false;
 
+        // 4. PostProcess 상수 버퍼 생성 (톤매핑용)
+        desc.ByteWidth = sizeof(float) * 4; // exposure, maxHDRNits, padding[2]
+        desc.Usage = D3D11_USAGE_DYNAMIC;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbPostProcess.ReleaseAndGetAddressOf()))) return false;
+
         return true;
     }
 
     bool ForwardRenderSystem::CreateSkinnedResources()
     {
         ComPtr<ID3DBlob> vsBlob;
-        if (FAILED(D3DCompile(g_SkinnedVertexShaderSource, strlen(g_SkinnedVertexShaderSource),
+        if (FAILED(D3DCompile(ForwardShader::SkinnedVS, strlen(ForwardShader::SkinnedVS),
             nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, &vsBlob, nullptr))) return false;
 
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &m_skinnedVertexShader))) return false;
@@ -899,6 +423,12 @@ float4 main(PSInput input) : SV_TARGET
         samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
         if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_samplerState.ReleaseAndGetAddressOf()))) return false;
+
+        // Linear Sampler (톤매핑용)
+        samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_samplerLinear.ReleaseAndGetAddressOf()))) return false;
 
         return true;
     }
@@ -1079,11 +609,18 @@ float4 main(PSInput input) : SV_TARGET
         if (!m_skyboxEnabled || !m_skyboxSRV || !m_skyboxVS || !m_skyboxPS || !m_cbSkybox) return;
 
         // 이전 상태 백업
-        ID3D11RasterizerState* pRS = nullptr; ID3D11DepthStencilState* pDS = nullptr; ID3D11ShaderResourceView* pSRV = nullptr;
+        ID3D11RasterizerState* pRS = nullptr; 
+        ID3D11DepthStencilState* pDS = nullptr; 
+        ID3D11ShaderResourceView* pSRV = nullptr;
+        ID3D11BlendState* pBS = nullptr; // 블렌드 상태 백업
         UINT ref = 0;
+        float blendFactor[4] = { 0.0f };
+        UINT sampleMask = 0;
+
         m_context->RSGetState(&pRS);
         m_context->OMGetDepthStencilState(&pDS, &ref);
         m_context->PSGetShaderResources(0, 1, &pSRV);
+        m_context->OMGetBlendState(&pBS, blendFactor, &sampleMask); // 현재 블렌드 상태 저장
 
         // IA 및 셰이더 설정
         UINT stride = sizeof(SimpleVertex), offset = 0;
@@ -1095,8 +632,14 @@ float4 main(PSInput input) : SV_TARGET
 
         m_context->VSSetShader(m_skyboxVS.Get(), nullptr, 0);
         m_context->PSSetShader(m_skyboxPS.Get(), nullptr, 0);
+        
         if (m_skyboxDepthState) m_context->OMSetDepthStencilState(m_skyboxDepthState.Get(), 0);
         if (m_skyboxRasterizerState) m_context->RSSetState(m_skyboxRasterizerState.Get());
+
+        // 스카이박스는 배경과 섞이면 안 되므로 블렌딩을 끕니다. (Opaque)
+        // DeferredRenderSystem과 동일한 m_ppBlendOpaque(Blend Disable) 사용
+        float zeroFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), zeroFactor, 0xFFFFFFFF);
 
         // 행렬 계산 (Translation 제거) 및 CB 업데이트
         XMMATRIX view = camera.GetViewMatrix();
@@ -1106,7 +649,17 @@ float4 main(PSInput input) : SV_TARGET
         D3D11_MAPPED_SUBRESOURCE map;
         const HRESULT hr = m_context->Map(m_cbSkybox.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &map);
         if (FAILED(hr))
+        {
+            // 실패 시 상태 복원
+            m_context->OMSetDepthStencilState(pDS, ref);
+            m_context->RSSetState(pRS);
+            m_context->OMSetBlendState(pBS, blendFactor, sampleMask);
+            if (pSRV) pSRV->Release();
+            if (pDS) pDS->Release();
+            if (pRS) pRS->Release();
+            if (pBS) pBS->Release();
             return;
+        }
 
         memcpy(map.pData, &wvpT, sizeof(XMMATRIX));
         m_context->Unmap(m_cbSkybox.Get(), 0);
@@ -1125,10 +678,16 @@ float4 main(PSInput input) : SV_TARGET
         // 상태 복원 및 릴리즈
         m_context->OMSetDepthStencilState(pDS, ref);
         m_context->RSSetState(pRS);
-        m_context->PSSetShaderResources(0, 1, &pSRV);
+        m_context->OMSetBlendState(pBS, blendFactor, sampleMask); // 블렌드 상태 복원
+        
+        // 리소스 해제
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(0, 1, &nullSRV);
+
         if (pSRV) pSRV->Release();
         if (pDS) pDS->Release();
         if (pRS) pRS->Release();
+        if (pBS) pBS->Release();
     }
 
     void ForwardRenderSystem::RenderSkinnedMeshes(
@@ -1333,7 +892,7 @@ float4 main(PSInput input) : SV_TARGET
 
                 XMFLOAT4 dummy(1, 1, 1, 1);
                 UpdatePerObjectCB(worldM, lightView, lightProj, dummy, 1, 0, false, false);
-                m_context->DrawIndexed(m_indexCount, 0, 0);
+                //m_context->DrawIndexed(m_indexCount, 0, 0);
             }
 
             // 스키닝 메시 그리기
@@ -1486,8 +1045,240 @@ float4 main(PSInput input) : SV_TARGET
         // 4. 스카이박스 렌더링 (Skybox)
         RenderSkybox(camera);
 
-        // 5. 최종 백버퍼 복귀 (Finalize) - ImGui 등 후처리를 위해 백버퍼로 타겟을 돌려놓습니다.
+        // 5. 에디터 뷰포트 표시용 LDR 텍스처로 톤매핑 (ImGui::Image에서 사용)
+        if (m_viewportRTV)
+        {
+            D3D11_VIEWPORT viewport = {};
+            viewport.Width = static_cast<float>(m_sceneWidth);
+            viewport.Height = static_cast<float>(m_sceneHeight);
+            viewport.MaxDepth = 1.0f;
+            RenderToneMapping(m_viewportRTV.Get(), viewport);
+        }
+
+        // 6. 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
         RestoreBackBuffer();
+    }
+
+    bool ForwardRenderSystem::CreateToneMappingResources()
+    {
+        ComPtr<ID3DBlob> vsBlob, psBlob, errorBlob;
+
+        // Quad Vertex Shader 컴파일
+        if (FAILED(D3DCompile(CommonShaderCode::QuadVS, strlen(CommonShaderCode::QuadVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+            {
+                ALICE_LOG_ERRORF("Quad VS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            }
+            return false;
+        }
+        if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_quadVS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Quad VS");
+            return false;
+        }
+
+        // Quad Input Layout
+        D3D11_INPUT_ELEMENT_DESC quadLayout[] = {
+            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0}
+        };
+        if (FAILED(m_device->CreateInputLayout(quadLayout, ARRAYSIZE(quadLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_quadInputLayout.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Quad Input Layout");
+            return false;
+        }
+
+        // HDR 지원 여부 확인 및 적절한 셰이더 선택
+        float maxNits = 100.0f;
+        bool isHDRSupported = m_renderDevice.IsHDRSupported(maxNits);
+        const char* toneMappingShaderSource = isHDRSupported ? CommonShaderCode::ToneMappingPS_HDR : CommonShaderCode::ToneMappingPS_LDR;
+        const char* shaderName = isHDRSupported ? "HDR" : "LDR";
+
+        // Tone Mapping Pixel Shader 컴파일
+        psBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(toneMappingShaderSource, strlen(toneMappingShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+            {
+                ALICE_LOG_ERRORF("Tone Mapping PS (%s) compile error: %s", shaderName, (char*)errorBlob->GetBufferPointer());
+            }
+            return false;
+        }
+        if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_toneMappingPS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Tone Mapping PS (%s)", shaderName);
+            return false;
+        }
+
+        if (isHDRSupported)
+        {
+            ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: HDR 톤매핑 셰이더 사용. MaxNits: %.1f", maxNits);
+        }
+        else
+        {
+            ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: LDR 톤매핑 셰이더 사용.");
+        }
+
+        // 톤매핑 전용 상태 객체 생성 (Blend OFF, Depth OFF, Cull OFF)
+        // Depth OFF
+        {
+            D3D11_DEPTH_STENCIL_DESC ds = {};
+            ds.DepthEnable = FALSE;
+            ds.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+            ds.DepthFunc = D3D11_COMPARISON_ALWAYS;
+            ds.StencilEnable = FALSE;
+            if (FAILED(m_device->CreateDepthStencilState(&ds, m_ppDepthOff.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create PostProcess Depth State");
+                return false;
+            }
+        }
+
+        // Blend OFF (opaque)
+        {
+            D3D11_BLEND_DESC bd = {};
+            bd.AlphaToCoverageEnable = FALSE;
+            bd.IndependentBlendEnable = FALSE;
+            auto& rt = bd.RenderTarget[0];
+            rt.BlendEnable = FALSE;
+            rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+            if (FAILED(m_device->CreateBlendState(&bd, m_ppBlendOpaque.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create PostProcess Blend State");
+                return false;
+            }
+        }
+
+        // Rasterizer: cull off, scissor off
+        {
+            D3D11_RASTERIZER_DESC rd = {};
+            rd.FillMode = D3D11_FILL_SOLID;
+            rd.CullMode = D3D11_CULL_NONE;
+            rd.DepthClipEnable = TRUE;
+            rd.ScissorEnable = FALSE;
+            if (FAILED(m_device->CreateRasterizerState(&rd, m_ppRasterNoCull.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create PostProcess Rasterizer State");
+                return false;
+            }
+        }
+
+        // Quad 지오메트리 생성
+        struct QuadVertex
+        {
+            DirectX::XMFLOAT3 position;
+            DirectX::XMFLOAT2 uv;
+        };
+
+        QuadVertex vertices[] = {
+            { DirectX::XMFLOAT3(-1.0f, 1.0f, 1.0f), DirectX::XMFLOAT2(0.0f, 0.0f) },  // Left Top
+            { DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f), DirectX::XMFLOAT2(1.0f, 0.0f) },   // Right Top
+            { DirectX::XMFLOAT3(-1.0f, -1.0f, 1.0f), DirectX::XMFLOAT2(0.0f, 1.0f) }, // Left Bottom
+            { DirectX::XMFLOAT3(1.0f, -1.0f, 1.0f), DirectX::XMFLOAT2(1.0f, 1.0f) }   // Right Bottom
+        };
+
+        D3D11_BUFFER_DESC vbDesc = {};
+        vbDesc.ByteWidth = sizeof(QuadVertex) * 4;
+        vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        vbDesc.Usage = D3D11_USAGE_DEFAULT;
+        D3D11_SUBRESOURCE_DATA vbData = {};
+        vbData.pSysMem = vertices;
+        if (FAILED(m_device->CreateBuffer(&vbDesc, &vbData, m_quadVB.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Quad VB");
+            return false;
+        }
+
+        m_quadStride = sizeof(QuadVertex);
+        m_quadOffset = 0;
+
+        WORD indices[] = { 0, 1, 2, 2, 1, 3 };
+        m_quadIndexCount = 6;
+        D3D11_BUFFER_DESC ibDesc = {};
+        ibDesc.ByteWidth = sizeof(WORD) * 6;
+        ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        ibDesc.Usage = D3D11_USAGE_DEFAULT;
+        D3D11_SUBRESOURCE_DATA ibData = {};
+        ibData.pSysMem = indices;
+        if (FAILED(m_device->CreateBuffer(&ibDesc, &ibData, m_quadIB.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Quad IB");
+            return false;
+        }
+
+        return true;
+    }
+
+    void ForwardRenderSystem::RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+    {
+        if (!m_toneMappingPS || !m_quadVS || !m_sceneSRV || !targetRTV) return;
+
+        // 뷰포트 설정
+        m_context->RSSetViewports(1, &viewport);
+
+        // 렌더 타겟 설정
+        m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
+
+        // 상태 정리 (중요: 이전 패스의 상태가 남아있으면 후처리가 오염됨)
+        float blendFactor[4] = { 0, 0, 0, 0 };
+        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        m_context->RSSetState(m_ppRasterNoCull.Get());
+
+        PostProcessCB cbData = {};
+        GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
+
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            memcpy(mapped.pData, &cbData, sizeof(PostProcessCB));
+            m_context->Unmap(m_cbPostProcess.Get(), 0);
+        }
+
+        // 리소스 바인딩
+        ID3D11ShaderResourceView* srv = m_sceneSRV.Get();
+        ID3D11SamplerState* sampler = m_samplerLinear.Get();
+        ID3D11Buffer* cb = m_cbPostProcess.Get();
+
+        m_context->PSSetShaderResources(0, 1, &srv);
+        m_context->PSSetSamplers(0, 1, &sampler);
+        m_context->PSSetConstantBuffers(2, 1, &cb); // register(b2)에 맞춰 슬롯 2 사용
+
+        // Quad 그리기 (VB 바인딩은 로컬 변수로 안전하게)
+        UINT stride = m_quadStride, offset = m_quadOffset;
+        ID3D11Buffer* vb = m_quadVB.Get();
+
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_context->IASetInputLayout(m_quadInputLayout.Get());
+        m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+        m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
+        m_context->PSSetShader(m_toneMappingPS.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+        // 리소스 해제
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(0, 1, &nullSRV);
+    }
+
+    void ForwardRenderSystem::GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const
+    {
+        outExposure = m_postProcessParams.exposure;
+        
+        // RenderDevice에서 HDR 지원 여부 및 최대 밝기 가져오기
+        float maxNits = 100.0f;
+        m_renderDevice.IsHDRSupported(maxNits);
+        // 사용자가 설정한 값이 있으면 사용, 없으면 모니터 최대 밝기 사용
+        outMaxHDRNits = (m_postProcessParams.maxHDRNits > 0.0f) ? m_postProcessParams.maxHDRNits : maxNits;
+    }
+
+    void ForwardRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits)
+    {
+        m_postProcessParams.exposure = exposure;
+        m_postProcessParams.maxHDRNits = maxHDRNits;
     }
 }
 

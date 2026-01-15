@@ -1,14 +1,48 @@
 cmake_minimum_required(VERSION 3.20)
 
-# ÇÁ·ÎÁ§Æ® ÀÌ¸§Àº ÀüÃ¼ ¼Ö·ç¼Ç ÀÌ¸§
+# í”„ë¡œì íŠ¸ ì´ë¦„ì€ ì „ì²´ ì†”ë£¨ì…˜ ì´ë¦„
 project(AliceRenderer LANGUAGES CXX)
 
-# C++ Ç¥ÁØ ¼³Á¤
+# =========================================================================
+# [ì„¤ì •] VCPKG ê²½ë¡œ (ë§¨ ìœ„ì—ì„œ ê´€ë¦¬)
+# 1. "AUTO" : í™˜ê²½ë³€ìˆ˜ -> Dë“œë¼ì´ë¸Œ -> Cë“œë¼ì´ë¸Œ ìˆœì„œë¡œ ìë™ íƒìƒ‰
+# 2. ì§ì ‘ ì§€ì • : "E:/MyLibs/vcpkg" ì²˜ëŸ¼ ê²½ë¡œ ì…ë ¥
+# =========================================================================
+set(ALICE_VCPKG_PATH_OPTION "AUTO")
+
+# --- VCPKG ê²½ë¡œ ìë™ ê°ì§€ ë¡œì§ ---
+if(ALICE_VCPKG_PATH_OPTION STREQUAL "AUTO")
+    if(DEFINED ENV{VCPKG_ROOT})
+        set(VCPKG_ROOT_DETECTED $ENV{VCPKG_ROOT})
+        message(STATUS "[Alice] VCPKG: í™˜ê²½ë³€ìˆ˜ì—ì„œ ê°ì§€ë¨ -> ${VCPKG_ROOT_DETECTED}")
+    elseif(EXISTS "D:/vcpkg/vcpkg.exe")
+        set(VCPKG_ROOT_DETECTED "D:/vcpkg")
+        message(STATUS "[Alice] VCPKG: Dë“œë¼ì´ë¸Œì—ì„œ ê°ì§€ë¨ -> ${VCPKG_ROOT_DETECTED}")
+    elseif(EXISTS "C:/vcpkg/vcpkg.exe")
+        set(VCPKG_ROOT_DETECTED "C:/vcpkg")
+        message(STATUS "[Alice] VCPKG: Cë“œë¼ì´ë¸Œì—ì„œ ê°ì§€ë¨ -> ${VCPKG_ROOT_DETECTED}")
+    else()
+        message(FATAL_ERROR "[Alice] vcpkgë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤! ë°°ì¹˜ íŒŒì¼ì„ ë¨¼ì € ì‹¤í–‰í•˜ê±°ë‚˜ ê²½ë¡œë¥¼ ì§€ì •í•´ì£¼ì„¸ìš”.")
+    endif()
+else()
+    set(VCPKG_ROOT_DETECTED ${ALICE_VCPKG_PATH_OPTION})
+    message(STATUS "[Alice] VCPKG: ì‚¬ìš©ì ì§€ì • ê²½ë¡œ ì‚¬ìš© -> ${VCPKG_ROOT_DETECTED}")
+endif()
+
+# ë³€ìˆ˜ëŠ” ì—¬ê¸°ì„œ í™•ì •ë¨ (ìºì‹œì— ì €ì¥í•˜ì—¬ GUIì—ì„œë„ ë³´ì´ê²Œ í•¨)
+set(VCPKG_ROOT "${VCPKG_ROOT_DETECTED}" CACHE PATH "Path to vcpkg root" FORCE)
+set(VCPKG_TRIPLET_STATIC "x64-windows-static-md" CACHE STRING "vcpkg static triplet")
+set(VCPKG_TRIPLET_DYNAMIC "x64-windows" CACHE STRING "vcpkg dynamic triplet")
+
+
+# ==========================================
+# [ì„¤ì •] ê¸°ë³¸ ì»´íŒŒì¼ ì˜µì…˜
+# ==========================================
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Ãâ·Â µğ·ºÅÍ¸® ¼³Á¤ (ºôµå Æú´õ ³»ºÎ bin/)
+# ì¶œë ¥ ë””ë ‰í„°ë¦¬ ì„¤ì • (ë¹Œë“œ í´ë” ë‚´ë¶€ bin/)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -17,38 +51,43 @@ set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
 set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 
 # ==========================================
-# [¼³Á¤] RTTR ¶óÀÌºê·¯¸® (Engine¿¡ ÅëÇÕ)
+# [ì„¤ì •] RTTR ë¼ì´ë¸ŒëŸ¬ë¦¬ (Engineì— í†µí•©)
 # ==========================================
-# Boost/Doxygen ÀÇÁ¸¼ºÀ» Á¦°ÅÇÏ°í °¡º±°Ô ºôµåÇÏ±â À§ÇÑ ¿É¼Çµé
+# Boost/Doxygen ì˜ì¡´ì„±ì„ ì œê±°í•˜ê³  ê°€ë³ê²Œ ë¹Œë“œí•˜ê¸° ìœ„í•œ ì˜µì…˜ë“¤
 set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
 set(BUILD_INSTALLER OFF CACHE BOOL "" FORCE)
 set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-# RTTRÀº shared·Î ºôµåÇØ¾ß Launch.exe, AliceScripts.dll »çÀÌ¿¡¼­
-# µî·ÏµÈ ÇÁ·ÎÆÛÆ¼°¡ °°Àº registry·Î ÇÕÃÄÁı´Ï´Ù.
+# RTTRì€ sharedë¡œ ë¹Œë“œí•´ì•¼ Launch.exe, AliceScripts.dll ì‚¬ì´ì—ì„œ
+# ë“±ë¡ëœ í”„ë¡œí¼í‹°ê°€ ê°™ì€ registryë¡œ í•©ì³ì§‘ë‹ˆë‹¤.
 set(BUILD_STATIC OFF CACHE BOOL "" FORCE)
 set(BUILD_RTTR_DYNAMIC ON CACHE BOOL "" FORCE)
 
-# ·±Å¸ÀÓ ¶óÀÌºê·¯¸® ¼³Á¤ (vcpkg ¹× ¿£Áø°ú ¸ÂÃß±â À§ÇØ Static Runtime ²û -> MD/MDd »ç¿ë)
+# ëŸ°íƒ€ì„ ë¼ì´ë¸ŒëŸ¬ë¦¬ ì„¤ì • (vcpkg ë° ì—”ì§„ê³¼ ë§ì¶”ê¸° ìœ„í•´ Static Runtime ë” -> MD/MDd ì‚¬ìš©)
 set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
 
-# RTTR ¼­ºê¸ğµâ Ãß°¡ (°æ·Î: ThirdParty/rttr)
+# RTTR ì„œë¸Œëª¨ë“ˆ ì¶”ê°€ (ê²½ë¡œ: ThirdParty/rttr)
 add_subdirectory(ThirdParty/rttr)
 
+# window, std ë‘˜ì˜ min, max ì¶©ëŒì‚­ì œ
+add_compile_definitions(NOMINMAX)
+
 # ==========================================
-# [Target] Engine (±âÁ¸ AliceEngine)
+# [Target] Engine (ê¸°ì¡´ AliceEngine)
 # ==========================================
 set(ENGINE_SOURCES
-    # ¿£Áø °èÃş
+    # ì—”ì§„ ê³„ì¸µ
     ${ALICE_SRC_DIR}/Engine/Engine.cpp
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.cpp
     ${ALICE_SRC_DIR}/Editor/EditorCore.cpp
 
-    # ÄÚ¾î(ECS ½ºÅ¸ÀÏ)
+    # ì½”ì–´(ECS ìŠ¤íƒ€ì¼)
     ${ALICE_SRC_DIR}/Core/World.cpp
-    ${ALICE_SRC_DIR}/Core/Script.cpp
+    ${ALICE_SRC_DIR}/Core/IScript.cpp
+    ${ALICE_SRC_DIR}/Core/ScriptFactory.cpp
+    ${ALICE_SRC_DIR}/Core/ScriptSystem.cpp
     ${ALICE_SRC_DIR}/Core/ScriptHotReload.cpp
     ${ALICE_SRC_DIR}/Core/Prefab.cpp
     ${ALICE_SRC_DIR}/Core/Material.cpp
@@ -64,19 +103,21 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
     ${ALICE_SRC_DIR}/Core/Input.cpp
 
-    # FBX/3D ¸ğµ¨ ·Î´õ
+    # FBX/3D ëª¨ë¸ ë¡œë”
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxModel.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxGeometry.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxAnimation.cpp
 
-    # ·»´õ¸µ °èÃş
+    # ë Œë”ë§ ê³„ì¸µ
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.cpp
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
+
 	
 	#PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -89,20 +130,26 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.cpp
-
+    
+    # ì‰ì´ë” ì½”ë“œ ë¬¶ìŒ
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
 )
 
 set(ENGINE_HEADERS
-    # ¿£Áø °èÃş
+    # ì—”ì§„ ê³„ì¸µ
     ${ALICE_SRC_DIR}/Engine/Engine.h
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.h
     ${ALICE_SRC_DIR}/Editor/EditorCore.h
 
-    # ÄÚ¾î
+    # ì½”ì–´
     ${ALICE_SRC_DIR}/Core/World.h
     ${ALICE_SRC_DIR}/Core/GameObject.h
     ${ALICE_SRC_DIR}/Core/Delegate.h
-    ${ALICE_SRC_DIR}/Core/Script.h
+    ${ALICE_SRC_DIR}/Core/IScript.h
+    ${ALICE_SRC_DIR}/Core/ScriptFactory.h
+    ${ALICE_SRC_DIR}/Core/ScriptSystem.h
     ${ALICE_SRC_DIR}/Core/ScriptAPI.h
     ${ALICE_SRC_DIR}/Core/ScriptHotReload.h
     ${ALICE_SRC_DIR}/Core/Prefab.h
@@ -128,15 +175,16 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Vertex.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
-	
-	#ÄÄÆ÷³ÍÆ®µé
-	${ALICE_SRC_DIR}/Components/CameraComponent.h
-	${ALICE_SRC_DIR}/Components/MaterialComponent.h
-	${ALICE_SRC_DIR}/Components/SkinnedAnimationComponent.h
-	${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
-	${ALICE_SRC_DIR}/Components/TransformComponent.h
+    
+    #ì»´í¬ë„ŒíŠ¸ë“¤
+    ${ALICE_SRC_DIR}/Components/CameraComponent.h
+    ${ALICE_SRC_DIR}/Components/MaterialComponent.h
+    ${ALICE_SRC_DIR}/Components/ScriptComponent.h
+    ${ALICE_SRC_DIR}/Components/SkinnedAnimationComponent.h
+    ${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
+    ${ALICE_SRC_DIR}/Components/TransformComponent.h
 
-    # FBX/3D ¸ğµ¨ ·Î´õ Çì´õ
+    # FBX/3D ëª¨ë¸ ë¡œë” í—¤ë”
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
     ${ALICE_SRC_DIR}/3Dmodel/FbxModel.h
     ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.h
@@ -144,20 +192,27 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/3Dmodel/FbxGeometry.h
     ${ALICE_SRC_DIR}/3Dmodel/FbxAnimation.h
 
-    # ·»´õ¸µ °èÃş
+    # ë Œë”ë§ ê³„ì¸µ
     ${ALICE_SRC_DIR}/Rendering/Camera.h
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.h
+    ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.h
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/IRenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
+    ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
+    
+    # ì‰ì´ë” ì½”ë“œ ë¬¶ìŒ
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
 
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
 	
-	#PhysX ¹°¸®
+	#PhysX ï¿½ï¿½ï¿½ï¿½
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
@@ -172,13 +227,13 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
 )
 
-# [º¯°æ] AliceEngine -> Engine
+# [ë³€ê²½] AliceEngine -> Engine
 add_library(Engine STATIC
     ${ENGINE_SOURCES}
     ${ENGINE_HEADERS}
 )
 
-# [¼³Á¤] Engine¿¡ RTTR ¿¬°á (PUBLIC: ¿£ÁøÀ» ¾²´Â ÇÁ·ÎÁ§Æ®µµ RTTR »ç¿ë °¡´É)
+# [ì„¤ì •] Engineì— RTTR ì—°ê²° (PUBLIC: ì—”ì§„ì„ ì“°ëŠ” í”„ë¡œì íŠ¸ë„ RTTR ì‚¬ìš© ê°€ëŠ¥)
 target_link_libraries(Engine PUBLIC RTTR::Core)
 
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
@@ -186,7 +241,7 @@ source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 # ==========================================
 # [Target] Launch & AlicePlayer
 # ==========================================
-# °øÅë °ÔÀÓ ÄÚµå
+# ê³µí†µ ê²Œì„ ì½”ë“œ
 set(APP_COMMON_SOURCES
     ${ALICE_SRC_DIR}/Scenes/SampleScene.cpp
     ${ALICE_SRC_DIR}/Game/FbxImporter.cpp
@@ -201,24 +256,24 @@ set(APP_HEADERS
     ${ALICE_SRC_DIR}/Game/SkinnedAnimationSystem.h
 )
 
-# 1. Launch (¿¡µğÅÍ/Åø ¸ğµå) ¿£Æ®¸® Æ÷ÀÎÆ®
+# 1. Launch (ì—ë””í„°/íˆ´ ëª¨ë“œ) ì—”íŠ¸ë¦¬ í¬ì¸íŠ¸
 set(LAUNCH_MAIN
     ${ALICE_SRC_DIR}/Sandbox/Main.cpp
 )
 
-# 2. AlicePlayer (¼ø¼ö °ÔÀÓ ¸ğµå) ¿£Æ®¸® Æ÷ÀÎÆ®
+# 2. AlicePlayer (ìˆœìˆ˜ ê²Œì„ ëª¨ë“œ) ì—”íŠ¸ë¦¬ í¬ì¸íŠ¸
 set(PLAYER_MAIN
     ${ALICE_SRC_DIR}/Sandbox/GameMain.cpp
 )
 
-# [Target 1] Launch (±âÁ¸ AliceGame/AliceRenderer)
+# [Target 1] Launch (ê¸°ì¡´ AliceGame/AliceRenderer)
 add_executable(Launch
     ${LAUNCH_MAIN}
     ${APP_COMMON_SOURCES}
     ${APP_HEADERS}
 )
 
-# [Target 2] AlicePlayer (ÃÖÁ¾ ºôµå¿ë ÇÃ·¹ÀÌ¾î)
+# [Target 2] AlicePlayer (ìµœì¢… ë¹Œë“œìš© í”Œë ˆì´ì–´)
 add_executable(AlicePlayer
     ${PLAYER_MAIN}
     ${APP_COMMON_SOURCES}
@@ -231,16 +286,16 @@ source_group(TREE ${ALICE_SRC_DIR} FILES ${LAUNCH_MAIN} ${PLAYER_MAIN} ${APP_COM
 # [ThirdParty] ImGui
 # ==========================================
 
-# EngineÀÌ ImGui Çì´õ¸¦ Ã£À» ¼ö ÀÖµµ·Ï ¼³Á¤
+# Engineì´ ImGui í—¤ë”ë¥¼ ì°¾ì„ ìˆ˜ ìˆë„ë¡ ì„¤ì •
 target_include_directories(Engine
     PRIVATE
         ${ALICE_SRC_DIR}
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
-        ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR Çì´õ °æ·Î
+        ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR í—¤ë” ê²½ë¡œ
 )
 
-# ImGui Á¤Àû ¶óÀÌºê·¯¸®
+# ImGui ì •ì  ë¼ì´ë¸ŒëŸ¬ë¦¬
 add_library(imgui STATIC
     ${IMGUI_DIR}/imconfig.h
     ${IMGUI_DIR}/imgui.cpp
@@ -265,7 +320,7 @@ target_include_directories(imgui
         ${IMGUI_DIR}/backends
 )
 
-# Launch¿Í AlicePlayer°¡ ImGui Çì´õ¸¦ Ã£À» ¼ö ÀÖµµ·Ï ¼³Á¤
+# Launchì™€ AlicePlayerê°€ ImGui í—¤ë”ë¥¼ ì°¾ì„ ìˆ˜ ìˆë„ë¡ ì„¤ì •
 foreach(target Launch AlicePlayer)
     target_include_directories(${target}
         PRIVATE
@@ -279,13 +334,13 @@ endforeach()
 # [ThirdParty] ImGuizmo
 # ==========================================
 
-# EngineÀÌ ImGuizmo Çì´õ¸¦ Ã£À» ¼ö ÀÖµµ·Ï ¼³Á¤
+# Engineì´ ImGuizmo í—¤ë”ë¥¼ ì°¾ì„ ìˆ˜ ìˆë„ë¡ ì„¤ì •
 target_include_directories(Engine
     PRIVATE
         ${IMGUIZMO_DIR}
 )
 
-# ImGuizmo Á¤Àû ¶óÀÌºê·¯¸®
+# ImGuizmo ì •ì  ë¼ì´ë¸ŒëŸ¬ë¦¬
 add_library(imguizmo STATIC
     ${IMGUIZMO_DIR}/ImGuizmo.cpp
     ${IMGUIZMO_DIR}/ImGuizmo.h
@@ -296,25 +351,25 @@ target_include_directories(imguizmo
         ${IMGUIZMO_DIR}
 )
 
-# ImGuizmo¸¦ DirectX ¸ğµå·Î ÄÄÆÄÀÏ (LH ÁÂÇ¥°è, depth 0~1)
+# ImGuizmoë¥¼ DirectX ëª¨ë“œë¡œ ì»´íŒŒì¼ (LH ì¢Œí‘œê³„, depth 0~1)
 target_compile_definitions(imguizmo
     PUBLIC
         IMGUIZMO_USE_DIRECTX
 )
 
-# Engineµµ µ¿ÀÏÇÑ Á¤ÀÇ »ç¿ë
+# Engineë„ ë™ì¼í•œ ì •ì˜ ì‚¬ìš©
 target_compile_definitions(Engine
     PRIVATE
         IMGUIZMO_USE_DIRECTX
 )
 
-# ImGuizmo´Â ImGui¿¡ ÀÇÁ¸
+# ImGuizmoëŠ” ImGuiì— ì˜ì¡´
 target_link_libraries(imguizmo
     PUBLIC
         imgui
 )
 
-# ½ÇÇà ÆÄÀÏµéÀÌ ImGuizmo Çì´õ¸¦ Ã£À» ¼ö ÀÖµµ·Ï ¼³Á¤
+# ì‹¤í–‰ íŒŒì¼ë“¤ì´ ImGuizmo í—¤ë”ë¥¼ ì°¾ì„ ìˆ˜ ìˆë„ë¡ ì„¤ì •
 foreach(target Launch AlicePlayer)
     target_include_directories(${target}
         PRIVATE
@@ -323,32 +378,22 @@ foreach(target Launch AlicePlayer)
 endforeach()
 
 # ==========================================
-# [¼³Á¤] ÄÄÆÄÀÏ ¿É¼Ç ¹× vcpkg
+# [ì„¤ì •] ì»´íŒŒì¼ ì˜µì…˜ ë° vcpkg ì ìš©
 # ==========================================
 if(MSVC)
-    # °æ°í ·¹º§
+    # ê²½ê³  ë ˆë²¨
     target_compile_options(Engine      PRIVATE /W4 /permissive-)
     target_compile_options(Launch      PRIVATE /W4 /permissive-)
     target_compile_options(AlicePlayer PRIVATE /W4 /permissive-)
 
-    # VCPKG ¼³Á¤
-    set(VCPKG_ROOT_DEFAULT "D:/vcpkg")
-    if(DEFINED ENV{VCPKG_ROOT})
-        set(VCPKG_ROOT_DEFAULT "$ENV{VCPKG_ROOT}")
-    endif()
-    set(VCPKG_ROOT "${VCPKG_ROOT_DEFAULT}" CACHE PATH "Path to vcpkg root")
-
-    set(VCPKG_TRIPLET_STATIC "x64-windows-static-md" CACHE STRING "vcpkg static triplet")
-    set(VCPKG_TRIPLET_DYNAMIC "x64-windows" CACHE STRING "vcpkg dynamic triplet")
-
-    # Include °æ·Î Ãß°¡
+    # Include ê²½ë¡œ ì¶”ê°€ (ìƒë‹¨ì—ì„œ ì„¤ì •í•œ VCPKG_ROOT ì‚¬ìš©)
     target_include_directories(Engine
         PRIVATE
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
     )
 
-    # Launch¿Í AlicePlayer¿¡ VCPKG Include/Lib °æ·Î ¼³Á¤
+    # Launchì™€ AlicePlayerì— VCPKG Include/Lib ê²½ë¡œ ì„¤ì •
     foreach(target Launch AlicePlayer)
         target_include_directories(${target}
             PRIVATE
@@ -366,18 +411,18 @@ if(MSVC)
     endforeach()
 endif()
 
-# Win32 ÇÏÀ§ ½Ã½ºÅÛ (ÄÜ¼Ö ¼û±è)
+# Win32 í•˜ìœ„ ì‹œìŠ¤í…œ (ì½˜ì†” ìˆ¨ê¹€)
 set_target_properties(Launch PROPERTIES WIN32_EXECUTABLE YES)
 set_target_properties(AlicePlayer PROPERTIES WIN32_EXECUTABLE YES)
 
 # ==========================================
-# [Link] ¶óÀÌºê·¯¸® ¿¬°á
+# [Link] ë¼ì´ë¸ŒëŸ¬ë¦¬ ì—°ê²°
 # ==========================================
-# µÎ Å¸°Ù ¸ğµÎ µ¿ÀÏÇÑ ¶óÀÌºê·¯¸® ÀÇÁ¸¼ºÀ» °¡Áü
+# ë‘ íƒ€ê²Ÿ ëª¨ë‘ ë™ì¼í•œ ë¼ì´ë¸ŒëŸ¬ë¦¬ ì˜ì¡´ì„±ì„ ê°€ì§
 foreach(target Launch AlicePlayer)
     target_link_libraries(${target}
         PRIVATE
-            Engine          # ÇÙ½É ¿£Áø
+            Engine          # í•µì‹¬ ì—”ì§„
             imgui
             imguizmo
             d3d11
@@ -392,13 +437,13 @@ foreach(target Launch AlicePlayer)
 endforeach()
 
 # ==========================================
-# [Post-Build] DLL º¹»ç
+# [Post-Build] DLL ë³µì‚¬
 # ==========================================
 
-# [º¯°æ] Launch¿Í AlicePlayer Å¸°Ù ¸ğµÎ¿¡ DLL º¹»ç ¼öÇà
+# [ë³€ê²½] Launchì™€ AlicePlayer íƒ€ê²Ÿ ëª¨ë‘ì— DLL ë³µì‚¬ ìˆ˜í–‰
 foreach(target Launch AlicePlayer)
     add_custom_command(TARGET ${target} POST_BUILD
-        # RTTR shared ½ºÅ©¸³Æ® DLL°ú registry °øÀ¯
+        # RTTR shared ìŠ¤í¬ë¦½íŠ¸ DLLê³¼ registry ê³µìœ 
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:rttr_core>" "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:rttr_core>"
 
@@ -417,7 +462,7 @@ foreach(target Launch AlicePlayer)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${THIRDPARTY_3DMODEL_DIR}/minizip.dll"      "$<TARGET_FILE_DIR:${target}>/minizip.dll"
 
-        # vcpkg Assimp DLL º¹»ç
+        # vcpkg Assimp DLL ë³µì‚¬
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/bin/assimp-vc143-mtd.dll"
             "$<TARGET_FILE_DIR:${target}>/assimp-vc143-mtd.dll"
@@ -439,24 +484,24 @@ if(MSVC)
     )
   endforeach()
   
-    # vcpkg toolchainÀ» ¾È ¾²´Â ±¸¼ºÀÌ¶ó¸é, find_package°¡ Ã£À» ¼ö ÀÖ°Ô prefix¸¸ Ãß°¡
+    # vcpkg toolchainï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì¶ï¿½ï¿½, find_packageï¿½ï¿½ Ã£ï¿½ï¿½ ï¿½ï¿½ ï¿½Ö°ï¿½ prefixï¿½ï¿½ ï¿½ß°ï¿½
     list(PREPEND CMAKE_PREFIX_PATH
         "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}"
     )
 
-    # vcpkg physx Æ÷Æ®°¡ ³»º¸³»´Â ÆĞÅ°Áö/Å¸°Ù
+    # vcpkg physx ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Å°ï¿½ï¿½/Å¸ï¿½ï¿½
     find_package(unofficial-omniverse-physx-sdk CONFIG REQUIRED)
 
-    # ¿£Áø¿¡ PhysX ¿¬°á (Debug/Release ¿Ã¹Ù¸¥ lib Á¶ÇÕÀº Å¸°ÙÀÌ ¾Ë¾Æ¼­ Ã³¸®)
+    # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ PhysX ï¿½ï¿½ï¿½ï¿½ (Debug/Release ï¿½Ã¹Ù¸ï¿½ lib ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¾Æ¼ï¿½ Ã³ï¿½ï¿½)
     target_link_libraries(Engine PUBLIC unofficial::omniverse-physx-sdk::sdk)
 
-    # include º¸°­
+    # include ï¿½ï¿½ï¿½ï¿½
     target_include_directories(Engine PRIVATE
         "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
         "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include/physx"
     )
 
-    # PhysX ·±Å¸ÀÓ DLL º¹»ç (ÇÊ¿äÇÑ °Í¸¸ ÃÖ¼Ò·Î)
+    # PhysX ï¿½ï¿½Å¸ï¿½ï¿½ DLL ï¿½ï¿½ï¿½ï¿½ (ï¿½Ê¿ï¿½ï¿½ï¿½ ï¿½Í¸ï¿½ ï¿½Ö¼Ò·ï¿½)
     set(PHYSX_BINDIR_DEBUG "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/bin")
     set(PHYSX_BINDIR_REL   "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/bin")
 

@@ -1,5 +1,7 @@
 #pragma once
 #include "CameraMovement.h"
+#include "Core/ScriptFactory.h"
+#include "Core/Logger.h"
 #include "Core/GameObject.h"
 #include "Core/Input.h" // Input 클래스가 있다고 가정
 #include "Core/InputTypes.h" // MouseCode 사용을 위해
