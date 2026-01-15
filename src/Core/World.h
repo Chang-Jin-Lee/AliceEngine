@@ -18,6 +18,11 @@
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/CameraComponent.h"
 
+// 물리 컴포넌트
+#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
+
+class IPhysicsWorld; // 물리 인터페이스 전방선언
+
 namespace Alice
 {
     class GameObject;
@@ -328,6 +333,16 @@ namespace Alice
         /// 엔티티가 유효한지 확인합니다. (generation 비교)
         bool IsEntityValid(EntityId id, std::uint32_t generation) const;
 
+
+        //==============================================================
+        // 물리 씬 함수
+        void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
+        IPhysicsWorld* GetPhysicsWorld();
+        const IPhysicsWorld* GetPhysicsWorld() const;
+    private:
+        std::shared_ptr<IPhysicsWorld> m_physicsWorld;
+        //==============================================================
+
     private:
         // if constexpr을 사용하여 타입에 맞는 저장소를 반환
         template <typename T>
@@ -338,6 +353,7 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
             else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
         }
 
@@ -350,6 +366,7 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
             else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
         }
 
@@ -364,6 +381,8 @@ namespace Alice
         ComponentStorage<SkinnedMeshComponent> m_skinnedMeshes;
         ComponentStorage<SkinnedAnimationComponent> m_skinnedAnimations;
         ComponentStorage<CameraComponent> m_cameras;
+
+        ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
 
         // 스크립트는 vector를 값으로 가지므로 일반 T와 구조가 달라 따로 둠
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
