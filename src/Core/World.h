@@ -10,18 +10,13 @@
 #include "Core/IScript.h"
 #include "Components/ScriptComponent.h"
 
-// ì»´í¬ë„ŒíŠ¸ í—¤ë”ë“¤
+// ÄÄÆ÷³ÍÆ® Çì´õµé
 #include "Components/ComponentStorage.h"
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/CameraComponent.h"
-
-// ë¬¼ë¦¬ ì»´í¬ë„ŒíŠ¸
-#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
-
-class IPhysicsWorld; // ë¬¼ë¦¬
 
 namespace Alice
 {
@@ -36,50 +31,50 @@ namespace Alice
         EntityId CreateEntity();
         void DestroyEntity(EntityId id);
 
-        // ==== ìœ í‹¸ë¦¬í‹° ====
+        // ==== À¯Æ¿¸®Æ¼ ====
         GameObject FindGameObject(const std::string& name);
         void SetEntityName(EntityId id, const std::string& name);
         std::string GetEntityName(EntityId id) const;
 
-        // ==== ê²Œì„ ì˜¤ë¸Œì íŠ¸ ìƒì„± í—¬í¼ ====
-        /// ë¹ˆ ê²Œì„ ì˜¤ë¸Œì íŠ¸ë¥¼ ìƒì„±í•©ë‹ˆë‹¤ (Transformë§Œ ê°€ì§)
+        // ==== °ÔÀÓ ¿ÀºêÁ§Æ® »ı¼º ÇïÆÛ ====
+        /// ºó °ÔÀÓ ¿ÀºêÁ§Æ®¸¦ »ı¼ºÇÕ´Ï´Ù (Transform¸¸ °¡Áü)
         EntityId CreateEmpty();
         
-        /// íë¸Œ ê²Œì„ ì˜¤ë¸Œì íŠ¸ë¥¼ ìƒì„±í•©ë‹ˆë‹¤ (Transform + Material)
+        /// Å¥ºê °ÔÀÓ ¿ÀºêÁ§Æ®¸¦ »ı¼ºÇÕ´Ï´Ù (Transform + Material)
         EntityId CreateCube();
         
-        /// ì¹´ë©”ë¼ ê²Œì„ ì˜¤ë¸Œì íŠ¸ë¥¼ ìƒì„±í•©ë‹ˆë‹¤ (Transform + Camera)
+        /// Ä«¸Ş¶ó °ÔÀÓ ¿ÀºêÁ§Æ®¸¦ »ı¼ºÇÕ´Ï´Ù (Transform + Camera)
         EntityId CreateCamera();
 
-        // ==== ì œë„¤ë¦­ ì»´í¬ë„ŒíŠ¸ ê´€ë¦¬ ì‹œìŠ¤í…œ ====
-        // ì»´í¬ë„ŒíŠ¸ íƒ€ì… Tì— ë”°ë¼ ì˜¬ë°”ë¥¸ Mapì„ ìë™ìœ¼ë¡œ ì°¾ì•„ì¤ë‹ˆë‹¤.
+        // ==== Á¦³×¸¯ ÄÄÆ÷³ÍÆ® °ü¸® ½Ã½ºÅÛ ====
+        // ÄÄÆ÷³ÍÆ® Å¸ÀÔ T¿¡ µû¶ó ¿Ã¹Ù¸¥ MapÀ» ÀÚµ¿À¸·Î Ã£¾ÆÁİ´Ï´Ù.
 
-        /// ì»´í¬ë„ŒíŠ¸ ì¶”ê°€ (ê¸°ì¡´ ë°ì´í„°ê°€ ìˆìœ¼ë©´ ë®ì–´ì“°ê±°ë‚˜ ë°˜í™˜)
-        /// ì‚¬ìš©ë²•: world.AddComponent<TransformComponent>(id).SetPosition(0,0,0);
+        /// ÄÄÆ÷³ÍÆ® Ãß°¡ (±âÁ¸ µ¥ÀÌÅÍ°¡ ÀÖÀ¸¸é µ¤¾î¾²°Å³ª ¹İÈ¯)
+        /// »ç¿ë¹ı: world.AddComponent<TransformComponent>(id).SetPosition(0,0,0);
         template <typename T, typename... Args>
         T& AddComponent(EntityId id, Args&&... args)
         {
-            // 1. ìœ ì € ìŠ¤í¬ë¦½íŠ¸ì¸ ê²½ìš° (IScript ìƒì† ì—¬ë¶€ í™•ì¸)
+            // 1. À¯Àú ½ºÅ©¸³Æ®ÀÎ °æ¿ì (IScript »ó¼Ó ¿©ºÎ È®ÀÎ)
             if constexpr (std::is_base_of_v<IScript, T>)
             {
-                // unique_ptr ìƒì„±
+                // unique_ptr »ı¼º
                 auto instance = std::make_unique<T>(std::forward<Args>(args)...);
 
-                // ë°˜í™˜ê°’ ì €ì¥ì„ ìœ„í•´ Raw Pointer í™•ë³´ (move í›„ì—ëŠ” instanceê°€ nullì´ ë¨)
+                // ¹İÈ¯°ª ÀúÀåÀ» À§ÇØ Raw Pointer È®º¸ (move ÈÄ¿¡´Â instance°¡ nullÀÌ µÊ)
                 T* rawPtr = instance.get();
 
-                // ì»¨í…Œì´ë„ˆ ìƒì„± ë° ë°ì´í„° ì±„ìš°ê¸°
+                // ÄÁÅ×ÀÌ³Ê »ı¼º ¹× µ¥ÀÌÅÍ Ã¤¿ì±â
                 ScriptComponent newScriptComp{};
                 newScriptComp.scriptName = typeid(T).name();
-                newScriptComp.instance = std::move(instance); // ì†Œìœ ê¶Œ ì´ì „
+                newScriptComp.instance = std::move(instance); // ¼ÒÀ¯±Ç ÀÌÀü
 
-                // ì´ˆê¸°í™” ë£¨í‹´
+                // ÃÊ±âÈ­ ·çÆ¾
                 newScriptComp.instance->SetContext(this, id);
 
-                // ì›”ë“œ ë°ì´í„°ì— ë“±ë¡ (Move)
+                // ¿ùµå µ¥ÀÌÅÍ¿¡ µî·Ï (Move)
                 m_scripts[id].push_back(std::move(newScriptComp));
 
-                // ì €ì¥í•´ë‘” í¬ì¸í„° ë°˜í™˜
+                // ÀúÀåÇØµĞ Æ÷ÀÎÅÍ ¹İÈ¯
                 return *rawPtr;
             }
             else
@@ -87,35 +82,35 @@ namespace Alice
                 auto& storage = GetStorage<T>();
                 if constexpr (std::is_default_constructible_v<T> && sizeof...(Args) == 0)
                 {
-                    // ê¸°ë³¸ ìƒì„±ìë§Œ í˜¸ì¶œ
+                    // ±âº» »ı¼ºÀÚ¸¸ È£Ãâ
                     T defaultComp{};
                     return storage.Add(id, std::move(defaultComp));
                 }
                 else
                 {
-                    // ì¸ìê°€ ìˆëŠ” ê²½ìš° ìƒì„± í›„ ì¶”ê°€
+                    // ÀÎÀÚ°¡ ÀÖ´Â °æ¿ì »ı¼º ÈÄ Ãß°¡
                     T newComp(std::forward<Args>(args)...);
                     return storage.Add(id, std::move(newComp));
                 }
             }
         }
 
-        /// ì»´í¬ë„ŒíŠ¸ ê°€ì ¸ì˜¤ê¸° (ì—†ìœ¼ë©´ nullptr)
-        /// ì‚¬ìš©ë²•: auto* tr = world.GetComponent<TransformComponent>(id);
+        /// ÄÄÆ÷³ÍÆ® °¡Á®¿À±â (¾øÀ¸¸é nullptr)
+        /// »ç¿ë¹ı: auto* tr = world.GetComponent<TransformComponent>(id);
         template <typename T>
         T* GetComponent(EntityId id)
         {
-            // Tê°€ ìœ ì € ìŠ¤í¬ë¦½íŠ¸ì¸ ê²½ìš°. IScriptë¥¼ ìƒì†ë°›ì•˜ìœ¼ë©´ ìœ ì €ê°€ ë§Œë“  ìŠ¤í¬ë¦½íŠ¸ì„
+            // T°¡ À¯Àú ½ºÅ©¸³Æ®ÀÎ °æ¿ì. IScript¸¦ »ó¼Ó¹Ş¾ÒÀ¸¸é À¯Àú°¡ ¸¸µç ½ºÅ©¸³Æ®ÀÓ
             if constexpr (std::is_base_of_v<IScript, T>)
             {
                 auto it = m_scripts.find(id);
                 if (it == m_scripts.end()) return nullptr;
 
-                // í•´ë‹¹ ì—”í‹°í‹°ì— ë¶™ì€ ëª¨ë“  ìŠ¤í¬ë¦½íŠ¸ë¥¼ ìˆœíšŒí•˜ë©° íƒ€ì… ê²€ì‚¬
+                // ÇØ´ç ¿£Æ¼Æ¼¿¡ ºÙÀº ¸ğµç ½ºÅ©¸³Æ®¸¦ ¼øÈ¸ÇÏ¸ç Å¸ÀÔ °Ë»ç
                 for (auto& scriptComp : it->second)
                 {
-                    // IScript* -> MyCustomScript* ë¡œ ë³€í™˜ ì‹œë„
-                    // dynamic_castëŠ” ì‹¤íŒ¨ ì‹œ nullptrë¥¼ ë°˜í™˜í•¨
+                    // IScript* -> MyCustomScript* ·Î º¯È¯ ½Ãµµ
+                    // dynamic_cast´Â ½ÇÆĞ ½Ã nullptr¸¦ ¹İÈ¯ÇÔ
                     if (scriptComp.instance)
                     {
                         T* casted = dynamic_cast<T*>(scriptComp.instance.get());
@@ -131,7 +126,7 @@ namespace Alice
             }
         }
 
-        /// const ë²„ì „ ê°€ì ¸ì˜¤ê¸°
+        /// const ¹öÀü °¡Á®¿À±â
         template <typename T>
         const T* GetComponent(EntityId id) const
         {
@@ -157,13 +152,13 @@ namespace Alice
             }
         }
 
-        /// ì‚¬ìš©ë²•: std::vector<MonsterScript*> list = world.GetComponents<MonsterScript>(id);
+        /// »ç¿ë¹ı: std::vector<MonsterScript*> list = world.GetComponents<MonsterScript>(id);
         template <typename T>
         std::vector<T*> GetComponents(EntityId id)
         {
             std::vector<T*> results;
 
-            // ìŠ¤í¬ë¦½íŠ¸ì¸ ê²½ìš°: ë²¡í„°ë¥¼ ìˆœíšŒí•˜ë©° dynamic_cast ì„±ê³µí•˜ëŠ” ëª¨ë“  ê°ì²´ ìˆ˜ì§‘
+            // ½ºÅ©¸³Æ®ÀÎ °æ¿ì: º¤ÅÍ¸¦ ¼øÈ¸ÇÏ¸ç dynamic_cast ¼º°øÇÏ´Â ¸ğµç °´Ã¼ ¼öÁı
             if constexpr (std::is_base_of_v<IScript, T>)
             {
                 auto it = m_scripts.find(id);
@@ -173,14 +168,14 @@ namespace Alice
                     {
                         if (scriptComp.instance)
                         {
-                            // ë¶€ëª¨ íƒ€ì…ìœ¼ë¡œ ìš”ì²­í•´ë„ ìì‹ë“¤ì„ ë‹¤ ì°¾ì•„ì¤ë‹ˆë‹¤.
+                            // ºÎ¸ğ Å¸ÀÔÀ¸·Î ¿äÃ»ÇØµµ ÀÚ½ÄµéÀ» ´Ù Ã£¾ÆÁİ´Ï´Ù.
                             T* casted = dynamic_cast<T*>(scriptComp.instance.get());
                             if (casted) results.push_back(casted);
                         }
                     }
                 }
             }
-            // 2. ì¼ë°˜ ì—”ì§„ ì»´í¬ë„ŒíŠ¸ì¸ ê²½ìš°: 1ê°œë§Œ ìˆìœ¼ë¯€ë¡œ ìˆìœ¼ë©´ ë‹´ì•„ì„œ ë¦¬í„´
+            // 2. ÀÏ¹İ ¿£Áø ÄÄÆ÷³ÍÆ®ÀÎ °æ¿ì: 1°³¸¸ ÀÖÀ¸¹Ç·Î ÀÖÀ¸¸é ´ã¾Æ¼­ ¸®ÅÏ
             else
             {
                 T* comp = GetComponent<T>(id);
@@ -190,7 +185,7 @@ namespace Alice
             return results;
         }
 
-        /// const ë²„ì „ GetComponents
+        /// const ¹öÀü GetComponents
         template <typename T>
         std::vector<const T*> GetComponents(EntityId id) const
         {
@@ -219,7 +214,7 @@ namespace Alice
             return results;
         }
 
-        /// ì»´í¬ë„ŒíŠ¸ ì œê±°
+        /// ÄÄÆ÷³ÍÆ® Á¦°Å
         template <typename T>
         void RemoveComponent(EntityId id)
         {
@@ -231,15 +226,15 @@ namespace Alice
                 auto& vec = it->second;
                 for (auto iter = vec.begin(); iter != vec.end(); ++iter)
                 {
-                    // íƒ€ì… ì¼ì¹˜ í™•ì¸
+                    // Å¸ÀÔ ÀÏÄ¡ È®ÀÎ
                     if (iter->instance && dynamic_cast<T*>(iter->instance.get()))
                     {
                         iter->instance->OnDisable();
                         iter->instance->OnDestroy();
 
-                        vec.erase(iter); // ë²¡í„°ì—ì„œ í•´ë‹¹ ìš”ì†Œ í•˜ë‚˜ë§Œ ì œê±°
+                        vec.erase(iter); // º¤ÅÍ¿¡¼­ ÇØ´ç ¿ä¼Ò ÇÏ³ª¸¸ Á¦°Å
 
-                        // ë¹„ì—ˆìœ¼ë©´ ë§µì—ì„œë„ ì—”í‹°í‹° í‚¤ ì œê±°
+                        // ºñ¾úÀ¸¸é ¸Ê¿¡¼­µµ ¿£Æ¼Æ¼ Å° Á¦°Å
                         if (vec.empty()) m_scripts.erase(it);
                         return;
                     }
@@ -252,33 +247,33 @@ namespace Alice
             }
         }
 
-        // ==== ì „ì²´ ì»´í¬ë„ŒíŠ¸ ìˆœíšŒ (ì‹œìŠ¤í…œ/ì—ë””í„°ìš©) ====
+        // ==== ÀüÃ¼ ÄÄÆ÷³ÍÆ® ¼øÈ¸ (½Ã½ºÅÛ/¿¡µğÅÍ¿ë) ====
         // 
-        // ì‚¬ìš© ì˜ˆì‹œ (ì½ê¸° ì „ìš©):
+        // »ç¿ë ¿¹½Ã (ÀĞ±â Àü¿ë):
         //   for (const auto& [entityId, transform] : world.GetComponents<TransformComponent>())
         //   {
-        //       // transformì€ const TransformComponent&
-        //       // ì—°ì† ë©”ëª¨ë¦¬ì—ì„œ íš¨ìœ¨ì ìœ¼ë¡œ ìˆœíšŒë¨ (ìºì‹œ ì¹œí™”ì )
+        //       // transformÀº const TransformComponent&
+        //       // ¿¬¼Ó ¸Ş¸ğ¸®¿¡¼­ È¿À²ÀûÀ¸·Î ¼øÈ¸µÊ (Ä³½Ã Ä£È­Àû)
         //   }
         //
-        // ì‚¬ìš© ì˜ˆì‹œ (ìˆ˜ì • ê°€ëŠ¥):
+        // »ç¿ë ¿¹½Ã (¼öÁ¤ °¡´É):
         //   for (auto& [entityId, transform] : world.GetComponents<TransformComponent>())
         //   {
-        //       // transformì€ TransformComponent&
-        //       transform.position.x += 1.0f; // ìˆ˜ì • ê°€ëŠ¥
+        //       // transformÀº TransformComponent&
+        //       transform.position.x += 1.0f; // ¼öÁ¤ °¡´É
         //   }
         //
-        // ì„±ëŠ¥ ìµœì í™”:
-        //   - ëª¨ë“  TransformComponentê°€ ì—°ì† ë©”ëª¨ë¦¬ì— ì €ì¥ë˜ì–´ ìºì‹œ íš¨ìœ¨ ê·¹ëŒ€í™”
-        //   - ìˆœíšŒ ì‹œ í•´ì‹œë§µ ì¡°íšŒ ì—†ì´ ì§ì ‘ ì ‘ê·¼
-        //   - O(1) ì‚­ì œë¡œ ì¸í•œ ìˆœíšŒ ì¤‘ ì‚­ì œ ì•ˆì „ì„± ë³´ì¥
+        // ¼º´É ÃÖÀûÈ­:
+        //   - ¸ğµç TransformComponent°¡ ¿¬¼Ó ¸Ş¸ğ¸®¿¡ ÀúÀåµÇ¾î Ä³½Ã È¿À² ±Ø´ëÈ­
+        //   - ¼øÈ¸ ½Ã ÇØ½Ã¸Ê Á¶È¸ ¾øÀÌ Á÷Á¢ Á¢±Ù
+        //   - O(1) »èÁ¦·Î ÀÎÇÑ ¼øÈ¸ Áß »èÁ¦ ¾ÈÀü¼º º¸Àå
         template <typename T>
         auto GetComponents() const
         {
             if constexpr (std::is_base_of_v<IScript, T>)
             {
-                // ìŠ¤í¬ë¦½íŠ¸ëŠ” ë³„ë„ ì²˜ë¦¬ í•„ìš” (í˜„ì¬ êµ¬ì¡° ìœ ì§€)
-                static_assert(std::is_same_v<T, void>, "ìŠ¤í¬ë¦½íŠ¸ëŠ” GetComponents()ë¡œ ì „ì²´ ìˆœíšŒí•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.");
+                // ½ºÅ©¸³Æ®´Â º°µµ Ã³¸® ÇÊ¿ä (ÇöÀç ±¸Á¶ À¯Áö)
+                static_assert(std::is_same_v<T, void>, "½ºÅ©¸³Æ®´Â GetComponents()·Î ÀüÃ¼ ¼øÈ¸ÇÒ ¼ö ¾ø½À´Ï´Ù.");
             }
             else
             {
@@ -287,64 +282,54 @@ namespace Alice
             }
         }
 
-        // ë¹„ìƒìˆ˜ ë²„ì „ (ìˆ˜ì • ê°€ëŠ¥í•œ ìˆœíšŒ)
+        // ºñ»ó¼ö ¹öÀü (¼öÁ¤ °¡´ÉÇÑ ¼øÈ¸)
         template <typename T>
         auto GetComponents()
         {
             if constexpr (std::is_base_of_v<IScript, T>)
             {
-                static_assert(std::is_same_v<T, void>, "ìŠ¤í¬ë¦½íŠ¸ëŠ” GetComponents()ë¡œ ì „ì²´ ìˆœíšŒí•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.");
+                static_assert(std::is_same_v<T, void>, "½ºÅ©¸³Æ®´Â GetComponents()·Î ÀüÃ¼ ¼øÈ¸ÇÒ ¼ö ¾ø½À´Ï´Ù.");
             }
             else
             {
                 auto& storage = GetStorage<T>();
-                return storage.GetView(); // const ì˜¤ë²„ë¡œë”©ìœ¼ë¡œ ìë™ íŒë‹¨
+                return storage.GetView(); // const ¿À¹ö·ÎµùÀ¸·Î ÀÚµ¿ ÆÇ´Ü
             }
         }
 
-        // ==== ìŠ¤í¬ë¦½íŠ¸ (íŠ¹ìˆ˜ ì¼€ì´ìŠ¤) ====
-        // ìŠ¤í¬ë¦½íŠ¸ëŠ” 1ê°œ ì—”í‹°í‹°ì— ì—¬ëŸ¬ ê°œê°€ ë¶™ì„ ìˆ˜ ìˆì–´ ë³„ë„ ê´€ë¦¬ ì¶”ì²œ
+        // ==== ½ºÅ©¸³Æ® (Æ¯¼ö ÄÉÀÌ½º) ====
+        // ½ºÅ©¸³Æ®´Â 1°³ ¿£Æ¼Æ¼¿¡ ¿©·¯ °³°¡ ºÙÀ» ¼ö ÀÖ¾î º°µµ °ü¸® ÃßÃµ
         ScriptComponent& AddScript(EntityId id, const std::string& scriptName);
 
-        /// ì „ì²´ Script ì»¨í…Œì´ë„ˆ ScriptSystemì—ì„œ ì‚¬ìš©
+        /// ÀüÃ¼ Script ÄÁÅ×ÀÌ³Ê ScriptSystem¿¡¼­ »ç¿ë
         const std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScriptsInWorld() const { return m_scripts;  }
         std::unordered_map<EntityId, std::vector<ScriptComponent>>& GetAllScriptsInWorld() { return m_scripts; }
 
         std::vector<ScriptComponent>* GetScripts(EntityId id);
         const std::vector<ScriptComponent>* GetScripts(EntityId id) const;
         void RemoveScript(EntityId id, std::size_t index);
-        void RemoveAllScript(); // Clearìš©
+        void RemoveAllScript(); // Clear¿ë
 
-        // ==== ì¹´ë©”ë¼ (íŠ¹ìˆ˜ ì¼€ì´ìŠ¤ - ë©”ì¸ ì¹´ë©”ë¼ ë“±) ====
-        // í•„ìš”í•˜ë‹¤ë©´ ë³„ë„ í—¬í¼ í•¨ìˆ˜ ìœ ì§€
+        // ==== Ä«¸Ş¶ó (Æ¯¼ö ÄÉÀÌ½º - ¸ŞÀÎ Ä«¸Ş¶ó µî) ====
+        // ÇÊ¿äÇÏ´Ù¸é º°µµ ÇïÆÛ ÇÔ¼ö À¯Áö
         EntityId GetMainCameraEntityId();
 
-		//==============================================================
-		// ë¬¼ë¦¬ ì”¬ í•¨ìˆ˜
-		void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
-		IPhysicsWorld* GetPhysicsWorld();
-		const IPhysicsWorld* GetPhysicsWorld() const;
-	private:
-		std::shared_ptr<IPhysicsWorld> m_physicsWorld;
-		//==============================================================
-
-	public:				
-        // ==== ì§€ì—° íŒŒê´´ ì‹œìŠ¤í…œ ====
-        /// ì§€ì—° íŒŒê´´ë¥¼ ì˜ˆì•½í•©ë‹ˆë‹¤. (delay ì´ˆ í›„ì— íŒŒê´´)
+        // ==== Áö¿¬ ÆÄ±« ½Ã½ºÅÛ ====
+        /// Áö¿¬ ÆÄ±«¸¦ ¿¹¾àÇÕ´Ï´Ù. (delay ÃÊ ÈÄ¿¡ ÆÄ±«)
         void ScheduleDelayedDestruction(EntityId id, float delay);
         
-        /// ì§€ì—° íŒŒê´´ ì‹œìŠ¤í…œì„ ì—…ë°ì´íŠ¸í•©ë‹ˆë‹¤. (ë§¤ í”„ë ˆì„ í˜¸ì¶œ í•„ìš”)
+        /// Áö¿¬ ÆÄ±« ½Ã½ºÅÛÀ» ¾÷µ¥ÀÌÆ®ÇÕ´Ï´Ù. (¸Å ÇÁ·¹ÀÓ È£Ãâ ÇÊ¿ä)
         void UpdateDelayedDestruction(float deltaTime);
 
-        // ==== SlotMap ê¸°ë°˜ ìœ íš¨ì„± ê²€ì‚¬ ====
-        /// ì—”í‹°í‹°ì˜ í˜„ì¬ generationì„ ê°€ì ¸ì˜µë‹ˆë‹¤. (ì—†ìœ¼ë©´ 0)
+        // ==== SlotMap ±â¹İ À¯È¿¼º °Ë»ç ====
+        /// ¿£Æ¼Æ¼ÀÇ ÇöÀç generationÀ» °¡Á®¿É´Ï´Ù. (¾øÀ¸¸é 0)
         std::uint32_t GetEntityGeneration(EntityId id) const;
         
-        /// ì—”í‹°í‹°ê°€ ìœ íš¨í•œì§€ í™•ì¸í•©ë‹ˆë‹¤. (generation ë¹„êµ)
+        /// ¿£Æ¼Æ¼°¡ À¯È¿ÇÑÁö È®ÀÎÇÕ´Ï´Ù. (generation ºñ±³)
         bool IsEntityValid(EntityId id, std::uint32_t generation) const;
 
     private:
-        // if constexprì„ ì‚¬ìš©í•˜ì—¬ íƒ€ì…ì— ë§ëŠ” ì €ì¥ì†Œë¥¼ ë°˜í™˜
+        // if constexprÀ» »ç¿ëÇÏ¿© Å¸ÀÔ¿¡ ¸Â´Â ÀúÀå¼Ò¸¦ ¹İÈ¯
         template <typename T>
         auto& GetStorage()
         {
@@ -353,11 +338,10 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
-            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
-            else static_assert(std::is_same_v<T, void>, "ì§€ì›í•˜ì§€ ì•ŠëŠ” ì»´í¬ë„ŒíŠ¸ íƒ€ì…ì…ë‹ˆë‹¤.");
+            else static_assert(std::is_same_v<T, void>, "Áö¿øÇÏÁö ¾Ê´Â ÄÄÆ÷³ÍÆ® Å¸ÀÔÀÔ´Ï´Ù.");
         }
 
-        // const ë²„ì „ ì €ì¥ì†Œ ë°˜í™˜
+        // const ¹öÀü ÀúÀå¼Ò ¹İÈ¯
         template <typename T>
         const auto& GetStorageConst() const
         {
@@ -365,9 +349,8 @@ namespace Alice
             else if constexpr (std::is_same_v<T, MaterialComponent>) return m_materials;
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
-            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
-            else static_assert(std::is_same_v<T, void>, "ì§€ì›í•˜ì§€ ì•ŠëŠ” ì»´í¬ë„ŒíŠ¸ íƒ€ì…ì…ë‹ˆë‹¤.");
+            else static_assert(std::is_same_v<T, void>, "Áö¿øÇÏÁö ¾Ê´Â ÄÄÆ÷³ÍÆ® Å¸ÀÔÀÔ´Ï´Ù.");
         }
 
     private:
@@ -375,26 +358,23 @@ namespace Alice
 
         std::unordered_map<EntityId, std::string> m_names;
 
-        // Sparse Set ê¸°ë°˜ ì»´í¬ë„ŒíŠ¸ ì €ì¥ì†Œë“¤ (ë©”ëª¨ë¦¬ ì—°ì†ì„± í™•ë³´)
+        // Sparse Set ±â¹İ ÄÄÆ÷³ÍÆ® ÀúÀå¼Òµé (¸Ş¸ğ¸® ¿¬¼Ó¼º È®º¸)
         ComponentStorage<TransformComponent> m_transforms;
         ComponentStorage<MaterialComponent> m_materials;
         ComponentStorage<SkinnedMeshComponent> m_skinnedMeshes;
         ComponentStorage<SkinnedAnimationComponent> m_skinnedAnimations;
         ComponentStorage<CameraComponent> m_cameras;
 
-		// ë¬¼ë¦¬		
-        ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
-        // ìŠ¤í¬ë¦½íŠ¸ëŠ” vectorë¥¼ ê°’ìœ¼ë¡œ ê°€ì§€ë¯€ë¡œ ì¼ë°˜ Tì™€ êµ¬ì¡°ê°€ ë‹¬ë¼ ë”°ë¡œ ë‘ 
+        // ½ºÅ©¸³Æ®´Â vector¸¦ °ªÀ¸·Î °¡Áö¹Ç·Î ÀÏ¹İ T¿Í ±¸Á¶°¡ ´Ş¶ó µû·Î µÒ
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
 
-        // ì§€ì—° íŒŒê´´ ì‹œìŠ¤í…œ (EntityId -> ë‚¨ì€ ì‹œê°„)
+        // Áö¿¬ ÆÄ±« ½Ã½ºÅÛ (EntityId -> ³²Àº ½Ã°£)
         std::unordered_map<EntityId, float> m_delayedDestructions;
 
-        // SlotMap ê¸°ë°˜ ìœ íš¨ì„± ê²€ì‚¬ (EntityId -> Generation)
-        // ì—”í‹°í‹°ê°€ ìƒì„±ë  ë•Œ 0ìœ¼ë¡œ ì‹œì‘í•˜ê³ , íŒŒê´´ë  ë•Œë§ˆë‹¤ ì¦ê°€í•©ë‹ˆë‹¤.
+        // SlotMap ±â¹İ À¯È¿¼º °Ë»ç (EntityId -> Generation)
+        // ¿£Æ¼Æ¼°¡ »ı¼ºµÉ ¶§ 0À¸·Î ½ÃÀÛÇÏ°í, ÆÄ±«µÉ ¶§¸¶´Ù Áõ°¡ÇÕ´Ï´Ù.
         std::unordered_map<EntityId, std::uint32_t> m_entityGenerations;
-		
-	};
+    };
 
     template <typename T>
     T* IScript::GetComponent()
@@ -420,7 +400,7 @@ namespace Alice
     template <typename T, typename... Args>
     T& IScript::AddComponent(Args&&... args)
     {
-        // Worldê°€ ì—†ìœ¼ë©´ í¬ë˜ì‹œê°€ ë‚˜ê² ì§€ë§Œ, ìŠ¤í¬ë¦½íŠ¸ê°€ ì‹¤í–‰ ì¤‘ì´ë¼ë©´ WorldëŠ” ë°˜ë“œì‹œ ì¡´ì¬í•´ì•¼ í•©ë‹ˆë‹¤.
+        // World°¡ ¾øÀ¸¸é Å©·¡½Ã°¡ ³ª°ÚÁö¸¸, ½ºÅ©¸³Æ®°¡ ½ÇÇà ÁßÀÌ¶ó¸é World´Â ¹İµå½Ã Á¸ÀçÇØ¾ß ÇÕ´Ï´Ù.
         return m_world->AddComponent<T>(m_entity, std::forward<Args>(args)...);
     }
 

@@ -1,5 +1,5 @@
 #include "Core/ComponentRegistry.h"
-#include "Core/World.h" // ì—¬ê¸°ì— ì»´í¬ë„ŒíŠ¸ í—¤ë” includeê°€ ìˆìŒ ë‰´í›„í›„
+#include "Core/World.h"
 #include "Logger.h"
 
 #include <rttr/registration>
@@ -10,20 +10,20 @@ using namespace DirectX;
 namespace Alice
 {
 	void LinkComponentRegistry() {
-        ALICE_LOG_INFO("[ë¦¬í”Œë ‰ì…˜] rttr Success");
+        ALICE_LOG_INFO("[¸®ÇÃ·º¼Ç] rttr Success");
     }
 
     RTTR_REGISTRATION
     {
-        // === DirectX íƒ€ì… ë“±ë¡ ===
+        // === DirectX Å¸ÀÔ µî·Ï ===
         rttr::registration::class_<XMFLOAT3>("XMFLOAT3")
             .constructor<>()
             .property("x", &XMFLOAT3::x)
             .property("y", &XMFLOAT3::y)
             .property("z", &XMFLOAT3::z);
 
-        // XMFLOAT4X4ëŠ” 4x4 í–‰ë ¬ì„ ë‚˜íƒ€ë‚´ëŠ” íƒ€ì…
-        // ë Œë”ë§í•  ë•Œ 4x4 í–‰ë ¬ì„ ë Œë”ë§í•˜ê¸° ìœ„í•´ ë“±ë¡
+        // XMFLOAT4X4´Â 4x4 Çà·ÄÀ» ³ªÅ¸³»´Â Å¸ÀÔ
+        // ·»´õ¸µÇÒ ¶§ 4x4 Çà·ÄÀ» ·»´õ¸µÇÏ±â À§ÇØ µî·Ï
         rttr::registration::class_<XMFLOAT4X4>("XMFLOAT4X4")
             .constructor<>()
             .property("_11", &XMFLOAT4X4::_11)
@@ -43,14 +43,14 @@ namespace Alice
             .property("_43", &XMFLOAT4X4::_43)
             .property("_44", &XMFLOAT4X4::_44);
 
-        // === TransformComponent ë“±ë¡ ===
+        // === TransformComponent µî·Ï ===
         rttr::registration::class_<TransformComponent>("TransformComponent")
             .constructor<>()
             .property("position", &TransformComponent::position)
             .property("rotation", &TransformComponent::rotation)
             .property("scale", &TransformComponent::scale);
 
-        // === MaterialComponent ë“±ë¡ ===
+        // === MaterialComponent µî·Ï ===
         rttr::registration::class_<MaterialComponent>("MaterialComponent")
             .constructor<>()
             .property("color", &MaterialComponent::color)
@@ -59,15 +59,15 @@ namespace Alice
             .property("assetPath", &MaterialComponent::assetPath)
             .property("albedoTexturePath", &MaterialComponent::albedoTexturePath);
 
-        // === SkinnedMeshComponent ë“±ë¡ ===
-        // boneMatricesëŠ” ë¼ˆ í–‰ë ¬ì„ ë‚˜íƒ€ë‚´ëŠ” í”„ë¡œí¼í‹°
+        // === SkinnedMeshComponent µî·Ï ===
+        // boneMatrices´Â »À Çà·ÄÀ» ³ªÅ¸³»´Â ÇÁ·ÎÆÛÆ¼
         rttr::registration::class_<SkinnedMeshComponent>("SkinnedMeshComponent")
             .constructor<>()
             .property("meshAssetPath", &SkinnedMeshComponent::meshAssetPath)
             .property("instanceAssetPath", &SkinnedMeshComponent::instanceAssetPath)
             .property("boneCount", &SkinnedMeshComponent::boneCount);
 
-        // === SkinnedAnimationComponent ë“±ë¡ ===
+        // === SkinnedAnimationComponent µî·Ï ===
         rttr::registration::class_<SkinnedAnimationComponent>("SkinnedAnimationComponent")
             .constructor<>()
             .property("clipIndex", &SkinnedAnimationComponent::clipIndex)
@@ -75,25 +75,15 @@ namespace Alice
             .property("speed", &SkinnedAnimationComponent::speed)
             .property("timeSec", &SkinnedAnimationComponent::timeSec);
         
-        // paletteëŠ” íŒ”ë ˆíŠ¸ë¥¼ ë‚˜íƒ€ë‚´ëŠ” í”„ë¡œí¼í‹°
+        // palette´Â ÆÈ·¹Æ®¸¦ ³ªÅ¸³»´Â ÇÁ·ÎÆÛÆ¼
 
-        // === CameraComponent ë“±ë¡ ===
+        // === CameraComponent µî·Ï ===
         rttr::registration::class_<CameraComponent>("CameraComponent")
             .constructor<>()
             .property("primary", &CameraComponent::primary)
             .property("fovYRad", &CameraComponent::fovYRad)
             .property("nearPlane", &CameraComponent::nearPlane)
             .property("farPlane", &CameraComponent::farPlane);
-
-
-        rttr::registration::class_<PhysicsSceneSettingsComponent>("PhysicsSceneSettingsComponent")
-            .constructor<>()
-            .property("enablePhysics", &PhysicsSceneSettingsComponent::enablePhysics)
-            .property("gravity", &PhysicsSceneSettingsComponent::gravity)
-            .property("fixedDt", &PhysicsSceneSettingsComponent::fixedDt)
-            .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps);
-
-
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

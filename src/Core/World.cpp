@@ -5,15 +5,9 @@
 namespace Alice {
 	void World::Clear()
 	{
-		// 1. ìŠ¤í¬ë¦½íŠ¸ ì»´í¬ë„ŒíŠ¸ë“¤ì˜ ì •ë¦¬(Cleanup) í•¨ìˆ˜ í˜¸ì¶œ
+		// 1. ½ºÅ©¸³Æ® ÄÄÆ÷³ÍÆ®µéÀÇ Á¤¸®(Cleanup) ÇÔ¼ö È£Ãâ
 		RemoveAllScript();
-
-
-		// 1.5 ë¬¼ë¦¬ì›”ë“œ ì—°ê²° ëŠê¸°
-		m_physicsWorld.reset();
-
-
-		// 2. ëª¨ë“  ì»´í¬ë„ŒíŠ¸ ì»¨í…Œì´ë„ˆ ë¹„ìš°ê¸° (ë©”ëª¨ë¦¬ í•´ì œ)
+		// 2. ¸ğµç ÄÄÆ÷³ÍÆ® ÄÁÅ×ÀÌ³Ê ºñ¿ì±â (¸Ş¸ğ¸® ÇØÁ¦)
 		m_names.clear();
 		m_transforms.Clear();
 		m_scripts.clear();
@@ -24,19 +18,15 @@ namespace Alice {
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
-		m_physicsSettings.Clear();
-		
-
-
-		// 3. ì—”í‹°í‹° ID ì¹´ìš´í„° ì´ˆê¸°í™” (ì„ íƒ ì‚¬í•­ì´ì§€ë§Œ ê¶Œì¥)
-		//    ìƒˆ ì”¬ì„ ë¡œë“œí•  ë•Œ IDê°€ 1ë²ˆë¶€í„° ë‹¤ì‹œ ì‹œì‘í•˜ë„ë¡ í•¨.
+		// 3. ¿£Æ¼Æ¼ ID Ä«¿îÅÍ ÃÊ±âÈ­ (¼±ÅÃ »çÇ×ÀÌÁö¸¸ ±ÇÀå)
+		//    »õ ¾ÀÀ» ·ÎµåÇÒ ¶§ ID°¡ 1¹øºÎÅÍ ´Ù½Ã ½ÃÀÛÇÏµµ·Ï ÇÔ.
 		m_nextEntityId = 1;
 	}
 	EntityId World::CreateEntity()
 	{
-		// ê°„ë‹¨í•œ ì¦ê°€í˜• IDë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.
+		// °£´ÜÇÑ Áõ°¡Çü ID¸¦ »ç¿ëÇÕ´Ï´Ù.
 		const EntityId newId = m_nextEntityId++;
-		// SlotMap: ìƒˆë¡œ ìƒì„±ëœ ì—”í‹°í‹°ì˜ generationì„ 0ìœ¼ë¡œ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
+		// SlotMap: »õ·Î »ı¼ºµÈ ¿£Æ¼Æ¼ÀÇ generationÀ» 0À¸·Î ÃÊ±âÈ­ÇÕ´Ï´Ù.
 		m_entityGenerations[newId] = 0;
 		return newId;
 	}
@@ -46,14 +36,14 @@ namespace Alice {
 		if (id == InvalidEntityId)
 			return;
 
-		// ì§€ì—° íŒŒê´´ ì˜ˆì•½ì´ ìˆìœ¼ë©´ ì œê±°
+		// Áö¿¬ ÆÄ±« ¿¹¾àÀÌ ÀÖÀ¸¸é Á¦°Å
 		m_delayedDestructions.erase(id);
 
-		// SlotMap: ì—”í‹°í‹°ê°€ íŒŒê´´ë  ë•Œ generationì„ ì¦ê°€ì‹œì¼œ ì´ì „ ì°¸ì¡°ë¥¼ ë¬´íš¨í™”í•©ë‹ˆë‹¤.
+		// SlotMap: ¿£Æ¼Æ¼°¡ ÆÄ±«µÉ ¶§ generationÀ» Áõ°¡½ÃÄÑ ÀÌÀü ÂüÁ¶¸¦ ¹«È¿È­ÇÕ´Ï´Ù.
 		auto genIt = m_entityGenerations.find(id);
 		if (genIt != m_entityGenerations.end())
 		{
-		    genIt->second++; // generation ì¦ê°€
+		    genIt->second++; // generation Áõ°¡
 		}
 
 		m_names.erase(id);
@@ -77,18 +67,18 @@ namespace Alice {
 
 	GameObject World::FindGameObject(const std::string& name)
 	{
-		// ì´ë¦„ìœ¼ë¡œ ì—”í‹°í‹° ê²€ìƒ‰ (ì„ í˜• ê²€ìƒ‰)
-		// ì—”í‹°í‹°ê°€ ë§ì•„ì§€ë©´ ë³„ë„ Map<String, EntityId> ê´€ë¦¬ ê¶Œì¥
+		// ÀÌ¸§À¸·Î ¿£Æ¼Æ¼ °Ë»ö (¼±Çü °Ë»ö)
+		// ¿£Æ¼Æ¼°¡ ¸¹¾ÆÁö¸é º°µµ Map<String, EntityId> °ü¸® ±ÇÀå
 		for (const auto& [id, entityName] : m_names)
 		{
 			if (entityName == name)
 			{
-				// GameObject ìƒì„± (ScriptServicesëŠ” nullptrë¡œ ì „ë‹¬)
-				// ìŠ¤í¬ë¦½íŠ¸ì—ì„œ ì‚¬ìš©í•  ë•ŒëŠ” IScript::gameObject()ë¥¼ í†µí•´ ScriptServicesê°€ í¬í•¨ëœ GameObjectë¥¼ ì–»ì„ ìˆ˜ ìˆìŒ
+				// GameObject »ı¼º (ScriptServices´Â nullptr·Î Àü´Ş)
+				// ½ºÅ©¸³Æ®¿¡¼­ »ç¿ëÇÒ ¶§´Â IScript::gameObject()¸¦ ÅëÇØ ScriptServices°¡ Æ÷ÇÔµÈ GameObject¸¦ ¾òÀ» ¼ö ÀÖÀ½
 				return GameObject(this, id, nullptr);
 			}
 		}
-		// ì°¾ì§€ ëª»í•œ ê²½ìš° ë¹ˆ GameObject ë°˜í™˜ (IsValid() == false)
+		// Ã£Áö ¸øÇÑ °æ¿ì ºó GameObject ¹İÈ¯ (IsValid() == false)
 		return GameObject();
 	}
 
@@ -171,7 +161,7 @@ namespace Alice {
 	}
 
 	EntityId World::GetMainCameraEntityId() {
-		// Sparse Set ê¸°ë°˜: ì¹´ë©”ë¼ ì»´í¬ë„ŒíŠ¸ ë·°ì—ì„œ ì²« ë²ˆì§¸ EntityIdë¥¼ ë°˜í™˜
+		// Sparse Set ±â¹İ: Ä«¸Ş¶ó ÄÄÆ÷³ÍÆ® ºä¿¡¼­ Ã¹ ¹øÂ° EntityId¸¦ ¹İÈ¯
 		auto cameras = GetComponents<CameraComponent>();
 		if (cameras.empty())
 			return InvalidEntityId;
@@ -183,7 +173,7 @@ namespace Alice {
 		if (id == InvalidEntityId || delay <= 0.0f)
 			return;
 
-		// ì´ë¯¸ ì˜ˆì•½ëœ íŒŒê´´ê°€ ìˆìœ¼ë©´ ë” ì§§ì€ ì‹œê°„ìœ¼ë¡œ ì—…ë°ì´íŠ¸
+		// ÀÌ¹Ì ¿¹¾àµÈ ÆÄ±«°¡ ÀÖÀ¸¸é ´õ ÂªÀº ½Ã°£À¸·Î ¾÷µ¥ÀÌÆ®
 		auto it = m_delayedDestructions.find(id);
 		if (it != m_delayedDestructions.end())
 		{
@@ -197,7 +187,7 @@ namespace Alice {
 
 	void World::UpdateDelayedDestruction(float deltaTime)
 	{
-		// ì—­ìˆœìœ¼ë¡œ ìˆœíšŒí•˜ì—¬ ì‚­ì œ ì‹œ iterator ë¬´íš¨í™” ë°©ì§€
+		// ¿ª¼øÀ¸·Î ¼øÈ¸ÇÏ¿© »èÁ¦ ½Ã iterator ¹«È¿È­ ¹æÁö
 		std::vector<EntityId> toDestroy;
 		toDestroy.reserve(m_delayedDestructions.size());
 
@@ -210,7 +200,7 @@ namespace Alice {
 			}
 		}
 
-		// ì‹œê°„ì´ ì§€ë‚œ ì—”í‹°í‹°ë“¤ì„ íŒŒê´´
+		// ½Ã°£ÀÌ Áö³­ ¿£Æ¼Æ¼µéÀ» ÆÄ±«
 		for (EntityId id : toDestroy)
 		{
 			m_delayedDestructions.erase(id);
@@ -222,7 +212,7 @@ namespace Alice {
 	{
 		auto it = m_entityGenerations.find(id);
 		if (it == m_entityGenerations.end())
-    		return 0; // ì¡´ì¬í•˜ì§€ ì•ŠëŠ” ì—”í‹°í‹°ëŠ” generation 0
+    		return 0; // Á¸ÀçÇÏÁö ¾Ê´Â ¿£Æ¼Æ¼´Â generation 0
 		return it->second;
 	}
 
@@ -233,9 +223,9 @@ namespace Alice {
 
 		auto it = m_entityGenerations.find(id);
 		if (it == m_entityGenerations.end())
-    		return false; // ì—”í‹°í‹°ê°€ ì¡´ì¬í•˜ì§€ ì•ŠìŒ
+    		return false; // ¿£Æ¼Æ¼°¡ Á¸ÀçÇÏÁö ¾ÊÀ½
 
-		// generationì´ ì¼ì¹˜í•˜ë©´ ìœ íš¨, ë‹¤ë¥´ë©´ ë¬´íš¨ (íŒŒê´´ í›„ ì¬ì‚¬ìš©ëœ ê²½ìš°)
+		// generationÀÌ ÀÏÄ¡ÇÏ¸é À¯È¿, ´Ù¸£¸é ¹«È¿ (ÆÄ±« ÈÄ Àç»ç¿ëµÈ °æ¿ì)
 		return it->second == generation;
 	}
 
@@ -256,7 +246,7 @@ namespace Alice {
 		t.SetPosition(0.0f, 0.0f, 0.0f)
 		 .SetScale(1.0f, 1.0f, 1.0f);
 		
-		// ê¸°ë³¸ íšŒìƒ‰ ë¨¸í‹°ë¦¬ì–¼ì„ í•¨ê»˜ ì¶”ê°€í•©ë‹ˆë‹¤.
+		// ±âº» È¸»ö ¸ÓÆ¼¸®¾óÀ» ÇÔ²² Ãß°¡ÇÕ´Ï´Ù.
 		DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
 		AddComponent<MaterialComponent>(e, defaultColor);
 		
@@ -281,78 +271,4 @@ namespace Alice {
 		SetEntityName(e, "Camera" + std::to_string(camIndex));
 		return e;
 	}
-
-	std::uint32_t World::GetEntityGeneration(EntityId id) const
-	{
-		auto it = m_entityGenerations.find(id);
-		if (it == m_entityGenerations.end())
-    		return 0; // ì¡´ì¬í•˜ì§€ ì•ŠëŠ” ì—”í‹°í‹°ëŠ” generation 0
-		return it->second;
-	}
-
-	bool World::IsEntityValid(EntityId id, std::uint32_t generation) const
-	{
-		if (id == InvalidEntityId)
-			return false;
-
-		auto it = m_entityGenerations.find(id);
-		if (it == m_entityGenerations.end())
-    		return false; // ì—”í‹°í‹°ê°€ ì¡´ì¬í•˜ì§€ ì•ŠìŒ
-
-		// generationì´ ì¼ì¹˜í•˜ë©´ ìœ íš¨, ë‹¤ë¥´ë©´ ë¬´íš¨ (íŒŒê´´ í›„ ì¬ì‚¬ìš©ëœ ê²½ìš°)
-		return it->second == generation;
-	}
-
-	EntityId World::CreateEmpty()
-	{
-		EntityId e = CreateEntity();
-		auto& t = AddComponent<TransformComponent>(e);
-		t.SetPosition(0.0f, 0.0f, 0.0f)
-		 .SetScale(1.0f, 1.0f, 1.0f);
-		SetEntityName(e, "GameObject" + std::to_string((std::uint32_t)e));
-		return e;
-	}
-
-	EntityId World::CreateCube()
-	{
-		EntityId e = CreateEntity();
-		auto& t = AddComponent<TransformComponent>(e);
-		t.SetPosition(0.0f, 0.0f, 0.0f)
-		 .SetScale(1.0f, 1.0f, 1.0f);
-		
-		// ê¸°ë³¸ íšŒìƒ‰ ë¨¸í‹°ë¦¬ì–¼ì„ í•¨ê»˜ ì¶”ê°€í•©ë‹ˆë‹¤.
-		DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-		AddComponent<MaterialComponent>(e, defaultColor);
-		
-		SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
-		return e;
-	}
-
-	EntityId World::CreateCamera()
-	{
-		const bool hasCamera = GetComponents<CameraComponent>().empty();
-		const std::uint32_t camIndex = static_cast<std::uint32_t>(GetComponents<CameraComponent>().size() + 1);
-
-		EntityId e = CreateEntity();
-		auto& t = AddComponent<TransformComponent>(e);
-		t.position = { 0.0f, 2.0f, -5.0f };
-		t.rotation = { 0.0f, 0.0f, 0.0f };
-		t.scale = { 1.0f, 1.0f, 1.0f };
-
-		auto& c = AddComponent<CameraComponent>(e);
-		c.primary = !hasCamera;
-
-		SetEntityName(e, "Camera" + std::to_string(camIndex));
-		return e;
-	}
-
-	//========================================================
-	// ë¬¼ë¦¬ ê´€ë ¨ í•¨ìˆ˜
-	void World::SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld) { m_physicsWorld = std::move(physicsWorld); }
-	IPhysicsWorld* World::GetPhysicsWorld() { return m_physicsWorld.get(); }
-	const IPhysicsWorld* World::GetPhysicsWorld() const { return m_physicsWorld.get(); }
-	//========================================================
-
-
-
 } // namespace Alice
