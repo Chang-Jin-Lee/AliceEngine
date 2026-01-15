@@ -1,4 +1,4 @@
-#include "Scenes/SampleScene.h"
+ï»¿#include "Scenes/SampleScene.h"
 
 #include <DirectXMath.h>
 
@@ -10,7 +10,7 @@ namespace Alice
 
     void SampleScene::OnEnter(World& world, ResourceManager& /*resources*/)
     {
-        // Å¥ºê ¿£Æ¼Æ¼ »ı¼º ¹× ±âº» Transform ¼³Á¤
+        // íë¸Œ ì—”í‹°í‹° ìƒì„± ë° ê¸°ë³¸ Transform ì„¤ì •
         m_cubeEntity = world.CreateEntity();
         auto& transform = world.AddComponent<TransformComponent>(m_cubeEntity);
         transform
@@ -34,11 +34,11 @@ namespace Alice
         auto* transform = world.GetComponent<TransformComponent>(m_cubeEntity);
         if (!transform) return;
 
-        // ½Ã°£¿¡ µû¶ó YÃà È¸Àü
+        // ì‹œê°„ì— ë”°ë¼ Yì¶• íšŒì „
         transform->rotation.y += m_rotationSpeed * deltaTime;
     }
 
-    // ÀÌ ¾ÀÀ» ¸®ÇÃ·º¼Ç/ÆÑÅä¸® ½Ã½ºÅÛ¿¡ µî·ÏÇÕ´Ï´Ù.
+    // ì´ ì”¬ì„ ë¦¬í”Œë ‰ì…˜/íŒ©í† ë¦¬ ì‹œìŠ¤í…œì— ë“±ë¡í•©ë‹ˆë‹¤.
     REGISTER_SCENE(SampleScene);
 }
 

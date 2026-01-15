@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -11,8 +11,8 @@
 
 namespace Alice
 {
-    /// Direct3D 11 ±â¹İ ·»´õ µğ¹ÙÀÌ½º ±¸ÇöÃ¼ÀÔ´Ï´Ù.
-    /// - ID3D11RenderDevice ÀÎÅÍÆäÀÌ½º¸¦ ±¸ÇöÇÕ´Ï´Ù.
+    /// Direct3D 11 ê¸°ë°˜ ë Œë” ë””ë°”ì´ìŠ¤ êµ¬í˜„ì²´ì…ë‹ˆë‹¤.
+    /// - ID3D11RenderDevice ì¸í„°í˜ì´ìŠ¤ë¥¼ êµ¬í˜„í•©ë‹ˆë‹¤.
     class D3D11RenderDevice final : public ID3D11RenderDevice
     {
     public:
@@ -35,7 +35,7 @@ namespace Alice
     private:
         using ComPtr = Microsoft::WRL::ComPtr<IUnknown>;
 
-        // ³»ºÎ¿¡¼­ »ç¿ëÇÒ ½ÇÁ¦ Å¸ÀÔº° ComPtr º°Äª
+        // ë‚´ë¶€ì—ì„œ ì‚¬ìš©í•  ì‹¤ì œ íƒ€ì…ë³„ ComPtr ë³„ì¹­
         Microsoft::WRL::ComPtr<ID3D11Device>           m_device;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext>    m_immediateContext;
         Microsoft::WRL::ComPtr<IDXGISwapChain>         m_swapChain;
@@ -47,16 +47,16 @@ namespace Alice
 
         std::uint32_t m_width  = 0;
         std::uint32_t m_height = 0;
-        DXGI_FORMAT m_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM; // ±âº»°ª: LDR
-        float m_maxHDRNits = 100.0f; // ±âº»°ª: SDR
+        DXGI_FORMAT m_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM; // ê¸°ë³¸ê°’: LDR
+        float m_maxHDRNits = 100.0f; // ê¸°ë³¸ê°’: SDR
 
-        /// ¹é¹öÆÛ·ÎºÎÅÍ ·»´õ Å¸±ê ºä¸¦ »ı¼ºÇÕ´Ï´Ù.
+        /// ë°±ë²„í¼ë¡œë¶€í„° ë Œë” íƒ€ê¹ƒ ë·°ë¥¼ ìƒì„±í•©ë‹ˆë‹¤.
         bool CreateRenderTarget();
 
-        /// ±íÀÌ/½ºÅÙ½Ç ¹öÆÛ¿Í ºä¸¦ »ı¼ºÇÕ´Ï´Ù.
+        /// ê¹Šì´/ìŠ¤í…ì‹¤ ë²„í¼ì™€ ë·°ë¥¼ ìƒì„±í•©ë‹ˆë‹¤.
         bool CreateDepthStencil(std::uint32_t width, std::uint32_t height);
 
-        /// ÇöÀç ·»´õ Å¸±ê ±âÁØÀ¸·Î ºäÆ÷Æ®¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+        /// í˜„ì¬ ë Œë” íƒ€ê¹ƒ ê¸°ì¤€ìœ¼ë¡œ ë·°í¬íŠ¸ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
         void SetupViewport();
     };
 }

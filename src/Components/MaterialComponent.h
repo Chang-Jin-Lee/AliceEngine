@@ -1,18 +1,18 @@
-#pragma once
+ï»¿#pragma once
 
 #include <DirectXMath.h>
 #include <string>
 
 namespace Alice {
-    /// ¸ÓÆ¼¸®¾ó ÄÄÆ÷³ÍÆ®
-    /// - ÇöÀç´Â º£ÀÌ½º ÄÃ·¯ + ·¯ÇÁ´Ï½º/¸ŞÅ»´Ï½º¸¸ °¡Áı´Ï´Ù.
-    /// - ÃßÈÄ ´õ ¸¹Àº ÆÄ¶ó¹ÌÅÍ¸¦ È®ÀåÇÒ ¼ö ÀÖ½À´Ï´Ù.
+    /// ë¨¸í‹°ë¦¬ì–¼ ì»´í¬ë„ŒíŠ¸
+    /// - í˜„ì¬ëŠ” ë² ì´ìŠ¤ ì»¬ëŸ¬ + ëŸ¬í”„ë‹ˆìŠ¤/ë©”íƒˆë‹ˆìŠ¤ë§Œ ê°€ì§‘ë‹ˆë‹¤.
+    /// - ì¶”í›„ ë” ë§ì€ íŒŒë¼ë¯¸í„°ë¥¼ í™•ì¥í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
     struct MaterialComponent 
     {
-        DirectX::XMFLOAT3 color{ 0.7f, 0.7f, 0.7f }; // º£ÀÌ½º »ö»ó (albedo)
-        float roughness{ 0.5f };                     // 0~1 ·¯ÇÁ´Ï½º (PBR)
-        float metalness{ 0.0f };                     // 0~1 ¸ŞÅ»´Ï½º (PBR)
-        std::string assetPath;                     // ¼±ÅÃµÈ ¸ÓÆ¼¸®¾ó ¿¡¼Â °æ·Î (¿É¼Ç)
-        std::string albedoTexturePath; // ¾Ëº£µµ ÅØ½ºÃ³ °æ·Î (.alice ¶Ç´Â ¿øº»)
+        DirectX::XMFLOAT3 color{ 0.7f, 0.7f, 0.7f }; // ë² ì´ìŠ¤ ìƒ‰ìƒ (albedo)
+        float roughness{ 0.5f };                     // 0~1 ëŸ¬í”„ë‹ˆìŠ¤ (PBR)
+        float metalness{ 0.0f };                     // 0~1 ë©”íƒˆë‹ˆìŠ¤ (PBR)
+        std::string assetPath;                     // ì„ íƒëœ ë¨¸í‹°ë¦¬ì–¼ ì—ì…‹ ê²½ë¡œ (ì˜µì…˜)
+        std::string albedoTexturePath; // ì•Œë² ë„ í…ìŠ¤ì²˜ ê²½ë¡œ (.alice ë˜ëŠ” ì›ë³¸)
     };
 }

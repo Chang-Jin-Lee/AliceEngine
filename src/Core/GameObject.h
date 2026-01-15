@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 #include <vector>
@@ -30,15 +30,15 @@ namespace Alice
         }
 
         /// SlotMap 기반 유효성 검사: generation이 일치하는지 확인
-        bool IsValid() const 
-        { 
+        bool IsValid() const
+        {
             if (!m_world || m_id == InvalidEntityId)
                 return false;
-            
+
             // World에서 현재 generation과 저장된 generation 비교
             return m_world->IsEntityValid(m_id, m_generation);
         }
-        
+
         EntityId id() const { return m_id; }
 
         template <typename T>
@@ -132,7 +132,7 @@ namespace Alice
                 // SlotMap: 먼저 엔티티 유효성 체크
                 if (!m_world || m_id == InvalidEntityId)
                     return false;
-                
+
                 if (!m_world->IsEntityValid(m_id, m_generation))
                     return false;
 
@@ -254,7 +254,7 @@ namespace Alice
                 // SlotMap: 유효성 체크
                 if (!m_world || m_id == InvalidEntityId)
                     return nullptr;
-                
+
                 if (!m_world->IsEntityValid(m_id, m_generation))
                     return nullptr;
 
@@ -272,7 +272,7 @@ namespace Alice
                 // SlotMap: 유효성 체크
                 if (!m_world || m_id == InvalidEntityId)
                     return nullptr;
-                
+
                 if (!m_world->IsEntityValid(m_id, m_generation))
                     return nullptr;
 

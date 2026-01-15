@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <filesystem>
 #include <string>
@@ -15,7 +15,7 @@ namespace Alice
         std::vector<std::string> materialAssetPaths;
     };
 
-    /// JSON(.fbxasset) ÀĞ±â/¾²±â
+    /// JSON(.fbxasset) ì½ê¸°/ì“°ê¸°
     /// - { "source_fbx": "...", "mesh": "...", "materials": ["..."] }
     bool LoadFbxInstanceAsset(const std::filesystem::path& path,
                               FbxInstanceAsset& out);
@@ -23,9 +23,9 @@ namespace Alice
     bool SaveFbxInstanceAsset(const std::filesystem::path& path,
                               const FbxInstanceAsset& asset);
 
-    /// ¿¡µğÅÍ/ÃÖÁ¾ºôµå ¸ğµÎ¿¡¼­ µ¿ÀÛÇÏ´Â ÀÚµ¿ ·Î´õÀÔ´Ï´Ù.
-    /// - editorMode: ½ÇÁ¦ ÆÄÀÏ(Assets/...)À» ÀĞ½À´Ï´Ù.
-    /// - gameMode  : ResourceManager¸¦ ÅëÇØ Metas/Chunks¿¡¼­ ¹ÙÀÌÆ®¸¦ ·ÎµåÇØ¼­ JSONÀ¸·Î ÆÄ½ÌÇÕ´Ï´Ù.
+    /// ì—ë””í„°/ìµœì¢…ë¹Œë“œ ëª¨ë‘ì—ì„œ ë™ì‘í•˜ëŠ” ìë™ ë¡œë”ì…ë‹ˆë‹¤.
+    /// - editorMode: ì‹¤ì œ íŒŒì¼(Assets/...)ì„ ì½ìŠµë‹ˆë‹¤.
+    /// - gameMode  : ResourceManagerë¥¼ í†µí•´ Metas/Chunksì—ì„œ ë°”ì´íŠ¸ë¥¼ ë¡œë“œí•´ì„œ JSONìœ¼ë¡œ íŒŒì‹±í•©ë‹ˆë‹¤.
     bool LoadFbxInstanceAssetAuto(const ResourceManager& resources,
                                   const std::filesystem::path& logicalPath,
                                   FbxInstanceAsset& out);

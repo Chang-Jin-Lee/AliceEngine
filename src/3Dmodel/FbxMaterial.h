@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <string>
 #include <vector>
@@ -22,7 +22,7 @@ public:
 	const std::vector<ID3D11ShaderResourceView*>& GetMaterialSRVs() const;
 	// Normal map list (index == aiMaterial index)
 	const std::vector<ID3D11ShaderResourceView*>& GetNormalSRVs() const;
-	// PBR È®ÀåÀ» À§ÇÑ metallic / roughness ÅØ½ºÃ³ ½½·Ô (index == aiMaterial index)
+	// PBR í™•ì¥ì„ ìœ„í•œ metallic / roughness í…ìŠ¤ì²˜ ìŠ¬ë¡¯ (index == aiMaterial index)
 	const std::vector<ID3D11ShaderResourceView*>& GetMetallicSRVs() const;
 	const std::vector<ID3D11ShaderResourceView*>& GetRoughnessSRVs() const;
 
