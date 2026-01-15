@@ -1,12 +1,12 @@
-#pragma once
+ï»¿#pragma once
 
 namespace Alice
 {
-    /// Æ÷¿öµå/µğÆÛµå ¾çÂÊ¿¡¼­ °øÅëÀ¸·Î »ç¿ëµÇ´Â ¼ÎÀÌ´õ ÄÚµå
+    /// í¬ì›Œë“œ/ë””í¼ë“œ ì–‘ìª½ì—ì„œ ê³µí†µìœ¼ë¡œ ì‚¬ìš©ë˜ëŠ” ì…°ì´ë” ì½”ë“œ
     class CommonShaderCode
     {
     public:
-        // Quad Vertex Shader (FullScreen) - Åæ¸ÅÇÎ/Æ÷½ºÆ®ÇÁ·Î¼¼½º¿ë
+        // Quad Vertex Shader (FullScreen) - í†¤ë§¤í•‘/í¬ìŠ¤íŠ¸í”„ë¡œì„¸ìŠ¤ìš©
         inline static const char* QuadVS = R"(
 struct VSInput
 {
@@ -120,7 +120,7 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 }
 )";
 
-		// Tone Mapping Pixel Shader - HDR (Æ÷¿öµå Àü¿ë)
+		// Tone Mapping Pixel Shader - HDR (í¬ì›Œë“œ ì „ìš©)
 		inline static const char* ToneMappingPS_HDR = R"(
 Texture2D g_SceneHDR : register(t0);
 SamplerState g_SamplerLinear : register(s0);
@@ -149,7 +149,7 @@ float3 ACESFilm(float3 x)
     return saturate(x * (a * x + b) / (x * (c * x + d) + e));
 }
 
-// Rec709 to Rec2020 »ö°ø°£ º¯È¯
+// Rec709 to Rec2020 ìƒ‰ê³µê°„ ë³€í™˜
 float3 Rec709ToRec2020(float3 color)
 {
     static const float3x3 conversion =
@@ -161,10 +161,10 @@ float3 Rec709ToRec2020(float3 color)
     return mul(conversion, color);
 }
 
-// Linear to ST2084 (PQ ÀÎÄÚµù)
+// Linear to ST2084 (PQ ì¸ì½”ë”©)
 float3 LinearToST2084(float3 color)
 {
-    // g_MaxHDRNits¸¦ ¹İ¿µÇÏ¿© HDR ½ºÄÉÀÏ¸µ (10000 nits ±âÁØÀ¸·Î Á¤±ÔÈ­)
+    // g_MaxHDRNitsë¥¼ ë°˜ì˜í•˜ì—¬ HDR ìŠ¤ì¼€ì¼ë§ (10000 nits ê¸°ì¤€ìœ¼ë¡œ ì •ê·œí™”)
     const float st2084max = 10000.0;
     float hdrScalar = g_MaxHDRNits / st2084max;
     float3 scaledColor = color * hdrScalar;
@@ -180,16 +180,16 @@ float3 LinearToST2084(float3 color)
 
 float4 main(PS_INPUT_QUAD input) : SV_Target
 {
-    // ¿¹Á¦ ÇÁ·ÎÁ§Æ® 36_ToneMappingPS_HDR.hlsl¿Í µ¿ÀÏÇÑ ·ÎÁ÷
+    // ì˜ˆì œ í”„ë¡œì íŠ¸ 36_ToneMappingPS_HDR.hlslì™€ ë™ì¼í•œ ë¡œì§
     float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
     float3 C_exposure = C_linear709 * pow(2.0f, g_Exposure);
     float3 C_tonemapped = ACESFilm(C_exposure);
     
-    // Rec709 ¡æ Rec2020 »ö°ø°£ º¯È¯ (LinearToST2084 ³»ºÎ¿¡¼­ g_MaxHDRNits Ã³¸®)
+    // Rec709 â†’ Rec2020 ìƒ‰ê³µê°„ ë³€í™˜ (LinearToST2084 ë‚´ë¶€ì—ì„œ g_MaxHDRNits ì²˜ë¦¬)
     float3 C_Rec2020 = Rec709ToRec2020(C_tonemapped);
     float3 C_ST2084 = LinearToST2084(C_Rec2020);
     
-    // ÃÖÁ¾ PQ ÀÎÄÚµùµÈ °ª [0.0, 1.0]À» R10G10B10A2_UNORM ¹é¹öÆÛ¿¡ Ãâ·Â
+    // ìµœì¢… PQ ì¸ì½”ë”©ëœ ê°’ [0.0, 1.0]ì„ R10G10B10A2_UNORM ë°±ë²„í¼ì— ì¶œë ¥
     return float4(C_ST2084, 1.0);
 }
 )";

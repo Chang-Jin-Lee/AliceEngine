@@ -1,4 +1,4 @@
-//‹xÀÕ#pragma once
+ï»¿//ëœŒë•¨ì‡#pragma once
 
 #include <vector>
 

@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "InputTypes.h"
 #include <utility>
@@ -10,42 +10,42 @@ namespace Alice
     class SkinnedMeshRegistry;
     class InputSystem;
 
-    /// ½ºÅ©¸³Æ®¿¡¼­ »ç¿ëÇÏ´Â ÀÔ·Â API (GetKeyDown µî)
+    /// ìŠ¤í¬ë¦½íŠ¸ì—ì„œ ì‚¬ìš©í•˜ëŠ” ì…ë ¥ API (GetKeyDown ë“±)
     class IScriptInput
     {
     public:
         virtual ~IScriptInput() = default;
 
-        // --- Å°º¸µå (±âÁ¸) ---
+        // --- í‚¤ë³´ë“œ (ê¸°ì¡´) ---
         virtual bool GetKey(KeyCode key) const = 0;
         virtual bool GetKeyDown(KeyCode key) const = 0;
         virtual bool GetKeyUp(KeyCode key) const = 0;
 
-        // --- ¸¶¿ì½º (½Å±Ô Ãß°¡) ---
-        // ¹öÆ° »óÅÂ È®ÀÎ (´©¸£°í ÀÖÀ½ / ´­¸² / ¶¼Áü)
+        // --- ë§ˆìš°ìŠ¤ (ì‹ ê·œ ì¶”ê°€) ---
+        // ë²„íŠ¼ ìƒíƒœ í™•ì¸ (ëˆ„ë¥´ê³  ìˆìŒ / ëˆŒë¦¼ / ë–¼ì§)
         virtual bool GetMouseButton(MouseCode button) const = 0;
         virtual bool GetMouseButtonDown(MouseCode button) const = 0;
         virtual bool GetMouseButtonUp(MouseCode button) const = 0;
 
-        // ¸¶¿ì½º ÇöÀç ÁÂÇ¥ (Screen Space: x, y) - STL pair È°¿ë
+        // ë§ˆìš°ìŠ¤ í˜„ì¬ ì¢Œí‘œ (Screen Space: x, y) - STL pair í™œìš©
         virtual std::pair<float, float> GetMousePosition() const = 0;
 
-        // ¸¶¿ì½º µ¨Å¸ (ÀÌµ¿·®) - µå·¡±×
+        // ë§ˆìš°ìŠ¤ ë¸íƒ€ (ì´ë™ëŸ‰) - ë“œë˜ê·¸
         virtual float GetMouseDeltaX() const = 0;
         virtual float GetMouseDeltaY() const = 0;
 
-        // ¸¶¿ì½º ½ºÅ©·Ñ µ¨Å¸ (½ºÅ©·Ñ ÀÌµ¿·®)
-        // - ¾ç¼ö: À§·Î ½ºÅ©·Ñ, À½¼ö: ¾Æ·¡·Î ½ºÅ©·Ñ
+        // ë§ˆìš°ìŠ¤ ìŠ¤í¬ë¡¤ ë¸íƒ€ (ìŠ¤í¬ë¡¤ ì´ë™ëŸ‰)
+        // - ì–‘ìˆ˜: ìœ„ë¡œ ìŠ¤í¬ë¡¤, ìŒìˆ˜: ì•„ë˜ë¡œ ìŠ¤í¬ë¡¤
         virtual float GetMouseScrollDelta() const = 0;
     };
 
-    /// ½ºÅ©¸³Æ®¿¡¼­ »ç¿ëÇÏ´Â ¾À ÀüÈ¯ API (Áï½Ã ·Îµå ´ë½Å "¿äÃ»" ¡æ ÇÁ·¹ÀÓ ³¡¿¡ Ã³¸®)
+    /// ìŠ¤í¬ë¦½íŠ¸ì—ì„œ ì‚¬ìš©í•˜ëŠ” ì”¬ ì „í™˜ API (ì¦‰ì‹œ ë¡œë“œ ëŒ€ì‹  "ìš”ì²­" â†’ í”„ë ˆì„ ëì— ì²˜ë¦¬)
     class IScriptScene
     {
     public:
         virtual ~IScriptScene() = default;
-        virtual void SwitchTo(const char* sceneName) = 0;              // ÄÚµå ¾À (SceneManager::SwitchTo)
-        virtual void LoadSceneFile(const char* scenePathUtf8) = 0;      // .scene ÆÄÀÏ ·Îµå (SceneFile::Load)
+        virtual void SwitchTo(const char* sceneName) = 0;              // ì½”ë“œ ì”¬ (SceneManager::SwitchTo)
+        virtual void LoadSceneFile(const char* scenePathUtf8) = 0;      // .scene íŒŒì¼ ë¡œë“œ (SceneFile::Load)
     };
 
     struct ScriptServices 

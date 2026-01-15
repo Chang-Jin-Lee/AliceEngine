@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 
-// ImGui¿ë °£´Ü ·¡ÆÛ
-// - ¶óº§À» wide literal(TCHAR / wchar_t*)·Î ¹Ş¾Æ¼­ UTF-8·Î º¯È¯ ÈÄ ImGui¿¡ ³Ñ±é´Ï´Ù.
-// - ¿¹)
-//   Alice::ImGuiCheckbox(TEXT("Fill Light (º¸Á¶±¤)"), &flag);
-//   Alice::ImGuiSliderFloat(TEXT("Key Intensity (ÁÖ±¤)"), &value, 0.0f, 3.0f);
-//   Alice::ImGuiSliderFloat3(TEXT("Key Direction (ÁÖ±¤)"), &vec.x, -1.0f, 1.0f);
+// ImGuiìš© ê°„ë‹¨ ë˜í¼
+// - ë¼ë²¨ì„ wide literal(TCHAR / wchar_t*)ë¡œ ë°›ì•„ì„œ UTF-8ë¡œ ë³€í™˜ í›„ ImGuiì— ë„˜ê¹ë‹ˆë‹¤.
+// - ì˜ˆ)
+//   Alice::ImGuiCheckbox(TEXT("Fill Light (ë³´ì¡°ê´‘)"), &flag);
+//   Alice::ImGuiSliderFloat(TEXT("Key Intensity (ì£¼ê´‘)"), &value, 0.0f, 3.0f);
+//   Alice::ImGuiSliderFloat3(TEXT("Key Direction (ì£¼ê´‘)"), &vec.x, -1.0f, 1.0f);
 
 #include "imgui.h"
 #include "Core/StringUtils.h"

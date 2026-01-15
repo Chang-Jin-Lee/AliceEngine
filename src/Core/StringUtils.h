@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -7,7 +7,7 @@
 
 namespace Alice
 {
-    /// UTF-8 ¹®ÀÚ¿­À» Windows wide ¹®ÀÚ¿­(UTF-16, std::wstring)·Î º¯È¯ÇÕ´Ï´Ù.
+    /// UTF-8 ë¬¸ìì—´ì„ Windows wide ë¬¸ìì—´(UTF-16, std::wstring)ë¡œ ë³€í™˜í•©ë‹ˆë‹¤.
     inline std::wstring WStringFromUtf8(const std::string& s)
     {
         if (s.empty()) return std::wstring();
@@ -30,7 +30,7 @@ namespace Alice
         return w;
     }
 
-    /// Windows wide ¹®ÀÚ¿­(UTF-16, std::wstring)À» UTF-8 ¹®ÀÚ¿­(std::string)·Î º¯È¯ÇÕ´Ï´Ù.
+    /// Windows wide ë¬¸ìì—´(UTF-16, std::wstring)ì„ UTF-8 ë¬¸ìì—´(std::string)ë¡œ ë³€í™˜í•©ë‹ˆë‹¤.
     inline std::string Utf8FromWString(const std::wstring& ws)
     {
         if (ws.empty()) return std::string();
@@ -57,8 +57,8 @@ namespace Alice
         return out;
     }
 
-    /// ÆíÀÇ¸¦ À§ÇÑ literal Àü¿ë ÇïÆÛ: TEXT("...") / L"..." ¸¦ UTF-8 std::string À¸·Î º¯È¯ÇÕ´Ï´Ù.
-    /// - ¿¹: ImGui::TextUnformatted( Alice::Utf8(TEXT("ÇÑ±ÛÅØ½ºÆ®")).c_str() );
+    /// í¸ì˜ë¥¼ ìœ„í•œ literal ì „ìš© í—¬í¼: TEXT("...") / L"..." ë¥¼ UTF-8 std::string ìœ¼ë¡œ ë³€í™˜í•©ë‹ˆë‹¤.
+    /// - ì˜ˆ: ImGui::TextUnformatted( Alice::Utf8(TEXT("í•œê¸€í…ìŠ¤íŠ¸")).c_str() );
     inline std::string Utf8(const wchar_t* ws)
     {
         if (!ws) return std::string();

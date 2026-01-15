@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <filesystem>
 #include <string>
@@ -11,49 +11,49 @@ namespace Alice
     class ResourceManager;
     class SkinnedMeshRegistry;
 
-    /// °£´ÜÇÑ FBX ÀÓÆ÷Æ® ¿É¼ÇÀÔ´Ï´Ù.
-    /// - Æ©Åä¸®¾óÀÇ Common/Mesh(FbxModel/FbxMaterial/...) ¸¦ °¨½Î´Â ¿ëµµÀÔ´Ï´Ù.
+    /// ê°„ë‹¨í•œ FBX ì„í¬íŠ¸ ì˜µì…˜ì…ë‹ˆë‹¤.
+    /// - íŠœí† ë¦¬ì–¼ì˜ Common/Mesh(FbxModel/FbxMaterial/...) ë¥¼ ê°ì‹¸ëŠ” ìš©ë„ì…ë‹ˆë‹¤.
     struct FbxImportOptions
     {
         bool generateTangents { true };
         bool importAnimations { true };
     };
 
-    /// FBX ÇÑ °³¸¦ ÀÓÆ÷Æ®ÇÑ µÚ, ¿£Áø/°ÔÀÓ ÂÊ¿¡¼­ »ç¿ëÇÒ ÇÙ½É Á¤º¸ÀÔ´Ï´Ù.
-    /// - ½ÇÁ¦ ¸Ş½Ã/º»/¾Ö´Ï¸ŞÀÌ¼Ç µ¥ÀÌÅÍ´Â º°µµÀÇ ¾Ö¼Â ±¸Á¶·Î °ü¸®ÇÕ´Ï´Ù.
+    /// FBX í•œ ê°œë¥¼ ì„í¬íŠ¸í•œ ë’¤, ì—”ì§„/ê²Œì„ ìª½ì—ì„œ ì‚¬ìš©í•  í•µì‹¬ ì •ë³´ì…ë‹ˆë‹¤.
+    /// - ì‹¤ì œ ë©”ì‹œ/ë³¸/ì• ë‹ˆë©”ì´ì…˜ ë°ì´í„°ëŠ” ë³„ë„ì˜ ì• ì…‹ êµ¬ì¡°ë¡œ ê´€ë¦¬í•©ë‹ˆë‹¤.
     struct FbxImportResult
     {
-        /// ÀÌ FBX ·ÎºÎÅÍ »ı¼ºµÈ ½ºÅ°´× ¸Ş½ÃÀÇ °æ·Î ÀÔ´Ï´Ù.
-        /// ¿¹) "Characters/Hero"
+        /// ì´ FBX ë¡œë¶€í„° ìƒì„±ëœ ìŠ¤í‚¤ë‹ ë©”ì‹œì˜ ê²½ë¡œ ì…ë‹ˆë‹¤.
+        /// ì˜ˆ) "Characters/Hero"
         std::string              meshAssetPath;
 
-        /// FBX ¿¡ Æ÷ÇÔµÈ °¢ ¼­ºê¸ÓÆ¼¸®¾ó¿¡¼­ »ı¼ºµÈ .mat ÆÄÀÏ °æ·Î ¸ñ·ÏÀÔ´Ï´Ù.
+        /// FBX ì— í¬í•¨ëœ ê° ì„œë¸Œë¨¸í‹°ë¦¬ì–¼ì—ì„œ ìƒì„±ëœ .mat íŒŒì¼ ê²½ë¡œ ëª©ë¡ì…ë‹ˆë‹¤.
         std::vector<std::string> materialAssetPaths;
 
-        /// ÀÌ FBX ·ÎºÎÅÍ »ı¼ºµÈ ÀÎ½ºÅÏ½º ¿¡¼Â(.fbxasset)ÀÇ °æ·ÎÀÔ´Ï´Ù.
-        /// - ¿¡µğÅÍ¿¡¼­ ¿ùµå¿¡ ¹èÄ¡ÇÒ ¶§ »ç¿ëÇÕ´Ï´Ù.
+        /// ì´ FBX ë¡œë¶€í„° ìƒì„±ëœ ì¸ìŠ¤í„´ìŠ¤ ì—ì…‹(.fbxasset)ì˜ ê²½ë¡œì…ë‹ˆë‹¤.
+        /// - ì—ë””í„°ì—ì„œ ì›”ë“œì— ë°°ì¹˜í•  ë•Œ ì‚¬ìš©í•©ë‹ˆë‹¤.
         std::string              instanceAssetPath;
     };
 
-    /// D3D11-AliceTutorial ÀÇ Common/Mesh(FbxModel/FbxMaterial/...) ¸¦
-    /// °ÔÀÓ ·¹º§¿¡¼­ °¨½Î±â À§ÇÑ ¾ÆÁÖ ¾ãÀº FBX ÀÓÆ÷ÅÍÀÔ´Ï´Ù.
-    /// - ÆÄÀÏÀ» ¿©´Â Ã¥ÀÓ¸¸ °¡Áö°í, ½ÇÁ¦ GPU ¹öÆÛ/¿£Æ¼Æ¼ µî·ÏÀº º°µµÀÇ ½Ã½ºÅÛ(¿¹: SkinnedMeshRegistry)¿¡¼­ Ã³¸®ÇÕ´Ï´Ù.
+    /// D3D11-AliceTutorial ì˜ Common/Mesh(FbxModel/FbxMaterial/...) ë¥¼
+    /// ê²Œì„ ë ˆë²¨ì—ì„œ ê°ì‹¸ê¸° ìœ„í•œ ì•„ì£¼ ì–‡ì€ FBX ì„í¬í„°ì…ë‹ˆë‹¤.
+    /// - íŒŒì¼ì„ ì—¬ëŠ” ì±…ì„ë§Œ ê°€ì§€ê³ , ì‹¤ì œ GPU ë²„í¼/ì—”í‹°í‹° ë“±ë¡ì€ ë³„ë„ì˜ ì‹œìŠ¤í…œ(ì˜ˆ: SkinnedMeshRegistry)ì—ì„œ ì²˜ë¦¬í•©ë‹ˆë‹¤.
     class FbxImporter
     {
     public:
         explicit FbxImporter(ResourceManager& resources,
                              SkinnedMeshRegistry* meshRegistry = nullptr);
 
-        /// FBX ÆÄÀÏÀ» ÀÓÆ÷Æ®ÇÕ´Ï´Ù.
-        /// - ÇöÀç´Â ÅØ½ºÃ³/.fbm/.mat/.alice ÆÄÀÌÇÁ¶óÀÎÀ» ¿Ï¼ºÇÑ »óÅÂÀÔ´Ï´Ù.
-        /// - ÀÌÈÄ ´Ü°è¿¡¼­ FbxModel À» »ç¿ëÇØ ¸Ş½Ã/º»/¾Ö´Ï¸ŞÀÌ¼ÇÀ» ¿¬°áÇÕ´Ï´Ù.
+        /// FBX íŒŒì¼ì„ ì„í¬íŠ¸í•©ë‹ˆë‹¤.
+        /// - í˜„ì¬ëŠ” í…ìŠ¤ì²˜/.fbm/.mat/.alice íŒŒì´í”„ë¼ì¸ì„ ì™„ì„±í•œ ìƒíƒœì…ë‹ˆë‹¤.
+        /// - ì´í›„ ë‹¨ê³„ì—ì„œ FbxModel ì„ ì‚¬ìš©í•´ ë©”ì‹œ/ë³¸/ì• ë‹ˆë©”ì´ì…˜ì„ ì—°ê²°í•©ë‹ˆë‹¤.
         FbxImportResult Import(ID3D11Device* device,
                                const std::filesystem::path& fbxPath,
                                const FbxImportOptions& options);
 
     private:
         ResourceManager&     m_resources;
-        SkinnedMeshRegistry* m_meshRegistry; // ¼±ÅÃÀû: ½ºÅ°´× ¸Ş½Ã GPU µî·Ï¿ë
+        SkinnedMeshRegistry* m_meshRegistry; // ì„ íƒì : ìŠ¤í‚¤ë‹ ë©”ì‹œ GPU ë“±ë¡ìš©
     };
 }
 

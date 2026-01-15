@@ -1,4 +1,4 @@
-#include "Core/IScript.h"
+﻿#include "Core/IScript.h"
 #include "Core/World.h"
 #include "Core/GameObject.h"
 

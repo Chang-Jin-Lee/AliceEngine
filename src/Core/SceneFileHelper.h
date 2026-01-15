@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -16,14 +16,14 @@
 
 namespace Alice
 {
-    // SceneFile À¯Æ¿¸®Æ¼ Å¬·¡½º
+    // SceneFile ìœ í‹¸ë¦¬í‹° í´ë˜ìŠ¤
     namespace SceneFileHelper
     {
         // prefix_propertyName: value
-        /// @param ofs Ãâ·Â ½ºÆ®¸²
-        /// @param component ÄÄÆ÷³ÍÆ®
-        /// @param prefix Á¢µÎ»ç
-        /// @return ÄÄÆ÷³ÍÆ® ÀúÀå
+        /// @param ofs ì¶œë ¥ ìŠ¤íŠ¸ë¦¼
+        /// @param component ì»´í¬ë„ŒíŠ¸
+        /// @param prefix ì ‘ë‘ì‚¬
+        /// @return ì»´í¬ë„ŒíŠ¸ ì €ì¥
         template<typename T>
         void SaveComponent(std::ofstream& ofs, const T& component, const std::string& prefix)
         {
@@ -65,7 +65,7 @@ namespace Alice
                 }
                 else if (valueType.is_class())
                 {
-                    // XMFLOAT3, XMFLOAT4 Å¸ÀÔ ÀúÀå
+                    // XMFLOAT3, XMFLOAT4 íƒ€ì… ì €ì¥
                     rttr::instance subInst = value;
                     rttr::type subType = subInst.get_type();
                     bool first = true;
@@ -142,7 +142,7 @@ namespace Alice
             }
             else if (propType.is_class())
             {
-                // XMFLOAT3, XMFLOAT4 Å¸ÀÔ ·Îµå
+                // XMFLOAT3, XMFLOAT4 íƒ€ì… ë¡œë“œ
                 std::istringstream iss(valueStr);
                 std::vector<std::string> tokens;
                 std::string token;
@@ -177,7 +177,7 @@ namespace Alice
                         }
                         catch (...)
                         {
-                            // ¿¹¿Ü Ã³¸®
+                            // ì˜ˆì™¸ ì²˜ë¦¬
                         }
                         ++index;
                     }

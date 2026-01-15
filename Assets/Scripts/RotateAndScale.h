@@ -1,13 +1,13 @@
-//#pragma once
+ï»¿//#pragma once
 //
 //#include "Core/IScript.h"
 //#include "Core/ScriptReflection.h"
 //
 //namespace Alice
 //{
-//    // ¿¹Á¦¿ë ½ºÅ©¸³Æ®:
-//    // - OnCreate: ±âÁØ ½ºÄÉÀÏÀ» ±â¾ïÇÕ´Ï´Ù.
-//    // - OnUpdate: YÃàÀ¸·Î ÃµÃµÈ÷ È¸Àü½ÃÅ°°í, ½Ã°£¿¡ µû¶ó ½ºÄÉÀÏÀÌ »ìÂ¦ Ä¿Á³´Ù/ÀÛ¾ÆÁ³´Ù ÇÕ´Ï´Ù.
+//    // ì˜ˆì œìš© ìŠ¤í¬ë¦½íŠ¸:
+//    // - OnCreate: ê¸°ì¤€ ìŠ¤ì¼€ì¼ì„ ê¸°ì–µí•©ë‹ˆë‹¤.
+//    // - OnUpdate: Yì¶•ìœ¼ë¡œ ì²œì²œíˆ íšŒì „ì‹œí‚¤ê³ , ì‹œê°„ì— ë”°ë¼ ìŠ¤ì¼€ì¼ì´ ì‚´ì§ ì»¤ì¡Œë‹¤/ì‘ì•„ì¡Œë‹¤ í•©ë‹ˆë‹¤.
 //    class RotateAndScale : public IScript
 //    {
 //    public:
@@ -17,13 +17,13 @@
 //        void Update(float deltaTime) override;
 //
 //    private:
-//        // ³ëÃâ/ÀúÀåÇÏ°í ½ÍÀº °ªÀº SerializeField·Î ¼±¾ğÇÕ´Ï´Ù.
+//        // ë…¸ì¶œ/ì €ì¥í•˜ê³  ì‹¶ì€ ê°’ì€ SerializeFieldë¡œ ì„ ì–¸í•©ë‹ˆë‹¤.
 //        ALICE_SERIALIZE_FIELD(float, m_spinSpeed, 1.0f);
 //        ALICE_SERIALIZE_FIELD(float, m_pulseSpeed, 2.0f);
 //        ALICE_SERIALIZE_FIELD(float, m_pulseAmplitude, 0.25f);
 //
-//        float m_timeSeconds = 0.0f; // ·±Å¸ÀÓ »óÅÂ
-//        float m_baseScale   = 1.0f; // ·±Å¸ÀÓ »óÅÂ
+//        float m_timeSeconds = 0.0f; // ëŸ°íƒ€ì„ ìƒíƒœ
+//        float m_baseScale   = 1.0f; // ëŸ°íƒ€ì„ ìƒíƒœ
 //    };
 //}
 
@@ -35,24 +35,24 @@
 
 namespace Alice
 {
-    // ¿¹Á¦¿ë ½ºÅ©¸³Æ®: È¸Àü ¹× ½ºÄÉÀÏ ÆŞ½º È¿°ú
+    // ì˜ˆì œìš© ìŠ¤í¬ë¦½íŠ¸: íšŒì „ ë° ìŠ¤ì¼€ì¼ í„ìŠ¤ íš¨ê³¼
     class RotateAndScale : public IScript
     {
-        // [1] ¸®ÇÃ·º¼Ç ÇÊ¼ö ¼³Á¤
+        // [1] ë¦¬í”Œë ‰ì…˜ í•„ìˆ˜ ì„¤ì •
         ALICE_BODY(RotateAndScale);
 
     public:
-        // ¿£Áø ¶óÀÌÇÁ»çÀÌÅ¬ ÇÔ¼ö (ÀÏ¹İ ¿À¹ö¶óÀÌµå)
+        // ì—”ì§„ ë¼ì´í”„ì‚¬ì´í´ í•¨ìˆ˜ (ì¼ë°˜ ì˜¤ë²„ë¼ì´ë“œ)
         void Start() override;
         void Update(float deltaTime) override;
 
-        // [2] Á÷·ÄÈ­ ÇÊµå: º¯¼ö ¼±¾ğ + Getter/Setter + µî·Ï ÀÚµ¿È­
+        // [2] ì§ë ¬í™” í•„ë“œ: ë³€ìˆ˜ ì„ ì–¸ + Getter/Setter + ë“±ë¡ ìë™í™”
         ALICE_PROPERTY(float, m_spinSpeed, 1.0f);
         ALICE_PROPERTY(float, m_pulseSpeed, 2.0f);
         ALICE_PROPERTY(float, m_pulseAmplitude, 0.25f);
 
     private:
-        // [3] ·±Å¸ÀÓ »óÅÂ º¯¼ö (¸®ÇÃ·º¼Ç Á¦¿Ü, ÀÏ¹İ ¼±¾ğ)
+        // [3] ëŸ°íƒ€ì„ ìƒíƒœ ë³€ìˆ˜ (ë¦¬í”Œë ‰ì…˜ ì œì™¸, ì¼ë°˜ ì„ ì–¸)
         float m_timeSeconds = 0.0f;
         float m_baseScale = 1.0f;
     };
