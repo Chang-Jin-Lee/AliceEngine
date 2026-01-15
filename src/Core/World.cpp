@@ -15,6 +15,9 @@ namespace Alice {
 		m_skinnedMeshes.Clear();
 		m_skinnedAnimations.Clear();
 		m_cameras.Clear();
+		m_pointLights.Clear();
+		m_spotLights.Clear();
+		m_rectLights.Clear();
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
@@ -63,6 +66,9 @@ namespace Alice {
 		m_skinnedMeshes.Remove(id);
 		m_skinnedAnimations.Remove(id);
 		m_cameras.Remove(id);
+		m_pointLights.Remove(id);
+		m_spotLights.Remove(id);
+		m_rectLights.Remove(id);
 	}
 
 	GameObject World::FindGameObject(const std::string& name)
@@ -269,6 +275,33 @@ namespace Alice {
 		c.primary = !hasCamera;
 
 		SetEntityName(e, "Camera" + std::to_string(camIndex));
+		return e;
+	}
+
+	EntityId World::CreatePointLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<PointLightComponent>(e);
+		SetEntityName(e, "Point Light");
+		return e;
+	}
+
+	EntityId World::CreateSpotLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<SpotLightComponent>(e);
+		SetEntityName(e, "Spot Light");
+		return e;
+	}
+
+	EntityId World::CreateRectLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<RectLightComponent>(e);
+		SetEntityName(e, "Rect Light");
 		return e;
 	}
 } // namespace Alice
