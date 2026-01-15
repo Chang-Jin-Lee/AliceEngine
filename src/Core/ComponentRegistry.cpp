@@ -1,5 +1,5 @@
 #include "Core/ComponentRegistry.h"
-#include "Core/World.h"
+#include "Core/World.h" // 여기에 컴포넌트 헤더 include가 있음 뉴후후
 #include "Logger.h"
 
 #include <rttr/registration>
@@ -84,5 +84,15 @@ namespace Alice
             .property("fovYRad", &CameraComponent::fovYRad)
             .property("nearPlane", &CameraComponent::nearPlane)
             .property("farPlane", &CameraComponent::farPlane);
+
+        rttr::registration::class_<PhysicsSceneSettingsComponent>("PhysicsSceneSettingsComponent")
+            .constructor<>()
+            .property("enablePhysics", &PhysicsSceneSettingsComponent::enablePhysics)
+            .property("gravity", &PhysicsSceneSettingsComponent::gravity)
+            .property("fixedDt", &PhysicsSceneSettingsComponent::fixedDt)
+            .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps);
+
+        rttr::registration::class_<IScript>("IScript")
+            .constructor<>();
     }
 }

@@ -1,28 +1,39 @@
-ï»¿#include "Core/World.h"
+#include "Core/World.h"
 #include "Core/GameObject.h"
+#include "Core/ScriptFactory.h"
 
 namespace Alice {
 	void World::Clear()
 	{
-		// 1. ìŠ¤í¬ë¦½íŠ¸ ì»´í¬ë„ŒíŠ¸ë“¤ì˜ ì •ë¦¬(Cleanup) í•¨ìˆ˜ í˜¸ì¶œ
+		// 1. ½ºÅ©¸³Æ® ÄÄÆ÷³ÍÆ®µéÀÇ Á¤¸®(Cleanup) ÇÔ¼ö È£Ãâ
 		RemoveAllScript();
-		// 2. ëª¨ë“  ì»´í¬ë„ŒíŠ¸ ì»¨í…Œì´ë„ˆ ë¹„ìš°ê¸° (ë©”ëª¨ë¦¬ í•´ì œ)
-		m_names.clear();
-		m_transforms.clear();
-		m_scripts.clear();
-		m_materials.clear();
-		m_skinnedMeshes.clear();
-		m_skinnedAnimations.clear();
-		m_cameras.clear();
 
-		// 3. ì—”í‹°í‹° ID ì¹´ìš´í„° ì´ˆê¸°í™” (ì„ íƒ ì‚¬í•­ì´ì§€ë§Œ ê¶Œì¥)
-		//    ìƒˆ ì”¬ì„ ë¡œë“œí•  ë•Œ IDê°€ 1ë²ˆë¶€í„° ë‹¤ì‹œ ì‹œì‘í•˜ë„ë¡ í•¨.
+		// 1.5 ¹°¸®¿ùµå ¿¬°á ²÷±â
+		m_physicsWorld.reset();
+
+		// 2. ¸ğµç ÄÄÆ÷³ÍÆ® ÄÁÅ×ÀÌ³Ê ºñ¿ì±â (¸Ş¸ğ¸® ÇØÁ¦)
+		m_names.clear();
+		m_transforms.Clear();
+		m_scripts.clear();
+		m_materials.Clear();
+		m_skinnedMeshes.Clear();
+		m_skinnedAnimations.Clear();
+		m_cameras.Clear();
+		m_delayedDestructions.clear();
+		m_entityGenerations.clear();
+		m_physicsSettings.Clear();
+		
+
+		// 3. ¿£Æ¼Æ¼ ID Ä«¿îÅÍ ÃÊ±âÈ­ (¼±ÅÃ »çÇ×ÀÌÁö¸¸ ±ÇÀå)
+		//    »õ ¾ÀÀ» ·ÎµåÇÒ ¶§ ID°¡ 1¹øºÎÅÍ ´Ù½Ã ½ÃÀÛÇÏµµ·Ï ÇÔ.
 		m_nextEntityId = 1;
 	}
 	EntityId World::CreateEntity()
 	{
-		// ê°„ë‹¨í•œ ì¦ê°€í˜• IDë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.
+		// °£´ÜÇÑ Áõ°¡Çü ID¸¦ »ç¿ëÇÕ´Ï´Ù.
 		const EntityId newId = m_nextEntityId++;
+		// SlotMap: »õ·Î »ı¼ºµÈ ¿£Æ¼Æ¼ÀÇ generationÀ» 0À¸·Î ÃÊ±âÈ­ÇÕ´Ï´Ù.
+		m_entityGenerations[newId] = 0;
 		return newId;
 	}
 
@@ -31,8 +42,18 @@ namespace Alice {
 		if (id == InvalidEntityId)
 			return;
 
+		// Áö¿¬ ÆÄ±« ¿¹¾àÀÌ ÀÖÀ¸¸é Á¦°Å
+		m_delayedDestructions.erase(id);
+
+		// SlotMap: ¿£Æ¼Æ¼°¡ ÆÄ±«µÉ ¶§ generationÀ» Áõ°¡½ÃÄÑ ÀÌÀü ÂüÁ¶¸¦ ¹«È¿È­ÇÕ´Ï´Ù.
+		auto genIt = m_entityGenerations.find(id);
+		if (genIt != m_entityGenerations.end())
+		{
+		    genIt->second++; // generation Áõ°¡
+		}
+
 		m_names.erase(id);
-		m_transforms.erase(id);
+		m_transforms.Remove(id);
 		auto it = m_scripts.find(id);
 		if (it != m_scripts.end()) {
 			for (auto& sc : it->second)
@@ -44,26 +65,26 @@ namespace Alice {
 			}
 			m_scripts.erase(it);
 		}
-		m_materials.erase(id);
-		m_skinnedMeshes.erase(id);
-		m_skinnedAnimations.erase(id);
-		m_cameras.erase(id);
+		m_materials.Remove(id);
+		m_skinnedMeshes.Remove(id);
+		m_skinnedAnimations.Remove(id);
+		m_cameras.Remove(id);
 	}
 
 	GameObject World::FindGameObject(const std::string& name)
 	{
-		// ì´ë¦„ìœ¼ë¡œ ì—”í‹°í‹° ê²€ìƒ‰ (ì„ í˜• ê²€ìƒ‰)
-		// ì—”í‹°í‹°ê°€ ë§ì•„ì§€ë©´ ë³„ë„ Map<String, EntityId> ê´€ë¦¬ ê¶Œì¥
+		// ÀÌ¸§À¸·Î ¿£Æ¼Æ¼ °Ë»ö (¼±Çü °Ë»ö)
+		// ¿£Æ¼Æ¼°¡ ¸¹¾ÆÁö¸é º°µµ Map<String, EntityId> °ü¸® ±ÇÀå
 		for (const auto& [id, entityName] : m_names)
 		{
 			if (entityName == name)
 			{
-				// GameObject ìƒì„± (ScriptServicesëŠ” nullptrë¡œ ì „ë‹¬)
-				// ìŠ¤í¬ë¦½íŠ¸ì—ì„œ ì‚¬ìš©í•  ë•ŒëŠ” IScript::gameObject()ë¥¼ í†µí•´ ScriptServicesê°€ í¬í•¨ëœ GameObjectë¥¼ ì–»ì„ ìˆ˜ ìˆìŒ
+				// GameObject »ı¼º (ScriptServices´Â nullptr·Î Àü´Ş)
+				// ½ºÅ©¸³Æ®¿¡¼­ »ç¿ëÇÒ ¶§´Â IScript::gameObject()¸¦ ÅëÇØ ScriptServices°¡ Æ÷ÇÔµÈ GameObject¸¦ ¾òÀ» ¼ö ÀÖÀ½
 				return GameObject(this, id, nullptr);
 			}
 		}
-		// ì°¾ì§€ ëª»í•œ ê²½ìš° ë¹ˆ GameObject ë°˜í™˜ (IsValid() == false)
+		// Ã£Áö ¸øÇÑ °æ¿ì ºó GameObject ¹İÈ¯ (IsValid() == false)
 		return GameObject();
 	}
 
@@ -146,8 +167,124 @@ namespace Alice {
 	}
 
 	EntityId World::GetMainCameraEntityId() {
-		if (m_cameras.empty())
+		// Sparse Set ±â¹İ: Ä«¸Ş¶ó ÄÄÆ÷³ÍÆ® ºä¿¡¼­ Ã¹ ¹øÂ° EntityId¸¦ ¹İÈ¯
+		auto cameras = GetComponents<CameraComponent>();
+		if (cameras.empty())
 			return InvalidEntityId;
-		return m_cameras.begin()->first;
+		return cameras.begin()->first;
 	}
+
+	void World::ScheduleDelayedDestruction(EntityId id, float delay)
+	{
+		if (id == InvalidEntityId || delay <= 0.0f)
+			return;
+
+		// ÀÌ¹Ì ¿¹¾àµÈ ÆÄ±«°¡ ÀÖÀ¸¸é ´õ ÂªÀº ½Ã°£À¸·Î ¾÷µ¥ÀÌÆ®
+		auto it = m_delayedDestructions.find(id);
+		if (it != m_delayedDestructions.end())
+		{
+			it->second = std::min(it->second, delay);
+		}
+		else
+		{
+			m_delayedDestructions[id] = delay;
+		}
+	}
+
+	void World::UpdateDelayedDestruction(float deltaTime)
+	{
+		// ¿ª¼øÀ¸·Î ¼øÈ¸ÇÏ¿© »èÁ¦ ½Ã iterator ¹«È¿È­ ¹æÁö
+		std::vector<EntityId> toDestroy;
+		toDestroy.reserve(m_delayedDestructions.size());
+
+		for (auto& [id, remainingTime] : m_delayedDestructions)
+		{
+			remainingTime -= deltaTime;
+			if (remainingTime <= 0.0f)
+			{
+				toDestroy.push_back(id);
+			}
+		}
+
+		// ½Ã°£ÀÌ Áö³­ ¿£Æ¼Æ¼µéÀ» ÆÄ±«
+		for (EntityId id : toDestroy)
+		{
+			m_delayedDestructions.erase(id);
+			DestroyEntity(id);
+		}
+	}
+
+	std::uint32_t World::GetEntityGeneration(EntityId id) const
+	{
+		auto it = m_entityGenerations.find(id);
+		if (it == m_entityGenerations.end())
+    		return 0; // Á¸ÀçÇÏÁö ¾Ê´Â ¿£Æ¼Æ¼´Â generation 0
+		return it->second;
+	}
+
+	bool World::IsEntityValid(EntityId id, std::uint32_t generation) const
+	{
+		if (id == InvalidEntityId)
+			return false;
+
+		auto it = m_entityGenerations.find(id);
+		if (it == m_entityGenerations.end())
+    		return false; // ¿£Æ¼Æ¼°¡ Á¸ÀçÇÏÁö ¾ÊÀ½
+
+		// generationÀÌ ÀÏÄ¡ÇÏ¸é À¯È¿, ´Ù¸£¸é ¹«È¿ (ÆÄ±« ÈÄ Àç»ç¿ëµÈ °æ¿ì)
+		return it->second == generation;
+	}
+
+	EntityId World::CreateEmpty()
+	{
+		EntityId e = CreateEntity();
+		auto& t = AddComponent<TransformComponent>(e);
+		t.SetPosition(0.0f, 0.0f, 0.0f)
+		 .SetScale(1.0f, 1.0f, 1.0f);
+		SetEntityName(e, "GameObject" + std::to_string((std::uint32_t)e));
+		return e;
+	}
+
+	EntityId World::CreateCube()
+	{
+		EntityId e = CreateEntity();
+		auto& t = AddComponent<TransformComponent>(e);
+		t.SetPosition(0.0f, 0.0f, 0.0f)
+		 .SetScale(1.0f, 1.0f, 1.0f);
+		
+		// ±âº» È¸»ö ¸ÓÆ¼¸®¾óÀ» ÇÔ²² Ãß°¡ÇÕ´Ï´Ù.
+		DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+		AddComponent<MaterialComponent>(e, defaultColor);
+		
+		SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
+		return e;
+	}
+
+	EntityId World::CreateCamera()
+	{
+		const bool hasCamera = GetComponents<CameraComponent>().empty();
+		const std::uint32_t camIndex = static_cast<std::uint32_t>(GetComponents<CameraComponent>().size() + 1);
+
+		EntityId e = CreateEntity();
+		auto& t = AddComponent<TransformComponent>(e);
+		t.position = { 0.0f, 2.0f, -5.0f };
+		t.rotation = { 0.0f, 0.0f, 0.0f };
+		t.scale = { 1.0f, 1.0f, 1.0f };
+
+		auto& c = AddComponent<CameraComponent>(e);
+		c.primary = !hasCamera;
+
+		SetEntityName(e, "Camera" + std::to_string(camIndex));
+		return e;
+	}
+
+	//========================================================
+	// ¹°¸® °ü·Ã ÇÔ¼ö
+	void World::SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld) { m_physicsWorld = std::move(physicsWorld); }
+	IPhysicsWorld* World::GetPhysicsWorld() { return m_physicsWorld.get(); }
+	const IPhysicsWorld* World::GetPhysicsWorld() const { return m_physicsWorld.get(); }
+	//========================================================
+
+
+
 } // namespace Alice
