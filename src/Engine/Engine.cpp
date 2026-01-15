@@ -22,7 +22,7 @@
 #include "json/json.hpp"
 
 // Core
-#include "Core/World.h" // 여기 컴포넌트 있찌롱
+#include "Core/World.h"
 #include "Core/InputSystem.h"
 #include "Core/TimeSystem.h"
 #include "Core/ResourceManager.h"
@@ -38,8 +38,6 @@
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
-
-#include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 
 // 문자열 변환 / ImGui 래퍼
 #include "Core/StringUtils.h"
@@ -85,19 +83,6 @@ namespace Alice
 		ResourceManager m_resourceManager;
 		std::unique_ptr<SceneManager> m_sceneManager;
 
-		//===============================		
-		PhysicsModule m_physics; // 물리 모듈
-		//테스트용
-		std::unique_ptr<IRigidBody>    m_testBox;
-		std::unique_ptr<IPhysicsActor> m_testGround; // 옵션
-		EntityId                       m_testEntity = InvalidEntityId;
-
-		float m_physAccum = 0.0f;
-		float m_physFixedDt = 1.0f / 60.0f;
-		int   m_physMaxSubsteps = 4;
-		//===============================
-
-
 		ScriptSystem   m_scriptSystem;
 
 		ViewportPicker m_viewportPicker;
@@ -121,7 +106,6 @@ namespace Alice
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
 		bool m_useForwardRendering = false;
-
 		
 		// 렌더링 시스템 전환 지연 처리 (안전한 전환을 위해)
 		bool m_pendingRenderSystemChange = false;
@@ -181,41 +165,6 @@ namespace Alice
 			return true;
 		}
 	}
-	namespace
-	{
-		inline Alice::EntityId DecodeEntityId(void* p)
-		{
-			return static_cast<Alice::EntityId>(reinterpret_cast<std::uintptr_t>(p));
-		}
-
-		// 축 맞는지 확인해야함, 아니면 조율해줘야함
-		inline DirectX::XMFLOAT3 QuatToEulerXYZ(const Quat& qIn)
-		{
-			// normalize
-			Quat q = qIn;
-			const float len2 = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
-			if (len2 > 0.0f)
-			{
-				const float inv = 1.0f / std::sqrt(len2);
-				q.x *= inv; q.y *= inv; q.z *= inv; q.w *= inv;
-			}
-
-			// Tait–Bryan angles (X=pitch, Y=yaw, Z=roll) 근사
-			const float sinp = 2.0f * (q.w * q.x + q.y * q.z);
-			const float cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
-			const float pitch = std::atan2(sinp, cosp);
-
-			float siny = 2.0f * (q.w * q.y - q.z * q.x);
-			siny = std::clamp(siny, -1.0f, 1.0f);
-			const float yaw = std::asin(siny);
-
-			const float sinr = 2.0f * (q.w * q.z + q.x * q.y);
-			const float cosr = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
-			const float roll = std::atan2(sinr, cosr);
-
-			return { pitch, yaw, roll };
-		}
-	}
 
 	Engine::Engine(bool editorMode) : pImpl(std::make_unique<Impl>())
 	{
@@ -225,7 +174,6 @@ namespace Alice
 
 	Engine::~Engine()
 	{
-		pImpl->m_physics.ShutdownContext();
 		pImpl->m_editorCore.Shutdown();
 	}
 
@@ -244,11 +192,6 @@ namespace Alice
 
 		// Editor: 프로젝트 루트 기준, Game: 실행 파일 기준
 		pImpl->m_resourceManager.Configure(!pImpl->m_editorMode, exeDir);
-
-		//===============================================================
-		// 물리 초기화(씬 초기화보다 선행되어야함 - 중요함)
-		PhysicsModule::ContextInitDesc ctx{};
-		if (!pImpl->m_physics.InitializeContext(ctx)) return false;
 
 		// ============================================= 시스템 초기화 =============================================
 		// 윈도우, 입력, 렌더 디바이스 생성
@@ -317,8 +260,6 @@ namespace Alice
 			ALICE_LOG_INFO("Engine::Initialize: Loaded SampleScene (Fallback or Editor).");
 		}
 
-		RefreshPhysicsForCurrentWorld(); // 물리 1회 수동호출 (씬 로드 이후 1회)
-
 		// ============================================= 후처리 =============================================
 		// 스키닝 레지스트리 확인 및 스크립트 서비스 바인딩
 		// 씬 전환할 때 실행될 TrimVideoMemory 바인딩
@@ -326,9 +267,7 @@ namespace Alice
 
 		pImpl->m_scriptSystem.SetServices(&pImpl->m_inputSystem, pImpl->m_sceneManager.get(), &pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
-		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::RefreshPhysicsForCurrentWorld); // 씬 로드 직후 추가작업 등록하는거 같음
 		pImpl->m_scriptSystem.onTrimVideoMemory.BindObject(this, &Engine::TrimVideoMemory);
-
 
 		ALICE_LOG_INFO("Engine::Initialize: Success (Entities: %zu)", pImpl->m_world.GetComponents<TransformComponent>().size());
 		return true;
@@ -452,143 +391,12 @@ namespace Alice
 		{
 			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
 			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
-
-			TickPhysics(dt); // 물리
 		}
 	}
-
-	//=========================================================
-	// 물리
-	void Alice::Engine::RefreshPhysicsForCurrentWorld()
-	{
-		// settings가 없으면, 물리월드 제거(비물리 씬)
-		const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
-
-		if (settingsMap.empty())
-		{
-			pImpl->m_world.SetPhysicsWorld(nullptr);
-
-			return;
-		}
-
-		const auto& settings = settingsMap.begin()->second;
-		if (!settings.enablePhysics)
-		{
-			pImpl->m_world.SetPhysicsWorld(nullptr);
-			return;
-		}
-
-		if (pImpl->m_world.GetPhysicsWorld())
-			return;
-
-		PhysicsModule::WorldDesc desc{};
-		desc.gravity = Vec3(settings.gravity.x, settings.gravity.y, settings.gravity.z);
-		// 필요하면 여기서 CCD / 이벤트 옵션들 설정
-
-		std::shared_ptr<IPhysicsWorld> world = pImpl->m_physics.CreateWorld(desc); // shared_ptr<IPhysicsWorld> 반환
-		ALICE_LOG_INFO("PhysicsWorld created: %p", world.get());
-		pImpl->m_world.SetPhysicsWorld(world);
-
-		// fixedDt/maxSubsteps도 엔진이 기억해야 한다면 Engine::Impl에 저장해 둬라.
-
-		//테스트용 바디 생성
-		// settings 반영
-		pImpl->m_physFixedDt = settings.fixedDt;
-		pImpl->m_physMaxSubsteps = settings.maxSubsteps;
-		pImpl->m_physAccum = 0.0f;
-
-		// ---- Smoke test (딱 한번만) ----
-		if (!pImpl->m_testBox)
-		{
-			IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
-			if (pw)
-			{
-				// 바닥
-				pImpl->m_testGround = pw->CreateStaticPlaneActor();
-
-				// 테스트 엔티티 하나 만들고 Transform 추가(이미 있으면 스킵 가능)
-				pImpl->m_testEntity = pImpl->m_world.CreateEntity();
-				auto& tr = pImpl->m_world.AddComponent<TransformComponent>(pImpl->m_testEntity);
-				tr.position = { 0.f, 5.f, 0.f };
-				tr.rotation = { 0.f, 0.f, 0.f };
-
-				// 동적 박스
-				RigidBodyDesc rb{};
-				rb.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(pImpl->m_testEntity));
-
-				BoxColliderDesc box{};
-				box.halfExtents = { 0.5f, 0.5f, 0.5f };
-				box.userData = rb.userData;
-
-				pImpl->m_testBox = pw->CreateDynamicBox(
-					Vec3(0.f, 5.f, 0.f),
-					Quat::Identity,
-					rb,
-					box
-				);
-
-				ALICE_LOG_INFO("SmokeTest box created. entity=%llu", (unsigned long long)pImpl->m_testEntity);
-			}
-		}
-		//----------여기까지 테스트용
-
-	}
-
-	void Engine::TickPhysics(float dt)
-	{
-		IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
-		if (!pw) return;
-
-		dt = std::min(dt, 0.25f);
-
-		pImpl->m_physAccum += dt;
-		int steps = 0;
-
-		std::vector<ActiveTransform> moved;
-
-		while (pImpl->m_physAccum >= pImpl->m_physFixedDt && steps < pImpl->m_physMaxSubsteps)
-		{
-			pw->Step(pImpl->m_physFixedDt);
-
-			moved.clear();
-			pw->DrainActiveTransforms(moved);
-
-			for (const auto& at : moved)
-			{
-				if (!at.userData) continue;
-				const EntityId id = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(at.userData));
-
-				auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
-				if (!tr) continue;
-
-				tr->position = { at.position.x, at.position.y, at.position.z };
-				// 회전은 나중에(일단 위치만 확인해도 스모크 테스트 충분)
-			}
-
-			pImpl->m_physAccum -= pImpl->m_physFixedDt;
-			++steps;
-		}
-
-		if (steps == pImpl->m_physMaxSubsteps)
-			pImpl->m_physAccum = 0.0f;
-
-		// 로그로 떨어지는지 확인 (1초에 1번만)
-		static float logAccum = 0.f;
-		logAccum += dt;
-		if (logAccum > 1.f && pImpl->m_testBox)
-		{
-			logAccum = 0.f;
-			auto p = pImpl->m_testBox->GetPosition();
-			ALICE_LOG_INFO("TestBox Y = %.3f", p.y);
-		}
-	}
-
-	//=========================================================
 
 	void Engine::Render()
 	{
 		if (!pImpl->m_renderDevice) return;
-
 		
 		// ============================================= 렌더링 시스템 전환 처리 =============================================
 		// 렌더링 시작 전에 전환 요청이 있으면 안전하게 전환합니다.
@@ -601,19 +409,16 @@ namespace Alice
 				// 모든 렌더 타겟 해제
 				ID3D11RenderTargetView* nullRTVs[8] = { nullptr };
 				context->OMSetRenderTargets(8, nullRTVs, nullptr);
-
 				
 				// 모든 셰이더 리소스 해제
 				ID3D11ShaderResourceView* nullSRVs[16] = { nullptr };
 				context->VSSetShaderResources(0, 16, nullSRVs);
 				context->PSSetShaderResources(0, 16, nullSRVs);
-
 				
 				// 모든 상수 버퍼 해제
 				ID3D11Buffer* nullCBs[16] = { nullptr };
 				context->VSSetConstantBuffers(0, 16, nullCBs);
 				context->PSSetConstantBuffers(0, 16, nullCBs);
-
 				
 				// 모든 셰이더 해제
 				context->VSSetShader(nullptr, nullptr, 0);
@@ -794,7 +599,6 @@ namespace Alice
                 }
             }
         }
-
 
 
 		// ============================================= 오버레이 =============================================
