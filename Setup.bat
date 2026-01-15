@@ -103,6 +103,7 @@ echo [3/4] 필수 라이브러리 설치 (시간이 걸립니다)...
 "%VCPKG_EXE%" install imgui[dx11-binding]:x64-windows-static-md
 "%VCPKG_EXE%" install imgui[win32-binding]:x64-windows-static-md --recurse
 "%VCPKG_EXE%" install assimp:x64-windows
+"%VCPKG_EXE%" install physx:x64-windows
 
 REM -----------------------------------------------------------
 REM [5] Visual Studio 통합
