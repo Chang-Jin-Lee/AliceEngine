@@ -1,10 +1,10 @@
-#pragma once
+ï»¿#pragma once
 #include "CameraMovement.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 #include "Core/GameObject.h"
-#include "Core/Input.h" // Input Å¬·¡½º°¡ ÀÖ´Ù°í °¡Á¤
-#include "Core/InputTypes.h" // MouseCode »ç¿ëÀ» À§ÇØ
+#include "Core/Input.h" // Input í´ë˜ìŠ¤ê°€ ìˆë‹¤ê³  ê°€ì •
+#include "Core/InputTypes.h" // MouseCode ì‚¬ìš©ì„ ìœ„í•´
 #include <cmath>
 
 #ifndef M_PI
@@ -14,7 +14,7 @@
 namespace Alice
 {
 
-    //// ¿£Áø¿¡ ½ºÅ©¸³Æ® µî·Ï
+    //// ì—”ì§„ì— ìŠ¤í¬ë¦½íŠ¸ ë“±ë¡
     REGISTER_SCRIPT(CameraMovement);
 
     void CameraMovement::Start() {  }
@@ -30,11 +30,11 @@ namespace Alice
         if (!t)
             return;     
 
-        // --- 1. ÀÔ·Â ¼öÁı (¹æÇâÅ°) ---
+        // --- 1. ì…ë ¥ ìˆ˜ì§‘ (ë°©í–¥í‚¤) ---
         float inputX = 0.0f; // Left, Right
         float inputZ = 0.0f; // Up, Down
 
-        // ¹æÇâÅ° ¸ÅÇÎ
+        // ë°©í–¥í‚¤ ë§¤í•‘
         if (input->GetKey(KeyCode::Up))
             inputZ += 1.0f;
         if (input->GetKey(KeyCode::Down))
@@ -44,34 +44,34 @@ namespace Alice
         if (input->GetKey(KeyCode::Left))
             inputX -= 1.0f;
 
-        // --- ¸¶¿ì½º ¿ŞÂÊ Å¬¸¯ °¨Áö ¹× Ä«¸Ş¶ó À§·Î ÀÌµ¿ ---
+        // --- ë§ˆìš°ìŠ¤ ì™¼ìª½ í´ë¦­ ê°ì§€ ë° ì¹´ë©”ë¼ ìœ„ë¡œ ì´ë™ ---
         if (input->GetMouseButtonDown(MouseCode::Left))
         {
-            // Ä«¸Ş¶ó positionÀ» À§·Î ÀÌµ¿ (YÃà Áõ°¡)
+            // ì¹´ë©”ë¼ positionì„ ìœ„ë¡œ ì´ë™ (Yì¶• ì¦ê°€)
             t->position.y += 1.0f;
         }
 
 		ALICE_LOG_INFO("CameraMovement Input: X={0}, Z={1}", inputX, inputZ);
 
-        // ÀÔ·ÂÀÌ ¾øÀ¸¸é ¿¬»ê Áß´Ü
+        // ì…ë ¥ì´ ì—†ìœ¼ë©´ ì—°ì‚° ì¤‘ë‹¨
         if (inputX == 0.0f && inputZ == 0.0f)
             return;
 
-        // --- 2. Ä«¸Ş¶óÀÇ ÇöÀç YÃà È¸Àü°ª(Yaw) °¡Á®¿À±â ---
-        // Ä«¸Ş¶ó ÀÚ½ÅÀÌ ¹Ù¶óº¸´Â ¹æÇâÀ¸·Î ¿òÁ÷¿©¾ß ÇÏ¹Ç·Î ÀÚ½ÅÀÇ rotationÀ» »ç¿ëÇÕ´Ï´Ù.
+        // --- 2. ì¹´ë©”ë¼ì˜ í˜„ì¬ Yì¶• íšŒì „ê°’(Yaw) ê°€ì ¸ì˜¤ê¸° ---
+        // ì¹´ë©”ë¼ ìì‹ ì´ ë°”ë¼ë³´ëŠ” ë°©í–¥ìœ¼ë¡œ ì›€ì§ì—¬ì•¼ í•˜ë¯€ë¡œ ìì‹ ì˜ rotationì„ ì‚¬ìš©í•©ë‹ˆë‹¤.
         float camYawRad = t->rotation.y * (static_cast<float>(M_PI) / 180.0f);
 
-        // --- 3. ·ÎÄÃ ÀÔ·Â º¤ÅÍ¸¦ ¿ùµå ÁÂÇ¥·Î º¯È¯ ---
-        // Ä³¸¯ÅÍ ÀÌµ¿ ÄÚµå¿Í µ¿ÀÏÇÑ È¸Àü Çà·Ä °ø½Ä »ç¿ë
-        // Forward(Z)¿Í Right(X)¸¦ ÇöÀç °¢µµ(Yaw)¸¸Å­ È¸Àü
+        // --- 3. ë¡œì»¬ ì…ë ¥ ë²¡í„°ë¥¼ ì›”ë“œ ì¢Œí‘œë¡œ ë³€í™˜ ---
+        // ìºë¦­í„° ì´ë™ ì½”ë“œì™€ ë™ì¼í•œ íšŒì „ í–‰ë ¬ ê³µì‹ ì‚¬ìš©
+        // Forward(Z)ì™€ Right(X)ë¥¼ í˜„ì¬ ê°ë„(Yaw)ë§Œí¼ íšŒì „
         float sinY = std::sin(camYawRad);
         float cosY = std::cos(camYawRad);
 
-        // ·ÎÄÃ(inputX, inputZ) -> ¿ùµå(worldX, worldZ) º¯È¯
+        // ë¡œì»¬(inputX, inputZ) -> ì›”ë“œ(worldX, worldZ) ë³€í™˜
         float worldX = inputX * cosY + inputZ * sinY;
         float worldZ = -inputX * sinY + inputZ * cosY;
 
-        // --- 4. Á¤±ÔÈ­ (´ë°¢¼± ÀÌµ¿ ½Ã ¼Óµµ ÀÏÁ¤ÇÏ°Ô) ---
+        // --- 4. ì •ê·œí™” (ëŒ€ê°ì„  ì´ë™ ì‹œ ì†ë„ ì¼ì •í•˜ê²Œ) ---
         float len = std::sqrt(worldX * worldX + worldZ * worldZ);
         if (len > 0.0001f)
         {
@@ -79,12 +79,12 @@ namespace Alice
             worldZ /= len;
         }
 
-        // --- 5. À§Ä¡ Àû¿ë ---
-        // Ä«¸Ş¶ó´Â º¸Åë ¹°¸®(Áß·Â)¸¦ ¹ŞÁö ¾Ê°í µÕµÕ ¶°´Ù´Ï¹Ç·Î TransformÀ» Á÷Á¢ ¼öÁ¤
+        // --- 5. ìœ„ì¹˜ ì ìš© ---
+        // ì¹´ë©”ë¼ëŠ” ë³´í†µ ë¬¼ë¦¬(ì¤‘ë ¥)ë¥¼ ë°›ì§€ ì•Šê³  ë‘¥ë‘¥ ë– ë‹¤ë‹ˆë¯€ë¡œ Transformì„ ì§ì ‘ ìˆ˜ì •
         t->position.x += worldX * m_moveSpeed * DeltaTime;
         t->position.z += worldZ * m_moveSpeed * DeltaTime;
 
-        // (¼±ÅÃ »çÇ×) »ó½Â/ÇÏ°­ ±â´É Ãß°¡ (¿¹: E/Q Å°)
+        // (ì„ íƒ ì‚¬í•­) ìƒìŠ¹/í•˜ê°• ê¸°ëŠ¥ ì¶”ê°€ (ì˜ˆ: E/Q í‚¤)
         /*
         if (input->GetKey(KeyCode::E)) t->position.y += m_moveSpeed * DeltaTime;
         if (input->GetKey(KeyCode::Q)) t->position.y -= m_moveSpeed * DeltaTime;

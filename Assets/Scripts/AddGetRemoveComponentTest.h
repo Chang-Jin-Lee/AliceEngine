@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
 
 namespace Alice
 {
-    // °£´ÜÇÑ ¿¹Á¦ ½ºÅ©¸³Æ®ÀÔ´Ï´Ù. ÇÊ¿ä¿¡ ¸Â°Ô ¼öÁ¤ÇØ¼­ »ç¿ëÇÏ¼¼¿ä.
+    // ê°„ë‹¨í•œ ì˜ˆì œ ìŠ¤í¬ë¦½íŠ¸ì…ë‹ˆë‹¤. í•„ìš”ì— ë§ê²Œ ìˆ˜ì •í•´ì„œ ì‚¬ìš©í•˜ì„¸ìš”.
     class AddGetRemoveComponentTest : public IScript
     {
         ALICE_BODY(AddGetRemoveComponentTest);
@@ -16,10 +16,10 @@ namespace Alice
         void Update(float deltaTime) override;
 		void OnDestroy() override;
 
-        // --- º¯¼ö ¸®ÇÃ·º¼Ç ¿¹½Ã (¿¡µğÅÍ¿¡¼­ ¼öÁ¤ °¡´É) ---
+        // --- ë³€ìˆ˜ ë¦¬í”Œë ‰ì…˜ ì˜ˆì‹œ (ì—ë””í„°ì—ì„œ ìˆ˜ì • ê°€ëŠ¥) ---
         ALICE_PROPERTY(float, m_exampleValue, 1.0f);
 
-        // --- ÇÔ¼ö ¸®ÇÃ·º¼Ç ¿¹½Ã ---
+        // --- í•¨ìˆ˜ ë¦¬í”Œë ‰ì…˜ ì˜ˆì‹œ ---
         void ExampleFunction();
         ALICE_FUNC(ExampleFunction);
     };
