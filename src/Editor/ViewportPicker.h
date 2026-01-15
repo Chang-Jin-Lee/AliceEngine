@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <cstdint>
 
@@ -9,21 +9,21 @@ namespace Alice
 {
     class SkinnedMeshRegistry;
 
-	/// ºäÆ÷Æ® »óÀÇ ¸¶¿ì½º ÁÂÇ¥(u,v)¸¦ ÀÌ¿ëÇØ
-	/// - Ä«¸Ş¶ó ±âÁØ ·¹ÀÌ¸¦ ¸¸µé°í
-	/// - ¿ùµå¿¡ ÀÖ´Â ´Ü¼ø ¿ÀºêÁ§Æ®(ÇöÀç´Â Å¥ºê)¸¦ ¼±ÅÃÇÏ´Â °£´ÜÇÑ ÇÇÄ¿ÀÔ´Ï´Ù.
-	/// º¹ÀâÇÑ °¡¼Ó ±¸Á¶(BVH)´Â »ç¿ëÇÏÁö ¾Ê°í, ¹Ù¿îµù ½ºÇÇ¾î¸¸ »ç¿ëÇÕ´Ï´Ù.
+	/// ë·°í¬íŠ¸ ìƒì˜ ë§ˆìš°ìŠ¤ ì¢Œí‘œ(u,v)ë¥¼ ì´ìš©í•´
+	/// - ì¹´ë©”ë¼ ê¸°ì¤€ ë ˆì´ë¥¼ ë§Œë“¤ê³ 
+	/// - ì›”ë“œì— ìˆëŠ” ë‹¨ìˆœ ì˜¤ë¸Œì íŠ¸(í˜„ì¬ëŠ” íë¸Œ)ë¥¼ ì„ íƒí•˜ëŠ” ê°„ë‹¨í•œ í”¼ì»¤ì…ë‹ˆë‹¤.
+	/// ë³µì¡í•œ ê°€ì† êµ¬ì¡°(BVH)ëŠ” ì‚¬ìš©í•˜ì§€ ì•Šê³ , ë°”ìš´ë”© ìŠ¤í”¼ì–´ë§Œ ì‚¬ìš©í•©ë‹ˆë‹¤.
 	class ViewportPicker
 	{
 	public:
 		ViewportPicker() = default;
 		~ViewportPicker() = default;
 
-		/// \param world  ÇÇÅ· ´ë»ó ¿£Æ¼Æ¼/Transform Á¤º¸¸¦ °¡Áø ¿ùµå
-		/// \param camera ÇöÀç Ä«¸Ş¶ó (View/Projection Çà·ÄÀ» »ç¿ë)
-		/// \param skinnedRegistry SkinnedMeshComponent(meshAssetPath) aabb·Î ¹İÆÇµÈ ¸Ş½Ã¸¦ °¡Áø ·¹Áö½ºÆ®¸®
-		/// \param u,v    [0,1] ¹üÀ§ÀÇ ºäÆ÷Æ® »ó´ë ÁÂÇ¥ (ÁÂ»ó´Ü (0,0), ¿ìÇÏ´Ü (1,1))
-		/// \return      È÷Æ®ÇÑ ¿£Æ¼Æ¼ ID (¾øÀ¸¸é InvalidEntityId)
+		/// \param world  í”¼í‚¹ ëŒ€ìƒ ì—”í‹°í‹°/Transform ì •ë³´ë¥¼ ê°€ì§„ ì›”ë“œ
+		/// \param camera í˜„ì¬ ì¹´ë©”ë¼ (View/Projection í–‰ë ¬ì„ ì‚¬ìš©)
+		/// \param skinnedRegistry SkinnedMeshComponent(meshAssetPath) aabbë¡œ ë°˜íŒëœ ë©”ì‹œë¥¼ ê°€ì§„ ë ˆì§€ìŠ¤íŠ¸ë¦¬
+		/// \param u,v    [0,1] ë²”ìœ„ì˜ ë·°í¬íŠ¸ ìƒëŒ€ ì¢Œí‘œ (ì¢Œìƒë‹¨ (0,0), ìš°í•˜ë‹¨ (1,1))
+		/// \return      íˆíŠ¸í•œ ì—”í‹°í‹° ID (ì—†ìœ¼ë©´ InvalidEntityId)
         EntityId Pick(const World& world,
                       const Camera& camera,
                       const SkinnedMeshRegistry* skinnedRegistry,

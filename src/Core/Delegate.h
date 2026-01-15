@@ -1,9 +1,9 @@
-#pragma once
+ï»¿#pragma once
 #include <functional>
 
 namespace Alice
 {
-	// ³ªÁß¿¡ ÆÄ¶ó¹ÌÅÍ°¡ »ı±â¸é ÅÛÇÃ¸´ ÀÎÀÚ¸¸ ¼öÁ¤ÇÏ¸é µË´Ï´Ù.
+	// ë‚˜ì¤‘ì— íŒŒë¼ë¯¸í„°ê°€ ìƒê¸°ë©´ í…œí”Œë¦¿ ì¸ìë§Œ ìˆ˜ì •í•˜ë©´ ë©ë‹ˆë‹¤.
 	template<typename... Args>
 	class Delegate
 	{
@@ -12,32 +12,32 @@ namespace Alice
 
 		Delegate() = default;
 
-		// 1. ¸â¹ö ÇÔ¼ö ¹ÙÀÎµù (UnrealÀÇ BindUObject / BindRaw)
-		// »ç¿ë¹ı: delegate.BindObject(this, &MyClass::MyFunc);
+		// 1. ë©¤ë²„ í•¨ìˆ˜ ë°”ì¸ë”© (Unrealì˜ BindUObject / BindRaw)
+		// ì‚¬ìš©ë²•: delegate.BindObject(this, &MyClass::MyFunc);
 		template <typename T>
 		void BindObject(T* instance, void(T::* method)(Args...))
 		{
-			// ¶÷´Ù·Î ·¡ÇÎÇØ¼­ ¸â¹ö ÇÔ¼ö È£Ãâ
+			// ëŒë‹¤ë¡œ ë˜í•‘í•´ì„œ ë©¤ë²„ í•¨ìˆ˜ í˜¸ì¶œ
 			m_callback = [instance, method](Args... args)
 			{
 				(instance->*method)(args...);
 			};
 		}
 
-		// 2. ¶÷´Ù ¹ÙÀÎµù (UnrealÀÇ BindLambda)
-		// »ç¿ë¹ı: delegate.BindLambda([](){ ... });
+		// 2. ëŒë‹¤ ë°”ì¸ë”© (Unrealì˜ BindLambda)
+		// ì‚¬ìš©ë²•: delegate.BindLambda([](){ ... });
 		void BindLambda(FunctionType&& func)
 		{
 			m_callback = std::move(func);
 		}
 
-		// 3. ¹ÙÀÎµù ÇØÁ¦ (Unbind)
+		// 3. ë°”ì¸ë”© í•´ì œ (Unbind)
 		void Unbind()
 		{
 			m_callback = nullptr;
 		}
 
-		// 4. ½ÇÇà (Execute) - ¹ÙÀÎµù ¾ÈµÇ¾î ÀÖÀ¸¸é ÅÍÁú ¼ö ÀÖÀ½
+		// 4. ì‹¤í–‰ (Execute) - ë°”ì¸ë”© ì•ˆë˜ì–´ ìˆìœ¼ë©´ í„°ì§ˆ ìˆ˜ ìˆìŒ
 		void Execute(Args... args) const
 		{
 			if (IsBound())
@@ -46,24 +46,24 @@ namespace Alice
 			}
 		}
 
-		// ¹ÙÀÎµù ¿©ºÎ È®ÀÎ
+		// ë°”ì¸ë”© ì—¬ë¶€ í™•ì¸
 		bool IsBound() const { return m_callback != nullptr; }
 
 	private:
 		FunctionType m_callback;
 	};
 
-	// »ç¿ë¹ı: ALICE_DECLARE_DELEGATE(ÀÌ¸§)
+	// ì‚¬ìš©ë²•: ALICE_DECLARE_DELEGATE(ì´ë¦„)
 
-	// ÆÄ¶ó¹ÌÅÍ 0°³
+	// íŒŒë¼ë¯¸í„° 0ê°œ
 #define ALICE_DECLARE_DELEGATE(DelegateName) \
         using DelegateName = Alice::Delegate<>; 
 
-	// ÆÄ¶ó¹ÌÅÍ 1°³
+	// íŒŒë¼ë¯¸í„° 1ê°œ
 #define ALICE_DECLARE_DELEGATE_OneParam(DelegateName, Param1Type) \
         using DelegateName = Alice::Delegate<Param1Type>;
 
-	// ÆÄ¶ó¹ÌÅÍ 2°³
+	// íŒŒë¼ë¯¸í„° 2ê°œ
 #define ALICE_DECLARE_DELEGATE_TwoParams(DelegateName, Param1Type, Param2Type) \
         using DelegateName = Alice::Delegate<Param1Type, Param2Type>;
 }

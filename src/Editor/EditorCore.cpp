@@ -1,4 +1,4 @@
-#ifndef NOMINMAX
+ï»¿#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -15,7 +15,7 @@
 #include "3Dmodel/FbxModel.h"
 #include "Core/Logger.h"
 #include "Core/ReflectionUI.h"
-#include "Core/ComponentRegistry.h"  // RTTR µî·Ï ÄÚµå Æ÷ÇÔ
+#include "Core/ComponentRegistry.h"  // RTTR ë“±ë¡ ì½”ë“œ í¬í•¨
 #include "Core/JsonRttr.h"
 
 // ImGui
@@ -38,11 +38,11 @@
 #include <Core/SceneFile.h>
 #include <shellapi.h>
 #include <commdlg.h>
-#include <ShlObj.h>   // Æú´õ ¼±ÅÃ ´ÙÀÌ¾ó·Î±× (SHBrowseForFolderW)
+#include <ShlObj.h>   // í´ë” ì„ íƒ ë‹¤ì´ì–¼ë¡œê·¸ (SHBrowseForFolderW)
 #include <Game/FbxAsset.h>
 #include "json/json.hpp"
 
-// ÅØ½ºÃ³ ·Îµù¿ë DirectXTK
+// í…ìŠ¤ì²˜ ë¡œë”©ìš© DirectXTK
 #include <DirectXTK/WICTextureLoader.h>
 
 using namespace DirectX;
@@ -51,14 +51,14 @@ namespace Alice
 {
     namespace
     {
-        // Build Game ÁøÇà »óÈ² Àü¿ª (¾Æ·¡ÂÊ¿¡¼­ Á¤ÀÇµÊ)
+        // Build Game ì§„í–‰ ìƒí™© ì „ì—­ (ì•„ë˜ìª½ì—ì„œ ì •ì˜ë¨)
         extern std::atomic<bool>  g_BuildInProgress;
         extern std::atomic<float> g_BuildProgress;
         extern std::atomic<long>  g_BuildExitCode;
 
         inline bool MaterialInspectorFilter(const std::string& propName)
         {
-            // assetPath¿Í albedoTexturePath´Â Æ¯º° UI Ã³¸®ÇÏ¹Ç·Î Á¦¿Ü
+            // assetPathì™€ albedoTexturePathëŠ” íŠ¹ë³„ UI ì²˜ë¦¬í•˜ë¯€ë¡œ ì œì™¸
             return propName != "assetPath" && propName != "albedoTexturePath";
         }
 
@@ -83,7 +83,7 @@ namespace Alice
             ~ScopedHandle() { if (h) CloseHandle(h); }
         };
 
-        // ¸í·É¾î¸¦ ½ÇÇàÇÏ°í Exit Code¸¦ ¹İÈ¯ÇÏ´Â ÇÔ¼öÀÓ
+        // ëª…ë ¹ì–´ë¥¼ ì‹¤í–‰í•˜ê³  Exit Codeë¥¼ ë°˜í™˜í•˜ëŠ” í•¨ìˆ˜ì„
         int ExecuteCommandWithConsole(const std::wstring& command)
         {
             STARTUPINFOW si;
@@ -93,52 +93,52 @@ namespace Alice
             si.cb = sizeof(si);
             ZeroMemory(&pi, sizeof(pi));
 
-            // cmd.exe /C ¸¦ ¾Õ¿¡ ºÙ¿©¼­ ½ÇÇàÇØ¾ß ½© ¸í·É¾î(cmake µî)°¡ ÀÎ½ÄµÊ
-            // ÀüÃ¼ ¸í·É¾î¸¦ " "·Î °¨½Î¼­ °ø¹éÀÌ³ª Æ¯¼ö¹®ÀÚ ¹®Á¦¸¦ ¹æÁöÇÕ´Ï´Ù.
+            // cmd.exe /C ë¥¼ ì•ì— ë¶™ì—¬ì„œ ì‹¤í–‰í•´ì•¼ ì‰˜ ëª…ë ¹ì–´(cmake ë“±)ê°€ ì¸ì‹ë¨
+            // ì „ì²´ ëª…ë ¹ì–´ë¥¼ " "ë¡œ ê°ì‹¸ì„œ ê³µë°±ì´ë‚˜ íŠ¹ìˆ˜ë¬¸ì ë¬¸ì œë¥¼ ë°©ì§€í•©ë‹ˆë‹¤.
             std::wstring finalCmd = L"cmd.exe /C \"" + command + L"\"";
 
-            // CreateProcess´Â ¹®ÀÚ¿­ ¹öÆÛ¸¦ ¼öÁ¤ÇÒ ¼ö ÀÖ¾î¾ß ÇÏ¹Ç·Î vector¿¡ º¹»ç
+            // CreateProcessëŠ” ë¬¸ìì—´ ë²„í¼ë¥¼ ìˆ˜ì •í•  ìˆ˜ ìˆì–´ì•¼ í•˜ë¯€ë¡œ vectorì— ë³µì‚¬
             std::vector<wchar_t> cmdBuffer(finalCmd.begin(), finalCmd.end());
             cmdBuffer.push_back(0); // Null terminator
 
-            // CreateProcess ½ÇÇà
-            // CREATE_NEW_CONSOLE: ºÎ¸ğ°¡ GUI¶óµµ ¹«Á¶°Ç »õ ÄÜ¼ÖÃ¢À» ¶ç¿ò
+            // CreateProcess ì‹¤í–‰
+            // CREATE_NEW_CONSOLE: ë¶€ëª¨ê°€ GUIë¼ë„ ë¬´ì¡°ê±´ ìƒˆ ì½˜ì†”ì°½ì„ ë„ì›€
             BOOL result = CreateProcessW(
-                NULL,                   // ¾îÇÃ¸®ÄÉÀÌ¼Ç ÀÌ¸§ (NULLÀÌ¸é Ä¿¸Çµå¶óÀÎ¿¡¼­ ÆÄ½Ì)
-                cmdBuffer.data(),       // Ä¿¸Çµå ¶óÀÎ
-                NULL,                   // ÇÁ·Î¼¼½º º¸¾È ¼Ó¼º
-                NULL,                   // ½º·¹µå º¸¾È ¼Ó¼º
-                FALSE,                  // ÇÚµé »ó¼Ó ¿©ºÎ
-                CREATE_NEW_CONSOLE,     // »õ ÄÜ¼Ö Ã¢ »ı¼º ÇÃ·¡±×
-                NULL,                   // È¯°æ º¯¼ö (NULLÀÌ¸é ºÎ¸ğ »ó¼Ó)
-                NULL,                   // ÇöÀç µğ·ºÅä¸® (NULLÀÌ¸é ºÎ¸ğ¿Í µ¿ÀÏ)
-                &si,                    // ½ÃÀÛ Á¤º¸
-                &pi                     // ÇÁ·Î¼¼½º Á¤º¸ (ÇÚµé µî)
+                NULL,                   // ì–´í”Œë¦¬ì¼€ì´ì…˜ ì´ë¦„ (NULLì´ë©´ ì»¤ë§¨ë“œë¼ì¸ì—ì„œ íŒŒì‹±)
+                cmdBuffer.data(),       // ì»¤ë§¨ë“œ ë¼ì¸
+                NULL,                   // í”„ë¡œì„¸ìŠ¤ ë³´ì•ˆ ì†ì„±
+                NULL,                   // ìŠ¤ë ˆë“œ ë³´ì•ˆ ì†ì„±
+                FALSE,                  // í•¸ë“¤ ìƒì† ì—¬ë¶€
+                CREATE_NEW_CONSOLE,     // ìƒˆ ì½˜ì†” ì°½ ìƒì„± í”Œë˜ê·¸
+                NULL,                   // í™˜ê²½ ë³€ìˆ˜ (NULLì´ë©´ ë¶€ëª¨ ìƒì†)
+                NULL,                   // í˜„ì¬ ë””ë ‰í† ë¦¬ (NULLì´ë©´ ë¶€ëª¨ì™€ ë™ì¼)
+                &si,                    // ì‹œì‘ ì •ë³´
+                &pi                     // í”„ë¡œì„¸ìŠ¤ ì •ë³´ (í•¸ë“¤ ë“±)
             );
 
             if (!result)
             {
-                // ½ÇÇà ÀÚÃ¼ ½ÇÆĞ
+                // ì‹¤í–‰ ìì²´ ì‹¤íŒ¨
                 return -1;
             }
 
-            // ÇÁ·Î¼¼½º°¡ ³¡³¯ ¶§±îÁö ´ë±â
+            // í”„ë¡œì„¸ìŠ¤ê°€ ëë‚  ë•Œê¹Œì§€ ëŒ€ê¸°
             WaitForSingleObject(pi.hProcess, INFINITE);
 
-            // Á¾·á ÄÚµå(Exit Code) °¡Á®¿À±â
+            // ì¢…ë£Œ ì½”ë“œ(Exit Code) ê°€ì ¸ì˜¤ê¸°
             DWORD exitCode = 0;
             GetExitCodeProcess(pi.hProcess, &exitCode);
 
-            // ÇÚµé ´İ±â
+            // í•¸ë“¤ ë‹«ê¸°
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
 
             return static_cast<int>(exitCode);
         }
 
-        /// ¿¡µğÅÍ Reload Scripts ¹öÆ°¿¡¼­ È£ÃâÇÏ´Â ÇïÆÛÀÔ´Ï´Ù.
-        /// - ScriptsBuild CMake ÇÁ·ÎÁ§Æ®¸¦ configure/build ÇØ¼­ AliceScripts.dll À» ¸¸µé°í
-        ///   ÇöÀç ½ÇÇà ÁßÀÎ exe ¿·À¸·Î º¹»çÇÑ µÚ ScriptHotReload_Reload ¸¦ È£ÃâÇÕ´Ï´Ù.
+        /// ì—ë””í„° Reload Scripts ë²„íŠ¼ì—ì„œ í˜¸ì¶œí•˜ëŠ” í—¬í¼ì…ë‹ˆë‹¤.
+        /// - ScriptsBuild CMake í”„ë¡œì íŠ¸ë¥¼ configure/build í•´ì„œ AliceScripts.dll ì„ ë§Œë“¤ê³ 
+        ///   í˜„ì¬ ì‹¤í–‰ ì¤‘ì¸ exe ì˜†ìœ¼ë¡œ ë³µì‚¬í•œ ë’¤ ScriptHotReload_Reload ë¥¼ í˜¸ì¶œí•©ë‹ˆë‹¤.
         struct ScriptReloadSnap
         {
             std::string name;
@@ -176,7 +176,7 @@ namespace Alice
                         rttr::type t = rttr::type::get_by_name(sc.scriptName);
                         s.props = JsonRttr::ToJsonObject(*sc.instance, t);
 
-                        // DLLÀÌ »ì¾ÆÀÖ´Â µ¿¾È °¡»óÇÔ¼ö È£ÃâÇØ¼­ Á¤¸®
+                        // DLLì´ ì‚´ì•„ìˆëŠ” ë™ì•ˆ ê°€ìƒí•¨ìˆ˜ í˜¸ì¶œí•´ì„œ ì •ë¦¬
                         sc.instance->OnDisable();
                         sc.instance->OnDestroy();
                         sc.instance.reset();
@@ -236,12 +236,12 @@ namespace Alice
         {
             using namespace std::filesystem;
 
-            // 1) ½ÇÇà ÆÄÀÏ À§Ä¡ ±âÁØÀ¸·Î ÇÁ·ÎÁ§Æ® ·çÆ® / ScriptsBuild °æ·Î °è»ê
+            // 1) ì‹¤í–‰ íŒŒì¼ ìœ„ì¹˜ ê¸°ì¤€ìœ¼ë¡œ í”„ë¡œì íŠ¸ ë£¨íŠ¸ / ScriptsBuild ê²½ë¡œ ê³„ì‚°
             wchar_t exePathW[MAX_PATH] = {};
             GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
             path exePath = exePathW;
             path exeDir  = exePath.parent_path();
-            path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug ¡æ ÇÁ·ÎÁ§Æ® ·çÆ®
+            path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug â†’ í”„ë¡œì íŠ¸ ë£¨íŠ¸
             path scriptsRoot = projectRoot / "ScriptsBuild";
 			path scriptsCMakePath = scriptsRoot / "CMakeLists.txt";
             path scriptsBuildDir = scriptsRoot / "build";
@@ -260,7 +260,7 @@ namespace Alice
 #endif
 
 			// ----------------------------------------------------------------------
-			// 1: Configure ¸í·É¾î ¼öÁ¤
+			// 1: Configure ëª…ë ¹ì–´ ìˆ˜ì •
 			// cmd /C "cmake -S "..." -B "..." || pause"
 			// ----------------------------------------------------------------------
 			std::wstring cmdConfig = L"cmd /C \"cmake -S \"";
@@ -269,7 +269,7 @@ namespace Alice
 			cmdConfig += scriptsBuildDir.wstring();
 			cmdConfig += L"\" || pause\""; 
 
-			// Configure ½ÇÇà
+			// Configure ì‹¤í–‰
 			if (ExecuteCommandWithConsole(cmdConfig.c_str()) != 0)
 			{
 				ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed.");
@@ -277,7 +277,7 @@ namespace Alice
 			}
 
 			// ----------------------------------------------------------------------
-			// 2: Build ¸í·É¾î ¼öÁ¤
+			// 2: Build ëª…ë ¹ì–´ ìˆ˜ì •
 			// cmd /C "cmake --build "..." --config ... || pause"
 			// ----------------------------------------------------------------------
 			std::wstring cmdBuild = L"cmd /C \"cmake --build \"";
@@ -286,14 +286,14 @@ namespace Alice
 			cmdBuild += kConfig;
 			cmdBuild += L" --target AliceScripts || pause\"";
 
-			// Build ½ÇÇà
+			// Build ì‹¤í–‰
 			if (ExecuteCommandWithConsole(cmdBuild.c_str()) != 0)
 			{
 				ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed.");
 				return;
 			}
 
-            // 4) ScriptsBuild/build/<Config>/AliceScripts.dll À» ½ÇÇà ÆÄÀÏ ¿·À¸·Î º¹»ç
+            // 4) ScriptsBuild/build/<Config>/AliceScripts.dll ì„ ì‹¤í–‰ íŒŒì¼ ì˜†ìœ¼ë¡œ ë³µì‚¬
             path builtDll = scriptsBuildDir / path(kConfig) / "AliceScripts.dll";
             if (!exists(builtDll))
             {
@@ -302,9 +302,9 @@ namespace Alice
                 return;
             }
 
-            // RTTR shared DLLµµ °°ÀÌ º¹»çÇØ µÓ´Ï´Ù. (½ºÅ©¸³Æ® RTTR µî·ÏÀÌ ¿£Áø¿¡¼­ º¸ÀÌ·Á¸é ÇÊ¼ö)
-            // - ScriptsBuild´Â ÀÚÃ¼ÀûÀ¸·Î rttr_core.dllÀ» ºôµåÇÕ´Ï´Ù.
-            // - ½ÇÇà ÆÄÀÏ Æú´õ¿¡ ÇÏ³ª¸¸ Á¸ÀçÇÏ¸é, EXE/DLLÀÌ °°Àº registry¸¦ °øÀ¯ÇÕ´Ï´Ù.
+            // RTTR shared DLLë„ ê°™ì´ ë³µì‚¬í•´ ë‘¡ë‹ˆë‹¤. (ìŠ¤í¬ë¦½íŠ¸ RTTR ë“±ë¡ì´ ì—”ì§„ì—ì„œ ë³´ì´ë ¤ë©´ í•„ìˆ˜)
+            // - ScriptsBuildëŠ” ìì²´ì ìœ¼ë¡œ rttr_core.dllì„ ë¹Œë“œí•©ë‹ˆë‹¤.
+            // - ì‹¤í–‰ íŒŒì¼ í´ë”ì— í•˜ë‚˜ë§Œ ì¡´ì¬í•˜ë©´, EXE/DLLì´ ê°™ì€ registryë¥¼ ê³µìœ í•©ë‹ˆë‹¤.
             {
                 path builtRttr = scriptsBuildDir / path(kConfig) / "rttr_core.dll";
                 if (exists(builtRttr))
@@ -321,8 +321,8 @@ namespace Alice
                 }
             }
 
-            // ±âÁ¸ DLLÀ» ¾ğ·ÎµåÇÏ±â Àü¿¡, ±âÁ¸ ½ºÅ©¸³Æ® ÀÎ½ºÅÏ½º(°¡»ó ÇÔ¼ö)°¡ ³²¾ÆÀÖÀ¸¸é Å©·¡½Ã°¡ ³³´Ï´Ù.
-            // - °ªÀº ½º³À¼¦ ÈÄ »õ DLL ·Îµå µÚ¿¡ ´Ù½Ã ÁÖÀÔÇÕ´Ï´Ù.
+            // ê¸°ì¡´ DLLì„ ì–¸ë¡œë“œí•˜ê¸° ì „ì—, ê¸°ì¡´ ìŠ¤í¬ë¦½íŠ¸ ì¸ìŠ¤í„´ìŠ¤(ê°€ìƒ í•¨ìˆ˜)ê°€ ë‚¨ì•„ìˆìœ¼ë©´ í¬ë˜ì‹œê°€ ë‚©ë‹ˆë‹¤.
+            // - ê°’ì€ ìŠ¤ëƒ…ìƒ· í›„ ìƒˆ DLL ë¡œë“œ ë’¤ì— ë‹¤ì‹œ ì£¼ì…í•©ë‹ˆë‹¤.
             std::vector<EntityReloadSnap> snaps;
             SnapshotAndDestroyScripts(world, snaps);
 
@@ -346,19 +346,19 @@ namespace Alice
                            builtDll.string().c_str(),
                            targetDll.string().c_str());
 
-            // 6) »õ DLL ·Îµå
+            // 6) ìƒˆ DLL ë¡œë“œ
             ScriptHotReload_Reload();
 
-            // »õ DLLÀÇ vtable/RTTRÀÌ ÁØºñµÈ µÚ¿¡ ÀÎ½ºÅÏ½º¸¦ ´Ù½Ã ¸¸µì´Ï´Ù.
+            // ìƒˆ DLLì˜ vtable/RTTRì´ ì¤€ë¹„ëœ ë’¤ì— ì¸ìŠ¤í„´ìŠ¤ë¥¼ ë‹¤ì‹œ ë§Œë“­ë‹ˆë‹¤.
             RestoreScripts(world, snaps);
         }
 
-        // ºôµå/¹èÆ÷¿ë °£´Ü ÆÄÀÏ À¯Æ¿ (¿¡·¯´Â ·Î±×·Î ³²±â°í, ½ÇÆĞ´Â false ¹İÈ¯)
+        // ë¹Œë“œ/ë°°í¬ìš© ê°„ë‹¨ íŒŒì¼ ìœ í‹¸ (ì—ëŸ¬ëŠ” ë¡œê·¸ë¡œ ë‚¨ê¸°ê³ , ì‹¤íŒ¨ëŠ” false ë°˜í™˜)
         bool CopyDirTree(const std::filesystem::path& src, const std::filesystem::path& dst)
         {
             namespace fs = std::filesystem;
             std::error_code ec;
-            if (!fs::exists(src, ec) || ec) return true; // ¾ø´Â °Ç ½ºÅµ
+            if (!fs::exists(src, ec) || ec) return true; // ì—†ëŠ” ê±´ ìŠ¤í‚µ
             fs::create_directories(dst, ec);
             if (ec)
             {
@@ -412,29 +412,29 @@ namespace Alice
             return true;
         }
 
-        // srcRootÀÇ ¸ğµç ÆÄÀÏÀ» dstCookedRoot/<rel>.alice ·Î "¾ÏÈ£È­ ÀúÀå"ÇÕ´Ï´Ù(Æú´õ ±¸Á¶ À¯Áö, È®ÀåÀÚ´Â .alice·Î ÅëÀÏ).
-        // - ÀÌ¹Ì ¾ÏÈ£È­µÈ .alice ´Â ±×´ë·Î º¹»çÇÕ´Ï´Ù(Áßº¹ ¾ÏÈ£È­ ¹æÁö).
-        // - excludePrefixRel(¿¹: "Resource/")·Î ½ÃÀÛÇÏ´Â rel °æ·Î´Â ½ºÅµÇÒ ¼ö ÀÖ½À´Ï´Ù.
+        // srcRootì˜ ëª¨ë“  íŒŒì¼ì„ dstCookedRoot/<rel>.alice ë¡œ "ì•”í˜¸í™” ì €ì¥"í•©ë‹ˆë‹¤(í´ë” êµ¬ì¡° ìœ ì§€, í™•ì¥ìëŠ” .aliceë¡œ í†µì¼).
+        // - ì´ë¯¸ ì•”í˜¸í™”ëœ .alice ëŠ” ê·¸ëŒ€ë¡œ ë³µì‚¬í•©ë‹ˆë‹¤(ì¤‘ë³µ ì•”í˜¸í™” ë°©ì§€).
+        // - excludePrefixRel(ì˜ˆ: "Resource/")ë¡œ ì‹œì‘í•˜ëŠ” rel ê²½ë¡œëŠ” ìŠ¤í‚µí•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
         bool CookAllIntoCookedRoot(const std::filesystem::path& srcRoot,
                                    const std::filesystem::path& dstCookedRoot,
                                    const std::string& excludePrefixRel = {})
         {
             namespace fs = std::filesystem;
             std::error_code ec;
-            if (!fs::exists(srcRoot, ec) || ec) return true; // ¾ø´Â °Ç ½ºÅµ
+            if (!fs::exists(srcRoot, ec) || ec) return true; // ì—†ëŠ” ê±´ ìŠ¤í‚µ
             if (!fs::is_directory(srcRoot, ec) || ec) return true;
 
-            // ½Ì±Û½º·¹µå·Î µµ´Â ¹öÀüÀÓ. ¿À·ù³ª¸é ÀÌ°É·Î ºôµå¤¡
+            // ì‹±ê¸€ìŠ¤ë ˆë“œë¡œ ë„ëŠ” ë²„ì „ì„. ì˜¤ë¥˜ë‚˜ë©´ ì´ê±¸ë¡œ ë¹Œë“œã„±
             //Alice::ResourceManager rm;
 			//if (alreadyEncrypted)
 			//{
-			//	// .alice ¡æ .alice ·Î ±×´ë·Î º¹»ç (°æ·Î/ÆÄÀÏ¸íÀº rel ±âÁØÀ¸·Î »õ·Î ¹èÄ¡)
+			//	// .alice â†’ .alice ë¡œ ê·¸ëŒ€ë¡œ ë³µì‚¬ (ê²½ë¡œ/íŒŒì¼ëª…ì€ rel ê¸°ì¤€ìœ¼ë¡œ ìƒˆë¡œ ë°°ì¹˜)
 			//	if (!CopyFileOver(inPath, outPath))
 			//		return false;
 			//}
 			//else
 			//{
-			//	// µğ¹ö±×: ¾î¶² ÆÄÀÏÀÌ ¾î¶² °æ·Î·Î cook µÇ´ÂÁö ÀüºÎ ·Î±×·Î ³²±é´Ï´Ù.
+			//	// ë””ë²„ê·¸: ì–´ë–¤ íŒŒì¼ì´ ì–´ë–¤ ê²½ë¡œë¡œ cook ë˜ëŠ”ì§€ ì „ë¶€ ë¡œê·¸ë¡œ ë‚¨ê¹ë‹ˆë‹¤.
 			//	ALICE_LOG_INFO("CookFile: in=\"%s\" -> out=\"%s\"",
 			//		inPath.string().c_str(),
 			//		outPath.string().c_str());
@@ -446,8 +446,8 @@ namespace Alice
 			//	}
 			//}
 
-            // ºôµåÇÒ¶§ CookÀ¸·Î º¯È¯ÇÒ¶§ ¾µ ¸ÖÆ¼¾²·¹µå ÀâÀÓ
-            // ¸ğµç ÀÛ¾÷À» º¤ÅÍ¿¡ ¼öÁı
+            // ë¹Œë“œí• ë•Œ Cookìœ¼ë¡œ ë³€í™˜í• ë•Œ ì“¸ ë©€í‹°ì“°ë ˆë“œ ì¡ì„
+            // ëª¨ë“  ì‘ì—…ì„ ë²¡í„°ì— ìˆ˜ì§‘
             struct Job
             {
                 fs::path inPath;
@@ -479,7 +479,7 @@ namespace Alice
 
             if (jobs.empty()) return true;
 
-            // 2´Ü°è: ¸ÖÆ¼½º·¹µå º´·Ä Ã³¸®
+            // 2ë‹¨ê³„: ë©€í‹°ìŠ¤ë ˆë“œ ë³‘ë ¬ ì²˜ë¦¬
             std::atomic<size_t> nextIdx = 0;
             std::atomic<bool> success = true;
             std::mutex logMutex;
@@ -555,7 +555,7 @@ namespace Alice
             fs::create_directories(toDir, ec);
             ec.clear();
 
-            // 1´Ü°è: ¸ğµç DLL ÆÄÀÏ °æ·Î ¼öÁı
+            // 1ë‹¨ê³„: ëª¨ë“  DLL íŒŒì¼ ê²½ë¡œ ìˆ˜ì§‘
             std::vector<fs::path> dllFiles;
             for (fs::directory_iterator it(fromDir, ec), end; it != end; it.increment(ec))
             {
@@ -564,8 +564,8 @@ namespace Alice
                 const fs::path p = it->path();
                 if (p.extension() == ".dll")
                 {
-                    // ÀÌ ºÎºĞ¿¡¼­ dllFilesÀ» Çª½ÃÇØ¼­ ¸ÖÆ¼½º·¹µå µµ´Â  °Çµ¥, 
-                    // ¸¸¾à ¿À·ù°¡ »ı±ä´Ù¸é ¹Ù·Î CopyFileOver·Î ¿©±â¼­ ½Ì±Û½º·¹µå·Î ÇÒ°Í.
+                    // ì´ ë¶€ë¶„ì—ì„œ dllFilesì„ í‘¸ì‹œí•´ì„œ ë©€í‹°ìŠ¤ë ˆë“œ ë„ëŠ”  ê±´ë°, 
+                    // ë§Œì•½ ì˜¤ë¥˜ê°€ ìƒê¸´ë‹¤ë©´ ë°”ë¡œ CopyFileOverë¡œ ì—¬ê¸°ì„œ ì‹±ê¸€ìŠ¤ë ˆë“œë¡œ í• ê²ƒ.
                     //CopyFileOver(p, toDir / p.filename());
                     dllFiles.push_back(p);
                 }
@@ -573,7 +573,7 @@ namespace Alice
 
             if (dllFiles.empty()) return;
 
-            // 2´Ü°è: ¸ÖÆ¼½º·¹µå º´·Ä º¹»ç
+            // 2ë‹¨ê³„: ë©€í‹°ìŠ¤ë ˆë“œ ë³‘ë ¬ ë³µì‚¬
             std::atomic<size_t> nextIdx = 0;
             const size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
             std::vector<std::thread> workers;
@@ -686,7 +686,7 @@ namespace Alice
                     return;
                 }
 
-                // (1) Metas: Assets¸¦ Ã»Å©·Î ÆĞÅ· (Æú´õ±¸Á¶ ¼û±è, 256KB)
+                // (1) Metas: Assetsë¥¼ ì²­í¬ë¡œ íŒ¨í‚¹ (í´ë”êµ¬ì¡° ìˆ¨ê¹€, 256KB)
                 const fs2::path stageMetas = releaseBinDir / "Metas";
                 if (!MakeCleanDir(stageMetas))
                 {
@@ -705,7 +705,7 @@ namespace Alice
                     }
                 }
 
-                // (2) Cooked: Ç×»ó »õ·Î »ı¼º + ÀüºÎ .alice ¾ÏÈ£È­
+                // (2) Cooked: í•­ìƒ ìƒˆë¡œ ìƒì„± + ì „ë¶€ .alice ì•”í˜¸í™”
                 const fs2::path stageCooked = releaseBinDir / "Cooked";
                 if (!MakeCleanDir(stageCooked))
                 {
@@ -720,7 +720,7 @@ namespace Alice
                     return;
                 }
 
-                // (3) Resource: ¿øº» Æú´õ¸¦ ³ÖÁö ¾Ê°í Cooked/Chunks·Î ÆĞÅ·
+                // (3) Resource: ì›ë³¸ í´ë”ë¥¼ ë„£ì§€ ì•Šê³  Cooked/Chunksë¡œ íŒ¨í‚¹
                 {
                     Alice::ResourceManager rm;
                     if (!rm.CookResourceToChunkStore(args.projectRoot / "Resource", stageCooked))
@@ -732,7 +732,7 @@ namespace Alice
                     }
                 }
 
-                // (4) BuildSettings º¹»ç (exe ¿·)
+                // (4) BuildSettings ë³µì‚¬ (exe ì˜†)
                 if (!CopyFileOver(args.cfgPath, releaseBinDir / "BuildSettings.json"))
                 {
                     g_BuildExitCode.store(7);
@@ -740,7 +740,7 @@ namespace Alice
                     return;
                 }
 
-                // (5) Export: Bin ¾Æ·¡·Î Á¤¸® (exe/dll/buildsettings/cooked/metas)
+                // (5) Export: Bin ì•„ë˜ë¡œ ì •ë¦¬ (exe/dll/buildsettings/cooked/metas)
                 fs2::path exportRoot = args.exportPathStr;
                 if (!exportRoot.is_absolute())
                     exportRoot = args.projectRoot / exportRoot;
@@ -789,24 +789,24 @@ namespace Alice
 
     namespace
     {
-        // ÇöÀç ¾ÀÀÌ ¼öÁ¤µÇ¾ú´ÂÁö ¿©ºÎ (ÀúÀå ÇÊ¿ä ¿©ºÎ)
+        // í˜„ì¬ ì”¬ì´ ìˆ˜ì •ë˜ì—ˆëŠ”ì§€ ì—¬ë¶€ (ì €ì¥ í•„ìš” ì—¬ë¶€)
         bool                     g_SceneDirty           = false;
         bool                     g_HasCurrentScenePath  = false;
         std::filesystem::path    g_CurrentScenePath;
 
-        // °£´ÜÇÑ °ÔÀÓ ºôµå UI »óÅÂ
+        // ê°„ë‹¨í•œ ê²Œì„ ë¹Œë“œ UI ìƒíƒœ
         bool                     g_ShowBuildGameWindow  = false;
 
-        // Build Game ÁøÇà »óÈ² (°£´ÜÇÑ ¸ÖÆ¼½º·¹µå + atomic »ç¿ë)
+        // Build Game ì§„í–‰ ìƒí™© (ê°„ë‹¨í•œ ë©€í‹°ìŠ¤ë ˆë“œ + atomic ì‚¬ìš©)
         std::atomic<bool>        g_BuildInProgress { false };
         std::atomic<float>       g_BuildProgress   { 0.0f };   // 0.0 ~ 1.0
-        std::atomic<long>        g_BuildExitCode   { -1 };     // -1: ¾ÆÁ÷ ¾øÀ½
+        std::atomic<long>        g_BuildExitCode   { -1 };     // -1: ì•„ì§ ì—†ìŒ
 
-        // ´Ù¸¥ ¾ÀÀ» ·ÎµåÇÏ±â À§ÇØ ´ë±â ÁßÀÎ °æ·Î
+        // ë‹¤ë¥¸ ì”¬ì„ ë¡œë“œí•˜ê¸° ìœ„í•´ ëŒ€ê¸° ì¤‘ì¸ ê²½ë¡œ
         bool                     g_RequestSceneLoad     = false;
         std::filesystem::path    g_NextScenePath;
 
-        // ´ÜÀÏ ¸ÓÆ¼¸®¾ó ¿¡¼Â ÆíÁı±â »óÅÂ
+        // ë‹¨ì¼ ë¨¸í‹°ë¦¬ì–¼ ì—ì…‹ í¸ì§‘ê¸° ìƒíƒœ
         bool                     g_MaterialEditorOpen   = false;
         std::filesystem::path    g_MaterialEditorPath;
         MaterialComponent        g_MaterialEditorData;
@@ -829,7 +829,7 @@ namespace Alice
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-        // ÆùÆ® ¾ÆÆ²¶ó½º¸¦ ¸ğµÎ Áö¿ì°í, ÇÑ±Û/ÀÏº»¾î¸¦ Æ÷ÇÔÇÑ ÆùÆ®¸¦ ±âº» ÆùÆ®·Î »ç¿ëÇÕ´Ï´Ù.
+        // í°íŠ¸ ì•„í‹€ë¼ìŠ¤ë¥¼ ëª¨ë‘ ì§€ìš°ê³ , í•œê¸€/ì¼ë³¸ì–´ë¥¼ í¬í•¨í•œ í°íŠ¸ë¥¼ ê¸°ë³¸ í°íŠ¸ë¡œ ì‚¬ìš©í•©ë‹ˆë‹¤.
         io.Fonts->Clear();
 
         ImFontConfig baseConfig{};
@@ -864,7 +864,7 @@ namespace Alice
         ImGui_ImplWin32_Init(hwnd);
         ImGui_ImplDX11_Init(d3dDevice, d3dContext);
 
-        // ImGuizmo ½ºÅ¸ÀÏ ¼³Á¤
+        // ImGuizmo ìŠ¤íƒ€ì¼ ì„¤ì •
         ImGuizmo::Style& style = ImGuizmo::GetStyle();
         style.RotationLineThickness = 3.0f;
         style.RotationOuterLineThickness = 2.0f;
@@ -923,11 +923,11 @@ namespace Alice
                                   float& cameraMoveSpeed,
                                   bool& useForwardRendering)
     {
-        // ¸ŞÀÎ ºäÆ÷Æ® ÀüÃ¼¸¦ µµÅ· ½ºÆäÀÌ½º·Î »ç¿ëÇÕ´Ï´Ù.
+        // ë©”ì¸ ë·°í¬íŠ¸ ì „ì²´ë¥¼ ë„í‚¹ ìŠ¤í˜ì´ìŠ¤ë¡œ ì‚¬ìš©í•©ë‹ˆë‹¤.
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGuiID dockspaceId = ImGui::DockSpaceOverViewport(viewport->ID, viewport);
 
-        // Ã¹ ÇÁ·¹ÀÓ¿¡¸¸ ±âº» µµÅ· ·¹ÀÌ¾Æ¿ôÀ» ±¸¼ºÇÕ´Ï´Ù.
+        // ì²« í”„ë ˆì„ì—ë§Œ ê¸°ë³¸ ë„í‚¹ ë ˆì´ì•„ì›ƒì„ êµ¬ì„±í•©ë‹ˆë‹¤.
         static bool s_dockInitialized = false;
         if (!s_dockInitialized)
         {
@@ -974,7 +974,7 @@ namespace Alice
             ImGui::Text("AliceRenderer");
             ImGui::Separator();
 
-            // Play / Stop Åä±Û ¹öÆ°
+            // Play / Stop í† ê¸€ ë²„íŠ¼
             if (!isPlaying)
             {
                 if (ImGui::Button("Play"))
@@ -992,7 +992,7 @@ namespace Alice
 
             ImGui::Separator();
 
-            // ¿ÀºêÁ§Æ® »ı¼º ¸Ş´º ¹öÆ°
+            // ì˜¤ë¸Œì íŠ¸ ìƒì„± ë©”ë‰´ ë²„íŠ¼
             if (ImGui::Button("Create"))
             {
                 ImGui::OpenPopup("CreateObjectPopup");
@@ -1025,17 +1025,17 @@ namespace Alice
 
             ImGui::Separator();
 
-            // ½ºÅ©¸³Æ® ÇÖ ¸®·Îµå ¹öÆ° (C++ ½ºÅ©¸³Æ® DLL Àçºôµå + Àç·Îµå)
+            // ìŠ¤í¬ë¦½íŠ¸ í•« ë¦¬ë¡œë“œ ë²„íŠ¼ (C++ ìŠ¤í¬ë¦½íŠ¸ DLL ì¬ë¹Œë“œ + ì¬ë¡œë“œ)
             if (ImGui::Button("Reload Scripts"))
             {
-                // ImGui Begin/End Â¦À» ±úÁö ¾Ê±â À§ÇØ,
-                // ½ÇÁ¦ ºôµå/º¹»ç/¸®·Îµå ·ÎÁ÷Àº º°µµ ÇïÆÛ ÇÔ¼ö¿¡¼­ Ã³¸®ÇÕ´Ï´Ù.
+                // ImGui Begin/End ì§ì„ ê¹¨ì§€ ì•Šê¸° ìœ„í•´,
+                // ì‹¤ì œ ë¹Œë“œ/ë³µì‚¬/ë¦¬ë¡œë“œ ë¡œì§ì€ ë³„ë„ í—¬í¼ í•¨ìˆ˜ì—ì„œ ì²˜ë¦¬í•©ë‹ˆë‹¤.
                 ReloadScripts_FromButton(world);
                 m_scriptBuilded = true;
             }
 
             ImGui::Separator();
-            // FBX ÀÓÆ÷Æ® ¹öÆ°
+            // FBX ì„í¬íŠ¸ ë²„íŠ¼
             if (ImGui::Button("Load FBX"))
             {
                 wchar_t fileBuffer[MAX_PATH] = {};
@@ -1057,19 +1057,19 @@ namespace Alice
 						GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
 						std::filesystem::path exePath = exePathW;
 						std::filesystem::path exeDir = exePath.parent_path();
-                        std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug ¡æ ÇÁ·ÎÁ§Æ® ·çÆ®
+                        std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug â†’ í”„ë¡œì íŠ¸ ë£¨íŠ¸
 
                         fbxPath = std::filesystem::relative(fbxPath, projectRoot);
 
-                        // °£´ÜÇÑ FBX ÀÓÆ÷Æ® ¿É¼Ç
+                        // ê°„ë‹¨í•œ FBX ì„í¬íŠ¸ ì˜µì…˜
                         FbxImportOptions opt{};
                         FbxImporter importer(*m_resources, m_skinnedRegistry);
 
                         auto* d3dDevice = m_renderDevice->GetDevice();
                         FbxImportResult result = importer.Import(d3dDevice, fbxPath, opt);
 
-                        // 1) ÀÎ½ºÅÏ½º ¿¡¼Â(.fbxasset)ÀÌ »ı¼ºµÇ¾úÀ¸¸é, ÇÁ·ÎÁ§Æ® ºä¿¡¼­ È°¿ëÇÒ ¼ö ÀÖ½À´Ï´Ù.
-                        // 2) ¿ùµå¿¡ ±âº» ÀÎ½ºÅÏ½º ÇÏ³ª¸¦ ¹Ù·Î »ı¼ºÇØ Áİ´Ï´Ù. (¾ğ¸®¾óÀÇ "¾À¿¡ ¹èÄ¡" ´À³¦)
+                        // 1) ì¸ìŠ¤í„´ìŠ¤ ì—ì…‹(.fbxasset)ì´ ìƒì„±ë˜ì—ˆìœ¼ë©´, í”„ë¡œì íŠ¸ ë·°ì—ì„œ í™œìš©í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
+                        // 2) ì›”ë“œì— ê¸°ë³¸ ì¸ìŠ¤í„´ìŠ¤ í•˜ë‚˜ë¥¼ ë°”ë¡œ ìƒì„±í•´ ì¤ë‹ˆë‹¤. (ì–¸ë¦¬ì–¼ì˜ "ì”¬ì— ë°°ì¹˜" ëŠë‚Œ)
                         if (!result.meshAssetPath.empty())
                         {
                             EntityId e = world.CreateEntity();
@@ -1078,12 +1078,12 @@ namespace Alice
                             t.scale    = { 1.0f, 1.0f, 1.0f };
                             t.rotation = { 0.0f, 0.0f, 0.0f };
 
-                            // ½ºÅ°´× ¸Ş½Ã ÄÄÆ÷³ÍÆ® µî·Ï
+                            // ìŠ¤í‚¤ë‹ ë©”ì‹œ ì»´í¬ë„ŒíŠ¸ ë“±ë¡
 							SkinnedMeshComponent& skinned = world.AddComponent<SkinnedMeshComponent>(e, result.meshAssetPath);
                             skinned.instanceAssetPath     = result.instanceAssetPath;
 
-                            // (ÀÓ½Ã) º» Çà·ÄÀÌ ¾ÆÁ÷ ¾øÀ¸¹Ç·Î, 1°³Â¥¸® Ç×µî Çà·Ä ÆÈ·¹Æ®¸¦ »ç¿ëÇÕ´Ï´Ù.
-                            //  - ³ªÁß¿¡ FbxModel/FbxAnimation ¿¬µ¿ ½Ã ½ÇÁ¦ º» ÆÈ·¹Æ®·Î ±³Ã¼µË´Ï´Ù.
+                            // (ì„ì‹œ) ë³¸ í–‰ë ¬ì´ ì•„ì§ ì—†ìœ¼ë¯€ë¡œ, 1ê°œì§œë¦¬ í•­ë“± í–‰ë ¬ íŒ”ë ˆíŠ¸ë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.
+                            //  - ë‚˜ì¤‘ì— FbxModel/FbxAnimation ì—°ë™ ì‹œ ì‹¤ì œ ë³¸ íŒ”ë ˆíŠ¸ë¡œ êµì²´ë©ë‹ˆë‹¤.
                             static DirectX::XMFLOAT4X4 s_identityBone =
                                 DirectX::XMFLOAT4X4(1,0,0,0,
                                                     0,1,0,0,
@@ -1092,7 +1092,7 @@ namespace Alice
                             skinned.boneMatrices = &s_identityBone;
                             skinned.boneCount    = 1;
 
-                            // Ã¹ ¹øÂ° ¸ÓÆ¼¸®¾óÀÌ ÀÖÀ¸¸é ±âº» ¸ÓÆ¼¸®¾ó·Î ÇÒ´ç
+                            // ì²« ë²ˆì§¸ ë¨¸í‹°ë¦¬ì–¼ì´ ìˆìœ¼ë©´ ê¸°ë³¸ ë¨¸í‹°ë¦¬ì–¼ë¡œ í• ë‹¹
                             if (!result.materialAssetPaths.empty())
                             {
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
@@ -1110,7 +1110,7 @@ namespace Alice
 
             ImGui::Separator();
 
-            // °ÔÀÓ ºôµå ¹öÆ° (°£´ÜÇÑ 1Â÷ ¹öÀü)
+            // ê²Œì„ ë¹Œë“œ ë²„íŠ¼ (ê°„ë‹¨í•œ 1ì°¨ ë²„ì „)
             if (ImGui::Button("Build"))
             {
                 g_ShowBuildGameWindow = true;
@@ -1120,17 +1120,17 @@ namespace Alice
             ImGui::Text("DeltaTime: %.3f  FPS: %.1f", deltaTime, fps);
 
             ImGui::Separator();
-            // ·»´õ¸µ ½Ã½ºÅÛ ¼±ÅÃ Ã¼Å©¹Ú½º
+            // ë Œë”ë§ ì‹œìŠ¤í…œ ì„ íƒ ì²´í¬ë°•ìŠ¤
             ImGui::Checkbox("Forward Rendering", &useForwardRendering);
             if (ImGui::IsItemHovered())
             {
-                ImGui::SetTooltip("Ã¼Å©: Forward Rendering\nÇØÁ¦: Deferred Rendering");
+                ImGui::SetTooltip("ì²´í¬: Forward Rendering\ní•´ì œ: Deferred Rendering");
             }
 
             ImGui::EndMainMenuBar();
         }
 
-        // === Build Game Ã¢ (¾À ¼±ÅÃ + °£´ÜÇÑ ÇØ»óµµ ¿É¼Ç) ===
+        // === Build Game ì°½ (ì”¬ ì„ íƒ + ê°„ë‹¨í•œ í•´ìƒë„ ì˜µì…˜) ===
         if (g_ShowBuildGameWindow)
         {
             if (ImGui::Begin("Build Game", &g_ShowBuildGameWindow))
@@ -1142,8 +1142,8 @@ namespace Alice
                 static bool  s_ScanScenesOnce = true;
                 static std::vector<fs::path> s_ScenePaths;
                 static std::vector<bool>     s_SceneSelected;
-                static int   s_DefaultScene  = -1;       // ±âº»À¸·Î ½ÇÇàµÉ ¾À ÀÎµ¦½º
-                static char  s_ExportPath[260] = "../Build/Export"; // ¹èÆ÷¿ë Ãâ·Â °æ·Î
+                static int   s_DefaultScene  = -1;       // ê¸°ë³¸ìœ¼ë¡œ ì‹¤í–‰ë  ì”¬ ì¸ë±ìŠ¤
+                static char  s_ExportPath[260] = "../Build/Export"; // ë°°í¬ìš© ì¶œë ¥ ê²½ë¡œ
 
                 ImGui::Text("Output Resolution");
                 ImGui::InputInt("Width (min : 320)",  &s_Width);
@@ -1203,7 +1203,7 @@ namespace Alice
 
                 ImGui::Separator();
 
-                // ¹èÆ÷¿ë Ãâ·Â °æ·Î ÀÔ·Â + Æú´õ ¼±ÅÃ ¹öÆ°
+                // ë°°í¬ìš© ì¶œë ¥ ê²½ë¡œ ì…ë ¥ + í´ë” ì„ íƒ ë²„íŠ¼
                 ImGui::Text("Export Path (relative to project root or absolute)");
                 ImGui::InputText("##ExportPath", s_ExportPath, IM_ARRAYSIZE(s_ExportPath));
                 ImGui::SameLine();
@@ -1222,14 +1222,14 @@ namespace Alice
                         {
                             std::filesystem::path p = folderW;
                             std::string utf8 = p.string();
-                            // ¼±ÅÃÇÑ °æ·Î¸¦ ±×´ë·Î ExportPath ·Î »ç¿ë (ÇÊ¿äÇÏ¸é ³ªÁß¿¡ »ó´ë °æ·Î·Î º¯È¯ °¡´É)
+                            // ì„ íƒí•œ ê²½ë¡œë¥¼ ê·¸ëŒ€ë¡œ ExportPath ë¡œ ì‚¬ìš© (í•„ìš”í•˜ë©´ ë‚˜ì¤‘ì— ìƒëŒ€ ê²½ë¡œë¡œ ë³€í™˜ ê°€ëŠ¥)
                             strncpy_s(s_ExportPath, utf8.c_str(), _TRUNCATE);
                         }
                         CoTaskMemFree(pidl);
                     }
                 }
 
-                // ºôµå ÁøÇà »óÈ² Ç¥½Ã
+                // ë¹Œë“œ ì§„í–‰ ìƒí™© í‘œì‹œ
                 if (g_BuildInProgress.load())
                 {
                     ImGui::Text("Building AliceGame (Release)...");
@@ -1253,12 +1253,12 @@ namespace Alice
                 {
                     if (ImGui::Button("Build Game"))
                     {
-                        // 1) ºôµå ¼³Á¤ ÆÄÀÏ ÀúÀå (JSON)
+                        // 1) ë¹Œë“œ ì„¤ì • íŒŒì¼ ì €ì¥ (JSON)
                         wchar_t exePathW[MAX_PATH] = {};
                         GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
                         fs::path exePath = exePathW;
                         fs::path exeDir  = exePath.parent_path();
-                        fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug ¡æ ÇÁ·ÎÁ§Æ® ·çÆ®
+                        fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug â†’ í”„ë¡œì íŠ¸ ë£¨íŠ¸
 
                         fs::path buildDir = projectRoot / "Build";
                         std::error_code fec;
@@ -1280,11 +1280,11 @@ namespace Alice
                                     if (i >= s_SceneSelected.size()) continue;
                                     if (!s_SceneSelected[i]) continue;
 
-									fs::path relScene = fs::relative(s_ScenePaths[i], projectRoot);  // ÇÁ·ÎÁ§Æ® ·çÆ® ±âÁØÀ¸·Î »ó´ë °æ·Î (¿¹: "Assets/Stage1/Stage1.scene")
+									fs::path relScene = fs::relative(s_ScenePaths[i], projectRoot);  // í”„ë¡œì íŠ¸ ë£¨íŠ¸ ê¸°ì¤€ìœ¼ë¡œ ìƒëŒ€ ê²½ë¡œ (ì˜ˆ: "Assets/Stage1/Stage1.scene")
                                     includedScenes.push_back(relScene);
                                 }
 
-                                // ±âº»(default) ¾À ¼±ÅÃ
+                                // ê¸°ë³¸(default) ì”¬ ì„ íƒ
                                 fs::path defaultScenePath;
 								bool validIndex =
 									s_DefaultScene >= 0 &&
@@ -1294,7 +1294,7 @@ namespace Alice
 
                                 if (validIndex)
                                 {
-                                    defaultScenePath = fs::relative(s_ScenePaths[s_DefaultScene], projectRoot); // »ó´ë °æ·Î·Î °¡Á®¿ÀÀÚ. ../Assts¸¦ Assets·Î ¹Ù²Ù´Â °Í
+                                    defaultScenePath = fs::relative(s_ScenePaths[s_DefaultScene], projectRoot); // ìƒëŒ€ ê²½ë¡œë¡œ ê°€ì ¸ì˜¤ì. ../Asstsë¥¼ Assetsë¡œ ë°”ê¾¸ëŠ” ê²ƒ
                                 }
                                 else if (!includedScenes.empty())
                                 {
@@ -1318,12 +1318,12 @@ namespace Alice
 
                         ALICE_LOG_INFO("BuildSettings saved to \"%s\"", cfgPath.string().c_str());
 
-                        // 2) º°µµ ½º·¹µå¿¡¼­ CMake ºôµå + ¸®¼Ò½º º¹»ç ½ÇÇà
+                        // 2) ë³„ë„ ìŠ¤ë ˆë“œì—ì„œ CMake ë¹Œë“œ + ë¦¬ì†ŒìŠ¤ ë³µì‚¬ ì‹¤í–‰
                         g_BuildInProgress.store(true);
                         g_BuildProgress.store(0.0f);
                         g_BuildExitCode.store(-1);
 
-                        // Export °æ·Î ¹®ÀÚ¿­Àº ½º·¹µå ½ÃÀÛ ½ÃÁ¡¿¡ º¹»çÇØ µÓ´Ï´Ù.
+                        // Export ê²½ë¡œ ë¬¸ìì—´ì€ ìŠ¤ë ˆë“œ ì‹œì‘ ì‹œì ì— ë³µì‚¬í•´ ë‘¡ë‹ˆë‹¤.
                         std::string exportPathStr = s_ExportPath;
 
                         const BuildGameTaskArgs args{ projectRoot, cfgPath, exportPathStr };
@@ -1337,13 +1337,13 @@ namespace Alice
         // === Hierarchy ===
         if (ImGui::Begin("Hierarchy"))
         {
-            Alice::ImGuiText(L"¿£Æ¼Æ¼ ¸ñ·Ï");
+            Alice::ImGuiText(L"ì—”í‹°í‹° ëª©ë¡");
             ImGui::Separator();
 
             const auto& transforms = world.GetComponents<TransformComponent>();
             if (transforms.empty())
             {
-                Alice::ImGuiText(L"»ı¼ºµÈ ¿£Æ¼Æ¼°¡ ¾ø½À´Ï´Ù.");
+                Alice::ImGuiText(L"ìƒì„±ëœ ì—”í‹°í‹°ê°€ ì—†ìŠµë‹ˆë‹¤.");
             }
             else
             {
@@ -1367,7 +1367,7 @@ namespace Alice
                         selectedEntity = entityId;
                     }
 
-                    // Ç×¸ñ ¿ìÅ¬¸¯ ½Ã ÄÁÅØ½ºÆ® ¸Ş´º Ç¥½Ã
+                    // í•­ëª© ìš°í´ë¦­ ì‹œ ì»¨í…ìŠ¤íŠ¸ ë©”ë‰´ í‘œì‹œ
                     if (ImGui::BeginPopupContextItem())
                     {
                         if (ImGui::MenuItem("Change Name"))
@@ -1388,10 +1388,10 @@ namespace Alice
                             entityToDelete = entityId;
                         }
 
-                        // ÇöÀç °ÔÀÓ ¿ÀºêÁ§Æ®¸¦ ÇÁ¸®ÆÕÀ¸·Î ÀúÀåÇÏ´Â ±â´É
+                        // í˜„ì¬ ê²Œì„ ì˜¤ë¸Œì íŠ¸ë¥¼ í”„ë¦¬íŒ¹ìœ¼ë¡œ ì €ì¥í•˜ëŠ” ê¸°ëŠ¥
                         if (ImGui::MenuItem("Save as Prefab"))
                         {
-                            // Assets/Prefabs Æú´õ ¾Æ·¡¿¡ °£´ÜÇÑ ÀÌ¸§À¸·Î ÀúÀåÇÕ´Ï´Ù.
+                            // Assets/Prefabs í´ë” ì•„ë˜ì— ê°„ë‹¨í•œ ì´ë¦„ìœ¼ë¡œ ì €ì¥í•©ë‹ˆë‹¤.
                             namespace fs = std::filesystem;
                             const fs::path prefabDir =
                                 (m_resources ? m_resources->Resolve("Assets/Prefabs")
@@ -1401,7 +1401,7 @@ namespace Alice
                                 fs::create_directories(prefabDir);
                             }
 
-                            // Entity_<id>.prefab ÇüÅÂÀÇ ±âº» ÀÌ¸§ »ç¿ë
+                            // Entity_<id>.prefab í˜•íƒœì˜ ê¸°ë³¸ ì´ë¦„ ì‚¬ìš©
                             std::string baseName = "Entity_" + std::to_string(static_cast<std::uint32_t>(entityId)) + ".prefab";
                             fs::path prefabPath = prefabDir / baseName;
 
@@ -1441,7 +1441,7 @@ namespace Alice
                     ImGui::EndPopup();
                 }
 
-                // ·çÇÁ°¡ ³¡³­ µÚ¿¡ ½ÇÁ¦ »èÁ¦¸¦ ¼öÇàÇÕ´Ï´Ù. (¹İº¹ Áß ÄÁÅ×ÀÌ³Ê ¼öÁ¤ ¹æÁö)
+                // ë£¨í”„ê°€ ëë‚œ ë’¤ì— ì‹¤ì œ ì‚­ì œë¥¼ ìˆ˜í–‰í•©ë‹ˆë‹¤. (ë°˜ë³µ ì¤‘ ì»¨í…Œì´ë„ˆ ìˆ˜ì • ë°©ì§€)
                 if (entityToDelete != InvalidEntityId)
                 {
                     world.DestroyEntity(entityToDelete);
@@ -1458,7 +1458,7 @@ namespace Alice
         // === Inspector ===
         if (ImGui::Begin("Inspector")) {
             if (selectedEntity == InvalidEntityId) {
-                Alice::ImGuiText(L"¼±ÅÃµÈ ¿£Æ¼Æ¼°¡ ¾ø½À´Ï´Ù.");
+                Alice::ImGuiText(L"ì„ íƒëœ ì—”í‹°í‹°ê°€ ì—†ìŠµë‹ˆë‹¤.");
             }
             else {
                 ImGui::Text("Entity %u", static_cast<uint32_t>(selectedEntity));
@@ -1491,16 +1491,16 @@ namespace Alice
         // === Project ===
         if (ImGui::Begin("Project"))
         {
-            Alice::ImGuiText(L"Assets Æú´õ");
+            Alice::ImGuiText(L"Assets í´ë”");
             ImGui::Separator();
 
-            // Assets Æú´õ´Â ³í¸® °æ·Î·Î¸¸ ´Ù·ç°í, ½ÇÁ¦ À§Ä¡´Â ResourceManager °¡ ÇØ¼®ÇÕ´Ï´Ù.
+            // Assets í´ë”ëŠ” ë…¼ë¦¬ ê²½ë¡œë¡œë§Œ ë‹¤ë£¨ê³ , ì‹¤ì œ ìœ„ì¹˜ëŠ” ResourceManager ê°€ í•´ì„í•©ë‹ˆë‹¤.
             const std::filesystem::path assetsRoot =
                 (m_resources ? m_resources->Resolve("Assets")
                              : std::filesystem::path("Assets"));
             if (!std::filesystem::exists(assetsRoot))
             {
-                // Æú´õ°¡ ¾ø´Ù¸é ÇÑ ¹ø¸¸ »ı¼ºÇØ µÓ´Ï´Ù.
+                // í´ë”ê°€ ì—†ë‹¤ë©´ í•œ ë²ˆë§Œ ìƒì„±í•´ ë‘¡ë‹ˆë‹¤.
                 std::filesystem::create_directories(assetsRoot);
             }
 
@@ -1511,15 +1511,15 @@ namespace Alice
         // === Game ===
         if (ImGui::Begin("Game"))
         {
-            // Gizmo ÄÁÆ®·Ñ UI (static º¯¼ö·Î »óÅÂ À¯Áö)
+            // Gizmo ì»¨íŠ¸ë¡¤ UI (static ë³€ìˆ˜ë¡œ ìƒíƒœ ìœ ì§€)
             static ImGuizmo::OPERATION gizmoOp = ImGuizmo::TRANSLATE;
-            static ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD; // ±âº»°ª: WORLD ¸ğµå
+            static ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD; // ê¸°ë³¸ê°’: WORLD ëª¨ë“œ
             static bool gizmoSnap = false;
             static XMFLOAT3 snapTranslation = XMFLOAT3(1.0f, 1.0f, 1.0f);
             static float snapRotation = 15.0f; // degrees
             static float snapScale = 1.0f;
 
-            // Å°º¸µå ´ÜÃàÅ°·Î Gizmo ¸ğµå º¯°æ (InputSystem »ç¿ë)
+            // í‚¤ë³´ë“œ ë‹¨ì¶•í‚¤ë¡œ Gizmo ëª¨ë“œ ë³€ê²½ (InputSystem ì‚¬ìš©)
             if (m_inputSystem)
             {
                 using namespace DirectX;
@@ -1532,7 +1532,7 @@ namespace Alice
                 }
             }
 
-            // Gizmo Operation ¼±ÅÃ ¹öÆ°
+            // Gizmo Operation ì„ íƒ ë²„íŠ¼
             if (ImGui::RadioButton("Translate (W)", gizmoOp == ImGuizmo::TRANSLATE))
                 gizmoOp = ImGuizmo::TRANSLATE;
             ImGui::SameLine();
@@ -1542,7 +1542,7 @@ namespace Alice
             if (ImGui::RadioButton("Scale (R)", gizmoOp == ImGuizmo::SCALE))
                 gizmoOp = ImGuizmo::SCALE;
 
-            // Gizmo Mode ¼±ÅÃ (Scale ¸ğµå¿¡¼­´Â World¸¸ Áö¿ø)
+            // Gizmo Mode ì„ íƒ (Scale ëª¨ë“œì—ì„œëŠ” Worldë§Œ ì§€ì›)
             if (gizmoOp != ImGuizmo::SCALE)
             {
                 ImGui::SameLine();
@@ -1554,17 +1554,17 @@ namespace Alice
             }
             else
             {
-                gizmoMode = ImGuizmo::LOCAL; // ScaleÀº Ç×»ó Local
+                gizmoMode = ImGuizmo::LOCAL; // Scaleì€ í•­ìƒ Local
             }
 
-            // Snap Åä±Û
+            // Snap í† ê¸€
             ImGui::SameLine();
             if (ImGui::Checkbox("Snap (Ctrl)", &gizmoSnap))
             {
-                // Snap Ã¼Å©¹Ú½º Å¬¸¯ ½Ã Åä±Û
+                // Snap ì²´í¬ë°•ìŠ¤ í´ë¦­ ì‹œ í† ê¸€
             }
 
-            // Snap °ª ¼³Á¤ (Á¢À» ¼ö ÀÖ´Â ¼½¼Ç)
+            // Snap ê°’ ì„¤ì • (ì ‘ì„ ìˆ˜ ìˆëŠ” ì„¹ì…˜)
             if (gizmoSnap)
             {
                 ImGui::Indent();
@@ -1586,11 +1586,11 @@ namespace Alice
             }
 
             ImGui::Separator();
-            Alice::ImGuiText(L"°ÔÀÓ »óÅÂ");
+            Alice::ImGuiText(L"ê²Œì„ ìƒíƒœ");
             ImGui::Separator();
             ImGui::Text("Play State : %s", isPlaying ? "Playing" : "Stopped");
 
-            // ¿¡µğÅÍ ºäÆ÷Æ®´Â Åæ¸ÅÇÎ ¿Ï·á(LDR) ÅØ½ºÃ³¸¦ Ç¥½ÃÇØ¾ß Á¤»ó »ö°¨ÀÌ ³ª¿É´Ï´Ù.
+            // ì—ë””í„° ë·°í¬íŠ¸ëŠ” í†¤ë§¤í•‘ ì™„ë£Œ(LDR) í…ìŠ¤ì²˜ë¥¼ í‘œì‹œí•´ì•¼ ì •ìƒ ìƒ‰ê°ì´ ë‚˜ì˜µë‹ˆë‹¤.
             ID3D11ShaderResourceView* sceneSRV = nullptr;
             float sceneWidth = 0.0f;
             float sceneHeight = 0.0f;
@@ -1630,20 +1630,20 @@ namespace Alice
                     }
                 }
 
-                // Image¸¦ ±×¸°´Ù
+                // Imageë¥¼ ê·¸ë¦°ë‹¤
                 ImGui::Image(sceneSRV, size);
 
-                // ÀÌ¹ÌÁö°¡ È­¸é¿¡ ±×·ÁÁø »ç°¢Çü(ÇÈ¼¿) - Image È£Ãâ Á÷ÈÄ¿¡¸¸ À¯È¿
+                // ì´ë¯¸ì§€ê°€ í™”ë©´ì— ê·¸ë ¤ì§„ ì‚¬ê°í˜•(í”½ì…€) - Image í˜¸ì¶œ ì§í›„ì—ë§Œ ìœ íš¨
                 ImVec2 imgMin  = ImGui::GetItemRectMin();
                 ImVec2 imgMax  = ImGui::GetItemRectMax();
                 ImVec2 imgSize = ImGui::GetItemRectSize();
 
-                // ImGuizmo¸¦ »ç¿ëÇÏ¿© ¼±ÅÃµÈ ¿£Æ¼Æ¼ Á¶ÀÛ (Àç»ı ÁßÀÌ ¾Æ´Ò ¶§¸¸)
+                // ImGuizmoë¥¼ ì‚¬ìš©í•˜ì—¬ ì„ íƒëœ ì—”í‹°í‹° ì¡°ì‘ (ì¬ìƒ ì¤‘ì´ ì•„ë‹ ë•Œë§Œ)
                 if (!isPlaying && selectedEntity != InvalidEntityId)
                 {
                     if (TransformComponent* transform = world.GetComponent<TransformComponent>(selectedEntity))
                     {
-                        // View/Proj Çà·Ä ÁØºñ (XMFLOAT4X4·Î º¯È¯)
+                        // View/Proj í–‰ë ¬ ì¤€ë¹„ (XMFLOAT4X4ë¡œ ë³€í™˜)
                         XMMATRIX viewXM = camera.GetViewMatrix();
                         XMMATRIX projXM = camera.GetProjectionMatrix();
                         
@@ -1651,16 +1651,16 @@ namespace Alice
                         XMStoreFloat4x4(&viewMatrix, viewXM);
                         XMStoreFloat4x4(&projMatrix, projXM);
 
-                        // [ÇÙ½É ¼öÁ¤] ImGuizmoÀÇ RecomposeMatrixFromComponents¸¦ »ç¿ëÇÏ¿© Çà·Ä »ı¼º
-                        // ÀÌ·¸°Ô ÇÏ¸é DecomposeMatrixToComponents¿Í ¾Ë°í¸®ÁòÀÌ ÀÏÄ¡ÇÏ¿© ¶³¸²ÀÌ »ç¶óÁı´Ï´Ù
-                        // ImGuizmo´Â Degree(µµ) ´ÜÀ§¸¦ »ç¿ëÇÏ¹Ç·Î º¯È¯ ÇÊ¿ä
+                        // [í•µì‹¬ ìˆ˜ì •] ImGuizmoì˜ RecomposeMatrixFromComponentsë¥¼ ì‚¬ìš©í•˜ì—¬ í–‰ë ¬ ìƒì„±
+                        // ì´ë ‡ê²Œ í•˜ë©´ DecomposeMatrixToComponentsì™€ ì•Œê³ ë¦¬ì¦˜ì´ ì¼ì¹˜í•˜ì—¬ ë–¨ë¦¼ì´ ì‚¬ë¼ì§‘ë‹ˆë‹¤
+                        // ImGuizmoëŠ” Degree(ë„) ë‹¨ìœ„ë¥¼ ì‚¬ìš©í•˜ë¯€ë¡œ ë³€í™˜ í•„ìš”
                         float matrixTranslation[3], matrixRotation[3], matrixScale[3];
 
                         matrixTranslation[0] = transform->position.x;
                         matrixTranslation[1] = transform->position.y;
                         matrixTranslation[2] = transform->position.z;
 
-                        // RadianÀ» Degree·Î º¯È¯
+                        // Radianì„ Degreeë¡œ ë³€í™˜
                         matrixRotation[1] = XMConvertToDegrees(transform->rotation.x);
                         matrixRotation[0] = XMConvertToDegrees(transform->rotation.y);
                         matrixRotation[2] = XMConvertToDegrees(transform->rotation.z);
@@ -1669,27 +1669,27 @@ namespace Alice
                         matrixScale[1] = transform->scale.y;
                         matrixScale[2] = transform->scale.z;
 
-                        // ImGuizmo ¹æ½ÄÀ¸·Î Çà·ÄÀ» ÀçÁ¶¸³ (Recompose)
-                        // ÀÌ·¸°Ô ÇÏ¸é ³ªÁß¿¡ DecomposeÇÒ ¶§ÀÇ ¾Ë°í¸®Áò°ú ´ëÄªÀÌ µÇ¾î ¶³¸²ÀÌ »ç¶óÁı´Ï´Ù
+                        // ImGuizmo ë°©ì‹ìœ¼ë¡œ í–‰ë ¬ì„ ì¬ì¡°ë¦½ (Recompose)
+                        // ì´ë ‡ê²Œ í•˜ë©´ ë‚˜ì¤‘ì— Decomposeí•  ë•Œì˜ ì•Œê³ ë¦¬ì¦˜ê³¼ ëŒ€ì¹­ì´ ë˜ì–´ ë–¨ë¦¼ì´ ì‚¬ë¼ì§‘ë‹ˆë‹¤
                         float worldMatrix[16];
                         ImGuizmo::RecomposeMatrixFromComponents(matrixTranslation, matrixRotation, matrixScale, worldMatrix);
 
-                        // ImGuizmo¿¡ Á÷Á¢ Æ÷ÀÎÅÍ Àü´Ş
+                        // ImGuizmoì— ì§ì ‘ í¬ì¸í„° ì „ë‹¬
                         const float* viewMat = reinterpret_cast<const float*>(viewMatrix.m);
                         const float* projMat = reinterpret_cast<const float*>(projMatrix.m);
                         float* objMat = worldMatrix;
 
-                        // ImGuizmo ¼³Á¤
+                        // ImGuizmo ì„¤ì •
                         ImGuizmo::SetOrthographic(false);
                         ImDrawList* drawList = ImGui::GetWindowDrawList();
                         ImGuizmo::SetDrawlist(drawList);
-                        // SetRect´Â ½ÇÁ¦ ÀÌ¹ÌÁö°¡ ±×·ÁÁø »ç°¢Çü(ÇÈ¼¿)À» »ç¿ë
-                        // sceneWidth/sceneHeight´Â GPU ·»´õ Å¸°Ù ÇØ»óµµÀÌ¹Ç·Î È­¸é ÇÈ¼¿°ú ´Ù¸¦ ¼ö ÀÖÀ½
+                        // SetRectëŠ” ì‹¤ì œ ì´ë¯¸ì§€ê°€ ê·¸ë ¤ì§„ ì‚¬ê°í˜•(í”½ì…€)ì„ ì‚¬ìš©
+                        // sceneWidth/sceneHeightëŠ” GPU ë Œë” íƒ€ê²Ÿ í•´ìƒë„ì´ë¯€ë¡œ í™”ë©´ í”½ì…€ê³¼ ë‹¤ë¥¼ ìˆ˜ ìˆìŒ
                         ImGuizmo::SetRect(imgMin.x, imgMin.y, imgSize.x, imgSize.y);
 
-                        // Snap °ª ÁØºñ
+                        // Snap ê°’ ì¤€ë¹„
                         float* snap = nullptr;
-                        float snapValue[3] = { 0, 0, 0 }; // Snap °ªÀ» ¹ŞÀ» ÀÓ½Ã ¹è¿­
+                        float snapValue[3] = { 0, 0, 0 }; // Snap ê°’ì„ ë°›ì„ ì„ì‹œ ë°°ì—´
                         bool forceSnap = false;
                         if (m_inputSystem)
                         {
@@ -1716,16 +1716,16 @@ namespace Alice
                             }
                         }
 
-                        // Gizmo Á¶ÀÛ (worldMatrix ¹è¿­À» Á÷Á¢ ³Ñ°ÜÁÖ¾î ¼öÁ¤µÇ°Ô ÇÔ)
+                        // Gizmo ì¡°ì‘ (worldMatrix ë°°ì—´ì„ ì§ì ‘ ë„˜ê²¨ì£¼ì–´ ìˆ˜ì •ë˜ê²Œ í•¨)
                         bool manipulated = ImGuizmo::Manipulate(viewMat, projMat, gizmoOp, gizmoMode, objMat, nullptr, snap);
 
                         if (manipulated)
                         {
-                            // [ÇÙ½É ¼öÁ¤] ImGuizmo·Î Á¶¸³ÇßÀ¸¹Ç·Î ºĞÇØ(Decompose)µµ ¾ÈÁ¤ÀûÀ¸·Î µ¿ÀÛÇÔ
-                            // Recompose¿Í DecomposeÀÇ ¾Ë°í¸®ÁòÀÌ ÀÏÄ¡ÇÏ¿© ¶³¸²ÀÌ »ç¶óÁı´Ï´Ù
+                            // [í•µì‹¬ ìˆ˜ì •] ImGuizmoë¡œ ì¡°ë¦½í–ˆìœ¼ë¯€ë¡œ ë¶„í•´(Decompose)ë„ ì•ˆì •ì ìœ¼ë¡œ ë™ì‘í•¨
+                            // Recomposeì™€ Decomposeì˜ ì•Œê³ ë¦¬ì¦˜ì´ ì¼ì¹˜í•˜ì—¬ ë–¨ë¦¼ì´ ì‚¬ë¼ì§‘ë‹ˆë‹¤
                             ImGuizmo::DecomposeMatrixToComponents(worldMatrix, matrixTranslation, matrixRotation, matrixScale);
 
-                            // Transform ÄÄÆ÷³ÍÆ® ¾÷µ¥ÀÌÆ® (´Ù½Ã RadianÀ¸·Î º¯È¯ÇÏ¿© ÀúÀå)
+                            // Transform ì»´í¬ë„ŒíŠ¸ ì—…ë°ì´íŠ¸ (ë‹¤ì‹œ Radianìœ¼ë¡œ ë³€í™˜í•˜ì—¬ ì €ì¥)
                             transform->position = XMFLOAT3(matrixTranslation[0], matrixTranslation[1], matrixTranslation[2]);
                             
                             transform->rotation = XMFLOAT3(
@@ -1739,25 +1739,25 @@ namespace Alice
                     }
                 }
 
-                // ¿£Æ¼Æ¼ ¼±ÅÃ (Gizmo À§¿¡ ÀÖÁö ¾ÊÀ» ¶§¸¸)
-                // ÃÖÁ¾ ºôµå(Release)¿¡¼­´Â ºäÆ÷Æ® ÇÇÄ¿°¡ ÀÛµ¿ÇÏÁö ¾Êµµ·Ï ÇÔ
+                // ì—”í‹°í‹° ì„ íƒ (Gizmo ìœ„ì— ìˆì§€ ì•Šì„ ë•Œë§Œ)
+                // ìµœì¢… ë¹Œë“œ(Release)ì—ì„œëŠ” ë·°í¬íŠ¸ í”¼ì»¤ê°€ ì‘ë™í•˜ì§€ ì•Šë„ë¡ í•¨
 #ifdef _DEBUG
                 if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 {
-                    // Gizmo À§¿¡ ÀÖÁö ¾Ê°í »ç¿ë ÁßÀÌ ¾Æ´Ò ¶§¸¸ ¼±ÅÃ Ã³¸®
+                    // Gizmo ìœ„ì— ìˆì§€ ì•Šê³  ì‚¬ìš© ì¤‘ì´ ì•„ë‹ ë•Œë§Œ ì„ íƒ ì²˜ë¦¬
                     if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing())
                     {
                         const ImVec2 mousePos = ImGui::GetIO().MousePos;
 
-                        //ÇÇÅ·Àº ½ÇÁ¦ ÀÌ¹ÌÁö »ç°¢Çü(imgMin, imgSize)À» ±âÁØÀ¸·Î °è»ê
-                        // imagePos³ª size¸¦ »ç¿ëÇÏ¸é ·¹ÅÍ¹Ú½º/ÆĞµù ¶§¹®¿¡ À§Ä¡°¡ ¾î±ß³²
+                        //í”¼í‚¹ì€ ì‹¤ì œ ì´ë¯¸ì§€ ì‚¬ê°í˜•(imgMin, imgSize)ì„ ê¸°ì¤€ìœ¼ë¡œ ê³„ì‚°
+                        // imagePosë‚˜ sizeë¥¼ ì‚¬ìš©í•˜ë©´ ë ˆí„°ë°•ìŠ¤/íŒ¨ë”© ë•Œë¬¸ì— ìœ„ì¹˜ê°€ ì–´ê¸‹ë‚¨
                         const float localX = mousePos.x - imgMin.x;
                         const float localY = mousePos.y - imgMin.y;
 
                         if (localX >= 0.0f && localX <= imgSize.x &&
                             localY >= 0.0f && localY <= imgSize.y)
                         {
-                            // UV ÁÂÇ¥¸¦ ½ÇÁ¦ ÀÌ¹ÌÁö Å©±â ±âÁØÀ¸·Î °è»ê
+                            // UV ì¢Œí‘œë¥¼ ì‹¤ì œ ì´ë¯¸ì§€ í¬ê¸° ê¸°ì¤€ìœ¼ë¡œ ê³„ì‚°
                             const float u = (imgSize.x > 0.0f) ? (localX / imgSize.x) : 0.0f;
                             const float v = (imgSize.y > 0.0f) ? (localY / imgSize.y) : 0.0f;
                             EntityId hit = picker.Pick(world, camera, m_skinnedRegistry, u, v);
@@ -1769,19 +1769,19 @@ namespace Alice
             }
             else
             {
-                Alice::ImGuiText("¾À ÅØ½ºÃ³°¡ ¾ÆÁ÷ ÁØºñµÇÁö ¾Ê¾Ò½À´Ï´Ù.");
+                Alice::ImGuiText("ì”¬ í…ìŠ¤ì²˜ê°€ ì•„ì§ ì¤€ë¹„ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.");
             }
         }
         ImGui::End();
 
-        // === Camera / Animation (°°Àº ¿µ¿ª, ÅÇ) ===
+        // === Camera / Animation (ê°™ì€ ì˜ì—­, íƒ­) ===
         if (ImGui::Begin("Camera"))
         {
             if (ImGui::BeginTabBar("##CameraTabs"))
             {
                 if (ImGui::BeginTabItem("Camera"))
                 {
-                    Alice::ImGuiText(L"Ä«¸Ş¶ó Á¤º¸");
+                    Alice::ImGuiText(L"ì¹´ë©”ë¼ ì •ë³´");
                     ImGui::Separator();
 
                     XMFLOAT3 camPos = camera.GetPosition();
@@ -1789,7 +1789,7 @@ namespace Alice
                                 camPos.x, camPos.y, camPos.z);
 
                     ImGui::Separator();
-                    Alice::ImGuiText(L"Ä«¸Ş¶ó ¼³Á¤");
+                    Alice::ImGuiText(L"ì¹´ë©”ë¼ ì„¤ì •");
 
                     float fovDeg = XMConvertToDegrees(camera.GetFovYRadians());
                     float nearPlane = camera.GetNearPlane();
@@ -1932,14 +1932,14 @@ namespace Alice
             if (ImGui::RadioButton("PBR", mode == 4))       mode = 4;
             shadingMode = mode;
 
-            Alice::ImGuiCheckbox(L"Fill Light (º¸Á¶±¤)", &useFillLight);
+            Alice::ImGuiCheckbox(L"Fill Light (ë³´ì¡°ê´‘)", &useFillLight);
 
-            // Forward/Deferred ¸ğµå¿¡ µû¶ó Á¶¸í ÆÄ¶ó¹ÌÅÍ¸¦ °¢ ·»´õ·¯¿¡ ¹İ¿µÇÕ´Ï´Ù.
+            // Forward/Deferred ëª¨ë“œì— ë”°ë¼ ì¡°ëª… íŒŒë¼ë¯¸í„°ë¥¼ ê° ë Œë”ëŸ¬ì— ë°˜ì˜í•©ë‹ˆë‹¤.
 			//auto& lighting = useForwardRendering ? forward.GetLightingParameters() : deferred.GetLightingParameters();
 			//auto& lighting = forward.GetLightingParameters();
 			auto& lighting = deferred.GetLightingParameters();
             
-            // PBR ¸ğµåÀÏ ¶§ PBR ÆÄ¶ó¹ÌÅÍ Ç¥½Ã
+            // PBR ëª¨ë“œì¼ ë•Œ PBR íŒŒë¼ë¯¸í„° í‘œì‹œ
             if (mode == 4)
             {
                 ImGui::Separator();
@@ -1952,52 +1952,52 @@ namespace Alice
             }
             else
             {
-                // ·¹°Å½Ã ½¦ÀÌ´õ ÆÄ¶ó¹ÌÅÍ
+                // ë ˆê±°ì‹œ ì‰ì´ë” íŒŒë¼ë¯¸í„°
                 ImGui::SliderFloat("Shininess", &lighting.shininess, 2.0f, 128.0f);
                 ImGui::ColorEdit3("Diffuse Color", &lighting.diffuseColor.x);
                 ImGui::ColorEdit3("Specular Color", &lighting.specularColor.x);
             }
 
-            // °øÅë Á¶¸í ÆÄ¶ó¹ÌÅÍ
-            Alice::ImGuiSliderFloat(L"Key Intensity (ÁÖ±¤)",
+            // ê³µí†µ ì¡°ëª… íŒŒë¼ë¯¸í„°
+            Alice::ImGuiSliderFloat(L"Key Intensity (ì£¼ê´‘)",
                                     &lighting.keyIntensity,
                                     0.0f,
                                     3.0f);
-            Alice::ImGuiSliderFloat(L"Fill Intensity (º¸Á¶±¤)",
+            Alice::ImGuiSliderFloat(L"Fill Intensity (ë³´ì¡°ê´‘)",
                                     &lighting.fillIntensity,
                                     0.0f,
                                     3.0f);
 
-            Alice::ImGuiSliderFloat3(L"Key Direction (ÁÖ±¤)",
+            Alice::ImGuiSliderFloat3(L"Key Direction (ì£¼ê´‘)",
                                      &lighting.keyDirection.x,
                                      -1.0f,
                                      1.0f);
-            Alice::ImGuiSliderFloat3(L"Fill Direction (º¸Á¶±¤)",
+            Alice::ImGuiSliderFloat3(L"Fill Direction (ë³´ì¡°ê´‘)",
                                      &lighting.fillDirection.x,
                                      -1.0f,
                                      1.0f);
 
-            // === Skybox ¼±ÅÃ ===
+            // === Skybox ì„ íƒ ===
             ImGui::Separator();
             ImGui::Text("Skybox");
             
-            // ½ºÄ«ÀÌ¹Ú½º ¼±ÅÃ »óÅÂ¸¦ ÀúÀåÇÒ º¯¼ö (staticÀ¸·Î À¯Áö)
-            static int skyboxChoice = 3; // ±âº»°ª: Baker (Sample) - ÀÎµ¦½º 3
+            // ìŠ¤ì¹´ì´ë°•ìŠ¤ ì„ íƒ ìƒíƒœë¥¼ ì €ì¥í•  ë³€ìˆ˜ (staticìœ¼ë¡œ ìœ ì§€)
+            static int skyboxChoice = 3; // ê¸°ë³¸ê°’: Baker (Sample) - ì¸ë±ìŠ¤ 3
             const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker" };
             
             if (useForwardRendering)
             {
                 if (ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems)))
                 {
-                    // ½ºÄ«ÀÌ¹Ú½º º¯°æ
+                    // ìŠ¤ì¹´ì´ë°•ìŠ¤ ë³€ê²½
                     if (skyboxChoice == 0) // Off
                     {
-                        // ½ºÄ«ÀÌ¹Ú½º ºñÈ°¼ºÈ­
+                        // ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¹„í™œì„±í™”
                         forward.SetSkyboxEnabled(false);
                     }
                     else
                     {
-                        // ½ºÄ«ÀÌ¹Ú½º È°¼ºÈ­ ¹× IBL ¼¼Æ® ·Îµå
+                        // ìŠ¤ì¹´ì´ë°•ìŠ¤ í™œì„±í™” ë° IBL ì„¸íŠ¸ ë¡œë“œ
                         forward.SetSkyboxEnabled(true);
                         switch (skyboxChoice)
                         {
@@ -2015,7 +2015,7 @@ namespace Alice
                         }
                     }
                 }
-                // OffÀÏ ¶§¸¸ ¹è°æ»ö ÆíÁı
+                // Offì¼ ë•Œë§Œ ë°°ê²½ìƒ‰ í¸ì§‘
                 if (skyboxChoice == 0)
                 {
                     DirectX::XMFLOAT4 bgColor = forward.GetBackgroundColor();
@@ -2029,15 +2029,15 @@ namespace Alice
             {
                 if (ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems)))
                 {
-                    // ½ºÄ«ÀÌ¹Ú½º º¯°æ
+                    // ìŠ¤ì¹´ì´ë°•ìŠ¤ ë³€ê²½
                     if (skyboxChoice == 0) // Off
                     {
-                        // ½ºÄ«ÀÌ¹Ú½º ºñÈ°¼ºÈ­
+                        // ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¹„í™œì„±í™”
                         deferred.SetSkyboxEnabled(false);
                     }
                     else
                     {
-                        // ½ºÄ«ÀÌ¹Ú½º È°¼ºÈ­ ¹× IBL ¼¼Æ® ·Îµå
+                        // ìŠ¤ì¹´ì´ë°•ìŠ¤ í™œì„±í™” ë° IBL ì„¸íŠ¸ ë¡œë“œ
                         deferred.SetSkyboxEnabled(true);
                         switch (skyboxChoice)
                         {
@@ -2055,7 +2055,7 @@ namespace Alice
                         }
                     }
                 }
-                // OffÀÏ ¶§¸¸ ¹è°æ»ö ÆíÁı
+                // Offì¼ ë•Œë§Œ ë°°ê²½ìƒ‰ í¸ì§‘
                 if (skyboxChoice == 0)
                 {
                     DirectX::XMFLOAT4 bgColor = deferred.GetBackgroundColor();
@@ -2066,7 +2066,7 @@ namespace Alice
                 }
             }
             
-            // === Post-Process ÆÄ¶ó¹ÌÅÍ (Exposure, Max HDR Nits) ===
+            // === Post-Process íŒŒë¼ë¯¸í„° (Exposure, Max HDR Nits) ===
             ImGui::Separator();
             ImGui::Text("Post-Process");
             ImGui::Separator();
@@ -2084,7 +2084,7 @@ namespace Alice
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Exposure °ª: -3.0 (¾îµÎ¿ò) ~ 3.0 (¹àÀ½)\n0.0 = 1.0¹è (±âº»°ª)");
+                    ImGui::SetTooltip("Exposure ê°’: -3.0 (ì–´ë‘ì›€) ~ 3.0 (ë°ìŒ)\n0.0 = 1.0ë°° (ê¸°ë³¸ê°’)");
                 }
                 
                 if (ImGui::SliderFloat("Max HDR Nits", &maxHDRNits, 100.0f, 10000.0f, "%.0f nits"))
@@ -2093,7 +2093,7 @@ namespace Alice
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("HDR ¸ğ´ÏÅÍ ÃÖ´ë ¹à±â (nits)\nÀÏ¹İ ¸ğ´ÏÅÍ: 100-300 nits\nHDR ¸ğ´ÏÅÍ: 1000-10000 nits");
+                    ImGui::SetTooltip("HDR ëª¨ë‹ˆí„° ìµœëŒ€ ë°ê¸° (nits)\nì¼ë°˜ ëª¨ë‹ˆí„°: 100-300 nits\nHDR ëª¨ë‹ˆí„°: 1000-10000 nits");
                 }
             }
             else
@@ -2106,7 +2106,7 @@ namespace Alice
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Exposure °ª: -3.0 (¾îµÎ¿ò) ~ 3.0 (¹àÀ½)\n0.0 = 1.0¹è (±âº»°ª)");
+                    ImGui::SetTooltip("Exposure ê°’: -3.0 (ì–´ë‘ì›€) ~ 3.0 (ë°ìŒ)\n0.0 = 1.0ë°° (ê¸°ë³¸ê°’)");
                 }
                 
                 if (ImGui::SliderFloat("Max HDR Nits", &maxHDRNits, 100.0f, 10000.0f, "%.0f nits"))
@@ -2115,14 +2115,14 @@ namespace Alice
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("HDR ¸ğ´ÏÅÍ ÃÖ´ë ¹à±â (nits)\nÀÏ¹İ ¸ğ´ÏÅÍ: 100-300 nits\nHDR ¸ğ´ÏÅÍ: 1000-10000 nits");
+                    ImGui::SetTooltip("HDR ëª¨ë‹ˆí„° ìµœëŒ€ ë°ê¸° (nits)\nì¼ë°˜ ëª¨ë‹ˆí„°: 100-300 nits\nHDR ëª¨ë‹ˆí„°: 1000-10000 nits");
                 }
             }
             
         }
         ImGui::End();
 
-        // === Material Asset Editor (.mat ´õºíÅ¬¸¯ ½Ã) ===
+        // === Material Asset Editor (.mat ë”ë¸”í´ë¦­ ì‹œ) ===
         if (g_MaterialEditorOpen)
         {
             if (ImGui::Begin("Material Asset Editor", &g_MaterialEditorOpen))
@@ -2169,10 +2169,10 @@ namespace Alice
 
                 if (changed)
                 {
-                    // 1) ¿¡¼Â ÆÄÀÏ¿¡ ÀúÀå
+                    // 1) ì—ì…‹ íŒŒì¼ì— ì €ì¥
                     MaterialFile::Save(g_MaterialEditorPath, g_MaterialEditorData);
 
-                    // 2) ÀÌ ¿¡¼ÂÀ» ÂüÁ¶ÇÏ´Â ¸ğµç ¿£Æ¼Æ¼ÀÇ MaterialComponent ¸¦ °»½Å
+                    // 2) ì´ ì—ì…‹ì„ ì°¸ì¡°í•˜ëŠ” ëª¨ë“  ì—”í‹°í‹°ì˜ MaterialComponent ë¥¼ ê°±ì‹ 
                     const std::string targetPath = g_MaterialEditorPath.string();
                     const auto& allMats = world.GetComponents<MaterialComponent>();
                     for (const auto& [id, matConst] : allMats)
@@ -2193,17 +2193,17 @@ namespace Alice
             ImGui::End();
         }
 
-        // === ¾À º¯°æ»çÇ× ÀúÀå È®ÀÎ ¸ğ´Ş ===
+        // === ì”¬ ë³€ê²½ì‚¬í•­ ì €ì¥ í™•ì¸ ëª¨ë‹¬ ===
         if (g_RequestSceneLoad)
         {
-            // ÇöÀç ¾ÀÀÌ Á¸ÀçÇÏ°í º¯°æ»çÇ×ÀÌ ÀÖÀ» ¶§¸¸ È®ÀÎ ¸ğ´ŞÀ» ¶ç¿ó´Ï´Ù.
+            // í˜„ì¬ ì”¬ì´ ì¡´ì¬í•˜ê³  ë³€ê²½ì‚¬í•­ì´ ìˆì„ ë•Œë§Œ í™•ì¸ ëª¨ë‹¬ì„ ë„ì›ë‹ˆë‹¤.
             if (g_HasCurrentScenePath && g_SceneDirty)
             {
                 ImGui::OpenPopup("SaveSceneBeforeLoad");
             }
             else
             {
-                // ÀúÀåÇÒ ÇÊ¿ä°¡ ¾øÀ¸¸é ¹Ù·Î ·Îµå
+                // ì €ì¥í•  í•„ìš”ê°€ ì—†ìœ¼ë©´ ë°”ë¡œ ë¡œë“œ
                 {
                     ALICE_LOG_INFO("[Editor] SceneFile::Load (no-save path): \"%s\"\n",
                         g_NextScenePath.string().c_str());
@@ -2224,7 +2224,7 @@ namespace Alice
 
         if (ImGui::BeginPopupModal("SaveSceneBeforeLoad", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            Alice::ImGuiText(L"ÇöÀç ¾ÀÀÇ º¯°æ ³»¿ëÀ» ÀúÀåÇÏ½Ã°Ú½À´Ï±î?");
+            Alice::ImGuiText(L"í˜„ì¬ ì”¬ì˜ ë³€ê²½ ë‚´ìš©ì„ ì €ì¥í•˜ì‹œê² ìŠµë‹ˆê¹Œ?");
             ImGui::Separator();
 
             if (ImGui::Button("Save"))
@@ -2259,7 +2259,7 @@ namespace Alice
             ImGui::SameLine();
             if (ImGui::Button("Cancel"))
             {
-                // ¾Æ¹«°Íµµ ÇÏÁö ¾Ê°í ¾À ·Îµå¸¦ Ãë¼ÒÇÕ´Ï´Ù.
+                // ì•„ë¬´ê²ƒë„ í•˜ì§€ ì•Šê³  ì”¬ ë¡œë“œë¥¼ ì·¨ì†Œí•©ë‹ˆë‹¤.
                 ImGui::CloseCurrentPopup();
             }
 
@@ -2366,7 +2366,7 @@ namespace Alice
                         if (!type.is_valid()) type = inst.get_type();
 
                         //rttr::instance inst = sc.instance;
-                        //rttr::type type = inst.get_derived_type(); // ÀÌÁ¦ Á¤È®ÇÑ ÀÚ½Ä Å¸ÀÔÀÌ ³ª¿È
+                        //rttr::type type = inst.get_derived_type(); // ì´ì œ ì •í™•í•œ ìì‹ íƒ€ì…ì´ ë‚˜ì˜´
                         //if (!type.is_valid()) return;
 
                         for (auto prop : type.get_properties()) {
@@ -2484,20 +2484,20 @@ namespace Alice
 
         ImGuiTreeNodeFlags baseFlags = ImGuiTreeNodeFlags_SpanAvailWidth;
 
-        // ÆÄÀÏ/Æú´õ ÀÌ¸§ º¯°æ »óÅÂ¸¦ °ü¸®ÇÏ´Â °£´ÜÇÑ Á¤Àû »óÅÂÀÔ´Ï´Ù.
+        // íŒŒì¼/í´ë” ì´ë¦„ ë³€ê²½ ìƒíƒœë¥¼ ê´€ë¦¬í•˜ëŠ” ê°„ë‹¨í•œ ì •ì  ìƒíƒœì…ë‹ˆë‹¤.
         static bool                 s_renaming      = false;
         static std::filesystem::path s_renamingPath;
         static char                 s_renameBuffer[260] = {};
         static bool                 s_renameFocus   = false;
 
-        // °øÅë Rename »óÅÂ: ÆÄÀÏ/Æú´õ ¸ğµÎ ÀÌ ÇÃ·¡±×¸¦ »ç¿ëÇÕ´Ï´Ù.
+        // ê³µí†µ Rename ìƒíƒœ: íŒŒì¼/í´ë” ëª¨ë‘ ì´ í”Œë˜ê·¸ë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.
         const bool isRenamingThis = s_renaming && (s_renamingPath == path);
 
         if (isDirectory)
         {
             bool open = false;
 
-            // Æú´õ ÀÌ¸§ ¿µ¿ª: ÀÏ¹İ ÅØ½ºÆ® ¶Ç´Â ÀÎ¶óÀÎ ÀÔ·Â ¹Ú½º
+            // í´ë” ì´ë¦„ ì˜ì—­: ì¼ë°˜ í…ìŠ¤íŠ¸ ë˜ëŠ” ì¸ë¼ì¸ ì…ë ¥ ë°•ìŠ¤
             ImGui::PushID(label.c_str());
             if (isRenamingThis)
             {
@@ -2535,7 +2535,7 @@ namespace Alice
             }
             ImGui::PopID();
 
-                // µğ·ºÅÍ¸® ³ëµå¿¡ ´ëÇÑ ¿ìÅ¬¸¯ ÄÁÅØ½ºÆ® ¸Ş´º (Æú´õ/½ºÅ©¸³Æ®/ÇÁ¸®ÆÕ »ı¼º µî)
+                // ë””ë ‰í„°ë¦¬ ë…¸ë“œì— ëŒ€í•œ ìš°í´ë¦­ ì»¨í…ìŠ¤íŠ¸ ë©”ë‰´ (í´ë”/ìŠ¤í¬ë¦½íŠ¸/í”„ë¦¬íŒ¹ ìƒì„± ë“±)
             if (ImGui::BeginPopupContextItem())
             {
                     if (ImGui::MenuItem("Rename Folder..."))
@@ -2552,7 +2552,7 @@ namespace Alice
                         ImGui::CloseCurrentPopup();
                     }
 
-                    // »õ ÇÏÀ§ Æú´õ »ı¼º
+                    // ìƒˆ í•˜ìœ„ í´ë” ìƒì„±
                     if (ImGui::MenuItem("Create Folder"))
                     {
                         fs::path newPath = path / "NewFolder";
@@ -2567,7 +2567,7 @@ namespace Alice
                         fs::create_directories(newPath, ec);
                     }
 
-                // Unity ½ºÅ¸ÀÏ: C++ ½ºÅ©¸³Æ®(.h/.cpp)¿Í ÇÁ¸®ÆÕÀ» °£´ÜÇÏ°Ô »ı¼ºÇÕ´Ï´Ù.
+                // Unity ìŠ¤íƒ€ì¼: C++ ìŠ¤í¬ë¦½íŠ¸(.h/.cpp)ì™€ í”„ë¦¬íŒ¹ì„ ê°„ë‹¨í•˜ê²Œ ìƒì„±í•©ë‹ˆë‹¤.
                 if (ImGui::MenuItem("Create C++ Script"))
                 {
                     const std::string baseName = "NewScript";
@@ -2586,7 +2586,7 @@ namespace Alice
 
                     const std::string className = headerPath.stem().string();
 
-                    // Çì´õ ÆÄÀÏ ÅÛÇÃ¸´ ÀÛ¼º
+                    // í—¤ë” íŒŒì¼ í…œí”Œë¦¿ ì‘ì„±
                     {
                         std::ofstream hfs(headerPath);
                         if (hfs.is_open())
@@ -2596,16 +2596,16 @@ namespace Alice
                             hfs << "#include \"Core/ScriptReflection.h\"\n\n";
                             hfs << "namespace Alice\n";
                             hfs << "{\n";
-                            hfs << "    // °£´ÜÇÑ ¿¹Á¦ ½ºÅ©¸³Æ®ÀÔ´Ï´Ù. ÇÊ¿ä¿¡ ¸Â°Ô ¼öÁ¤ÇØ¼­ »ç¿ëÇÏ¼¼¿ä.\n";
+                            hfs << "    // ê°„ë‹¨í•œ ì˜ˆì œ ìŠ¤í¬ë¦½íŠ¸ì…ë‹ˆë‹¤. í•„ìš”ì— ë§ê²Œ ìˆ˜ì •í•´ì„œ ì‚¬ìš©í•˜ì„¸ìš”.\n";
                             hfs << "    class " << className << " : public IScript\n";
                             hfs << "    {\n";
                             hfs << "        ALICE_BODY(" << className << ");\n\n";
                             hfs << "    public:\n";
                             hfs << "        void Start() override;\n";
                             hfs << "        void Update(float deltaTime) override;\n\n";
-                            hfs << "        // --- º¯¼ö ¸®ÇÃ·º¼Ç ¿¹½Ã (¿¡µğÅÍ¿¡¼­ ¼öÁ¤ °¡´É) ---\n";
+                            hfs << "        // --- ë³€ìˆ˜ ë¦¬í”Œë ‰ì…˜ ì˜ˆì‹œ (ì—ë””í„°ì—ì„œ ìˆ˜ì • ê°€ëŠ¥) ---\n";
                             hfs << "        ALICE_PROPERTY(float, m_exampleValue, 1.0f);\n\n";
-                            hfs << "        // --- ÇÔ¼ö ¸®ÇÃ·º¼Ç ¿¹½Ã ---\n";
+                            hfs << "        // --- í•¨ìˆ˜ ë¦¬í”Œë ‰ì…˜ ì˜ˆì‹œ ---\n";
                             hfs << "        void ExampleFunction();\n";
                             hfs << "        ALICE_FUNC(ExampleFunction);\n";
                             hfs << "    };\n";
@@ -2613,7 +2613,7 @@ namespace Alice
                         }
                     }
 
-                    // cpp ÆÄÀÏ ÅÛÇÃ¸´ ÀÛ¼º
+                    // cpp íŒŒì¼ í…œí”Œë¦¿ ì‘ì„±
                     {
                         std::ofstream cfs(sourcePath);
                         if (cfs.is_open())
@@ -2624,25 +2624,25 @@ namespace Alice
                             cfs << "#include \"Core/World.h\"\n\n";
                             cfs << "namespace Alice\n";
                             cfs << "{\n";
-                            cfs << "    // ÀÌ ½ºÅ©¸³Æ®¸¦ ¸®ÇÃ·º¼Ç/ÆÑÅä¸® ½Ã½ºÅÛ¿¡ µî·ÏÇÕ´Ï´Ù.\n";
+                            cfs << "    // ì´ ìŠ¤í¬ë¦½íŠ¸ë¥¼ ë¦¬í”Œë ‰ì…˜/íŒ©í† ë¦¬ ì‹œìŠ¤í…œì— ë“±ë¡í•©ë‹ˆë‹¤.\n";
                             cfs << "    REGISTER_SCRIPT(" << className << ");\n\n";
                             cfs << "    void " << className << "::Start()\n";
                             cfs << "    {\n";
-                            cfs << "        // ÃÊ±âÈ­ ·ÎÁ÷À» ¿©±â¿¡ ÀÛ¼ºÇÏ¼¼¿ä.\n";
+                            cfs << "        // ì´ˆê¸°í™” ë¡œì§ì„ ì—¬ê¸°ì— ì‘ì„±í•˜ì„¸ìš”.\n";
                             cfs << "    }\n\n";
                             cfs << "    void " << className << "::Update(float deltaTime)\n";
                             cfs << "    {\n";
-                            cfs << "        // ¸Å ÇÁ·¹ÀÓ È£ÃâµÇ´Â ·ÎÁ÷À» ¿©±â¿¡ ÀÛ¼ºÇÏ¼¼¿ä.\n";
+                            cfs << "        // ë§¤ í”„ë ˆì„ í˜¸ì¶œë˜ëŠ” ë¡œì§ì„ ì—¬ê¸°ì— ì‘ì„±í•˜ì„¸ìš”.\n";
                             cfs << "    }\n\n";
                             cfs << "    void " << className << "::ExampleFunction()\n";
                             cfs << "    {\n";
-                            cfs << "        // ¸®ÇÃ·º¼ÇÀ¸·Î µî·ÏµÈ ÇÔ¼ö ¿¹½ÃÀÔ´Ï´Ù.\n";
-                            cfs << "        // ÀÌ ÇÔ¼ö´Â ¿¡µğÅÍ¿¡¼­ È£ÃâÇÒ ¼ö ÀÖ½À´Ï´Ù.\n";
+                            cfs << "        // ë¦¬í”Œë ‰ì…˜ìœ¼ë¡œ ë“±ë¡ëœ í•¨ìˆ˜ ì˜ˆì‹œì…ë‹ˆë‹¤.\n";
+                            cfs << "        // ì´ í•¨ìˆ˜ëŠ” ì—ë””í„°ì—ì„œ í˜¸ì¶œí•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.\n";
                             cfs << "        \n";
-                            cfs << "        // ¿¹½Ã: Transform ÄÄÆ÷³ÍÆ® °¡Á®¿À±â\n";
+                            cfs << "        // ì˜ˆì‹œ: Transform ì»´í¬ë„ŒíŠ¸ ê°€ì ¸ì˜¤ê¸°\n";
                             cfs << "        if (auto* transform = GetComponent<TransformComponent>())\n";
                             cfs << "        {\n";
-                            cfs << "            // À§Ä¡¸¦ (0, 0, 0)À¸·Î ¸®¼ÂÇÏ´Â ¿¹½Ã\n";
+                            cfs << "            // ìœ„ì¹˜ë¥¼ (0, 0, 0)ìœ¼ë¡œ ë¦¬ì…‹í•˜ëŠ” ì˜ˆì‹œ\n";
                             cfs << "            transform->position = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);\n";
                             cfs << "        }\n";
                             cfs << "    }\n";
@@ -2653,7 +2653,7 @@ namespace Alice
 
                 if (ImGui::MenuItem("Create Prefab"))
                 {
-                    // ±âº» ÇÁ¸®ÆÕ(JSON) »ı¼º (.prefab)
+                    // ê¸°ë³¸ í”„ë¦¬íŒ¹(JSON) ìƒì„± (.prefab)
                     fs::path newPath = path / "NewPrefab.prefab";
                     int index = 1;
                     while (fs::exists(newPath))
@@ -2687,7 +2687,7 @@ namespace Alice
                         ++index;
                     }
 
-                    // JSON(.mat)·Î ÀúÀå (RTTR + ReflectionSerializer ³»ºÎ »ç¿ë)
+                    // JSON(.mat)ë¡œ ì €ì¥ (RTTR + ReflectionSerializer ë‚´ë¶€ ì‚¬ìš©)
                     MaterialComponent mat;
                     mat.color = DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
                     mat.roughness = 0.5f;
@@ -2707,8 +2707,8 @@ namespace Alice
                         ++index;
                     }
 
-                    // ±âº» ¾À: Å¥ºê(Transform 1°³) + ±âº» Material 1°³
-                    // ForwardRenderSystemÀº Transform¸¸ ÀÖ¾îµµ ±âº» Å¥ºê¸¦ ±×¸³´Ï´Ù.
+                    // ê¸°ë³¸ ì”¬: íë¸Œ(Transform 1ê°œ) + ê¸°ë³¸ Material 1ê°œ
+                    // ForwardRenderSystemì€ Transformë§Œ ìˆì–´ë„ ê¸°ë³¸ íë¸Œë¥¼ ê·¸ë¦½ë‹ˆë‹¤.
                     World temp;
                     const EntityId e = temp.CreateEntity();
                     temp.AddComponent<TransformComponent>(e);
@@ -2716,7 +2716,7 @@ namespace Alice
                     SceneFile::Save(temp, newPath);
                 }
 
-                // µğ·ºÅÍ¸® »èÁ¦ (Assets ¾È¿¡¼­¸¸ »ç¿ë)
+                // ë””ë ‰í„°ë¦¬ ì‚­ì œ (Assets ì•ˆì—ì„œë§Œ ì‚¬ìš©)
                 if (ImGui::MenuItem("Delete Folder"))
                 {
                     std::error_code ec;
@@ -2728,7 +2728,7 @@ namespace Alice
 
             if (open)
             {
-                // ÀÌ ³ëµå°¡ ±× »çÀÌ¿¡ »èÁ¦µÇ¾úÀ¸¸é ¼øÈ¸¸¦ °Ç³Ê¶İ´Ï´Ù.
+                // ì´ ë…¸ë“œê°€ ê·¸ ì‚¬ì´ì— ì‚­ì œë˜ì—ˆìœ¼ë©´ ìˆœíšŒë¥¼ ê±´ë„ˆëœë‹ˆë‹¤.
                 if (fs::exists(path) && fs::is_directory(path))
                 {
                     for (const auto& entry : fs::directory_iterator(path))
@@ -2744,7 +2744,7 @@ namespace Alice
         {
             const std::string ext = path.extension().string();
 
-            // ÆÄÀÏ ÀÌ¸§ ·»´õ¸µ: ÀÏ¹İ ÅØ½ºÆ® ¶Ç´Â ÀÎ¶óÀÎ ÀÔ·Â ¹Ú½º
+            // íŒŒì¼ ì´ë¦„ ë Œë”ë§: ì¼ë°˜ í…ìŠ¤íŠ¸ ë˜ëŠ” ì¸ë¼ì¸ ì…ë ¥ ë°•ìŠ¤
             ImGui::PushID(label.c_str());
             if (isRenamingThis)
             {
@@ -2783,7 +2783,7 @@ namespace Alice
             }
             ImGui::PopID();
 
-            // ÆÄÀÏ ³ëµå¸¦ ´õºíÅ¬¸¯ÇÏ¸é ÆÄÀÏ Çü½Ä¿¡ µû¶ó µ¿ÀÛÇÕ´Ï´Ù.
+            // íŒŒì¼ ë…¸ë“œë¥¼ ë”ë¸”í´ë¦­í•˜ë©´ íŒŒì¼ í˜•ì‹ì— ë”°ë¼ ë™ì‘í•©ë‹ˆë‹¤.
             if (!isRenamingThis &&
                 ImGui::IsItemHovered() &&
                 ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -2797,33 +2797,33 @@ namespace Alice
 					GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
                     std::filesystem::path exePath = exePathW;
 					std::filesystem::path exeDir = exePath.parent_path();
-					std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug ¡æ ÇÁ·ÎÁ§Æ® ·çÆ®
+					std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug â†’ í”„ë¡œì íŠ¸ ë£¨íŠ¸
 					std::filesystem::path scriptsSolutionRoot = projectRoot / "ScriptsBuild" / "build" / "AliceUserScripts.sln";
                     ALICE_LOG_INFO("[Editor] Opening script solution: \"%s\"", scriptsSolutionRoot.string().c_str());
 					ShellExecuteW(nullptr, L"open", scriptsSolutionRoot.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 }
                 else if (ext == ".scene")
                 {
-                    // ¾À ÆÄÀÏÀ» ´õºíÅ¬¸¯ÇÏ¸é, ÇÊ¿äÇÑ °æ¿ì ÀúÀå ¿©ºÎ¸¦ ¹°Àº µÚ ·ÎµåÇÕ´Ï´Ù.
+                    // ì”¬ íŒŒì¼ì„ ë”ë¸”í´ë¦­í•˜ë©´, í•„ìš”í•œ ê²½ìš° ì €ì¥ ì—¬ë¶€ë¥¼ ë¬¼ì€ ë’¤ ë¡œë“œí•©ë‹ˆë‹¤.
                     g_NextScenePath    = path;
                     g_RequestSceneLoad = true;
                 }
                 else if (ext == ".mat")
                 {
-                    // ¸ÓÆ¼¸®¾ó ¿¡¼Â Àü¿ë ÆíÁı Ã¢À» ¿±´Ï´Ù.
+                    // ë¨¸í‹°ë¦¬ì–¼ ì—ì…‹ ì „ìš© í¸ì§‘ ì°½ì„ ì—½ë‹ˆë‹¤.
                     g_MaterialEditorPath = path;
                     g_MaterialEditorData = {};
-                    // ÆÄÀÏ¿¡¼­ °ªÀ» ºÒ·¯¿É´Ï´Ù. ½ÇÆĞÇÏ¸é ±âº» °ªÀ¸·Î ³²°ÜµÓ´Ï´Ù.
+                    // íŒŒì¼ì—ì„œ ê°’ì„ ë¶ˆëŸ¬ì˜µë‹ˆë‹¤. ì‹¤íŒ¨í•˜ë©´ ê¸°ë³¸ ê°’ìœ¼ë¡œ ë‚¨ê²¨ë‘¡ë‹ˆë‹¤.
                     MaterialFile::Load(path, g_MaterialEditorData);
                     g_MaterialEditorData.assetPath = path.string();
                     g_MaterialEditorOpen = true;
                 }
             }
 
-            // ÆÄÀÏ ³ëµå¿¡ ´ëÇÑ ¿ìÅ¬¸¯ ÄÁÅØ½ºÆ® ¸Ş´º (¿­±â/ÀÌ¸§ ¹Ù²Ù±â/»èÁ¦/ÇÁ¸®ÆÕ Instantiate µî)
+            // íŒŒì¼ ë…¸ë“œì— ëŒ€í•œ ìš°í´ë¦­ ì»¨í…ìŠ¤íŠ¸ ë©”ë‰´ (ì—´ê¸°/ì´ë¦„ ë°”ê¾¸ê¸°/ì‚­ì œ/í”„ë¦¬íŒ¹ Instantiate ë“±)
             if (ImGui::BeginPopupContextItem())
             {
-                // ¾î¶² È®ÀåÀÚµç ±âº» Open / Rename / Delete ´Â Á¦°øÇÑ´Ù.
+                // ì–´ë–¤ í™•ì¥ìë“  ê¸°ë³¸ Open / Rename / Delete ëŠ” ì œê³µí•œë‹¤.
                 if (ImGui::MenuItem("Open"))
                 {
                     fs::path absPath = fs::absolute(path);
@@ -2842,7 +2842,7 @@ namespace Alice
                     s_renaming      = true;
                     s_renamingPath  = path;
                     s_renameFocus   = true;
-                    // ¹Ù·Î ÀÎ¶óÀÎ ÀÔ·Â ¹Ú½º¸¦ º¸¿©ÁÖ±â À§ÇØ ÆË¾÷À» ´İ½À´Ï´Ù.
+                    // ë°”ë¡œ ì¸ë¼ì¸ ì…ë ¥ ë°•ìŠ¤ë¥¼ ë³´ì—¬ì£¼ê¸° ìœ„í•´ íŒì—…ì„ ë‹«ìŠµë‹ˆë‹¤.
                     ImGui::CloseCurrentPopup();
                 }
 
@@ -2851,7 +2851,7 @@ namespace Alice
                     std::error_code ec;
                     fs::remove(path, ec);
 
-                    // .cpp »èÁ¦ ½Ã °°Àº Æú´õÀÇ <stem>.meta µµ °°ÀÌ Á¦°ÅÇÕ´Ï´Ù.
+                    // .cpp ì‚­ì œ ì‹œ ê°™ì€ í´ë”ì˜ <stem>.meta ë„ ê°™ì´ ì œê±°í•©ë‹ˆë‹¤.
                     if (ext == ".cpp")
                     {
                         std::error_code ec2;
@@ -2860,7 +2860,7 @@ namespace Alice
                     }
                 }
 
-                // ÇÁ¸®ÆÕ ÆÄÀÏ¿¡ ´ëÇÑ Instantiate µ¿ÀÛ
+                // í”„ë¦¬íŒ¹ íŒŒì¼ì— ëŒ€í•œ Instantiate ë™ì‘
                 if (ext == ".prefab")
                 {
                     if (ImGui::MenuItem("Instantiate Prefab"))
@@ -2874,7 +2874,7 @@ namespace Alice
                     }
                 }
 
-                // ¸ÓÆ¼¸®¾ó ÆÄÀÏ¿¡ ´ëÇÑ °£´ÜÇÑ Àû¿ë ±â´É
+                // ë¨¸í‹°ë¦¬ì–¼ íŒŒì¼ì— ëŒ€í•œ ê°„ë‹¨í•œ ì ìš© ê¸°ëŠ¥
                 if (ext == ".mat")
                 {
                     if (ImGui::MenuItem("Assign To Selected Entity") &&
@@ -2897,7 +2897,7 @@ namespace Alice
                     }
                 }
 
-                // ¾À ÆÄÀÏ ÀúÀå/·Îµå
+                // ì”¬ íŒŒì¼ ì €ì¥/ë¡œë“œ
                 if (ext == ".scene")
                 {
                     if (ImGui::MenuItem("Load Scene"))
@@ -2914,7 +2914,7 @@ namespace Alice
                     }
                 }
 
-                // FBX ÀÎ½ºÅÏ½º ¿¡¼Â(.fbxasset)À» ¿ùµå¿¡ ¹èÄ¡
+                // FBX ì¸ìŠ¤í„´ìŠ¤ ì—ì…‹(.fbxasset)ì„ ì›”ë“œì— ë°°ì¹˜
                 if (ext == ".fbxasset")
                 {
                     if (ImGui::MenuItem("Instantiate FBX"))
@@ -2922,14 +2922,14 @@ namespace Alice
                         Alice::FbxInstanceAsset asset{};
                         if (Alice::LoadFbxInstanceAsset(path, asset) && !asset.meshAssetPath.empty())
                         {
-                            // µğ¹ö±× ·Î±ë: .fbxasset ·Îµå °á°ú
+                            // ë””ë²„ê·¸ ë¡œê¹…: .fbxasset ë¡œë“œ ê²°ê³¼
                             ALICE_LOG_INFO("[Editor] Instantiate FBX: assetPath=\"%s\" sourceFbx=\"%s\" meshKey=\"%s\" mats=%zu\n",
                                           path.string().c_str(),
                                           asset.sourceFbx.c_str(),
                                           asset.meshAssetPath.c_str(),
                                           asset.materialAssetPaths.size());
 
-                            // ·¹Áö½ºÆ®¸®¿¡ GPU ¸Ş½Ã°¡ ¾ø´Ù¸é, ¿øº» FBX ¸¦ ´Ù½Ã ÀÓÆ÷Æ®ÇØ¼­ µî·ÏÇÕ´Ï´Ù.
+                            // ë ˆì§€ìŠ¤íŠ¸ë¦¬ì— GPU ë©”ì‹œê°€ ì—†ë‹¤ë©´, ì›ë³¸ FBX ë¥¼ ë‹¤ì‹œ ì„í¬íŠ¸í•´ì„œ ë“±ë¡í•©ë‹ˆë‹¤.
                             if (m_skinnedRegistry && m_resources && m_renderDevice)
                             {
                                 if (!m_skinnedRegistry->Find(asset.meshAssetPath))
@@ -2937,7 +2937,7 @@ namespace Alice
                                     FbxImportOptions opt{};
                                     FbxImporter importer(*m_resources, m_skinnedRegistry);
                                     auto* device = m_renderDevice->GetDevice();
-                                    // ¿øº» FBX °æ·Î´Â .fbxasset ¾ÈÀÇ source_fbx ¿¡ ÀúÀåµÇ¾î ÀÖ½À´Ï´Ù.
+                                    // ì›ë³¸ FBX ê²½ë¡œëŠ” .fbxasset ì•ˆì˜ source_fbx ì— ì €ì¥ë˜ì–´ ìˆìŠµë‹ˆë‹¤.
                                     std::filesystem::path srcFbxPath =
                                         (m_resources ? m_resources->Resolve(asset.sourceFbx) : std::filesystem::path(asset.sourceFbx));
                                     importer.Import(device, srcFbxPath, opt);
@@ -2989,10 +2989,10 @@ namespace Alice
         }
     }
 
-    // BuildSettings.json ÆÄ½Ì ¹× ½ÃÀÛ ¾À ·Îµå
+    // BuildSettings.json íŒŒì‹± ë° ì‹œì‘ ì”¬ ë¡œë“œ
     bool LoadStartupSceneFromBuildSettings(World& world, const std::filesystem::path& exeDir)
     {
-        // 1. ¼³Á¤ ÆÄÀÏ °æ·Î È®º¸ (ExeÀ§Ä¡ -> ÇÁ·ÎÁ§Æ® ·çÆ® ¼ø)
+        // 1. ì„¤ì • íŒŒì¼ ê²½ë¡œ í™•ë³´ (Exeìœ„ì¹˜ -> í”„ë¡œì íŠ¸ ë£¨íŠ¸ ìˆœ)
         std::filesystem::path cfg = exeDir / "BuildSettings.json";
         if (!std::filesystem::exists(cfg))
             cfg = exeDir.parent_path().parent_path().parent_path() / "Build/BuildSettings.json";
@@ -3012,21 +3012,21 @@ namespace Alice
                 if (v.is_string()) scenes.push_back(v.get<std::string>());
         }
 
-        // 3. Å¸°Ù ¾À °áÁ¤ ¹× °æ·Î º¸Á¤
+        // 3. íƒ€ê²Ÿ ì”¬ ê²°ì • ë° ê²½ë¡œ ë³´ì •
         if (target.empty() && !scenes.empty()) target = scenes.front();
         if (target.empty()) return false;
 
         std::filesystem::path finalPath = target;
         if (!finalPath.is_absolute())
         {
-            // Exe ±âÁØ Á¸Àç ¿©ºÎ È®ÀÎ ÈÄ, ¾øÀ¸¸é ·çÆ® ±âÁØ Àû¿ë
+            // Exe ê¸°ì¤€ ì¡´ì¬ ì—¬ë¶€ í™•ì¸ í›„, ì—†ìœ¼ë©´ ë£¨íŠ¸ ê¸°ì¤€ ì ìš©
             if (std::filesystem::exists(exeDir / finalPath)) finalPath = exeDir / finalPath;
             else finalPath = exeDir.parent_path().parent_path().parent_path() / finalPath;
         }
 
         ALICE_LOG_INFO("Loading Startup Scene: %s", finalPath.string().c_str());
 
-        // 4. ·Îµå ½ÇÆĞ °Ë»ç
+        // 4. ë¡œë“œ ì‹¤íŒ¨ ê²€ì‚¬
         if (!SceneFile::Load(world, finalPath))
         {
             ALICE_LOG_ERRORF("Scene Load Failed: %s", finalPath.string().c_str());
@@ -3036,7 +3036,7 @@ namespace Alice
         return true;
     }
 
-    // ½ºÅ² ¸Ş½¬ µî·Ï º¸Àå
+    // ìŠ¤í‚¨ ë©”ì‰¬ ë“±ë¡ ë³´ì¥
     void EditorCore::EnsureSkinnedMeshesRegistered(World& world)
     {
         if (!m_skinnedRegistry || !m_resources || !m_renderDevice || world.GetComponents<SkinnedMeshComponent>().empty())
@@ -3047,7 +3047,7 @@ namespace Alice
             if (comp.meshAssetPath.empty() || m_skinnedRegistry->Find(comp.meshAssetPath))
                 continue;
 
-            // °æ·Î °áÁ¤ (.fbxasset ¿ì¼±, ¾øÀ¸¸é °ü·Ê °æ·Î)
+            // ê²½ë¡œ ê²°ì • (.fbxasset ìš°ì„ , ì—†ìœ¼ë©´ ê´€ë¡€ ê²½ë¡œ)
             std::filesystem::path fbxPath = comp.instanceAssetPath.empty()
                 ? std::filesystem::path("Assets/Fbx") / (comp.meshAssetPath + ".fbxasset")
                 : std::filesystem::path(comp.instanceAssetPath);
@@ -3055,14 +3055,14 @@ namespace Alice
             Alice::FbxInstanceAsset instance{};
             std::filesystem::path absPath = m_resources->Resolve(fbxPath);
 
-            // ·Îµå ½ÇÆĞ °Ë»ç
+            // ë¡œë“œ ì‹¤íŒ¨ ê²€ì‚¬
             if (!Alice::LoadFbxInstanceAsset(absPath, instance) || instance.sourceFbx.empty())
             {
                 ALICE_LOG_WARN("[Editor] Failed loading fbxasset: %s", absPath.string().c_str());
                 continue;
             }
 
-            // ÀçÀÓÆ÷Æ® ¹× µî·Ï
+            // ì¬ì„í¬íŠ¸ ë° ë“±ë¡
             FbxImporter importer(*m_resources, m_skinnedRegistry);
             FbxImportResult res = importer.Import(m_renderDevice->GetDevice(), m_resources->Resolve(instance.sourceFbx), {});
 
@@ -3070,31 +3070,31 @@ namespace Alice
         }
     }
 
-    // ¾À ÀúÀå
+    // ì”¬ ì €ì¥
     void EditorCore::SaveScene(World& world)
     {
         std::filesystem::path savePath = g_CurrentScenePath.empty() ? "Assets/AutoSaved.scene" : g_CurrentScenePath;
 
         ALICE_LOG_INFO("[Editor] Saving Scene: %s", savePath.string().c_str());
 
-        // ÀúÀå ½ÇÇà (½ÇÆĞ Ã³¸®´Â ³»ºÎ ·ÎÁ÷¿¡ ¸Ã±è)
+        // ì €ì¥ ì‹¤í–‰ (ì‹¤íŒ¨ ì²˜ë¦¬ëŠ” ë‚´ë¶€ ë¡œì§ì— ë§¡ê¹€)
         SceneFile::Save(world, m_resources ? m_resources->Resolve(savePath) : savePath);
 
-        // »óÅÂ °»½Å
+        // ìƒíƒœ ê°±ì‹ 
         g_CurrentScenePath = savePath;
         g_HasCurrentScenePath = true;
         g_SceneDirty = false;
     }
 
-    // ¾À ·Îµå
+    // ì”¬ ë¡œë“œ
     void EditorCore::LoadScene(World& world)
     {
         ALICE_LOG_INFO("[Editor] Loading Scene: %s", g_NextScenePath.string().c_str());
 
-        // ·Îµå ½ÇÇà
+        // ë¡œë“œ ì‹¤í–‰
         SceneFile::Load(world, m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
 
-        // ÈÄÃ³¸® ¹× »óÅÂ °»½Å
+        // í›„ì²˜ë¦¬ ë° ìƒíƒœ ê°±ì‹ 
         EnsureSkinnedMeshesRegistered(world);
         g_CurrentScenePath = g_NextScenePath;
         g_HasCurrentScenePath = true;
