@@ -25,7 +25,7 @@ namespace Alice
 
         void Update(World& world, double dtSec)
         {
-            auto& skinnedMap = world.GetComponents<SkinnedMeshComponent>();
+            auto skinnedMap = world.GetComponents<SkinnedMeshComponent>();
             if (skinnedMap.empty())
                 return;
 
