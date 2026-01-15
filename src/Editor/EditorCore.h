@@ -12,7 +12,7 @@
 #include "Core/Entity.h"
 #include "Core/World.h"
 #include "Core/Scene.h"
-#include "Core/Script.h"
+#include "Core/IScript.h"
 #include "Rendering/Camera.h"
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
@@ -24,6 +24,7 @@ namespace Alice
     struct ID3D11RenderDevice;
     class ResourceManager;
     class SkinnedMeshRegistry;
+    class DeferredRenderSystem;
 
     /// ImGui 컨텍스트 수명과 기본 에디터 유틸(도킹, 디렉터리 뷰, 에디터 패널 등)을 관리하는
     /// 간단한 코어 클래스입니다.
@@ -50,6 +51,7 @@ namespace Alice
         void DrawEditorUI(World& world,
                           Camera& camera,
                           ForwardRenderSystem& forward,
+                          DeferredRenderSystem& deferred,
                           SceneManager* sceneManager,
                           float deltaTime,
                           float fps,
@@ -58,7 +60,12 @@ namespace Alice
                           bool& useFillLight,
                           EntityId& selectedEntity,
                           ViewportPicker& picker,
-                          float& cameraMoveSpeed);
+                          float& cameraMoveSpeed,
+                          bool& useForwardRendering);
+
+        void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorMaterial(World& world, const EntityId& _selectedEntity);
 
         /// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
         void DrawDirectoryNode(World& world,
@@ -85,6 +92,8 @@ namespace Alice
         ResourceManager*    m_resources    = nullptr;
         SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
         InputSystem*        m_inputSystem = nullptr;
+
+        bool               m_scriptBuilded = false;
     };
 }
 

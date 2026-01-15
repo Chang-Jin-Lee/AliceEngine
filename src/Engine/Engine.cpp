@@ -122,6 +122,7 @@ namespace Alice
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
 		bool m_useForwardRendering = false;
 
+		
 		// 렌더링 시스템 전환 지연 처리 (안전한 전환을 위해)
 		bool m_pendingRenderSystemChange = false;
 		bool m_pendingUseForwardRendering = true;
@@ -588,6 +589,7 @@ namespace Alice
 	{
 		if (!pImpl->m_renderDevice) return;
 
+		
 		// ============================================= 렌더링 시스템 전환 처리 =============================================
 		// 렌더링 시작 전에 전환 요청이 있으면 안전하게 전환합니다.
 		if (pImpl->m_pendingRenderSystemChange)
@@ -600,16 +602,19 @@ namespace Alice
 				ID3D11RenderTargetView* nullRTVs[8] = { nullptr };
 				context->OMSetRenderTargets(8, nullRTVs, nullptr);
 
+				
 				// 모든 셰이더 리소스 해제
 				ID3D11ShaderResourceView* nullSRVs[16] = { nullptr };
 				context->VSSetShaderResources(0, 16, nullSRVs);
 				context->PSSetShaderResources(0, 16, nullSRVs);
 
+				
 				// 모든 상수 버퍼 해제
 				ID3D11Buffer* nullCBs[16] = { nullptr };
 				context->VSSetConstantBuffers(0, 16, nullCBs);
 				context->PSSetConstantBuffers(0, 16, nullCBs);
 
+				
 				// 모든 셰이더 해제
 				context->VSSetShader(nullptr, nullptr, 0);
 				context->PSSetShader(nullptr, nullptr, 0);
@@ -617,19 +622,19 @@ namespace Alice
 				context->HSSetShader(nullptr, nullptr, 0);
 				context->DSSetShader(nullptr, nullptr, 0);
 				context->CSSetShader(nullptr, nullptr, 0);
-
+				
 				// Flush (모든 명령이 완료될 때까지 대기)
 				context->Flush();
 			}
-
+			
 			// 렌더링 시스템 전환
 			pImpl->m_useForwardRendering = pImpl->m_pendingUseForwardRendering;
 			pImpl->m_pendingRenderSystemChange = false;
-
-			ALICE_LOG_INFO("Engine::Render: 렌더링 시스템 전환 완료 (Forward: %s)",
+			
+			ALICE_LOG_INFO("Engine::Render: 렌더링 시스템 전환 완료 (Forward: %s)", 
 				pImpl->m_useForwardRendering ? "true" : "false");
 		}
-
+		
 		if (pImpl->m_useForwardRendering && !pImpl->m_forwardRenderSystem) return;
 		if (!pImpl->m_useForwardRendering && !pImpl->m_deferredRenderSystem) return;
 
@@ -660,6 +665,78 @@ namespace Alice
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 1.f, 0.f, 0.f }, { 1.f, 0.f, 0.f, 1.f }); // X: Red
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 1.f, 0.f }, { 0.f, 1.f, 0.f, 1.f }); // Y: Green
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f }, { 0.f, 0.f, 1.f, 1.f }); // Z: Blue
+
+				// === FBX/SkinnedMesh 디버그 AABB 박스 ===
+				// - SkinnedMeshRegistry의 sourceModel(FbxModel)에서 로컬 AABB를 얻어,
+				//   엔티티 Transform(S*R*T)을 적용한 OBB(로컬 AABB의 월드 변환)를 라인으로 표시합니다.
+				auto AddBoxLines = [&](const DirectX::XMFLOAT3 corners[8], const DirectX::XMFLOAT4& col)
+				{
+					// bottom
+					dbg->AddLine(corners[0], corners[1], col);
+					dbg->AddLine(corners[1], corners[2], col);
+					dbg->AddLine(corners[2], corners[3], col);
+					dbg->AddLine(corners[3], corners[0], col);
+					// top
+					dbg->AddLine(corners[4], corners[5], col);
+					dbg->AddLine(corners[5], corners[6], col);
+					dbg->AddLine(corners[6], corners[7], col);
+					dbg->AddLine(corners[7], corners[4], col);
+					// sides
+					dbg->AddLine(corners[0], corners[4], col);
+					dbg->AddLine(corners[1], corners[5], col);
+					dbg->AddLine(corners[2], corners[6], col);
+					dbg->AddLine(corners[3], corners[7], col);
+				};
+
+				for (const auto& [entityId, skinned] : pImpl->m_world.GetComponents<SkinnedMeshComponent>())
+				{
+					if (skinned.meshAssetPath.empty())
+						continue;
+
+					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
+					if (!t)
+						continue;
+
+					auto mesh = pImpl->m_skinnedMeshRegistry.Find(skinned.meshAssetPath);
+					if (!mesh || !mesh->sourceModel)
+						continue;
+
+					DirectX::XMFLOAT3 mn{}, mx{};
+					if (!mesh->sourceModel->GetLocalBounds(mn, mx))
+						continue;
+
+					// 로컬 AABB 8 코너
+					DirectX::XMFLOAT3 local[8] = {
+						{mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mn.y, mx.z}, {mn.x, mn.y, mx.z},
+						{mn.x, mx.y, mn.z}, {mx.x, mx.y, mn.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
+					};
+
+					// 월드 행렬 (렌더러/피커와 동일: S*R*T)
+					using namespace DirectX;
+					const XMVECTOR S = XMLoadFloat3(&t->scale);
+					const XMVECTOR R = XMLoadFloat3(&t->rotation);
+					const XMVECTOR T = XMLoadFloat3(&t->position);
+					const XMMATRIX worldM =
+						XMMatrixScalingFromVector(S) *
+						XMMatrixRotationRollPitchYawFromVector(R) *
+						XMMatrixTranslationFromVector(T);
+
+					// 월드 코너로 변환
+					DirectX::XMFLOAT3 worldCorners[8]{};
+					for (int i = 0; i < 8; ++i)
+					{
+						const XMVECTOR p = XMVectorSet(local[i].x, local[i].y, local[i].z, 1.0f);
+						const XMVECTOR pw = XMVector3TransformCoord(p, worldM);
+						XMStoreFloat3(&worldCorners[i], pw);
+					}
+
+					// 선택된 엔티티는 빨강, 나머지는 노랑
+					const DirectX::XMFLOAT4 col = (entityId == pImpl->m_selectedEntity)
+						? DirectX::XMFLOAT4(1.f, 0.f, 0.f, 1.f)
+						: DirectX::XMFLOAT4(1.f, 1.f, 0.f, 1.f);
+
+					AddBoxLines(worldCorners, col);
+				}
 			}
 		}
 
@@ -669,54 +746,55 @@ namespace Alice
 		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
-		// ============================================= 렌더링 =============================================
-		// Forward/Deferred 렌더링 모드에 따라 분기
-		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
+	// ============================================= 렌더링 =============================================
+	// Forward/Deferred 렌더링 모드에 따라 분기
+	EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
 
-		// 카메라 엔티티 ID 집합 구성
-		std::unordered_set<EntityId> cameraIDs;
-		for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
+	// 카메라 엔티티 ID 집합 구성
+	std::unordered_set<EntityId> cameraIDs;
+	for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
 
-		const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
+	const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
 
-		if (pImpl->m_useForwardRendering)
-		{
-			// Forward 렌더링
-			pImpl->m_forwardRenderSystem->Render(
-				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
-			);
-		}
-		else
-		{
-			// Deferred 렌더링
-			pImpl->m_deferredRenderSystem->Render(
-				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
-			);
-		}
+	if (pImpl->m_useForwardRendering)
+	{
+		// Forward 렌더링
+		pImpl->m_forwardRenderSystem->Render(
+			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+		);
+	}
+	else
+	{
+		// Deferred 렌더링
+		pImpl->m_deferredRenderSystem->Render(
+			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+		);
+	}
 
-		// 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
-		if (!pImpl->m_editorMode)
-		{
-			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
-			if (backBufferRTV)
-			{
-				D3D11_VIEWPORT viewport = {};
-				viewport.Width = static_cast<float>(pImpl->m_width);
-				viewport.Height = static_cast<float>(pImpl->m_height);
-				viewport.MaxDepth = 1.0f;
+        // 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
+        if (!pImpl->m_editorMode)
+        {
+            ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
+            if (backBufferRTV)
+            {
+                D3D11_VIEWPORT viewport = {};
+                viewport.Width = static_cast<float>(pImpl->m_width);
+                viewport.Height = static_cast<float>(pImpl->m_height);
+                viewport.MaxDepth = 1.0f;
 
-				if (pImpl->m_useForwardRendering)
-				{
-					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-				}
-				else
-				{
-					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-				}
-			}
-		}
+                if (pImpl->m_useForwardRendering)
+                {
+                    pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+                }
+                else
+                {
+                    pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+                }
+            }
+        }
+
 
 
 		// ============================================= 오버레이 =============================================
