@@ -3,7 +3,7 @@ DirectX 11 기반 3D 게임 엔진
 
 
 - 엔진 구조
-<img width="2961" height="856" alt="다이어그램" src="https://github.com/user-attachments/assets/81d6bd36-358e-4fe6-874d-7e305238e498" />
+<img width="2961" height="857" alt="다이어그램" src="https://github.com/user-attachments/assets/53ca1e2a-85f8-4628-a621-f424545b0f2c" />
 
 
 - 빌드 과정
