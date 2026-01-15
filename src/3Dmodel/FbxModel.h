@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 
 #include <string>
 #include <vector>
 #include <memory>
 #include <unordered_map>
 
-// DirectX ¼öÇĞ Å¸ÀÔ(XMFLOAT4X4 µî)À» »ç¿ë
+// DirectX ìˆ˜í•™ íƒ€ì…(XMFLOAT4X4 ë“±)ì„ ì‚¬ìš©
 #include <DirectXMath.h>
 
 #include "FbxTypes.h"
@@ -27,9 +27,9 @@ public:
 	~FbxModel();
 
 	bool Load(ID3D11Device* device, const std::wstring& pathW);
-	// Cooked/Chunks ¿¡¼­ º¹È£È­µÈ FBX ¹ÙÀÌÆ®¸¦ ÀÓ½ÃÆÄÀÏ ¾øÀÌ ¹Ù·Î ·ÎµåÇÕ´Ï´Ù.
-	// - virtualNameUtf8: È®ÀåÀÚ ÈùÆ®(¿¹: "Rapi.fbx") ¿ë
-	// - baseDirW: ¿ÜºÎ ÅØ½ºÃ³ »ó´ë °æ·Î ÇØ¼®¿ë(¾øÀ¸¸é L"")
+	// Cooked/Chunks ì—ì„œ ë³µí˜¸í™”ëœ FBX ë°”ì´íŠ¸ë¥¼ ì„ì‹œíŒŒì¼ ì—†ì´ ë°”ë¡œ ë¡œë“œí•©ë‹ˆë‹¤.
+	// - virtualNameUtf8: í™•ì¥ì íŒíŠ¸(ì˜ˆ: "Rapi.fbx") ìš©
+	// - baseDirW: ì™¸ë¶€ í…ìŠ¤ì²˜ ìƒëŒ€ ê²½ë¡œ í•´ì„ìš©(ì—†ìœ¼ë©´ L"")
 	bool LoadFromMemory(ID3D11Device* device,
 	                    const void* data,
 	                    size_t size,
@@ -79,8 +79,8 @@ public:
 	const DirectX::XMFLOAT4X4& GetGlobalInverse() const;
 
 	// Bounds (local space)
-	// - ·Îµå ½ÃÁ¡¿¡ CPU-side bindVertices(pos) ±âÁØÀ¸·Î °è»êµÈ ·ÎÄÃ AABBÀÔ´Ï´Ù.
-	// - World Transform(TransformComponent)ÀÌ Àû¿ëµÇ±â ÀüÀÇ ¼ø¼ö ¸ğµ¨ °ø°£ ¹Ù¿îµùÀÔ´Ï´Ù.
+	// - ë¡œë“œ ì‹œì ì— CPU-side bindVertices(pos) ê¸°ì¤€ìœ¼ë¡œ ê³„ì‚°ëœ ë¡œì»¬ AABBì…ë‹ˆë‹¤.
+	// - World Transform(TransformComponent)ì´ ì ìš©ë˜ê¸° ì „ì˜ ìˆœìˆ˜ ëª¨ë¸ ê³µê°„ ë°”ìš´ë”©ì…ë‹ˆë‹¤.
 	bool GetLocalBounds(DirectX::XMFLOAT3& outMin, DirectX::XMFLOAT3& outMax) const;
 
 private:

@@ -1,4 +1,4 @@
-// GameTimer.cpp (AliceRenderer¿ë) - Frank Luna ÄÚµå ±â¹Ý
+ï»¿// GameTimer.cpp (AliceRendererìš©) - Frank Luna ì½”ë“œ ê¸°ë°˜
 
 #include <Windows.h>
 #include "Core/TimeSystem.h"

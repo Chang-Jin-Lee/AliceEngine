@@ -1,13 +1,13 @@
-#pragma once
+ï»¿#pragma once
 
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
 
 namespace Alice
 {
-    /// ¾ÀÀÇ "¸ŞÀÎ Ä«¸Ş¶ó" ¿ªÇÒÀ» ÇÏ´Â ¿£Æ¼Æ¼¿¡ ºÙÀÌ´Â ½ºÅ©¸³Æ®ÀÔ´Ï´Ù.
-    /// - CameraComponent°¡ ¾øÀ¸¸é ÀÚµ¿À¸·Î Ãß°¡ÇÕ´Ï´Ù.
-    /// - primary=true·Î ¸¸µé¾î ¿£ÁøÀÌ ÀÌ Ä«¸Ş¶ó¸¦ »ç¿ëÇÏ°Ô ÇÕ´Ï´Ù.
+    /// ì”¬ì˜ "ë©”ì¸ ì¹´ë©”ë¼" ì—­í• ì„ í•˜ëŠ” ì—”í‹°í‹°ì— ë¶™ì´ëŠ” ìŠ¤í¬ë¦½íŠ¸ì…ë‹ˆë‹¤.
+    /// - CameraComponentê°€ ì—†ìœ¼ë©´ ìë™ìœ¼ë¡œ ì¶”ê°€í•©ë‹ˆë‹¤.
+    /// - primary=trueë¡œ ë§Œë“¤ì–´ ì—”ì§„ì´ ì´ ì¹´ë©”ë¼ë¥¼ ì‚¬ìš©í•˜ê²Œ í•©ë‹ˆë‹¤.
     class CameraManager : public IScript
     {
         ALICE_BODY(CameraManager);

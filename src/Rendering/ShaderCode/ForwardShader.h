@@ -1,8 +1,8 @@
-#pragma once
+ï»¿#pragma once
 
 namespace Alice
 {
-    /// Æ÷¿öµå ·»´õ¸µ Àü¿ë ¼ÎÀÌ´õ ÄÚµå
+    /// í¬ì›Œë“œ ë Œë”ë§ ì „ìš© ì…°ì´ë” ì½”ë“œ
     class ForwardShader
     {
     public:
@@ -13,7 +13,7 @@ cbuffer CBPerObject : register(b0)
     float4x4 gWorld;
     float4x4 gView;
     float4x4 gProj;
-    float4   gMaterialColor; // per-object ¸ÓÆ¼¸®¾ó »ö»ó
+    float4   gMaterialColor; // per-object ë¨¸í‹°ë¦¬ì–¼ ìƒ‰ìƒ
 
     float    gRoughness;
     float    gMetalness;
@@ -49,8 +49,8 @@ VSOutput main(VSInput input)
     output.WorldPos = worldPos.xyz;
     float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
     output.Normal = N;
-    // Á¤Àû Áö¿À¸ŞÆ®¸®(Å¥ºê µî)´Â ÅºÁ¨Æ®/¹ÙÀÌÅºÁ¨Æ®°¡ ¾øÀ¸¹Ç·Î
-    // ³ë¸»¿¡¼­ ÀÓÀÇÀÇ Á÷±³ ±âÀú¸¦ ¸¸µé¾î ³ë¸»¸Ê(TBN) °è»êÀÌ °¡´ÉÇÏ°Ô ÇÕ´Ï´Ù.
+    // ì •ì  ì§€ì˜¤ë©”íŠ¸ë¦¬(íë¸Œ ë“±)ëŠ” íƒ„ì  íŠ¸/ë°”ì´íƒ„ì  íŠ¸ê°€ ì—†ìœ¼ë¯€ë¡œ
+    // ë…¸ë§ì—ì„œ ì„ì˜ì˜ ì§êµ ê¸°ì €ë¥¼ ë§Œë“¤ì–´ ë…¸ë§ë§µ(TBN) ê³„ì‚°ì´ ê°€ëŠ¥í•˜ê²Œ í•©ë‹ˆë‹¤.
     float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
     float3 T = normalize(cross(up, N));
     float3 B = normalize(cross(N, T));
@@ -109,12 +109,12 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
 
-    // D3D11-AliceTutorial/31_IBL ¹æ½ÄÀ¸·Î ½ºÅ°´×
-    // - CPU¿¡¼­ ÀüÄ¡ ¾÷·ÎµåµÈ º» ÆÈ·¹Æ®¿¡ ´ëÇØ row-vector °ö(mul(v, M))À» »ç¿ëÇÕ´Ï´Ù.
+    // D3D11-AliceTutorial/31_IBL ë°©ì‹ìœ¼ë¡œ ìŠ¤í‚¤ë‹
+    // - CPUì—ì„œ ì „ì¹˜ ì—…ë¡œë“œëœ ë³¸ íŒ”ë ˆíŠ¸ì— ëŒ€í•´ row-vector ê³±(mul(v, M))ì„ ì‚¬ìš©í•©ë‹ˆë‹¤.
     uint4 bi = input.BoneIndices;
     float4 bw = input.BoneWeights;
 
-    // DirectX11(Çàº¤ÅÍ) ±âÁØ: v' = v * (¥Ò w_i * M_i)
+    // DirectX11(í–‰ë²¡í„°) ê¸°ì¤€: v' = v * (Î£ w_i * M_i)
     matrix M = bw.x * gBones[bi.x]
              + bw.y * gBones[bi.y]
              + bw.z * gBones[bi.z]
@@ -153,11 +153,11 @@ Texture2D gSpecularMap : register(t2);
 TextureCube gSkybox    : register(t3);
 SamplerState gSampler  : register(s0);
 
-// ¼¨µµ¿ì ¸Ê (Depth ÅØ½ºÃ³)
+// ì„€ë„ìš° ë§µ (Depth í…ìŠ¤ì²˜)
 Texture2D<float>        gShadowMap     : register(t4);
 SamplerComparisonState  gShadowSampler : register(s1);
 
-// IBL (Image-Based Lighting) ÅØ½ºÃ³µé
+// IBL (Image-Based Lighting) í…ìŠ¤ì²˜ë“¤
 TextureCube gIBL_Diffuse  : register(t5);
 TextureCube gIBL_Specular : register(t6);
 Texture2D   gIBL_BRDF_LUT : register(t7);
@@ -200,9 +200,9 @@ cbuffer CBLighting : register(b1)
     int    gShadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon
     int3   gPad2;
 
-    float4x4 gLightViewProj;   // ¼¨µµ¿ì ¸Ê °è»ê¿ë ¶óÀÌÆ® ºä-ÇÁ·ÎÁ§¼Ç
+    float4x4 gLightViewProj;   // ì„€ë„ìš° ë§µ ê³„ì‚°ìš© ë¼ì´íŠ¸ ë·°-í”„ë¡œì ì…˜
 
-    // Shadow params (34_ToneMapping ¹æ½Ä)
+    // Shadow params (34_ToneMapping ë°©ì‹)
     float  gShadowBias;
     float  gShadowMapSize;
     float  gShadowPCFRadius;
@@ -223,20 +223,20 @@ float4 main(PSInput input) : SV_TARGET
 {
 	float4 textureColor = gDiffuseMap.Sample(gSampler, input.TexCoord);
     float alphaTex = textureColor.a * gMaterialColor.a;
-    // ¾ËÆÄ ºí·»µù
+    // ì•ŒíŒŒ ë¸”ë Œë”©
     clip(alphaTex - 0.1f);
 
     float3 N = normalize(input.Normal);
     if (gEnableNormalMap != 0)
     {
-        // D3D11-AliceTutorial/31_IBL/31_BasicPS.hlsl ÀÇ ¹æ½ÄÀ¸·Î TBN ±â¹İ ³ë¸»¸Ê Àû¿ë
+        // D3D11-AliceTutorial/31_IBL/31_BasicPS.hlsl ì˜ ë°©ì‹ìœ¼ë¡œ TBN ê¸°ë°˜ ë…¸ë§ë§µ ì ìš©
         float3 T = normalize(input.TangentW);
         float3 B = normalize(input.BitanW);
         float handed = dot(cross(T, B), N);
         if (handed < 0.0f) B = -B;
         float3x3 TBN = float3x3(T, B, N);
         float3 N_ts = gNormalMap.Sample(gSampler, input.TexCoord).xyz * 2.0f - 1.0f;
-        N_ts.y = -N_ts.y; // ±×¸° Ã¤³Î ¹İÀü º¸Á¤
+        N_ts.y = -N_ts.y; // ê·¸ë¦° ì±„ë„ ë°˜ì „ ë³´ì •
         N_ts = normalize(N_ts);
         N = normalize(mul(N_ts, TBN));
     }
@@ -274,7 +274,7 @@ float4 main(PSInput input) : SV_TARGET
         }
     }
 
-    // Fill Light (¿É¼Ç)
+    // Fill Light (ì˜µì…˜)
     {
         float3 L = normalize(-gFillLightDir);
         float  NdotL = max(dot(N, L), 0.0f);
@@ -302,7 +302,7 @@ float4 main(PSInput input) : SV_TARGET
         }
     }
 
-    // ¼¨µµ¿ì ÆÑÅÍ (PCF)
+    // ì„€ë„ìš° íŒ©í„° (PCF)
     float shadow = 1.0f;
     {
         if (gShadowEnabled != 0)
@@ -315,7 +315,7 @@ float4 main(PSInput input) : SV_TARGET
         shadowTex.y = -shadowPos.y * 0.5f + 0.5f;
         float depth = shadowPos.z;
 
-        // Shadow map texel Å©±â ¹× PCF ¹İ°æ(ÅØ¼¿ ´ÜÀ§)
+        // Shadow map texel í¬ê¸° ë° PCF ë°˜ê²½(í…ì…€ ë‹¨ìœ„)
         const float2 texelSize = float2(1.0f, 1.0f) / max(gShadowMapSize, 1.0f);
         const float2 pcfStep = max(gShadowPCFRadius, 0.0f) * texelSize;
 
@@ -342,7 +342,7 @@ float4 main(PSInput input) : SV_TARGET
     totalDiffuse  *= shadow;
     totalSpecular *= shadow;
 
-    // ¸ÓÆ¼¸®¾ó º£ÀÌ½º ÄÃ·¯
+    // ë¨¸í‹°ë¦¬ì–¼ ë² ì´ìŠ¤ ì»¬ëŸ¬
     float3 albedo = gMaterialColor.rgb;
     if (gUseTexture != 0)
     {
@@ -365,12 +365,12 @@ float4 main(PSInput input) : SV_TARGET
         else if (NdotL > 0.2f)  level = 0.4f;
         else                    level = 0.1f;
 
-        // Toonµµ PCF shadow¸¦ ¹İ¿µÇØ¾ß Phong/Blinn°ú µ¿ÀÏÇÏ°Ô ±×¸²ÀÚ°¡ º¸ÀÔ´Ï´Ù.
+        // Toonë„ PCF shadowë¥¼ ë°˜ì˜í•´ì•¼ Phong/Blinnê³¼ ë™ì¼í•˜ê²Œ ê·¸ë¦¼ìê°€ ë³´ì…ë‹ˆë‹¤.
         float3 toonColor = albedo * (level * shadow) + 0.1f * albedo;
         return float4(toonColor, alphaTex);
     }
 
-    // === PBR °æ·Î (shadingMode == 4) ===
+    // === PBR ê²½ë¡œ (shadingMode == 4) ===
     if (gShadingMode == 4)
     {
         float roughness = saturate(gRoughness);
@@ -414,7 +414,7 @@ float4 main(PSInput input) : SV_TARGET
 
         float3 Lo = (diffuseTerm + specularTerm) * radiance * shadow;
 
-        // === IBL (Image-Based Lighting) °è»ê ===
+        // === IBL (Image-Based Lighting) ê³„ì‚° ===
         float3 diffuseIBL = kd * gIBL_Diffuse.Sample(gSampler, Np).rgb * albedo;
 
         float3 Renv = reflect(-Vp, Np);
@@ -423,14 +423,14 @@ float4 main(PSInput input) : SV_TARGET
         float2 specBRDF = gIBL_BRDF_LUT.Sample(gSampler, float2(NdotV, roughness)).rg;
         float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
 
-        // ÃÖÁ¾ »ö»ó = Á÷Á¢±¤ + °£Á¢±¤(IBL)
+        // ìµœì¢… ìƒ‰ìƒ = ì§ì ‘ê´‘ + ê°„ì ‘ê´‘(IBL)
         float shadowIBL = lerp(0.35f, 1.0f, shadow);
         float3 colorPbr = Lo + (diffuseIBL * shadowIBL + specularIBL);
 
         return float4(colorPbr, alphaTex);
     }
 
-    // ±âº» Phong/Blinn-Phong/Lambert °æ·Î
+    // ê¸°ë³¸ Phong/Blinn-Phong/Lambert ê²½ë¡œ
     float3 baseColor =
         ambient * albedo +
         totalDiffuse * albedo +
@@ -440,7 +440,7 @@ float4 main(PSInput input) : SV_TARGET
 }
 )";
 
-        // Tone Mapping Pixel Shader - HDR (Æ÷¿öµå Àü¿ë)
+        // Tone Mapping Pixel Shader - HDR (í¬ì›Œë“œ ì „ìš©)
         inline static const char* ToneMappingPS_HDR = R"(
 Texture2D g_SceneHDR : register(t0);
 SamplerState g_SamplerLinear : register(s0);
@@ -469,7 +469,7 @@ float3 ACESFilm(float3 x)
     return saturate(x * (a * x + b) / (x * (c * x + d) + e));
 }
 
-// Rec709 to Rec2020 »ö°ø°£ º¯È¯
+// Rec709 to Rec2020 ìƒ‰ê³µê°„ ë³€í™˜
 float3 Rec709ToRec2020(float3 color)
 {
     static const float3x3 conversion =
@@ -481,10 +481,10 @@ float3 Rec709ToRec2020(float3 color)
     return mul(conversion, color);
 }
 
-// Linear to ST2084 (PQ ÀÎÄÚµù)
+// Linear to ST2084 (PQ ì¸ì½”ë”©)
 float3 LinearToST2084(float3 color)
 {
-    // g_MaxHDRNits¸¦ ¹İ¿µÇÏ¿© HDR ½ºÄÉÀÏ¸µ (10000 nits ±âÁØÀ¸·Î Á¤±ÔÈ­)
+    // g_MaxHDRNitsë¥¼ ë°˜ì˜í•˜ì—¬ HDR ìŠ¤ì¼€ì¼ë§ (10000 nits ê¸°ì¤€ìœ¼ë¡œ ì •ê·œí™”)
     const float st2084max = 10000.0;
     float hdrScalar = g_MaxHDRNits / st2084max;
     float3 scaledColor = color * hdrScalar;
@@ -500,16 +500,16 @@ float3 LinearToST2084(float3 color)
 
 float4 main(PS_INPUT_QUAD input) : SV_Target
 {
-    // ¿¹Á¦ ÇÁ·ÎÁ§Æ® 36_ToneMappingPS_HDR.hlsl¿Í µ¿ÀÏÇÑ ·ÎÁ÷
+    // ì˜ˆì œ í”„ë¡œì íŠ¸ 36_ToneMappingPS_HDR.hlslì™€ ë™ì¼í•œ ë¡œì§
     float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
     float3 C_exposure = C_linear709 * pow(2.0f, g_Exposure);
     float3 C_tonemapped = ACESFilm(C_exposure);
     
-    // Rec709 ¡æ Rec2020 »ö°ø°£ º¯È¯ (LinearToST2084 ³»ºÎ¿¡¼­ g_MaxHDRNits Ã³¸®)
+    // Rec709 â†’ Rec2020 ìƒ‰ê³µê°„ ë³€í™˜ (LinearToST2084 ë‚´ë¶€ì—ì„œ g_MaxHDRNits ì²˜ë¦¬)
     float3 C_Rec2020 = Rec709ToRec2020(C_tonemapped);
     float3 C_ST2084 = LinearToST2084(C_Rec2020);
     
-    // ÃÖÁ¾ PQ ÀÎÄÚµùµÈ °ª [0.0, 1.0]À» R10G10B10A2_UNORM ¹é¹öÆÛ¿¡ Ãâ·Â
+    // ìµœì¢… PQ ì¸ì½”ë”©ëœ ê°’ [0.0, 1.0]ì„ R10G10B10A2_UNORM ë°±ë²„í¼ì— ì¶œë ¥
     return float4(C_ST2084, 1.0);
 }
 )";

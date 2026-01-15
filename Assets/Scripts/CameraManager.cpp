@@ -1,4 +1,4 @@
-#include "CameraManager.h"
+ï»¿#include "CameraManager.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 #include "Core/GameObject.h"
@@ -15,15 +15,15 @@ namespace Alice
         if (!go.IsValid())
             return;
 
-        // ÇöÀç GameObject¿¡ ºÙ¾î ÀÖ´Â CameraComponent¸¦ °¡Á®¿É´Ï´Ù.
+        // í˜„ì¬ GameObjectì— ë¶™ì–´ ìˆëŠ” CameraComponentë¥¼ ê°€ì ¸ì˜µë‹ˆë‹¤.
         auto* cam = go.GetComponent<CameraComponent>();
         if (!cam)
         {
-            // CameraComponent°¡ ¾øÀ¸¸é gameObject().AddComponent<>()·Î Ãß°¡ (Unity ½ºÅ¸ÀÏ)
+            // CameraComponentê°€ ì—†ìœ¼ë©´ gameObject().AddComponent<>()ë¡œ ì¶”ê°€ (Unity ìŠ¤íƒ€ì¼)
             cam = &go.AddComponent<CameraComponent>();
         }
 
-        // ¸ŞÀÎ Ä«¸Ş¶ó·Î ¼³Á¤
+        // ë©”ì¸ ì¹´ë©”ë¼ë¡œ ì„¤ì •
         cam->primary = true;
         ALICE_LOG_INFO("[CameraManager] Ready. primary=1");
     }
@@ -40,12 +40,12 @@ namespace Alice
 
         if (input->GetKeyDown(KeyCode::H))
         {
-            // ÇöÀç GameObject¿¡ AddGetRemoveComponentTest ÄÄÆ÷³ÍÆ® Ãß°¡
+            // í˜„ì¬ GameObjectì— AddGetRemoveComponentTest ì»´í¬ë„ŒíŠ¸ ì¶”ê°€
             go.AddComponent<AddGetRemoveComponentTest>();
         }
         if (input->GetKeyDown(KeyCode::J))
         {
-            // ÇöÀç GameObject¿¡¼­ AddGetRemoveComponentTest ÄÄÆ÷³ÍÆ® Á¦°Å
+            // í˜„ì¬ GameObjectì—ì„œ AddGetRemoveComponentTest ì»´í¬ë„ŒíŠ¸ ì œê±°
             go.RemoveComponent<AddGetRemoveComponentTest>();
         }
         if (input->GetMouseButtonDown(MouseCode::Right))

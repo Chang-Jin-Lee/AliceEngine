@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <filesystem>
 
@@ -6,16 +6,16 @@ namespace Alice
 {
     struct MaterialComponent;
 
-    /// °£´ÜÇÑ ¸ÓÆ¼¸®¾ó ÆÄÀÏ ÀÔÃâ·Â À¯Æ¿¸®Æ¼ÀÔ´Ï´Ù.
-    /// - RTTR + JSON ±â¹İ ÀúÀå/·ÎµåÀÔ´Ï´Ù.
+    /// ê°„ë‹¨í•œ ë¨¸í‹°ë¦¬ì–¼ íŒŒì¼ ì…ì¶œë ¥ ìœ í‹¸ë¦¬í‹°ì…ë‹ˆë‹¤.
+    /// - RTTR + JSON ê¸°ë°˜ ì €ì¥/ë¡œë“œì…ë‹ˆë‹¤.
     namespace MaterialFile
     {
-        /// .mat ÆÄÀÏ¿¡¼­ ¸ÓÆ¼¸®¾óÀ» ÀĞ¾î¿Í MaterialComponent ¿¡ Ã¤¿ó´Ï´Ù.
-        /// ÆÄÀÏÀÌ ¾ø°Å³ª Æ÷¸ËÀÌ Àß¸øµÇ¸é false ¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
+        /// .mat íŒŒì¼ì—ì„œ ë¨¸í‹°ë¦¬ì–¼ì„ ì½ì–´ì™€ MaterialComponent ì— ì±„ì›ë‹ˆë‹¤.
+        /// íŒŒì¼ì´ ì—†ê±°ë‚˜ í¬ë§·ì´ ì˜ëª»ë˜ë©´ false ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
         bool Load(const std::filesystem::path& path, MaterialComponent& outMaterial);
 
-        /// MaterialComponent ÀÇ ³»¿ëÀ» .mat ÆÄÀÏ·Î ÀúÀåÇÕ´Ï´Ù.
-        /// »óÀ§ µğ·ºÅÍ¸®°¡ ¾øÀ¸¸é ÀÚµ¿À¸·Î »ı¼ºÇÕ´Ï´Ù.
+        /// MaterialComponent ì˜ ë‚´ìš©ì„ .mat íŒŒì¼ë¡œ ì €ì¥í•©ë‹ˆë‹¤.
+        /// ìƒìœ„ ë””ë ‰í„°ë¦¬ê°€ ì—†ìœ¼ë©´ ìë™ìœ¼ë¡œ ìƒì„±í•©ë‹ˆë‹¤.
         bool Save(const std::filesystem::path& path, const MaterialComponent& material);
     }
 }

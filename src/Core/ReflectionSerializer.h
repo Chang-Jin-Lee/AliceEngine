@@ -1,6 +1,6 @@
-#pragma once
+ï»¿#pragma once
 
-// Windows.hÀÇ min/max ¸ÅÅ©·Î Ãæµ¹ ¹æÁö (RTTR Çì´õ¿ÍÀÇ Ãæµ¹ ¹æÁö)
+// Windows.hì˜ min/max ë§¤í¬ë¡œ ì¶©ëŒ ë°©ì§€ (RTTR í—¤ë”ì™€ì˜ ì¶©ëŒ ë°©ì§€)
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -20,20 +20,20 @@
 
 namespace Alice
 {
-    /// @note RTTR ±â¹İÀ¸·Î Á÷·ÄÈ­ÇÏ´Â À¯Æ¿¸®Æ¼ Å¬·¡½º
+    /// @note RTTR ê¸°ë°˜ìœ¼ë¡œ ì§ë ¬í™”í•˜ëŠ” ìœ í‹¸ë¦¬í‹° í´ë˜ìŠ¤
     namespace ReflectionSerializer
     {
-        /// @param path ÆÄÀÏ °æ·Î
-        /// @param obj ÀÎ½ºÅÏ½º
-        /// @return ÀúÀå ¼º°ø ¿©ºÎ
+        /// @param path íŒŒì¼ ê²½ë¡œ
+        /// @param obj ì¸ìŠ¤í„´ìŠ¤
+        /// @return ì €ì¥ ì„±ê³µ ì—¬ë¶€
         template<typename T>
         bool Save(const std::filesystem::path& path, const T& obj)
         {
-            // ÅÛÇÃ¸´ ÆÄ¶ó¹ÌÅÍ·Î Å¸ÀÔ °¡Á®¿À±â
+            // í…œí”Œë¦¿ íŒŒë¼ë¯¸í„°ë¡œ íƒ€ì… ê°€ì ¸ì˜¤ê¸°
             rttr::type t = rttr::type::get<T>();
             if (!t.is_valid())
             {
-                // ½ÇÆĞÇÏ¸é °´Ã¼·ÎºÎÅÍ Å¸ÀÔ °¡Á®¿À±â ½Ãµµ
+                // ì‹¤íŒ¨í•˜ë©´ ê°ì²´ë¡œë¶€í„° íƒ€ì… ê°€ì ¸ì˜¤ê¸° ì‹œë„
                 t = rttr::type::get(obj);
                 if (!t.is_valid())
                     return false;
@@ -46,17 +46,17 @@ namespace Alice
             return true;
         }
 
-        /// @param path ÆÄÀÏ °æ·Î
-        /// @param obj ÀÎ½ºÅÏ½º
-        /// @return ·Îµå ¼º°ø ¿©ºÎ
+        /// @param path íŒŒì¼ ê²½ë¡œ
+        /// @param obj ì¸ìŠ¤í„´ìŠ¤
+        /// @return ë¡œë“œ ì„±ê³µ ì—¬ë¶€
         template<typename T>
         bool Load(const std::filesystem::path& path, T& obj)
         {
-            // ÅÛÇÃ¸´ ÆÄ¶ó¹ÌÅÍ·Î Å¸ÀÔ °¡Á®¿À±â
+            // í…œí”Œë¦¿ íŒŒë¼ë¯¸í„°ë¡œ íƒ€ì… ê°€ì ¸ì˜¤ê¸°
             rttr::type t = rttr::type::get<T>();
             if (!t.is_valid())
             {
-                // ½ÇÆĞÇÏ¸é °´Ã¼·ÎºÎÅÍ Å¸ÀÔ °¡Á®¿À±â ½Ãµµ
+                // ì‹¤íŒ¨í•˜ë©´ ê°ì²´ë¡œë¶€í„° íƒ€ì… ê°€ì ¸ì˜¤ê¸° ì‹œë„
                 t = rttr::type::get(obj);
                 if (!t.is_valid())
                     return false;
@@ -72,7 +72,7 @@ namespace Alice
             return true;
         }
 
-        /// ÇÊ¿äÇÑ °æ¿ì: Æ¯Á¤ ÇÁ·ÎÆÛÆ¼¸¸ ÀúÀå
+        /// í•„ìš”í•œ ê²½ìš°: íŠ¹ì • í”„ë¡œí¼í‹°ë§Œ ì €ì¥
         template<typename T, typename Filter>
         bool SaveFiltered(const std::filesystem::path& path, const T& obj, const Filter& filter)
         {

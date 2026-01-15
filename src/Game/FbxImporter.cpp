@@ -1,4 +1,4 @@
-#include "Game/FbxImporter.h"
+ï»¿#include "Game/FbxImporter.h"
 
 #include <algorithm>
 #include <system_error>
@@ -14,7 +14,7 @@
 #include <assimp/scene.h>
 #include <assimp/material.h>
 
-#include "Core/World.h"          // MaterialComponent Á¤ÀÇ
+#include "Core/World.h"          // MaterialComponent ì •ì˜
 #include "Core/Material.h"       // MaterialFile::Save
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
@@ -37,7 +37,7 @@ namespace Alice
             for (char& c : s) c = ToLowerChar(static_cast<unsigned char>(c));
         }
 
-        // °£´ÜÇÑ ÀÌ¹ÌÁö È®ÀåÀÚ Ã¼Å© ÇÔ¼öÀÔ´Ï´Ù.
+        // ê°„ë‹¨í•œ ì´ë¯¸ì§€ í™•ì¥ì ì²´í¬ í•¨ìˆ˜ì…ë‹ˆë‹¤.
         inline bool IsImageFile(const std::filesystem::path& path)
         {
             const std::string ext = path.extension().string();
@@ -55,7 +55,7 @@ namespace Alice
             return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
         }
 
-        // "...\Resource\<rel>" absolute °æ·Î¸¦ "Resource/<rel>" ·Î ÃÖ´ëÇÑ Á¤±ÔÈ­ÇÕ´Ï´Ù.
+        // "...\Resource\<rel>" absolute ê²½ë¡œë¥¼ "Resource/<rel>" ë¡œ ìµœëŒ€í•œ ì •ê·œí™”í•©ë‹ˆë‹¤.
         inline std::string NormalizeToResourceLogical(const std::filesystem::path& p)
         {
             if (!p.is_absolute())
@@ -115,7 +115,7 @@ namespace Alice
 
             const std::string t = texPath.C_Str();
 
-            // fbmDirÀÌ À¯È¿ÇÑÁö È®ÀÎ
+            // fbmDirì´ ìœ íš¨í•œì§€ í™•ì¸
             std::error_code ec;
             if (!fs::exists(fbmDir, ec) || !fs::is_directory(fbmDir, ec))
             {
@@ -123,7 +123,7 @@ namespace Alice
                 return;
             }
 
-            // ÀÓº£µğµå ÅØ½ºÃ³
+            // ì„ë² ë””ë“œ í…ìŠ¤ì²˜
             const aiTexture* at = scene->GetEmbeddedTexture(t.c_str());
             if (at)
             {
@@ -165,13 +165,13 @@ namespace Alice
                 return;
             }
 
-            // ¿ÜºÎ ÆÄÀÏ ÅØ½ºÃ³ ¡æ .fbm À¸·Î º¹»ç
+            // ì™¸ë¶€ íŒŒì¼ í…ìŠ¤ì²˜ â†’ .fbm ìœ¼ë¡œ ë³µì‚¬
             try
             {
                 fs::path srcTex = t;
                 if (!srcTex.is_absolute())
                 {
-                    // fbxDirÀÌ À¯È¿ÇÑÁö È®ÀÎ
+                    // fbxDirì´ ìœ íš¨í•œì§€ í™•ì¸
                     if (fbxDir.empty() || !fs::exists(fbxDir, ec) || !fs::is_directory(fbxDir, ec))
                     {
                         ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: invalid fbxDir: \"%s\"", fbxDir.string().c_str());
@@ -180,7 +180,7 @@ namespace Alice
                     srcTex = fbxDir / srcTex;
                 }
 
-                // srcTex Á¤±ÔÈ­ÇØº½ (.. ¶Ç´Â . Á¦°Å)
+                // srcTex ì •ê·œí™”í•´ë´„ (.. ë˜ëŠ” . ì œê±°)
                 srcTex = srcTex.lexically_normal();
 
                 if (!fs::exists(srcTex, ec))
@@ -240,7 +240,7 @@ namespace Alice
             const aiTexture* at = scene->GetEmbeddedTexture(t.c_str());
             if (at)
             {
-                // ¹èÆ÷ ¸ğµå¿¡¼­´Â Æò¹® ÆÄÀÏ »ı¼º ¾øÀÌ ¸Ş¸ğ¸®¿¡¼­ ¹Ù·Î Cooked ÀúÀå
+                // ë°°í¬ ëª¨ë“œì—ì„œëŠ” í‰ë¬¸ íŒŒì¼ ìƒì„± ì—†ì´ ë©”ëª¨ë¦¬ì—ì„œ ë°”ë¡œ Cooked ì €ì¥
                 if (at->mHeight != 0)
                     return;
 
@@ -298,14 +298,14 @@ namespace Alice
 
         ALICE_LOG_INFO("[FbxImporter] Import start: path=\"%s\"", fbxPath.string().c_str());
 
-        // Àı´ë "decrypted ÀÓ½ÃÆÄÀÏ"À» ¸¸µéÁö ¾Ê½À´Ï´Ù.
-        // - ÆÄÀÏÀÌ ÀÖÀ¸¸é ±×´ë·Î ÆÄÀÏ ·Îµå
-        // - ¾øÀ¸¸é(Resource/Cooked/Chunks) ¸Ş¸ğ¸®¿¡¼­ º¹È£È­µÈ ¹ÙÀÌÆ®¸¦ ¹Ş¾Æ Assimp ReadFileFromMemory ·Î ·Îµå
+        // ì ˆëŒ€ "decrypted ì„ì‹œíŒŒì¼"ì„ ë§Œë“¤ì§€ ì•ŠìŠµë‹ˆë‹¤.
+        // - íŒŒì¼ì´ ìˆìœ¼ë©´ ê·¸ëŒ€ë¡œ íŒŒì¼ ë¡œë“œ
+        // - ì—†ìœ¼ë©´(Resource/Cooked/Chunks) ë©”ëª¨ë¦¬ì—ì„œ ë³µí˜¸í™”ëœ ë°”ì´íŠ¸ë¥¼ ë°›ì•„ Assimp ReadFileFromMemory ë¡œ ë¡œë“œ
         namespace fs = std::filesystem;
 
         const bool fileExists = !fbxPath.empty() && fs::exists(fbxPath);
 
-        // Å°/»ı¼º¹° ÀÌ¸§Àº Ç×»ó ¿ø·¡ ¿äÃ»µÈ fbxPath ±âÁØ(stem)À¸·Î °íÁ¤ÇÔ
+        // í‚¤/ìƒì„±ë¬¼ ì´ë¦„ì€ í•­ìƒ ì›ë˜ ìš”ì²­ëœ fbxPath ê¸°ì¤€(stem)ìœ¼ë¡œ ê³ ì •í•¨
         // C:/Models/Robot/robot_01.fbx -> 	robot_01
         std::string baseName = std::filesystem::path(fbxPath).stem().string();
 
@@ -330,7 +330,7 @@ namespace Alice
                 return result;
             }
 
-            // baseDirW´Â ¿ÜºÎ ÅØ½ºÃ³ »ó´ë°æ·Î ÇØ¼®¿ëÀÎµ¥, ¹èÆ÷ ºôµå¿¡¼± ÆÄÀÏÀÌ ¾øÀ» ¼ö ÀÖ¾î ºó °ªÀ¸·Î µÓ´Ï´Ù.
+            // baseDirWëŠ” ì™¸ë¶€ í…ìŠ¤ì²˜ ìƒëŒ€ê²½ë¡œ í•´ì„ìš©ì¸ë°, ë°°í¬ ë¹Œë“œì—ì„  íŒŒì¼ì´ ì—†ì„ ìˆ˜ ìˆì–´ ë¹ˆ ê°’ìœ¼ë¡œ ë‘¡ë‹ˆë‹¤.
             if (!model->LoadFromMemory(device, sp->data(), sp->size(), baseName + ".fbx", L""))
             {
                 ALICE_LOG_ERRORF("[FbxImporter] FbxModel::LoadFromMemory FAILED for \"%s\" (bytes=%zu)\n", resolvedLogical.string().c_str(), sp->size());
@@ -346,19 +346,19 @@ namespace Alice
             return result;
         }
 
-        // 0-1) ½ºÅ°´× ¸Ş½Ã GPU ¸¦ ·¹Áö½ºÆ®¸®¿¡ µî·Ï
-        //     - FBX ¸ğµ¨ÀÌ À¯È¿ÇÏ°í ·¹Áö½ºÆ®¸®°¡ ÁÖÀÔµÈ °æ¿ì¿¡¸¸ ¼öÇàÇÕ´Ï´Ù.
+        // 0-1) ìŠ¤í‚¤ë‹ ë©”ì‹œ GPU ë¥¼ ë ˆì§€ìŠ¤íŠ¸ë¦¬ì— ë“±ë¡
+        //     - FBX ëª¨ë¸ì´ ìœ íš¨í•˜ê³  ë ˆì§€ìŠ¤íŠ¸ë¦¬ê°€ ì£¼ì…ëœ ê²½ìš°ì—ë§Œ ìˆ˜í–‰í•©ë‹ˆë‹¤.
         if (m_meshRegistry && model->HasMesh())
         {
             auto gpu = std::make_shared<SkinnedMeshGPU>();
-            gpu->vertexBuffer = model->GetVertexBuffer(); // AddRef ¹ß»ı
+            gpu->vertexBuffer = model->GetVertexBuffer(); // AddRef ë°œìƒ
             gpu->indexBuffer  = model->GetIndexBuffer();
             gpu->stride       = model->GetVertexStride();
             gpu->indexCount   = static_cast<UINT>(model->GetIndexCount());
             gpu->startIndex   = 0;
             gpu->baseVertex   = 0;
 
-            // ¼­ºê¼Â / ¸ÓÆ¼¸®¾ó SRV º¹»ç
+            // ì„œë¸Œì…‹ / ë¨¸í‹°ë¦¬ì–¼ SRV ë³µì‚¬
             gpu->subsets = model->GetSubsets();
             const auto& matSrvs = model->GetMaterialSRVs();
             const auto& nrmSrvs = model->GetNormalSRVs();
@@ -367,7 +367,7 @@ namespace Alice
             gpu->materialOverridePaths.resize(matSrvs.size());
             for (std::size_t i = 0; i < matSrvs.size(); ++i)
             {
-                gpu->materialSRVs[i] = matSrvs[i]; // ComPtr À¸·Î AddRef
+                gpu->materialSRVs[i] = matSrvs[i]; // ComPtr ìœ¼ë¡œ AddRef
                 gpu->materialOverridePaths[i].clear();
             }
             for (std::size_t i = 0; i < nrmSrvs.size(); ++i)
@@ -375,13 +375,13 @@ namespace Alice
                 gpu->normalSRVs[i] = nrmSrvs[i];
             }
 
-            // ½ºÄÌ·¹Åæ Á¤º¸ º¹»ç
+            // ìŠ¤ì¼ˆë ˆí†¤ ì •ë³´ ë³µì‚¬
             if (model->HasSkeleton())
             {
                 gpu->skeleton     = model->GetSkeleton();
                 gpu->skeletonRoot = model->GetSkeletonRoot();
 
-                // °£´ÜÇÑ º» Æ®¸® ÅØ½ºÆ® »ı¼º (App.cpp ÀÇ boneDisplayText ¿Í À¯»ç)
+                // ê°„ë‹¨í•œ ë³¸ íŠ¸ë¦¬ í…ìŠ¤íŠ¸ ìƒì„± (App.cpp ì˜ boneDisplayText ì™€ ìœ ì‚¬)
                 const auto& nodes = gpu->skeleton;
                 int root = gpu->skeletonRoot;
 
@@ -390,7 +390,7 @@ namespace Alice
                 gpu->skeletonText = text;
             }
 
-            // ¾Ö´Ï¸ŞÀÌ¼Ç Àç»ı/Å¬¸³ ¸ñ·ÏÀ» À§ÇØ ¿øº» ÄÁÅØ½ºÆ®¸¦ À¯ÁöÇÕ´Ï´Ù.
+            // ì• ë‹ˆë©”ì´ì…˜ ì¬ìƒ/í´ë¦½ ëª©ë¡ì„ ìœ„í•´ ì›ë³¸ ì»¨í…ìŠ¤íŠ¸ë¥¼ ìœ ì§€í•©ë‹ˆë‹¤.
             gpu->sourceModel = model;
 
             const std::string meshKey = baseName;
@@ -404,15 +404,15 @@ namespace Alice
                 gpu->materialSRVs.size());
         }
 
-        // 1) ÅØ½ºÃ³´Â "Æò¹® ÆÄÀÏ·Î ÃßÃâ"ÇÏÁö ¾Ê½À´Ï´Ù.
-        //    - ÀÓº£µğµå ÅØ½ºÃ³: ¸Ş¸ğ¸® ¹ÙÀÌÆ®¸¦ ¹Ù·Î Cooked/.../.alice ·Î ¾ÏÈ£È­ ÀúÀå
-        //    - ¿ÜºÎ ÅØ½ºÃ³: ¿øº» ÆÄÀÏÀ» ¹Ù·Î ÀĞ¾î Cooked ·Î ¾ÏÈ£È­ ÀúÀå (Áß°£ ÆÄÀÏ ¾øÀ½)
+        // 1) í…ìŠ¤ì²˜ëŠ” "í‰ë¬¸ íŒŒì¼ë¡œ ì¶”ì¶œ"í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
+        //    - ì„ë² ë””ë“œ í…ìŠ¤ì²˜: ë©”ëª¨ë¦¬ ë°”ì´íŠ¸ë¥¼ ë°”ë¡œ Cooked/.../.alice ë¡œ ì•”í˜¸í™” ì €ì¥
+        //    - ì™¸ë¶€ í…ìŠ¤ì²˜: ì›ë³¸ íŒŒì¼ì„ ë°”ë¡œ ì½ì–´ Cooked ë¡œ ì•”í˜¸í™” ì €ì¥ (ì¤‘ê°„ íŒŒì¼ ì—†ìŒ)
 
         std::vector<fs::path> cookedTextures;
 
-        // (A) ¿¡µğÅÍ¿¡¼­ FBX ÆÄÀÏÀ» Á÷Á¢ ·ÎµåÇÑ °æ¿ì: ¿¹Àü ¹æ½Ä´ë·Î <fbx>.fbm Æú´õ¸¦ ¸¸µé°í
-        //     ¿ÜºÎ ÅØ½ºÃ³´Â °Å±â¿¡ º¹»ç, ÀÓº£µğµå ÅØ½ºÃ³´Â °Å±â¿¡ ÃßÃâÇÕ´Ï´Ù.
-        //     ±×·± ´ÙÀ½ ÃßÃâ/º¹»çÇÑ ÆÄÀÏµéÀ» Cooked/Textures/.../.alice ·Î ¾ÏÈ£È­ ÀúÀåÇÕ´Ï´Ù.
+        // (A) ì—ë””í„°ì—ì„œ FBX íŒŒì¼ì„ ì§ì ‘ ë¡œë“œí•œ ê²½ìš°: ì˜ˆì „ ë°©ì‹ëŒ€ë¡œ <fbx>.fbm í´ë”ë¥¼ ë§Œë“¤ê³ 
+        //     ì™¸ë¶€ í…ìŠ¤ì²˜ëŠ” ê±°ê¸°ì— ë³µì‚¬, ì„ë² ë””ë“œ í…ìŠ¤ì²˜ëŠ” ê±°ê¸°ì— ì¶”ì¶œí•©ë‹ˆë‹¤.
+        //     ê·¸ëŸ° ë‹¤ìŒ ì¶”ì¶œ/ë³µì‚¬í•œ íŒŒì¼ë“¤ì„ Cooked/Textures/.../.alice ë¡œ ì•”í˜¸í™” ì €ì¥í•©ë‹ˆë‹¤.
         if (fileExists)
         {
             const fs::path absFbxPath = fs::absolute(fbxPath);
@@ -435,7 +435,7 @@ namespace Alice
                 ExtractTexture_FileMode(scene, mat, aiTextureType_DIFFUSE_ROUGHNESS, "Roughness", fbxDir, fbmDir, baseName, extractedTextures);
             }
 
-            // extractedTextures ¡æ Cooked/Textures/<fbxName>/<texStem>.alice
+            // extractedTextures â†’ Cooked/Textures/<fbxName>/<texStem>.alice
             for (const auto& texPath : extractedTextures)
             {
                 fs::path cooked = "Cooked/Textures";
@@ -446,7 +446,7 @@ namespace Alice
                     cookedTextures.push_back(cooked);
             }
         }
-        // (B) °ÔÀÓ/¹èÆ÷ ¶Ç´Â ¿øº» ÆÄÀÏÀÌ ¾ø´Â °æ¿ì: ±âÁ¸ ¹æ½Ä(¸Ş¸ğ¸®/¿øº» ÀÚµ¿ ·Îµå ¡æ Cooked ÀúÀå)
+        // (B) ê²Œì„/ë°°í¬ ë˜ëŠ” ì›ë³¸ íŒŒì¼ì´ ì—†ëŠ” ê²½ìš°: ê¸°ì¡´ ë°©ì‹(ë©”ëª¨ë¦¬/ì›ë³¸ ìë™ ë¡œë“œ â†’ Cooked ì €ì¥)
         else
         {
             for (unsigned mi = 0; mi < scene->mNumMaterials; ++mi)
@@ -460,15 +460,15 @@ namespace Alice
             }
         }
 
-        // 4) °£´ÜÇÑ .mat ÆÄÀÏ »ı¼º
-        //    - ÇöÀç´Â ÃßÃâµÈ ÅØ½ºÃ³ °³¼ö¸¸Å­ ±âº» ¸ÓÆ¼¸®¾óÀ» ¸¸µé¾î µÓ´Ï´Ù.
+        // 4) ê°„ë‹¨í•œ .mat íŒŒì¼ ìƒì„±
+        //    - í˜„ì¬ëŠ” ì¶”ì¶œëœ í…ìŠ¤ì²˜ ê°œìˆ˜ë§Œí¼ ê¸°ë³¸ ë¨¸í‹°ë¦¬ì–¼ì„ ë§Œë“¤ì–´ ë‘¡ë‹ˆë‹¤.
         for (std::size_t i = 0; i < cookedTextures.size(); ++i)
         {
             fs::path matDir  = m_resources.Resolve("Assets/Materials");
             std::error_code ec;
             fs::create_directories(matDir, ec);
 
-            // ¿¹: Hero_0.mat, Hero_1.mat ...
+            // ì˜ˆ: Hero_0.mat, Hero_1.mat ...
             fs::path matPath = matDir / (baseName + "_" + std::to_string(i) + ".mat");
 
             MaterialComponent matComp;
@@ -483,16 +483,16 @@ namespace Alice
 
             MaterialFile::Save(matPath, matComp);
 
-            // »ó´ë °æ·Î·Î º¯È¯ÇÏ¿© ÀúÀå D:\\Github\\AliceRenderer\\Assets\\Materials\\ -> (Assets/Materials/... Çü½Ä)
+            // ìƒëŒ€ ê²½ë¡œë¡œ ë³€í™˜í•˜ì—¬ ì €ì¥ D:\\Github\\AliceRenderer\\Assets\\Materials\\ -> (Assets/Materials/... í˜•ì‹)
             fs::path matPathRelative = fs::path("Assets/Materials") / (baseName + "_" + std::to_string(i) + ".mat");
             result.materialAssetPaths.push_back(matPathRelative.generic_string());
         }
 
-        // 5) ¸Ş½Ã ÀÚ»êÀÇ ³í¸® °æ·Î´Â FBX ÀÌ¸§À» ±×´ë·Î »ç¿ëÇÕ´Ï´Ù.
+        // 5) ë©”ì‹œ ìì‚°ì˜ ë…¼ë¦¬ ê²½ë¡œëŠ” FBX ì´ë¦„ì„ ê·¸ëŒ€ë¡œ ì‚¬ìš©í•©ë‹ˆë‹¤.
         result.meshAssetPath = baseName;
 
-        // 6) ¿¡µğÅÍ/World ¿¡¼­ »ç¿ëÇÒ ÀÎ½ºÅÏ½º ¿¡¼Â(.fbxasset)À» »ı¼ºÇÕ´Ï´Ù.
-        //    - ¾ğ¸®¾óÀÇ SkeletalMesh ¿¡¼Â ºñ½ÁÇÑ °³³äÀ¸·Î, FBX ¿øº»°ú ¸ÓÆ¼¸®¾óÀ» ¹­¾î µÓ´Ï´Ù.
+        // 6) ì—ë””í„°/World ì—ì„œ ì‚¬ìš©í•  ì¸ìŠ¤í„´ìŠ¤ ì—ì…‹(.fbxasset)ì„ ìƒì„±í•©ë‹ˆë‹¤.
+        //    - ì–¸ë¦¬ì–¼ì˜ SkeletalMesh ì—ì…‹ ë¹„ìŠ·í•œ ê°œë…ìœ¼ë¡œ, FBX ì›ë³¸ê³¼ ë¨¸í‹°ë¦¬ì–¼ì„ ë¬¶ì–´ ë‘¡ë‹ˆë‹¤.
         {
             fs::path fbxAssetDir = m_resources.Resolve("Assets/Fbx");
             std::error_code ec;
@@ -507,12 +507,12 @@ namespace Alice
 
             if (!SaveFbxInstanceAsset(fbxAssetPath, asset)) return result;
 
-            // »ó´ë °æ·Î·Î º¯È¯ÇÏ¿© ÀúÀå D:\\Github\\AliceRenderer\\Assets\\Materials -> (Assets/Fbx/... Çü½Ä)
+            // ìƒëŒ€ ê²½ë¡œë¡œ ë³€í™˜í•˜ì—¬ ì €ì¥ D:\\Github\\AliceRenderer\\Assets\\Materials -> (Assets/Fbx/... í˜•ì‹)
             fs::path fbxAssetPathRelative = fs::path("Assets/Fbx") / (baseName + ".fbxasset");
             result.instanceAssetPath = fbxAssetPathRelative.generic_string();
         }
 
-        // µğ¹ö±× ·Î±ë: Import ¿Ï·á
+        // ë””ë²„ê·¸ ë¡œê¹…: Import ì™„ë£Œ
         {
 
 			ALICE_LOG_INFO("[FbxImporter] Import done: meshAssetPath=\"%s\", materials=%zu\n",

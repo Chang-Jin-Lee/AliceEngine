@@ -1,20 +1,20 @@
-#pragma once
+ï»¿#pragma once
 
 #include <DirectXMath.h>
 #include <string>
 
 namespace Alice {
-    // Àü¹æ ¼±¾ğ
+    // ì „ë°© ì„ ì–¸
     class GameObject;
 
-    /// Skinned FBX ¸Ş½Ã¿¡ ´ëÇÑ ÃÖ¼Ò Á¤º¸¸¸ ´ã´Â ÄÄÆ÷³ÍÆ®ÀÔ´Ï´Ù.
-    /// - ½ÇÁ¦ FBX ÆÄ½Ì/¾Ö´Ï¸ŞÀÌ¼ÇÀº °ÔÀÓ(»ùÇÃ) ·¹º§¿¡¼­ Ã³¸®ÇÕ´Ï´Ù.
-    /// - ¿£ÁøÀº bone Çà·Ä ¹è¿­°ú º» °³¼ö¸¸ »ç¿ëÇÕ´Ï´Ù.
+    /// Skinned FBX ë©”ì‹œì— ëŒ€í•œ ìµœì†Œ ì •ë³´ë§Œ ë‹´ëŠ” ì»´í¬ë„ŒíŠ¸ì…ë‹ˆë‹¤.
+    /// - ì‹¤ì œ FBX íŒŒì‹±/ì• ë‹ˆë©”ì´ì…˜ì€ ê²Œì„(ìƒ˜í”Œ) ë ˆë²¨ì—ì„œ ì²˜ë¦¬í•©ë‹ˆë‹¤.
+    /// - ì—”ì§„ì€ bone í–‰ë ¬ ë°°ì—´ê³¼ ë³¸ ê°œìˆ˜ë§Œ ì‚¬ìš©í•©ë‹ˆë‹¤.
     struct SkinnedMeshComponent 
     {
-        std::string meshAssetPath; // FBX/¸Ş½Ã ¿¡¼Â °æ·Î (SkinnedMeshRegistry Å°)
-        std::string instanceAssetPath; // .fbxasset ÀÎ½ºÅÏ½º ¿¡¼Â °æ·Î (¾À/ÇÁ·ÎÁ§Æ® ÀúÀå¿ë)
-        const DirectX::XMFLOAT4X4* boneMatrices{ nullptr };               // ¿ÜºÎ¿¡¼­ °ü¸®ÇÏ´Â º» Çà·Ä ¹è¿­
-        std::uint32_t boneCount{ 0 }; // »ç¿ë ÁßÀÎ º» °³¼ö
+        std::string meshAssetPath; // FBX/ë©”ì‹œ ì—ì…‹ ê²½ë¡œ (SkinnedMeshRegistry í‚¤)
+        std::string instanceAssetPath; // .fbxasset ì¸ìŠ¤í„´ìŠ¤ ì—ì…‹ ê²½ë¡œ (ì”¬/í”„ë¡œì íŠ¸ ì €ì¥ìš©)
+        const DirectX::XMFLOAT4X4* boneMatrices{ nullptr };               // ì™¸ë¶€ì—ì„œ ê´€ë¦¬í•˜ëŠ” ë³¸ í–‰ë ¬ ë°°ì—´
+        std::uint32_t boneCount{ 0 }; // ì‚¬ìš© ì¤‘ì¸ ë³¸ ê°œìˆ˜
     };
 }
