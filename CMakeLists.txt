@@ -85,7 +85,9 @@ set(ENGINE_SOURCES
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
-    ${ALICE_SRC_DIR}/Core/Script.cpp
+    ${ALICE_SRC_DIR}/Core/IScript.cpp
+    ${ALICE_SRC_DIR}/Core/ScriptFactory.cpp
+    ${ALICE_SRC_DIR}/Core/ScriptSystem.cpp
     ${ALICE_SRC_DIR}/Core/ScriptHotReload.cpp
     ${ALICE_SRC_DIR}/Core/Prefab.cpp
     ${ALICE_SRC_DIR}/Core/Material.cpp
@@ -132,7 +134,9 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/World.h
     ${ALICE_SRC_DIR}/Core/GameObject.h
     ${ALICE_SRC_DIR}/Core/Delegate.h
-    ${ALICE_SRC_DIR}/Core/Script.h
+    ${ALICE_SRC_DIR}/Core/IScript.h
+    ${ALICE_SRC_DIR}/Core/ScriptFactory.h
+    ${ALICE_SRC_DIR}/Core/ScriptSystem.h
     ${ALICE_SRC_DIR}/Core/ScriptAPI.h
     ${ALICE_SRC_DIR}/Core/ScriptHotReload.h
     ${ALICE_SRC_DIR}/Core/Prefab.h
