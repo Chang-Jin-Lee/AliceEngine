@@ -16,29 +16,37 @@ PhysicsSystem::PhysicsSystem(World& world)
 
 PhysicsSystem::~PhysicsSystem()
 {
-    // 모든 물리 액터 정리
-    for (auto& [entityId, actor] : m_entityToActor)
+    // 모든 물리 액터 정리 (컴포넌트 핸들도 함께 정리)
+    std::vector<EntityId> entityIds;
+    entityIds.reserve(m_entityToActor.size());
+    for (const auto& [entityId, handle] : m_entityToActor)
     {
-        if (actor)
-        {
-            // IRigidBody 또는 IPhysicsActor의 Destroy 호출
-            // 실제로는 shared_ptr로 관리되므로 자동 해제되지만, 명시적으로 정리
-            static_cast<IPhysicsActor*>(actor)->Destroy();
-        }
+        entityIds.push_back(entityId);
     }
+    
+    for (EntityId entityId : entityIds)
+    {
+        DestroyPhysicsActor(entityId);
+    }
+    
     m_entityToActor.clear();
 }
 
 void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
 {
-    // 기존 액터들 정리
-    for (auto& [entityId, actor] : m_entityToActor)
+    // 기존 액터들 정리 (컴포넌트 핸들도 함께 정리)
+    std::vector<EntityId> entityIds;
+    entityIds.reserve(m_entityToActor.size());
+    for (const auto& [entityId, handle] : m_entityToActor)
     {
-        if (actor)
-        {
-            static_cast<IPhysicsActor*>(actor)->Destroy();
-        }
+        entityIds.push_back(entityId);
     }
+    
+    for (EntityId entityId : entityIds)
+    {
+        DestroyPhysicsActor(entityId);
+    }
+    
     m_entityToActor.clear();
     m_lastTransforms.clear();
 
@@ -88,7 +96,7 @@ void PhysicsSystem::Update(float deltaTime)
 
         // 제거된 컴포넌트 확인 (m_entityToActor에 있지만 컴포넌트가 없는 경우)
         std::vector<EntityId> toRemove;
-        for (const auto& [entityId, actor] : m_entityToActor)
+        for (const auto& [entityId, handle] : m_entityToActor)
         {
             auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
             auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
@@ -192,8 +200,6 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         rbDesc.stabilizationThreshold = rb->stabilizationThreshold;
         rbDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
 
-        IRigidBody* body = nullptr;
-
         if (collider)
         {
             // Collider 타입에 따라 바디 생성
@@ -215,7 +221,14 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 auto bodyPtr = m_physicsWorld->CreateDynamicBox(pos, rot, rbDesc, boxDesc);
                 if (bodyPtr)
                 {
-                    body = bodyPtr.release(); // 소유권 이전 (나중에 수동 삭제)
+                    // unique_ptr을 그대로 move하여 소유권 유지
+                    // IRigidBody는 IPhysicsActor를 상속하므로 자동 변환됨
+                    ActorHandle handle(std::move(bodyPtr));
+                    IRigidBody* body = handle.GetRigidBody();
+                    
+                    rb->physicsActorHandle = body;
+                    collider->physicsActorHandle = body;
+                    m_entityToActor[entityId] = std::move(handle);
                 }
                 break;
             }
@@ -235,7 +248,12 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 auto bodyPtr = m_physicsWorld->CreateDynamicSphere(pos, rot, rbDesc, sphereDesc);
                 if (bodyPtr)
                 {
-                    body = bodyPtr.release();
+                    ActorHandle handle(std::move(bodyPtr));
+                    IRigidBody* body = handle.GetRigidBody();
+                    
+                    rb->physicsActorHandle = body;
+                    collider->physicsActorHandle = body;
+                    m_entityToActor[entityId] = std::move(handle);
                 }
                 break;
             }
@@ -257,18 +275,18 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 auto bodyPtr = m_physicsWorld->CreateDynamicCapsule(pos, rot, rbDesc, capsuleDesc);
                 if (bodyPtr)
                 {
-                    body = bodyPtr.release();
+                    ActorHandle handle(std::move(bodyPtr));
+                    IRigidBody* body = handle.GetRigidBody();
+                    
+                    rb->physicsActorHandle = body;
+                    collider->physicsActorHandle = body;
+                    m_entityToActor[entityId] = std::move(handle);
                 }
                 break;
             }
             }
 
-            if (body)
-            {
-                rb->physicsActorHandle = body;
-                collider->physicsActorHandle = body;
-                m_entityToActor[entityId] = body;
-            }
+            // body는 이미 m_entityToActor에 저장됨
         }
         else
         {
@@ -276,9 +294,11 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             auto bodyPtr = m_physicsWorld->CreateDynamicEmpty(pos, rot, rbDesc);
             if (bodyPtr)
             {
-                body = bodyPtr.release();
+                ActorHandle handle(std::move(bodyPtr));
+                IRigidBody* body = handle.GetRigidBody();
+                
                 rb->physicsActorHandle = body;
-                m_entityToActor[entityId] = body;
+                m_entityToActor[entityId] = std::move(handle);
             }
         }
     }
@@ -296,8 +316,6 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         materialDesc.staticFriction = collider->staticFriction;
         materialDesc.dynamicFriction = collider->dynamicFriction;
         materialDesc.restitution = collider->restitution;
-
-        IPhysicsActor* actor = nullptr;
 
         switch (collider->type)
         {
@@ -317,7 +335,11 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             auto actorPtr = m_physicsWorld->CreateStaticBox(pos, rot, boxDesc);
             if (actorPtr)
             {
-                actor = actorPtr.release();
+                ActorHandle handle(std::move(actorPtr));
+                IPhysicsActor* actor = handle.GetActor();
+                
+                collider->physicsActorHandle = actor;
+                m_entityToActor[entityId] = std::move(handle);
             }
             break;
         }
@@ -337,7 +359,11 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             auto actorPtr = m_physicsWorld->CreateStaticSphere(pos, rot, sphereDesc);
             if (actorPtr)
             {
-                actor = actorPtr.release();
+                ActorHandle handle(std::move(actorPtr));
+                IPhysicsActor* actor = handle.GetActor();
+                
+                collider->physicsActorHandle = actor;
+                m_entityToActor[entityId] = std::move(handle);
             }
             break;
         }
@@ -359,17 +385,16 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             auto actorPtr = m_physicsWorld->CreateStaticCapsule(pos, rot, capsuleDesc);
             if (actorPtr)
             {
-                actor = actorPtr.release();
+                ActorHandle handle(std::move(actorPtr));
+                IPhysicsActor* actor = handle.GetActor();
+                
+                collider->physicsActorHandle = actor;
+                m_entityToActor[entityId] = std::move(handle);
             }
             break;
         }
         }
 
-        if (actor)
-        {
-            collider->physicsActorHandle = actor;
-            m_entityToActor[entityId] = actor;
-        }
     }
 }
 
@@ -378,11 +403,7 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     auto it = m_entityToActor.find(entityId);
     if (it == m_entityToActor.end()) return;
 
-    void* actor = it->second;
-    if (actor)
-    {
-        static_cast<IPhysicsActor*>(actor)->Destroy();
-    }
+    it->second.Destroy();
 
     // 컴포넌트의 핸들도 초기화
     auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
@@ -400,8 +421,10 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
     auto it = m_entityToActor.find(entityId);
     if (it == m_entityToActor.end()) return;
 
-    void* actor = it->second;
-    if (!actor) return;
+    ActorHandle& handle = it->second;
+    if (!handle.IsValid()) return;
+    
+    IPhysicsActor* actor = handle.GetActor();
 
     Vec3 pos = ToVec3(position);
     Quat rot = ToQuat(rotation);
@@ -410,7 +433,7 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
     if (rb && rb->isKinematic)
     {
         // Kinematic 바디는 SetKinematicTarget 사용
-        IRigidBody* body = static_cast<IRigidBody*>(actor);
+        IRigidBody* body = handle.GetRigidBody();
         if (body && body->IsValid())
         {
             body->SetKinematicTarget(pos, rot);
@@ -419,10 +442,9 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
     else
     {
         // Static Actor 또는 Dynamic 바디는 SetTransform 사용
-        IPhysicsActor* physActor = static_cast<IPhysicsActor*>(actor);
-        if (physActor && physActor->IsValid())
+        if (actor && actor->IsValid())
         {
-            physActor->SetTransform(pos, rot);
+            actor->SetTransform(pos, rot);
         }
     }
 }

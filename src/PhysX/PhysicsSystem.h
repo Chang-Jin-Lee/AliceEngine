@@ -54,8 +54,44 @@ private:
     IPhysicsWorld* m_physicsWorld = nullptr;
 
     // EntityId → 물리 액터 매핑
-    // RigidBodyComponent가 있으면 IRigidBody*, 없으면 IPhysicsActor*
-    std::unordered_map<Alice::EntityId, void*> m_entityToActor;
+    // unique_ptr을 소유하여 래퍼 객체의 생명주기를 안전하게 관리
+    struct ActorHandle
+    {
+        std::unique_ptr<IPhysicsActor> owned;  // 소유권 유지! (래퍼 객체 delete 보장)
+        IRigidBody* rigid = nullptr;           // owned.get()의 non-owning 캐시 (편의용)
+        
+        ActorHandle() = default;
+        
+        // unique_ptr<IPhysicsActor>로부터 생성 (Static Actor용)
+        explicit ActorHandle(std::unique_ptr<IPhysicsActor> actor)
+            : owned(std::move(actor))
+            , rigid(nullptr)  // Static Actor는 IRigidBody가 아님
+        {
+        }
+        
+        // unique_ptr<IRigidBody>로부터 생성 (IRigidBody는 IPhysicsActor를 상속)
+        explicit ActorHandle(std::unique_ptr<IRigidBody> body)
+            : owned(std::move(body))
+            , rigid(static_cast<IRigidBody*>(owned.get()))
+        {
+        }
+        
+        bool IsValid() const { return owned && owned->IsValid(); }
+        
+        IPhysicsActor* GetActor() const { return owned.get(); }
+        IRigidBody* GetRigidBody() const { return rigid; }
+        
+        void Destroy()
+        {
+            if (owned)
+            {
+                owned->Destroy();  // native PxActor 정리 예약 (deferred-safe)
+                owned.reset();     // 래퍼 객체 delete (누수 방지!)
+            }
+            rigid = nullptr;
+        }
+    };
+    std::unordered_map<Alice::EntityId, ActorHandle> m_entityToActor;
 
     // 이전 프레임의 Transform 상태 (변경 감지용)
     struct TransformState

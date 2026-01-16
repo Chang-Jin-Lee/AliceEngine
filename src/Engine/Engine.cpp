@@ -639,8 +639,8 @@ namespace Alice
 					if (!tr) continue;
 
 					tr->position = { at.position.x, at.position.y, at.position.z };
-					// 회전도 동기화
-					DirectX::XMFLOAT3 euler = pImpl->m_physicsSystem->ToEulerRadians(at.rotation);
+					// 회전도 동기화 (static 메서드이므로 PhysicsSystem 인스턴스 없이도 호출 가능)
+					DirectX::XMFLOAT3 euler = PhysicsSystem::ToEulerRadians(at.rotation);
 					tr->rotation = euler;
 				}
 			}

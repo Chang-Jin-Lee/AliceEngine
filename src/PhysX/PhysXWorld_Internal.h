@@ -4,7 +4,7 @@
 #include "PhysXWorld.h"
 #include "PhysicsMath.h"
 
-#include <Physx/PxPhysicsAPI.h>
+#include <PhysX/PxPhysicsAPI.h>
 
 // ------------------------------------------------------------
 // PhysX Character Controller (CCT) header detection
@@ -207,6 +207,7 @@ struct FilterShaderData
 	PxU32 enableContactEvents = 1;
 	PxU32 enableContactPoints = 0;
 	PxU32 enableContactModify = 0;
+	PxU32 enableCCD = 0;  // Scene-level CCD 활성화 여부
 };
 
 static PxFilterFlags LayerFilterShader(
@@ -249,6 +250,13 @@ static PxFilterFlags LayerFilterShader(
 	if (fsd && fsd->enableContactModify)
 	{
 		pairFlags |= PxPairFlag::eMODIFY_CONTACTS;
+	}
+
+	// PhysX 5.5: Scene이 CCD를 활성화했으면 contact pair에도 eDETECT_CCD_CONTACT 플래그 필요
+	// 개별 body의 eENABLE_CCD 플래그와는 별개로, collision filtering에서도 명시해야 함
+	if (fsd && fsd->enableCCD)
+	{
+		pairFlags |= PxPairFlag::eDETECT_CCD_CONTACT;
 	}
 
 	return PxFilterFlag::eDEFAULT;
@@ -359,6 +367,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		shaderData.enableContactEvents = desc.enableContactEvents ? 1u : 0u;
 		shaderData.enableContactPoints = desc.enableContactPoints ? 1u : 0u;
 		shaderData.enableContactModify = desc.enableContactModify ? 1u : 0u;
+		shaderData.enableCCD = desc.enableCCD ? 1u : 0u;  // Scene-level CCD를 필터 셰이더에 전달
 		sdesc.filterShaderData = &shaderData;
 		sdesc.filterShaderDataSize = sizeof(FilterShaderData);
 
