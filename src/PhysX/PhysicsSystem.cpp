@@ -161,6 +161,113 @@ void PhysicsSystem::Update(float deltaTime)
             }
         }
     }
+
+    // 3. Collider/Scale 변경 감지 및 Shape 재구성
+    {
+        auto colliders = m_world.GetComponents<ColliderComponent>();
+        for (const auto& [entityId, collider] : colliders)
+        {
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform) continue;
+
+            // 이전 상태 확인
+            auto it = m_lastColliders.find(entityId);
+            bool needsRebuild = false;
+
+            if (it == m_lastColliders.end())
+            {
+                // 첫 프레임 - 상태 저장만
+                ColliderState state{};
+                state.type = collider.type;
+                state.halfExtents = collider.halfExtents;
+                state.radius = collider.radius;
+                state.capsuleRadius = collider.capsuleRadius;
+                state.capsuleHalfHeight = collider.capsuleHalfHeight;
+                state.capsuleAlignYAxis = collider.capsuleAlignYAxis;
+                state.staticFriction = collider.staticFriction;
+                state.dynamicFriction = collider.dynamicFriction;
+                state.restitution = collider.restitution;
+                state.layerBits = collider.layerBits;
+                state.collideMask = collider.collideMask;
+                state.queryMask = collider.queryMask;
+                state.isTrigger = collider.isTrigger;
+                state.scale = transform->scale;
+                m_lastColliders[entityId] = state;
+            }
+            else
+            {
+                // 변경 감지
+                const auto& last = it->second;
+                bool changed = false;
+
+                // Collider 파라미터 변경
+                if (collider.type != last.type ||
+                    collider.halfExtents.x != last.halfExtents.x || collider.halfExtents.y != last.halfExtents.y || collider.halfExtents.z != last.halfExtents.z ||
+                    collider.radius != last.radius ||
+                    collider.capsuleRadius != last.capsuleRadius ||
+                    collider.capsuleHalfHeight != last.capsuleHalfHeight ||
+                    collider.capsuleAlignYAxis != last.capsuleAlignYAxis ||
+                    collider.staticFriction != last.staticFriction ||
+                    collider.dynamicFriction != last.dynamicFriction ||
+                    collider.restitution != last.restitution ||
+                    collider.layerBits != last.layerBits ||
+                    collider.collideMask != last.collideMask ||
+                    collider.queryMask != last.queryMask ||
+                    collider.isTrigger != last.isTrigger)
+                {
+                    changed = true;
+                }
+
+                // Scale 변경
+                if (transform->scale.x != last.scale.x || 
+                    transform->scale.y != last.scale.y || 
+                    transform->scale.z != last.scale.z)
+                {
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    needsRebuild = true;
+                    // 상태 업데이트
+                    it->second.type = collider.type;
+                    it->second.halfExtents = collider.halfExtents;
+                    it->second.radius = collider.radius;
+                    it->second.capsuleRadius = collider.capsuleRadius;
+                    it->second.capsuleHalfHeight = collider.capsuleHalfHeight;
+                    it->second.capsuleAlignYAxis = collider.capsuleAlignYAxis;
+                    it->second.staticFriction = collider.staticFriction;
+                    it->second.dynamicFriction = collider.dynamicFriction;
+                    it->second.restitution = collider.restitution;
+                    it->second.layerBits = collider.layerBits;
+                    it->second.collideMask = collider.collideMask;
+                    it->second.queryMask = collider.queryMask;
+                    it->second.isTrigger = collider.isTrigger;
+                    it->second.scale = transform->scale;
+                }
+            }
+
+            if (needsRebuild)
+            {
+                RebuildShapes(entityId);
+            }
+        }
+
+        // 제거된 Collider의 상태도 정리
+        std::vector<EntityId> collidersToRemove;
+        for (const auto& [entityId, state] : m_lastColliders)
+        {
+            auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+            if (!collider)
+            {
+                collidersToRemove.push_back(entityId);
+            }
+        }
+        for (EntityId entityId : collidersToRemove)
+        {
+            m_lastColliders.erase(entityId);
+        }
+    }
 }
 
 void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
@@ -235,7 +342,10 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             case ColliderType::Sphere:
             {
                 SphereColliderDesc sphereDesc{};
-                sphereDesc.radius = collider->radius;
+                // Scale 반영 (최대값 사용)
+                Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+                float sMax = std::max({ scale.x, scale.y, scale.z });
+                sphereDesc.radius = collider->radius * sMax;
                 sphereDesc.staticFriction = collider->staticFriction;
                 sphereDesc.dynamicFriction = collider->dynamicFriction;
                 sphereDesc.restitution = collider->restitution;
@@ -260,8 +370,20 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             case ColliderType::Capsule:
             {
                 CapsuleColliderDesc capsuleDesc{};
-                capsuleDesc.radius = collider->capsuleRadius;
-                capsuleDesc.halfHeight = collider->capsuleHalfHeight;
+                // Scale 반영
+                Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+                if (collider->capsuleAlignYAxis)
+                {
+                    float radial = std::max(scale.x, scale.z);
+                    capsuleDesc.radius = collider->capsuleRadius * radial;
+                    capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.y;
+                }
+                else
+                {
+                    float radial = std::max(scale.y, scale.z);
+                    capsuleDesc.radius = collider->capsuleRadius * radial;
+                    capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.x;
+                }
                 capsuleDesc.alignYAxis = collider->capsuleAlignYAxis;
                 capsuleDesc.staticFriction = collider->staticFriction;
                 capsuleDesc.dynamicFriction = collider->dynamicFriction;
@@ -322,7 +444,13 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         case ColliderType::Box:
         {
             BoxColliderDesc boxDesc{};
-            boxDesc.halfExtents = ToVec3(collider->halfExtents);
+            // Scale 반영
+            Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+            Vec3 he = ToVec3(collider->halfExtents);
+            he.x *= scale.x;
+            he.y *= scale.y;
+            he.z *= scale.z;
+            boxDesc.halfExtents = he;
             boxDesc.staticFriction = collider->staticFriction;
             boxDesc.dynamicFriction = collider->dynamicFriction;
             boxDesc.restitution = collider->restitution;
@@ -346,7 +474,10 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         case ColliderType::Sphere:
         {
             SphereColliderDesc sphereDesc{};
-            sphereDesc.radius = collider->radius;
+            // Scale 반영 (최대값 사용)
+            Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+            float sMax = std::max({ scale.x, scale.y, scale.z });
+            sphereDesc.radius = collider->radius * sMax;
             sphereDesc.staticFriction = collider->staticFriction;
             sphereDesc.dynamicFriction = collider->dynamicFriction;
             sphereDesc.restitution = collider->restitution;
@@ -370,8 +501,20 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         case ColliderType::Capsule:
         {
             CapsuleColliderDesc capsuleDesc{};
-            capsuleDesc.radius = collider->capsuleRadius;
-            capsuleDesc.halfHeight = collider->capsuleHalfHeight;
+            // Scale 반영
+            Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+            if (collider->capsuleAlignYAxis)
+            {
+                float radial = std::max(scale.x, scale.z);
+                capsuleDesc.radius = collider->capsuleRadius * radial;
+                capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.y;
+            }
+            else
+            {
+                float radial = std::max(scale.y, scale.z);
+                capsuleDesc.radius = collider->capsuleRadius * radial;
+                capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.x;
+            }
             capsuleDesc.alignYAxis = collider->capsuleAlignYAxis;
             capsuleDesc.staticFriction = collider->staticFriction;
             capsuleDesc.dynamicFriction = collider->dynamicFriction;
@@ -414,6 +557,114 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
 
     m_entityToActor.erase(it);
     m_lastTransforms.erase(entityId);
+    m_lastColliders.erase(entityId);
+}
+
+void PhysicsSystem::RebuildShapes(EntityId entityId)
+{
+    auto it = m_entityToActor.find(entityId);
+    if (it == m_entityToActor.end()) return;
+
+    ActorHandle& handle = it->second;
+    if (!handle.IsValid()) return;
+
+    IPhysicsActor* actor = handle.GetActor();
+    if (!actor || !actor->IsValid()) return;
+
+    auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    if (!transform || !collider) return;
+
+    // Scale 반영을 위한 헬퍼 함수
+    auto AbsScale = [](const DirectX::XMFLOAT3& s) -> Vec3 {
+        return Vec3(std::abs(s.x), std::abs(s.y), std::abs(s.z));
+    };
+
+    Vec3 scale = AbsScale(transform->scale);
+
+    // 기존 Shape 제거
+    actor->ClearShapes();
+
+    // Collider 타입에 따라 Shape 재생성 (scale 반영)
+    switch (collider->type)
+    {
+    case ColliderType::Box:
+    {
+        BoxColliderDesc boxDesc{};
+        Vec3 he = ToVec3(collider->halfExtents);
+        he.x *= scale.x;
+        he.y *= scale.y;
+        he.z *= scale.z;
+        boxDesc.halfExtents = he;
+        boxDesc.staticFriction = collider->staticFriction;
+        boxDesc.dynamicFriction = collider->dynamicFriction;
+        boxDesc.restitution = collider->restitution;
+        boxDesc.layerBits = collider->layerBits;
+        boxDesc.collideMask = collider->collideMask;
+        boxDesc.queryMask = collider->queryMask;
+        boxDesc.isTrigger = collider->isTrigger;
+        boxDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+
+        actor->AddBoxShape(boxDesc, Vec3::Zero, Quat::Identity);
+        break;
+    }
+    case ColliderType::Sphere:
+    {
+        SphereColliderDesc sphereDesc{};
+        float sMax = std::max({ scale.x, scale.y, scale.z });
+        sphereDesc.radius = collider->radius * sMax;
+        sphereDesc.staticFriction = collider->staticFriction;
+        sphereDesc.dynamicFriction = collider->dynamicFriction;
+        sphereDesc.restitution = collider->restitution;
+        sphereDesc.layerBits = collider->layerBits;
+        sphereDesc.collideMask = collider->collideMask;
+        sphereDesc.queryMask = collider->queryMask;
+        sphereDesc.isTrigger = collider->isTrigger;
+        sphereDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+
+        actor->AddSphereShape(sphereDesc, Vec3::Zero, Quat::Identity);
+        break;
+    }
+    case ColliderType::Capsule:
+    {
+        CapsuleColliderDesc capsuleDesc{};
+        if (collider->capsuleAlignYAxis)
+        {
+            float radial = std::max(scale.x, scale.z);
+            capsuleDesc.radius = collider->capsuleRadius * radial;
+            capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.y;
+        }
+        else
+        {
+            // X축 정렬 (일반적이지 않지만 지원)
+            float radial = std::max(scale.y, scale.z);
+            capsuleDesc.radius = collider->capsuleRadius * radial;
+            capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.x;
+        }
+        capsuleDesc.alignYAxis = collider->capsuleAlignYAxis;
+        capsuleDesc.staticFriction = collider->staticFriction;
+        capsuleDesc.dynamicFriction = collider->dynamicFriction;
+        capsuleDesc.restitution = collider->restitution;
+        capsuleDesc.layerBits = collider->layerBits;
+        capsuleDesc.collideMask = collider->collideMask;
+        capsuleDesc.queryMask = collider->queryMask;
+        capsuleDesc.isTrigger = collider->isTrigger;
+        capsuleDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+
+        actor->AddCapsuleShape(capsuleDesc, Vec3::Zero, Quat::Identity);
+        break;
+    }
+    }
+
+    // Dynamic RigidBody인 경우 질량 재계산
+    IRigidBody* body = handle.GetRigidBody();
+    if (body && body->IsValid())
+    {
+        body->RecomputeMass();
+    }
+
+    // 필터/재질/트리거 변경도 반영
+    // (Shape 재생성 시 이미 desc에 포함되어 있음)
 }
 
 void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation)

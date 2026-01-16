@@ -102,6 +102,29 @@ private:
     };
     std::unordered_map<Alice::EntityId, TransformState> m_lastTransforms;
 
+    // 이전 프레임의 Collider 상태 (변경 감지 및 Shape 재구성용)
+    struct ColliderState
+    {
+        ColliderType type{};
+        DirectX::XMFLOAT3 halfExtents{};
+        float radius{};
+        float capsuleRadius{};
+        float capsuleHalfHeight{};
+        bool capsuleAlignYAxis{};
+        float staticFriction{};
+        float dynamicFriction{};
+        float restitution{};
+        uint32_t layerBits{};
+        uint32_t collideMask{};
+        uint32_t queryMask{};
+        bool isTrigger{};
+        DirectX::XMFLOAT3 scale{}; // Transform scale 포함
+    };
+    std::unordered_map<Alice::EntityId, ColliderState> m_lastColliders;
+
+    // Collider/Scale 변경 시 Shape 재구성
+    void RebuildShapes(Alice::EntityId entityId);
+
     // 이벤트 콜백
     EventCallback m_eventCallback = nullptr;
     void* m_eventCallbackUserData = nullptr;

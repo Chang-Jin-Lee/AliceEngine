@@ -41,6 +41,7 @@
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 #include "PhysX/PhysicsSystem.h" // 물리 시스템
+#include "PhysX/Module/PhysicsDebug.h" // 물리 디버그 드로우
 
 // 문자열 변환 / ImGui 래퍼
 #include "Core/StringUtils.h"
@@ -97,6 +98,9 @@ namespace Alice
 		float m_physAccum = 0.0f;
 		float m_physFixedDt = 1.0f / 60.0f;
 		int   m_physMaxSubsteps = 4;
+		
+		// 물리 이벤트 큐 (한 프레임 안전하게 처리하기 위함)
+		std::vector<PhysicsEvent> m_physicsEventQueue;
 		//===============================
 
 		ScriptSystem   m_scriptSystem;
@@ -320,6 +324,11 @@ namespace Alice
 			ALICE_LOG_INFO("Engine::Initialize: Loaded SampleScene (Fallback or Editor).");
 		}
 
+		// ============================================= 물리 시스템 생성 =============================================
+		// PhysicsSystem 생성 (ECS 브릿지) - 씬 로드 이후, RefreshPhysicsForCurrentWorld 호출 전
+		pImpl->m_physicsSystem = std::make_unique<PhysicsSystem>(pImpl->m_world);
+		ALICE_LOG_INFO("Engine::Initialize: PhysicsSystem created.");
+
 		RefreshPhysicsForCurrentWorld(); // 물리 1회 수동호출 (씬 로드 이후 1회)
 
 		// ============================================= 후처리 =============================================
@@ -462,6 +471,9 @@ namespace Alice
 			}
 
 			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
+			
+			// 물리 이벤트 처리 (물리 시뮬레이션 이후, 게임 로직에서 안전하게 처리)
+			ProcessPhysicsEvents();
 		}
 	}
 
@@ -489,12 +501,12 @@ namespace Alice
 
 		if (settingsMap.empty())
 		{
-			pImpl->m_world.SetPhysicsWorld(nullptr);
-			// PhysicsSystem에도 nullptr 설정
+			// 안전한 파괴 순서: PhysicsSystem 먼저 정리 (액터 Destroy) → 월드 해제
 			if (pImpl->m_physicsSystem)
 			{
 				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
 			}
+			pImpl->m_world.SetPhysicsWorld(nullptr);
 			return;
 		}
 
@@ -502,12 +514,12 @@ namespace Alice
 		const auto& settings = settingsMap.begin()->second;
 		if (!settings.enablePhysics)
 		{
-			pImpl->m_world.SetPhysicsWorld(nullptr);
-			// PhysicsSystem에도 nullptr 설정
+			// 안전한 파괴 순서: PhysicsSystem 먼저 정리 (액터 Destroy) → 월드 해제
 			if (pImpl->m_physicsSystem)
 			{
 				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
 			}
+			pImpl->m_world.SetPhysicsWorld(nullptr);
 			return;
 		}
 
@@ -645,20 +657,16 @@ namespace Alice
 				}
 			}
 
-			// 이벤트 드레인 및 처리
+			// 이벤트 드레인 및 큐에 누적 (한 프레임 안전하게 처리)
 			events.clear();
 			pw->DrainEvents(events);
 			
-			// PhysicsSystem을 통해 이벤트 라우팅
-			if (pImpl->m_physicsSystem)
-			{
-				for (const auto& event : events)
-				{
-					// PhysicsSystem의 이벤트 콜백 호출
-					// (나중에 게임 시스템으로 라우팅 가능)
-					// TODO: 게임 시스템으로 이벤트 전달
-				}
-			}
+			// 이벤트를 큐에 추가 (다음 프레임 게임 로직에서 처리)
+			pImpl->m_physicsEventQueue.insert(
+				pImpl->m_physicsEventQueue.end(),
+				events.begin(),
+				events.end()
+			);
 
 			pImpl->m_physAccum -= pImpl->m_physFixedDt;
 			++steps;
@@ -681,6 +689,42 @@ namespace Alice
 				ALICE_LOG_INFO("TestBox Y = %.3f", p.y);
 			}
 		}
+	}
+
+	void Engine::ProcessPhysicsEvents()
+	{
+		// 물리 이벤트 큐 처리 (한 프레임 안전하게 처리)
+		for (const auto& e : pImpl->m_physicsEventQueue)
+		{
+			if (!e.userDataA || !e.userDataB) continue;
+
+			EntityId entityA = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(e.userDataA));
+			EntityId entityB = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(e.userDataB));
+
+			// 이벤트 타입에 따른 처리
+			switch (e.type)
+			{
+			case PhysicsEventType::ContactBegin:
+				// TODO: 게임 시스템으로 전달 (예: 스크립트 이벤트, 컴포넌트 갱신 등)
+				// ALICE_LOG_INFO("ContactBegin: Entity %llu <-> %llu", 
+				//     (unsigned long long)entityA, (unsigned long long)entityB);
+				break;
+			case PhysicsEventType::ContactEnd:
+				// TODO: 게임 시스템으로 전달
+				break;
+			case PhysicsEventType::TriggerEnter:
+				// TODO: 게임 시스템으로 전달
+				// ALICE_LOG_INFO("TriggerEnter: Entity %llu <-> %llu", 
+				//     (unsigned long long)entityA, (unsigned long long)entityB);
+				break;
+			case PhysicsEventType::TriggerExit:
+				// TODO: 게임 시스템으로 전달
+				break;
+			}
+		}
+
+		// 큐 비우기
+		pImpl->m_physicsEventQueue.clear();
 	}
 
 	//=========================================================
@@ -762,6 +806,9 @@ namespace Alice
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 1.f, 0.f, 0.f }, { 1.f, 0.f, 0.f, 1.f }); // X: Red
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 1.f, 0.f }, { 0.f, 1.f, 0.f, 1.f }); // Y: Green
 				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f }, { 0.f, 0.f, 1.f, 1.f }); // Z: Blue
+
+				// 물리 콜라이더 와이어프레임 그리기
+				PhysicsDebug::DrawColliders(pImpl->m_world, *dbg);
 
 				// === FBX/SkinnedMesh 디버그 AABB 박스 ===
 				// - SkinnedMeshRegistry의 sourceModel(FbxModel)에서 로컬 AABB를 얻어,
