@@ -1,4 +1,4 @@
-#include "Rendering/ForwardRenderSystem.h"
+﻿#include "Rendering/ForwardRenderSystem.h"
 
 #include <d3dcompiler.h>
 // 텍스처 로더 (vcpkg의 DirectXTK 사용)
@@ -341,7 +341,7 @@ namespace Alice
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbExtraLights.ReleaseAndGetAddressOf()))) return false;
 
-        // 3. ????????? ???? ???? ???? ???? ?? ????
+        // 3. 스카이박스용 동적 버퍼 설정 변경 및 생성
         desc.ByteWidth = sizeof(XMMATRIX);
         desc.Usage = D3D11_USAGE_DYNAMIC;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;

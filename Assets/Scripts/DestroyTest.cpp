@@ -1,4 +1,4 @@
-#include "DestroyTest.h"
+ï»¿#include "DestroyTest.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 #include "Core/World.h"
@@ -6,32 +6,32 @@
 
 namespace Alice
 {
-    // ÀÌ ½ºÅ©¸³Æ®¸¦ ¸®ÇÃ·º¼Ç/ÆÑÅä¸® ½Ã½ºÅÛ¿¡ µî·ÏÇÕ´Ï´Ù.
+    // ì´ ìŠ¤í¬ë¦½íŠ¸ë¥¼ ë¦¬í”Œë ‰ì…˜/íŒ©í† ë¦¬ ì‹œìŠ¤í…œì— ë“±ë¡í•©ë‹ˆë‹¤.
     REGISTER_SCRIPT(DestroyTest2);
 
     void DestroyTest2::Start()
     {
-        // ÃÊ±âÈ­ ·ÎÁ÷À» ¿©±â¿¡ ÀÛ¼ºÇÏ¼¼¿ä.
+        // ì´ˆê¸°í™” ë¡œì§ì„ ì—¬ê¸°ì— ì‘ì„±í•˜ì„¸ìš”.
     }
 
     void DestroyTest2::Update(float deltaTime)
     {
-        // ¸Å ÇÁ·¹ÀÓ È£ÃâµÇ´Â ·ÎÁ÷À» ¿©±â¿¡ ÀÛ¼ºÇÏ¼¼¿ä.
+        // ë§¤ í”„ë ˆì„ í˜¸ì¶œë˜ëŠ” ë¡œì§ì„ ì—¬ê¸°ì— ì‘ì„±í•˜ì„¸ìš”.
     }
 
     void DestroyTest2::ExampleFunction()
     {
-        // ¸®ÇÃ·º¼ÇÀ¸·Î µî·ÏµÈ ÇÔ¼ö ¿¹½ÃÀÔ´Ï´Ù.
-        // ÀÌ ÇÔ¼ö´Â ¿¡µğÅÍ¿¡¼­ È£ÃâÇÒ ¼ö ÀÖ½À´Ï´Ù.
+        // ë¦¬í”Œë ‰ì…˜ìœ¼ë¡œ ë“±ë¡ëœ í•¨ìˆ˜ ì˜ˆì‹œì…ë‹ˆë‹¤.
+        // ì´ í•¨ìˆ˜ëŠ” ì—ë””í„°ì—ì„œ í˜¸ì¶œí•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
         
-        // ¿¹½Ã: ÇöÀç gameObject¿¡ ºÙÀº Transform ÄÄÆ÷³ÍÆ®¸¦ °¡Á®¿É´Ï´Ù.
+        // ì˜ˆì‹œ: í˜„ì¬ gameObjectì— ë¶™ì€ Transform ì»´í¬ë„ŒíŠ¸ë¥¼ ê°€ì ¸ì˜µë‹ˆë‹¤.
         auto go = gameObject();
         if (!go.IsValid())
             return;
 
         if (auto* transform = go.GetComponent<TransformComponent>())
         {
-            // À§Ä¡¸¦ (0, 0, 0)À¸·Î ¸®¼ÂÇÏ´Â ¿¹½Ã
+            // ìœ„ì¹˜ë¥¼ (0, 0, 0)ìœ¼ë¡œ ë¦¬ì…‹í•˜ëŠ” ì˜ˆì‹œ
             transform->position = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
         }
     }

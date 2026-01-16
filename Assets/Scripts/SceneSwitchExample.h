@@ -1,12 +1,12 @@
-#pragma once
+ï»¿#pragma once
 
 #include "Core/IScript.h"
 
 namespace Alice
 {
-    /// F1/F2·Î ¾À ÀüÈ¯ ¿¹½Ã
-    /// - F1: ÄÚµå ¾À "SampleScene"
-    /// - F2: .scene ÆÄÀÏ "Assets/Scens/fbxScene.scene" (ÇÁ·ÎÁ§Æ®¿¡ Á¸ÀçÇÏ´Â °æ·Î·Î ¹Ù²ãµµ µÊ)
+    /// F1/F2ë¡œ ì”¬ ì „í™˜ ì˜ˆì‹œ
+    /// - F1: ì½”ë“œ ì”¬ "SampleScene"
+    /// - F2: .scene íŒŒì¼ "Assets/Scens/fbxScene.scene" (í”„ë¡œì íŠ¸ì— ì¡´ì¬í•˜ëŠ” ê²½ë¡œë¡œ ë°”ê¿”ë„ ë¨)
     class SceneSwitchExample : public IScript
     {
     public:

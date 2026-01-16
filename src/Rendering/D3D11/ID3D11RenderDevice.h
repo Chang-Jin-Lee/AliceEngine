@@ -1,8 +1,8 @@
-#pragma once
+ï»¿#pragma once
 
 #include "Rendering/IRenderDevice.h"
 
-// DirectX 11 Àü¹æ ¼±¾ğ (Çì´õ ÀÇÁ¸¼º ÃÖ¼ÒÈ­)
+// DirectX 11 ì „ë°© ì„ ì–¸ (í—¤ë” ì˜ì¡´ì„± ìµœì†Œí™”)
 struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct ID3D11RenderTargetView;
@@ -10,35 +10,35 @@ struct ID3D11DepthStencilView;
 
 namespace Alice
 {
-    /// Direct3D11 Àü¿ë ·»´õ µğ¹ÙÀÌ½º ÀÎÅÍÆäÀÌ½ºÀÔ´Ï´Ù.
-    /// - IRenderDevice À§¿¡ DX11 Å¸ÀÔÀ» ³ëÃâÇÏ±â À§ÇÑ ¾ãÀº °èÃşÀÔ´Ï´Ù.
+    /// Direct3D11 ì „ìš© ë Œë” ë””ë°”ì´ìŠ¤ ì¸í„°í˜ì´ìŠ¤ì…ë‹ˆë‹¤.
+    /// - IRenderDevice ìœ„ì— DX11 íƒ€ì…ì„ ë…¸ì¶œí•˜ê¸° ìœ„í•œ ì–‡ì€ ê³„ì¸µì…ë‹ˆë‹¤.
     struct ID3D11RenderDevice : public IRenderDevice
     {
         virtual ~ID3D11RenderDevice() = default;
 
-        /// ³»ºÎ D3D11 µğ¹ÙÀÌ½º Æ÷ÀÎÅÍ¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
+        /// ë‚´ë¶€ D3D11 ë””ë°”ì´ìŠ¤ í¬ì¸í„°ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
         virtual ID3D11Device* GetDevice() = 0;
 
-        /// ³»ºÎ D3D11 µğ¹ÙÀÌ½º ÄÁÅØ½ºÆ® Æ÷ÀÎÅÍ¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
+        /// ë‚´ë¶€ D3D11 ë””ë°”ì´ìŠ¤ ì»¨í…ìŠ¤íŠ¸ í¬ì¸í„°ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
         virtual ID3D11DeviceContext* GetImmediateContext() = 0;
 
-        /// ±âº» ¹é¹öÆÛ ·»´õ Å¸±ê ºä¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
-        /// - ·»´õ Å¸±êÀ» ÀÓ½Ã·Î ´Ù¸¥ ÅØ½ºÃ³·Î ¹Ù²å´Ù°¡, ´Ù½Ã ±âº» ¹é¹öÆÛ·Î º¹¿øÇÒ ¶§ »ç¿ëÇÕ´Ï´Ù.
+        /// ê¸°ë³¸ ë°±ë²„í¼ ë Œë” íƒ€ê¹ƒ ë·°ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
+        /// - ë Œë” íƒ€ê¹ƒì„ ì„ì‹œë¡œ ë‹¤ë¥¸ í…ìŠ¤ì²˜ë¡œ ë°”ê¿¨ë‹¤ê°€, ë‹¤ì‹œ ê¸°ë³¸ ë°±ë²„í¼ë¡œ ë³µì›í•  ë•Œ ì‚¬ìš©í•©ë‹ˆë‹¤.
         virtual ID3D11RenderTargetView* GetBackBufferRTV() = 0;
 
-        /// ±âº» ±íÀÌ ½ºÅÙ½Ç ºä¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
+        /// ê¸°ë³¸ ê¹Šì´ ìŠ¤í…ì‹¤ ë·°ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
         virtual ID3D11DepthStencilView* GetBackBufferDSV() = 0;
 
-		/// ºñµğ¿À ¸Ş¸ğ¸®¸¦ Æ®¸²(ÇØÁ¦)ÇÕ´Ï´Ù.
+		/// ë¹„ë””ì˜¤ ë©”ëª¨ë¦¬ë¥¼ íŠ¸ë¦¼(í•´ì œ)í•©ë‹ˆë‹¤.
 		virtual void TrimVideoMemory() = 0;
 
-        /// HDR Áö¿ø ¿©ºÎ¸¦ È®ÀÎÇÏ°í ÃÖ´ë ¹à±â(nits)¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
-        /// @param outMaxNits ¸ğ´ÏÅÍ ÃÖ´ë ¹à±â (nits)
-        /// @return HDR Áö¿ø ¿©ºÎ
+        /// HDR ì§€ì› ì—¬ë¶€ë¥¼ í™•ì¸í•˜ê³  ìµœëŒ€ ë°ê¸°(nits)ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
+        /// @param outMaxNits ëª¨ë‹ˆí„° ìµœëŒ€ ë°ê¸° (nits)
+        /// @return HDR ì§€ì› ì—¬ë¶€
         virtual bool IsHDRSupported(float& outMaxNits) const = 0;
 
-        /// ¹é¹öÆÛ Æ÷¸ËÀ» ¹İÈ¯ÇÕ´Ï´Ù.
-        /// @return DXGI_FORMAT_R8G8B8A8_UNORM (LDR) ¶Ç´Â DXGI_FORMAT_R10G10B10A2_UNORM (HDR)
+        /// ë°±ë²„í¼ í¬ë§·ì„ ë°˜í™˜í•©ë‹ˆë‹¤.
+        /// @return DXGI_FORMAT_R8G8B8A8_UNORM (LDR) ë˜ëŠ” DXGI_FORMAT_R10G10B10A2_UNORM (HDR)
         virtual DXGI_FORMAT GetBackBufferFormat() const = 0;
     };
 }

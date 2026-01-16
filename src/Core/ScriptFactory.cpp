@@ -1,4 +1,4 @@
-#include "Core/ScriptFactory.h"
+﻿#include "Core/ScriptFactory.h"
 #include "Core/IScript.h"
 
 #include <unordered_map>

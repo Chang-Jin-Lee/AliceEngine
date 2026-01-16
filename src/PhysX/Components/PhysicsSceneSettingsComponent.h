@@ -1,15 +1,15 @@
-#pragma once
+ï»¿#pragma once
 #include <DirectXMath.h>
 
-// opt-in ¹æ½Ä ÀÌ¶ó°í ÇÏ´õ¶ó
-// Ç¥½Ä ÄÄÆ÷³ÍÆ®
-// ÇØ´ç ÄÄÆ÷³ÍÆ®°¡ ÀÖ´ÂÁö ¾ø´ÂÁö·Î ¹°¸®¸¦ »ç¿ëÇÏ´ÂÁö ¾ÈÇÏ´ÂÁö È®ÀÎÇÔ
+// opt-in ë°©ì‹ ì´ë¼ê³  í•˜ë”ë¼
+// í‘œì‹ ì»´í¬ë„ŒíŠ¸
+// í•´ë‹¹ ì»´í¬ë„ŒíŠ¸ê°€ ìˆëŠ”ì§€ ì—†ëŠ”ì§€ë¡œ ë¬¼ë¦¬ë¥¼ ì‚¬ìš©í•˜ëŠ”ì§€ ì•ˆí•˜ëŠ”ì§€ í™•ì¸í•¨
 
 struct PhysicsSceneSettingsComponent
 {
     bool enablePhysics = true;
 
-    // TransformÀÌ DirectX ±âÁØÀÌ´Ï±î gravityµµ XMFLOAT3·Î
+    // Transformì´ DirectX ê¸°ì¤€ì´ë‹ˆê¹Œ gravityë„ XMFLOAT3ë¡œ
     DirectX::XMFLOAT3 gravity = { 0.0f, -9.81f, 0.0f };
 
     float fixedDt = 1.0f / 60.0f;

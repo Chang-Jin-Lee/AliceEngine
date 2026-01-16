@@ -1,4 +1,4 @@
-#include "Core/ComponentRegistry.h"
+﻿#include "Core/ComponentRegistry.h"
 #include "Core/World.h"
 #include "Logger.h"
 

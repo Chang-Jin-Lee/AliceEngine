@@ -1,4 +1,4 @@
-#include "ViewportPicker.h"
+﻿#include "ViewportPicker.h"
 
 #include <algorithm>
 #include <cfloat>

@@ -1,4 +1,4 @@
-#include "Core/ScriptHotReload.h"
+ï»¿#include "Core/ScriptHotReload.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -33,7 +33,7 @@ namespace Alice
             if (!dllName)
                 return false;
 
-            // ÀÌÀü¿¡ ·ÎµåµÈ ¸ğµâÀÌ ÀÖ´Ù¸é ¸ÕÀú ¾ğ·Îµå
+            // ì´ì „ì— ë¡œë“œëœ ëª¨ë“ˆì´ ìˆë‹¤ë©´ ë¨¼ì € ì–¸ë¡œë“œ
             if (g_ScriptModule)
             {
                 ScriptHotReload_Unload();
@@ -91,7 +91,7 @@ namespace Alice
             g_ScriptModule = nullptr;
         }
 
-        // µ¿Àû ½ºÅ©¸³Æ® ÇÔ¼ö Æ÷ÀÎÅÍ ÇØÁ¦
+        // ë™ì  ìŠ¤í¬ë¦½íŠ¸ í•¨ìˆ˜ í¬ì¸í„° í•´ì œ
         SetDynamicScriptFunctions(nullptr, nullptr, nullptr);
         ALICE_LOG_INFO("ScriptHotReload: unloaded script DLL");
     }

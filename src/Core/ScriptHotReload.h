@@ -1,15 +1,15 @@
-#pragma once
+О╩©#pragma once
 
 namespace Alice
 {
-    /// AliceScripts.dll ю╩ ╥н╣Его©╘ ╣©юШ ╫╨е╘╦Ёф╝ гт╪Ж фВюнем╦╕ ╣Н╥огу╢о╢ы.
-    /// - dllName ю╨ ╨╦еК "AliceScripts.dll" ют╢о╢ы.
+    /// AliceScripts.dll Л²└ К║°К⌠°М∙≤Л≈╛ К▐≥Л═│ Л┼╓М│╛К╕╫М┼╦ М∙╗Л┬≤ М▐╛Л²╦М└╟К╔╪ К⌠╠К║²М∙╘К▀┬К▀╓.
+    /// - dllName Л²─ КЁ╢М├╣ "AliceScripts.dll" Л·┘К▀┬К▀╓.
     bool ScriptHotReload_Load(const wchar_t* dllName = L"AliceScripts.dll");
 
-    /// юл╧л ╥н╣Е╣х DLL ю╩ ╬П╥н╣Е гя ╣з ╢ы╫ц ╥н╣Егу╢о╢ы.
+    /// Л²╢К╞╦ К║°К⌠°К░° DLL Л²└ Л√╦К║°К⌠° М∙° К▓╓ К▀╓Л▀° К║°К⌠°М∙╘К▀┬К▀╓.
     bool ScriptHotReload_Reload(const wchar_t* dllName = L"AliceScripts.dll");
 
-    /// DLL ю╩ ╬П╥н╣Его╟М, ╣©юШ ╫╨е╘╦Ёф╝ гт╪Ж фВюнем╦╕ ╦П╣н гьа╕гу╢о╢ы.
+    /// DLL Л²└ Л√╦К║°К⌠°М∙≤ЙЁ═, К▐≥Л═│ Л┼╓М│╛К╕╫М┼╦ М∙╗Л┬≤ М▐╛Л²╦М└╟К╔╪ К╙╗К▒░ М∙╢Л═°М∙╘К▀┬К▀╓.
     void ScriptHotReload_Unload();
 }
 
