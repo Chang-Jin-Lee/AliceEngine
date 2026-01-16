@@ -16,14 +16,14 @@
 
 namespace Alice
 {
-    /// @note RTTR ±â¹İÀ¸·Î ·»´õ¸µÇÏ´Â À¯Æ¿¸®Æ¼ Å¬·¡½º
+    /// @note RTTR ê¸°ë°˜ìœ¼ë¡œ ë Œë”ë§í•˜ëŠ” ìœ í‹¸ë¦¬í‹° í´ë˜ìŠ¤
     namespace ReflectionUI
     {
         namespace Detail
         {
-            /// @param obj ÀÎ½ºÅÏ½º
-            /// @param label ·»´õ¸µÇÒ ¶óº§
-            /// @return º¯°æ ¿©ºÎ
+            /// @param obj ì¸ìŠ¤í„´ìŠ¤
+            /// @param label ë Œë”ë§í•  ë¼ë²¨
+            /// @return ë³€ê²½ ì—¬ë¶€
             inline bool RenderProperty(const rttr::property& prop, rttr::instance& obj, 
                                       const std::string& label = "")
             {
@@ -86,18 +86,18 @@ namespace Alice
                 }
                 else if (propType.is_class())
                 {
-                    // ÇÁ·ÎÆÛÆ¼ Å¸ÀÔÀÌ Å¬·¡½ºÀÎ °æ¿ì ·»´õ¸µ
+                    // í”„ë¡œí¼í‹° íƒ€ì…ì´ í´ë˜ìŠ¤ì¸ ê²½ìš° ë Œë”ë§
                     rttr::type classType = propType;
                     std::string className = classType.get_name().to_string();
 
-                    // XMFLOAT3 Å¸ÀÔ ·»´õ¸µ
+                    // XMFLOAT3 íƒ€ì… ë Œë”ë§
                     if (className == "XMFLOAT3")
                     {
                         rttr::instance inst = value;
                         DirectX::XMFLOAT3* float3 = inst.try_convert<DirectX::XMFLOAT3>();
                         if (float3)
                         {
-                            // "color" ¶Ç´Â "Color"°¡ Æ÷ÇÔµÈ °æ¿ì »ö»ó ÆíÁı ÄÁÆ®·Ñ·Î ·»´õ¸µ
+                            // "color" ë˜ëŠ” "Color"ê°€ í¬í•¨ëœ ê²½ìš° ìƒ‰ìƒ í¸ì§‘ ì»¨íŠ¸ë¡¤ë¡œ ë Œë”ë§
                             bool isColor = propName.find("color") != std::string::npos || 
                                           propName.find("Color") != std::string::npos;
                             
@@ -119,7 +119,7 @@ namespace Alice
                             }
                         }
                     }
-                    // XMFLOAT4 Å¸ÀÔ ·»´õ¸µ
+                    // XMFLOAT4 íƒ€ì… ë Œë”ë§
                     else if (className == "XMFLOAT4")
                     {
                         rttr::instance inst = value;
@@ -149,7 +149,7 @@ namespace Alice
                     }
                     else
                     {
-                        // Æ®¸® ³ëµå·Î ·»´õ¸µ
+                        // íŠ¸ë¦¬ ë…¸ë“œë¡œ ë Œë”ë§
                         if (ImGui::TreeNode(displayName.c_str()))
                         {
                             rttr::instance inst = value;
@@ -165,12 +165,12 @@ namespace Alice
                 return changed;
             }
 
-            /// @param prop ÇÁ·ÎÆÛÆ¼
-            /// @param obj ÀÎ½ºÅÏ½º
-            /// @param minVal ÃÖ¼Ò°ª
-            /// @param maxVal ÃÖ´ë°ª
-            /// @param label ·»´õ¸µÇÒ ¶óº§
-            /// @return º¯°æ ¿©ºÎ
+            /// @param prop í”„ë¡œí¼í‹°
+            /// @param obj ì¸ìŠ¤í„´ìŠ¤
+            /// @param minVal ìµœì†Œê°’
+            /// @param maxVal ìµœëŒ€ê°’
+            /// @param label ë Œë”ë§í•  ë¼ë²¨
+            /// @return ë³€ê²½ ì—¬ë¶€
             inline bool RenderPropertyWithRange(const rttr::property& prop, rttr::instance& obj,
                                                float minVal, float maxVal,
                                                const std::string& label = "")
@@ -203,9 +203,9 @@ namespace Alice
             }
         }
 
-        /// @param obj ÀÎ½ºÅÏ½º
-        /// @param filter ÇÊÅÍ ÇÔ¼ö
-        /// @return º¯°æ ¿©ºÎ
+        /// @param obj ì¸ìŠ¤í„´ìŠ¤
+        /// @param filter í•„í„° í•¨ìˆ˜
+        /// @return ë³€ê²½ ì—¬ë¶€
         template<typename T>
         bool RenderInspector(T& obj, const std::function<bool(const std::string&)>& filter = nullptr)
         {
@@ -217,11 +217,11 @@ namespace Alice
             {
                 std::string propName = prop.get_name().to_string();
                 
-                // roughness, metalness ÇÁ·ÎÆÛÆ¼´Â ÀÚµ¿À¸·Î SliderFloat·Î ·»´õ¸µ
+                // roughness, metalness í”„ë¡œí¼í‹°ëŠ” ìë™ìœ¼ë¡œ SliderFloatë¡œ ë Œë”ë§
                 if (filter && !filter(propName))
                     continue;
 
-                // ±× ¿Ü ÇÁ·ÎÆÛÆ¼´Â ÀÚµ¿À¸·Î ·»´õ¸µ
+                // ê·¸ ì™¸ í”„ë¡œí¼í‹°ëŠ” ìë™ìœ¼ë¡œ ë Œë”ë§
                 if (propName == "roughness" || propName == "metalness")
                 {
                     changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f);
@@ -235,11 +235,11 @@ namespace Alice
             return changed;
         }
 
-        /// @param obj ÀÎ½ºÅÏ½º
-        /// @param propName ÇÁ·ÎÆÛÆ¼ ÀÌ¸§
-        /// @param label ·»´õ¸µÇÒ ¶óº§
-        /// @return º¯°æ ¿©ºÎ
-        // ÇÁ·ÎÆÛÆ¼ ·»´õ¸µ
+        /// @param obj ì¸ìŠ¤í„´ìŠ¤
+        /// @param propName í”„ë¡œí¼í‹° ì´ë¦„
+        /// @param label ë Œë”ë§í•  ë¼ë²¨
+        /// @return ë³€ê²½ ì—¬ë¶€
+        // í”„ë¡œí¼í‹° ë Œë”ë§
         template<typename T>
         bool RenderProperty(T& obj, const std::string& propName, const std::string& label = "")
         {
@@ -256,10 +256,10 @@ namespace Alice
             return Detail::RenderProperty(prop, inst, label.empty() ? propName : label);
         }
 
-        // ÇÁ·ÎÆÛÆ¼ ·»´õ¸µ
-        /// @param obj ÀÎ½ºÅÏ½º
-        /// @param labelMap ·»´õ¸µÇÒ ¶óº§ ¸Ê
-        /// @return º¯°æ ¿©ºÎ
+        // í”„ë¡œí¼í‹° ë Œë”ë§
+        /// @param obj ì¸ìŠ¤í„´ìŠ¤
+        /// @param labelMap ë Œë”ë§í•  ë¼ë²¨ ë§µ
+        /// @return ë³€ê²½ ì—¬ë¶€
         template<typename T>
         bool RenderInspectorWithLabels(T& obj, const std::unordered_map<std::string, std::string>& labelMap)
         {
@@ -276,7 +276,7 @@ namespace Alice
                 if (it != labelMap.end())
                     displayLabel = it->second;
 
-                // roughness, metalness´Â ÀÚµ¿À¸·Î SliderFloat·Î ·»´õ¸µ
+                // roughness, metalnessëŠ” ìë™ìœ¼ë¡œ SliderFloatë¡œ ë Œë”ë§
                 if (propName == "roughness" || propName == "metalness")
                 {
                     changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel);
