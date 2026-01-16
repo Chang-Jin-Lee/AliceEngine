@@ -134,7 +134,6 @@ set(ENGINE_SOURCES
     #Physx Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
-    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.cpp
 
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
@@ -224,7 +223,6 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
-    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.h
     #Components
     ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/ColliderComponent.h
