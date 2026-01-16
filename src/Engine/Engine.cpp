@@ -40,6 +40,7 @@
 #include "Game/SkinnedAnimationSystem.h"
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
+#include "PhysX/PhysicsSystem.h" // 물리 시스템
 
 // 문자열 변환 / ImGui 래퍼
 #include "Core/StringUtils.h"
@@ -87,6 +88,7 @@ namespace Alice
 
 		//===============================		
 		PhysicsModule m_physics; // 물리 모듈
+		std::unique_ptr<PhysicsSystem> m_physicsSystem; // 물리 시스템 (ECS 브릿지)
 		//테스트용
 		std::unique_ptr<IRigidBody>    m_testBox;
 		std::unique_ptr<IPhysicsActor> m_testGround; // 옵션
@@ -453,7 +455,13 @@ namespace Alice
 			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
 			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
 
-			TickPhysics(dt); // 물리
+			// PhysicsSystem 업데이트 (Game → Physics 동기화)
+			if (pImpl->m_physicsSystem)
+			{
+				pImpl->m_physicsSystem->Update(dt);
+			}
+
+			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
 		}
 	}
 
@@ -461,77 +469,133 @@ namespace Alice
 	// 물리
 	void Alice::Engine::RefreshPhysicsForCurrentWorld()
 	{
+		// 기존 테스트 바디 정리 (씬 전환 시 안전하게 정리)
+		if (pImpl->m_testBox)
+		{
+			pImpl->m_testBox.reset();
+		}
+		if (pImpl->m_testGround)
+		{
+			pImpl->m_testGround.reset();
+		}
+		if (pImpl->m_testEntity != InvalidEntityId)
+		{
+			pImpl->m_world.DestroyEntity(pImpl->m_testEntity);
+			pImpl->m_testEntity = InvalidEntityId;
+		}
+
 		// settings가 없으면, 물리월드 제거(비물리 씬)
 		const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
 
 		if (settingsMap.empty())
 		{
 			pImpl->m_world.SetPhysicsWorld(nullptr);
-
+			// PhysicsSystem에도 nullptr 설정
+			if (pImpl->m_physicsSystem)
+			{
+				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+			}
 			return;
 		}
 
+		// 여러 settings 컴포넌트가 있을 경우 첫 번째 것만 사용 (명확하게)
 		const auto& settings = settingsMap.begin()->second;
 		if (!settings.enablePhysics)
 		{
 			pImpl->m_world.SetPhysicsWorld(nullptr);
+			// PhysicsSystem에도 nullptr 설정
+			if (pImpl->m_physicsSystem)
+			{
+				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+			}
 			return;
 		}
 
-		if (pImpl->m_world.GetPhysicsWorld())
-			return;
+		IPhysicsWorld* existingWorld = pImpl->m_world.GetPhysicsWorld();
+		Vec3 newGravity = Vec3(settings.gravity.x, settings.gravity.y, settings.gravity.z);
 
+		// 기존 월드가 있고 설정이 변경되지 않았다면 그대로 사용
+		if (existingWorld)
+		{
+			Vec3 currentGravity = existingWorld->GetGravity();
+			// 중력이 변경되었으면 업데이트
+			if (currentGravity.x != newGravity.x || currentGravity.y != newGravity.y || currentGravity.z != newGravity.z)
+			{
+				existingWorld->SetGravity(newGravity);
+				ALICE_LOG_INFO("PhysicsWorld gravity updated: (%.2f, %.2f, %.2f)", newGravity.x, newGravity.y, newGravity.z);
+			}
+
+			// fixedDt/maxSubsteps는 매 프레임 업데이트 (에디터에서 변경 가능)
+			pImpl->m_physFixedDt = settings.fixedDt;
+			pImpl->m_physMaxSubsteps = settings.maxSubsteps;
+			// accum은 유지 (프레임 드롭 방지)
+
+			// PhysicsSystem에 물리 월드 설정 (이미 있지만 재설정)
+			if (pImpl->m_physicsSystem)
+			{
+				pImpl->m_physicsSystem->SetPhysicsWorld(existingWorld);
+			}
+
+			return;
+		}
+
+		// 새 월드 생성
 		PhysicsModule::WorldDesc desc{};
-		desc.gravity = Vec3(settings.gravity.x, settings.gravity.y, settings.gravity.z);
+		desc.gravity = newGravity;
 		// 필요하면 여기서 CCD / 이벤트 옵션들 설정
 
-		std::shared_ptr<IPhysicsWorld> world = pImpl->m_physics.CreateWorld(desc); // shared_ptr<IPhysicsWorld> 반환
+		std::shared_ptr<IPhysicsWorld> world = pImpl->m_physics.CreateWorld(desc);
+		if (!world)
+		{
+			ALICE_LOG_ERRORF("Failed to create PhysicsWorld");
+			return;
+		}
+
 		ALICE_LOG_INFO("PhysicsWorld created: %p", world.get());
 		pImpl->m_world.SetPhysicsWorld(world);
+		
+		// PhysicsSystem에 물리 월드 설정
+		if (pImpl->m_physicsSystem)
+		{
+			pImpl->m_physicsSystem->SetPhysicsWorld(world.get());
+		}
 
-		// fixedDt/maxSubsteps도 엔진이 기억해야 한다면 Engine::Impl에 저장해 둬라.
-
-		//테스트용 바디 생성
 		// settings 반영
 		pImpl->m_physFixedDt = settings.fixedDt;
 		pImpl->m_physMaxSubsteps = settings.maxSubsteps;
 		pImpl->m_physAccum = 0.0f;
 
 		// ---- Smoke test (딱 한번만) ----
-		if (!pImpl->m_testBox)
+		IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
+		if (pw)
 		{
-			IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
-			if (pw)
-			{
-				// 바닥
-				pImpl->m_testGround = pw->CreateStaticPlaneActor();
+			// 바닥
+			pImpl->m_testGround = pw->CreateStaticPlaneActor();
 
-				// 테스트 엔티티 하나 만들고 Transform 추가(이미 있으면 스킵 가능)
-				pImpl->m_testEntity = pImpl->m_world.CreateEntity();
-				auto& tr = pImpl->m_world.AddComponent<TransformComponent>(pImpl->m_testEntity);
-				tr.position = { 0.f, 5.f, 0.f };
-				tr.rotation = { 0.f, 0.f, 0.f };
+			// 테스트 엔티티 하나 만들고 Transform 추가
+			pImpl->m_testEntity = pImpl->m_world.CreateEntity();
+			auto& tr = pImpl->m_world.AddComponent<TransformComponent>(pImpl->m_testEntity);
+			tr.position = { 0.f, 5.f, 0.f };
+			tr.rotation = { 0.f, 0.f, 0.f };
 
-				// 동적 박스
-				RigidBodyDesc rb{};
-				rb.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(pImpl->m_testEntity));
+			// 동적 박스
+			RigidBodyDesc rb{};
+			rb.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(pImpl->m_testEntity));
 
-				BoxColliderDesc box{};
-				box.halfExtents = { 0.5f, 0.5f, 0.5f };
-				box.userData = rb.userData;
+			BoxColliderDesc box{};
+			box.halfExtents = { 0.5f, 0.5f, 0.5f };
+			box.userData = rb.userData;
 
-				pImpl->m_testBox = pw->CreateDynamicBox(
-					Vec3(0.f, 5.f, 0.f),
-					Quat::Identity,
-					rb,
-					box
-				);
+			pImpl->m_testBox = pw->CreateDynamicBox(
+				Vec3(0.f, 5.f, 0.f),
+				Quat::Identity,
+				rb,
+				box
+			);
 
-				ALICE_LOG_INFO("SmokeTest box created. entity=%llu", (unsigned long long)pImpl->m_testEntity);
-			}
+			ALICE_LOG_INFO("SmokeTest box created. entity=%llu", (unsigned long long)pImpl->m_testEntity);
 		}
 		//----------여기까지 테스트용
-
 	}
 
 	void Engine::TickPhysics(float dt)
@@ -546,6 +610,8 @@ namespace Alice
 
 		std::vector<ActiveTransform> moved;
 
+		std::vector<PhysicsEvent> events;
+
 		while (pImpl->m_physAccum >= pImpl->m_physFixedDt && steps < pImpl->m_physMaxSubsteps)
 		{
 			pw->Step(pImpl->m_physFixedDt);
@@ -553,16 +619,45 @@ namespace Alice
 			moved.clear();
 			pw->DrainActiveTransforms(moved);
 
-			for (const auto& at : moved)
+			// Physics → Game 동기화 (PhysicsSystem을 통해 처리)
+			if (pImpl->m_physicsSystem)
 			{
-				if (!at.userData) continue;
-				const EntityId id = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(at.userData));
+				for (const auto& at : moved)
+				{
+					pImpl->m_physicsSystem->SyncPhysicsToGame(at);
+				}
+			}
+			else
+			{
+				// Fallback: PhysicsSystem이 없을 때 직접 동기화
+				for (const auto& at : moved)
+				{
+					if (!at.userData) continue;
+					const EntityId id = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(at.userData));
 
-				auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
-				if (!tr) continue;
+					auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
+					if (!tr) continue;
 
-				tr->position = { at.position.x, at.position.y, at.position.z };
-				// 회전은 나중에(일단 위치만 확인해도 스모크 테스트 충분)
+					tr->position = { at.position.x, at.position.y, at.position.z };
+					// 회전도 동기화
+					DirectX::XMFLOAT3 euler = pImpl->m_physicsSystem->ToEulerRadians(at.rotation);
+					tr->rotation = euler;
+				}
+			}
+
+			// 이벤트 드레인 및 처리
+			events.clear();
+			pw->DrainEvents(events);
+			
+			// PhysicsSystem을 통해 이벤트 라우팅
+			if (pImpl->m_physicsSystem)
+			{
+				for (const auto& event : events)
+				{
+					// PhysicsSystem의 이벤트 콜백 호출
+					// (나중에 게임 시스템으로 라우팅 가능)
+					// TODO: 게임 시스템으로 이벤트 전달
+				}
 			}
 
 			pImpl->m_physAccum -= pImpl->m_physFixedDt;
@@ -573,13 +668,18 @@ namespace Alice
 			pImpl->m_physAccum = 0.0f;
 
 		// 로그로 떨어지는지 확인 (1초에 1번만)
+		// 주의: 월드가 유효할 때만 호출 (Use-after-free 방지)
 		static float logAccum = 0.f;
 		logAccum += dt;
-		if (logAccum > 1.f && pImpl->m_testBox)
+		if (logAccum > 1.f && pImpl->m_testBox && pw)
 		{
 			logAccum = 0.f;
-			auto p = pImpl->m_testBox->GetPosition();
-			ALICE_LOG_INFO("TestBox Y = %.3f", p.y);
+			// 월드가 유효한지 확인 후 호출
+			if (pImpl->m_world.GetPhysicsWorld() == pw)
+			{
+				auto p = pImpl->m_testBox->GetPosition();
+				ALICE_LOG_INFO("TestBox Y = %.3f", p.y);
+			}
 		}
 	}
 

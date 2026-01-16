@@ -372,6 +372,8 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		// Use PCM by default (better contact generation in most cases)
 		sdesc.flags |= PxSceneFlag::eENABLE_PCM;
 
+		
+
 		scene = physics->createScene(sdesc);
 		if (!scene) throw std::runtime_error("createScene failed");
 

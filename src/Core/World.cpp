@@ -19,6 +19,9 @@ namespace Alice {
 		m_skinnedMeshes.Clear();
 		m_skinnedAnimations.Clear();
 		m_cameras.Clear();
+		m_physicsSettings.Clear();
+		m_rigidBodies.Clear();
+		m_colliders.Clear();
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
@@ -67,6 +70,9 @@ namespace Alice {
 		m_skinnedMeshes.Remove(id);
 		m_skinnedAnimations.Remove(id);
 		m_cameras.Remove(id);
+		m_physicsSettings.Remove(id);
+		m_rigidBodies.Remove(id);
+		m_colliders.Remove(id);
 	}
 
 	GameObject World::FindGameObject(const std::string& name)
