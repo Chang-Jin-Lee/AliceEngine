@@ -39,6 +39,54 @@ namespace Alice
         DirectX::XMFLOAT3 fillDirection { -0.5f, -0.5f, -0.2f };
     };
 
+    // ==== 추가 라이트 (Point/Spot/Rect) ====
+    static constexpr int MaxPointLights = 16;
+    static constexpr int MaxSpotLights = 16;
+    static constexpr int MaxRectLights = 16;
+
+    struct PointLightGPU
+    {
+        DirectX::XMFLOAT3 position;
+        float range;
+        DirectX::XMFLOAT3 color;
+        float intensity;
+    };
+
+    struct SpotLightGPU
+    {
+        DirectX::XMFLOAT3 position;
+        float range;
+        DirectX::XMFLOAT3 direction;
+        float innerCos;
+        DirectX::XMFLOAT3 color;
+        float outerCos;
+        float intensity;
+        float pad[3];
+    };
+
+    struct RectLightGPU
+    {
+        DirectX::XMFLOAT3 position;
+        float range;
+        DirectX::XMFLOAT3 direction;
+        float width;
+        DirectX::XMFLOAT3 color;
+        float height;
+        float intensity;
+        float pad[3];
+    };
+
+    struct ExtraLightsCB
+    {
+        int pointCount;
+        int spotCount;
+        int rectCount;
+        int pad0;
+        PointLightGPU pointLights[MaxPointLights];
+        SpotLightGPU spotLights[MaxSpotLights];
+        RectLightGPU rectLights[MaxRectLights];
+    };
+
      /// 스키닝 메시를 그리기 위한 드로우 커맨드입니다.
     struct SkinnedDrawCommand
     {
