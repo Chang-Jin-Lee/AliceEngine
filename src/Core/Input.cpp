@@ -1,10 +1,10 @@
-#include "Core/Input.h"
+ï»¿#include "Core/Input.h"
 
 namespace Alice
 {
     Input::Input()
     {
-        // ¹è¿­À» ¸ğµÎ false / 0 À¸·Î ÃÊ±âÈ­ÇÕ´Ï´Ù.
+        // ë°°ì—´ì„ ëª¨ë‘ false / 0 ìœ¼ë¡œ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
         ZeroMemory(m_keys, sizeof(m_keys));
         ZeroMemory(m_mouseButtons, sizeof(m_mouseButtons));
         m_mousePosition = POINT{ 0, 0 };
@@ -14,7 +14,7 @@ namespace Alice
 
     void Input::NewFrame()
     {
-        // ¸¶¿ì½º µ¨Å¸´Â ÇÁ·¹ÀÓ¸¶´Ù ÃÊ±âÈ­ÇÕ´Ï´Ù.
+        // ë§ˆìš°ìŠ¤ ë¸íƒ€ëŠ” í”„ë ˆì„ë§ˆë‹¤ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
         m_mouseDelta.x = 0;
         m_mouseDelta.y = 0;
     }
@@ -45,7 +45,7 @@ namespace Alice
             m_hasPreviousPos = true;
         }
 
-        // ÀÌ¹ø ÇÁ·¹ÀÓÀÇ µ¨Å¸¸¦ ´©ÀûÇÕ´Ï´Ù.
+        // ì´ë²ˆ í”„ë ˆì„ì˜ ë¸íƒ€ë¥¼ ëˆ„ì í•©ë‹ˆë‹¤.
         m_mouseDelta.x += current.x - m_prevMousePosition.x;
         m_mouseDelta.y += current.y - m_prevMousePosition.y;
 

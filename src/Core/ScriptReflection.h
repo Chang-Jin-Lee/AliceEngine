@@ -1,14 +1,14 @@
-#pragma once
+ï»¿#pragma once
 
-// Script Àü¿ë RTTR µî·Ï/SerializeField À¯Æ¿
-// - C++Àº "º¯¼ö À§¿¡ UPROPERTY" °°Àº ÄÚµå ºĞ¼®ÀÌ ¾øÀ¸¹Ç·Î, µî·ÏÀº RTTR_REGISTRATION¿¡¼­ ÇÕ´Ï´Ù.
-// - ´ë½Å ¸ÅÅ©·Î·Î (ÀÌ¸§ ¹®ÀÚ¿­/Getter/Setter/¸ŞÅ¸µ¥ÀÌÅÍ)¸¦ ÇÑ ¹ø¿¡ ¹­¾î¼­ Âª°Ô ¾¹´Ï´Ù.
+// Script ì „ìš© RTTR ë“±ë¡/SerializeField ìœ í‹¸
+// - C++ì€ "ë³€ìˆ˜ ìœ„ì— UPROPERTY" ê°™ì€ ì½”ë“œ ë¶„ì„ì´ ì—†ìœ¼ë¯€ë¡œ, ë“±ë¡ì€ RTTR_REGISTRATIONì—ì„œ í•©ë‹ˆë‹¤.
+// - ëŒ€ì‹  ë§¤í¬ë¡œë¡œ (ì´ë¦„ ë¬¸ìì—´/Getter/Setter/ë©”íƒ€ë°ì´í„°)ë¥¼ í•œ ë²ˆì— ë¬¶ì–´ì„œ ì§§ê²Œ ì”ë‹ˆë‹¤.
 #include <rttr/type>
 #include <rttr/registration.h>
 #include "Core/IScript.h"
 
 // ---- Field declaration helpers (in .h) ----
-// private ÇÊµå´Â RTTRÀÌ Á÷Á¢ ÁÖ¼Ò¸¦ ¸ø ÀâÀ¸¹Ç·Î, getter/setter¸¦ ÀÚµ¿ »ı¼ºÇØ¼­ µî·ÏÇÕ´Ï´Ù.
+// private í•„ë“œëŠ” RTTRì´ ì§ì ‘ ì£¼ì†Œë¥¼ ëª» ì¡ìœ¼ë¯€ë¡œ, getter/setterë¥¼ ìë™ ìƒì„±í•´ì„œ ë“±ë¡í•©ë‹ˆë‹¤.
 //#define ALICE_SERIALIZE_FIELD(Type, Name, DefaultValue) \
 //private: \
 //    Type Name = DefaultValue; \
@@ -22,15 +22,15 @@
 //{ \
 //    rttr::registration::class_<Type>(#Type).constructor<>()
 //
-//// public ÇÊµå µî·Ï (public ¸â¹ö¸¸)
+//// public í•„ë“œ ë“±ë¡ (public ë©¤ë²„ë§Œ)
 //#define ALICE_SCRIPT_PUBLIC_FIELD(Type, Name) \
 //    .property(#Name, &Type::Name)
 //
-//// SerializeField µî·Ï (ALICE_SERIALIZE_FIELD·Î ¸¸µç getter/setter ´ë»ó)
+//// SerializeField ë“±ë¡ (ALICE_SERIALIZE_FIELDë¡œ ë§Œë“  getter/setter ëŒ€ìƒ)
 //#define ALICE_SCRIPT_SERIALIZE_FIELD(Type, Name) \
 //    .property(#Name, &Type::Get_##Name, &Type::Set_##Name)(rttr::metadata("SerializeField", true))
 //
-//// EntityId ÇÊµå¿¡ "ÀÌ ÄÄÆ÷³ÍÆ®¸¦ °¡Áø ¿£Æ¼Æ¼¸¸ ¼±ÅÃ" °°Àº ÇÊÅÍ¸¦ °É°í ½ÍÀ» ¶§ »ç¿ë(¹®ÀÚ¿­ ±â¹İ)
+//// EntityId í•„ë“œì— "ì´ ì»´í¬ë„ŒíŠ¸ë¥¼ ê°€ì§„ ì—”í‹°í‹°ë§Œ ì„ íƒ" ê°™ì€ í•„í„°ë¥¼ ê±¸ê³  ì‹¶ì„ ë•Œ ì‚¬ìš©(ë¬¸ìì—´ ê¸°ë°˜)
 //#define ALICE_SCRIPT_ENTITY_FIELD(Type, Name, RequiredComponentName) \
 //    .property(#Name, &Type::Get_##Name, &Type::Set_##Name) \
 //    (rttr::metadata("SerializeField", true), rttr::metadata("EntityRef", true), rttr::metadata("RequiredComponent", RequiredComponentName))
@@ -40,7 +40,7 @@
 //}
 
 // ==================================================================================
-// 1. Å¬·¡½º ¼³Á¤ ¸ÅÅ©·Î (ALICE_BODY)
+// 1. í´ë˜ìŠ¤ ì„¤ì • ë§¤í¬ë¡œ (ALICE_BODY)
 // ==================================================================================
 #define ALICE_BODY(ClassName) \
 public: \
@@ -57,7 +57,7 @@ private: \
     inline static ClassReflector _reg_ctor; 
 
 // ==================================================================================
-// 2. º¯¼ö(ÇÊµå) µî·Ï ¸ÅÅ©·Î (ALICE_PROPERTY)
+// 2. ë³€ìˆ˜(í•„ë“œ) ë“±ë¡ ë§¤í¬ë¡œ (ALICE_PROPERTY)
 // ==================================================================================
 #define ALICE_PROPERTY(Type, Name, DefaultValue) \
 private: \
@@ -75,7 +75,7 @@ private: \
     inline static Reflector_##Name _reg_##Name;
 
 // ==================================================================================
-// 3. ÇÔ¼ö(¸Ş¼­µå) µî·Ï ¸ÅÅ©·Î (ALICE_FUNC)
+// 3. í•¨ìˆ˜(ë©”ì„œë“œ) ë“±ë¡ ë§¤í¬ë¡œ (ALICE_FUNC)
 // ==================================================================================
 #define ALICE_FUNC(FuncName) \
 private: \
@@ -87,7 +87,7 @@ private: \
     }; \
     inline static Reflector_Func_##FuncName _reg_func_##FuncName;
 
-// Get, Set ÀÚµ¿»ı¼º ÇØÁÖ´Â ºÎºĞÀÎµ¥, Áö±İÀº ¾È¾²ÀÌ±äÇÔ
+// Get, Set ìë™ìƒì„± í•´ì£¼ëŠ” ë¶€ë¶„ì¸ë°, ì§€ê¸ˆì€ ì•ˆì“°ì´ê¸´í•¨
 #define ALICE_GET_PROP(Instance, Name) \
     (rttr::type::get(Instance).get_property(#Name).get_value(Instance))
 

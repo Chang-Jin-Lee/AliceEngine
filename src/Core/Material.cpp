@@ -1,6 +1,6 @@
-#include "Core/Material.h"
+ï»¿#include "Core/Material.h"
 #include "Core/ReflectionSerializer.h"
-#include "Core/ComponentRegistry.h"  // RTTR µî·Ï ÄÚµå Æ÷ÇÔ
+#include "Core/ComponentRegistry.h"  // RTTR ë“±ë¡ ì½”ë“œ í¬í•¨
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -17,10 +17,10 @@ namespace Alice
     {
         bool Load(const std::filesystem::path& path, MaterialComponent& outMaterial)
         {
-            // RTTR ±â¹İÀ¸·Î ÀÚµ¿ ·Îµå
+            // RTTR ê¸°ë°˜ìœ¼ë¡œ ìë™ ë¡œë“œ
             bool result = ReflectionSerializer::Load(path, outMaterial);
             
-            // roughness, metalness Å¬·¥ÇÎ (RTTR·Î´Â ±âº»°ª Ã³¸®¸¸ ÇÏ¹Ç·Î ¿©±â¼­ º¸Á¤)
+            // roughness, metalness í´ë¨í•‘ (RTTRë¡œëŠ” ê¸°ë³¸ê°’ ì²˜ë¦¬ë§Œ í•˜ë¯€ë¡œ ì—¬ê¸°ì„œ ë³´ì •)
             outMaterial.roughness = std::clamp(outMaterial.roughness, 0.0f, 1.0f);
             outMaterial.metalness = std::clamp(outMaterial.metalness, 0.0f, 1.0f);
 
@@ -36,7 +36,7 @@ namespace Alice
 
         bool Save(const std::filesystem::path& path, const MaterialComponent& material)
         {
-            // RTTR ±â¹İÀ¸·Î ÀÚµ¿ ÀúÀå
+            // RTTR ê¸°ë°˜ìœ¼ë¡œ ìë™ ì €ì¥
             bool result = ReflectionSerializer::Save(path, material);
 
             ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f tex=\"%s\"",

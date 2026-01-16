@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include <string>
@@ -68,8 +68,8 @@ public:
 		const std::unordered_map<std::string,int>& nodeIndexOfName,
 		std::vector<DirectX::XMFLOAT4X4>& outGlobal) const;
 
-	// CPU ÆÈ·¹Æ® »ı¼º (ForwardRenderSystem¿¡¼­ ÀüÄ¡ÇØ¼­ ¾÷·ÎµåÇÏ¹Ç·Î ÀüÄ¡ ¾øÀÌ XMFLOAT4X4·Î ¹İÈ¯)
-	// - precomputed clipÀÌ ÀÖÀ¸¸é ±×°É »ç¿ëÇÏ°í, ¾øÀ¸¸é on-the-fly Æò°¡·Î fallback ÇÕ´Ï´Ù.
+	// CPU íŒ”ë ˆíŠ¸ ìƒì„± (ForwardRenderSystemì—ì„œ ì „ì¹˜í•´ì„œ ì—…ë¡œë“œí•˜ë¯€ë¡œ ì „ì¹˜ ì—†ì´ XMFLOAT4X4ë¡œ ë°˜í™˜)
+	// - precomputed clipì´ ìˆìœ¼ë©´ ê·¸ê±¸ ì‚¬ìš©í•˜ê³ , ì—†ìœ¼ë©´ on-the-fly í‰ê°€ë¡œ fallback í•©ë‹ˆë‹¤.
 	void BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>& outPalette);
 private:
 	void UploadPalette(ID3D11DeviceContext* ctx, const std::vector<DirectX::XMMATRIX>& pal);

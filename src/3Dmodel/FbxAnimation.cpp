@@ -1,4 +1,4 @@
-#include "FbxAnimation.h"
+ï»¿#include "FbxAnimation.h"
 #include "../Core/Helper.h"
 
 #include <assimp/scene.h>
@@ -7,7 +7,7 @@
 
 using namespace DirectX;
 
-// ¾ÈÀüÇÑ Çà·Ä º¸°£ ÇïÆÛ (XMMatrixLerp°¡ ¾ø´Â È¯°æÀ» À§ÇØ Á÷Á¢ ±¸Çö)
+// ì•ˆì „í•œ í–‰ë ¬ ë³´ê°„ í—¬í¼ (XMMatrixLerpê°€ ì—†ëŠ” í™˜ê²½ì„ ìœ„í•´ ì§ì ‘ êµ¬í˜„)
 static XMMATRIX LerpMatrix(const XMMATRIX& A, const XMMATRIX& B, float t)
 {
 	return A + (B - A) * t;
@@ -382,7 +382,7 @@ void FbxAnimation::UpdateAndUpload(
 				while (t >= dur) t -= dur;
 			}
 
-			// »ùÇÃ °£ ¼±Çü º¸°£À¸·Î ¸Å²ô·¯¿î ¾Ö´Ï¸ŞÀÌ¼Ç ±¸Çö
+			// ìƒ˜í”Œ ê°„ ì„ í˜• ë³´ê°„ìœ¼ë¡œ ë§¤ë„ëŸ¬ìš´ ì• ë‹ˆë©”ì´ì…˜ êµ¬í˜„
 			if (pc.sampleDt > 0.0 && pc.palettes.size() >= 2)
 			{
 				double f = t / pc.sampleDt;
@@ -414,7 +414,7 @@ void FbxAnimation::UpdateAndUpload(
 			}
 			else
 			{
-				// »ùÇÃ °£°İ Á¤º¸°¡ ¾øÀ¸¸é °¡Àå °¡±î¿î ÆÈ·¹Æ®¸¸ »ç¿ë
+				// ìƒ˜í”Œ ê°„ê²© ì •ë³´ê°€ ì—†ìœ¼ë©´ ê°€ì¥ ê°€ê¹Œìš´ íŒ”ë ˆíŠ¸ë§Œ ì‚¬ìš©
 				int idx = 0;
 				if (!pc.palettes.empty())
 				{
@@ -452,13 +452,13 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 	if (m_Current < 0 || (size_t)m_Current >= m_Names.size())
 		return;
 
-	// Fast path: precomputed ÆÈ·¹Æ® »ç¿ë
-	// 1. À¯È¿¼º °Ë»ç
+	// Fast path: precomputed íŒ”ë ˆíŠ¸ ì‚¬ìš©
+	// 1. ìœ íš¨ì„± ê²€ì‚¬
 	if ((size_t)m_Current >= m_Precomputed.size()) return;
 	const auto& pc = m_Precomputed[(size_t)m_Current];
 	if (!pc.valid || pc.times.empty() || pc.palettes.empty()) return;
 
-	// 2. ½Ã°£ ·çÇÎ Ã³¸® (std::fmod »ç¿ë)
+	// 2. ì‹œê°„ ë£¨í•‘ ì²˜ë¦¬ (std::fmod ì‚¬ìš©)
 	double t = m_TimeSec;
 	if (pc.durationSec > 0.0)
 	{
@@ -466,11 +466,11 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 		if (t < 0.0) t += pc.durationSec;
 	}
 
-	// 3. ÀÎµ¦½º ¹× º¸°£ °è¼ö(Alpha) °è»ê
+	// 3. ì¸ë±ìŠ¤ ë° ë³´ê°„ ê³„ìˆ˜(Alpha) ê³„ì‚°
 	size_t idx0 = 0, idx1 = 0;
 	float alpha = 0.0f;
 
-	// º¸°£ °æ·Î
+	// ë³´ê°„ ê²½ë¡œ
 	if (pc.sampleDt > 0.0 && pc.palettes.size() >= 2)
 	{
 		double frame = t / pc.sampleDt;
@@ -478,23 +478,23 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 		idx1 = std::min(idx0 + 1, pc.palettes.size() - 1);
 		alpha = (float)(frame - idx0);
 	}
-	// ºñº¸°£ °æ·Î (´ÜÀÏ ÇÁ·¹ÀÓÀÌ°Å³ª È¤Àº »ùÇÃ Á¤º¸ ¾øÀ»¶§)
+	// ë¹„ë³´ê°„ ê²½ë¡œ (ë‹¨ì¼ í”„ë ˆì„ì´ê±°ë‚˜ í˜¹ì€ ìƒ˜í”Œ ì •ë³´ ì—†ì„ë•Œ)
 	else
 	{
 		double ratio = (pc.durationSec > 0.0) ? (t / pc.durationSec) : 0.0;
 		idx0 = std::clamp<size_t>((size_t)(ratio * pc.palettes.size()), 0, pc.palettes.size() - 1);
-		idx1 = idx0; // º¸°£ÇÏÁö ¾ÊÀ½
+		idx1 = idx0; // ë³´ê°„í•˜ì§€ ì•ŠìŒ
 	}
 
-	// 4. ÃÖÁ¾ Çà·Ä °è»ê (º¸°£ ¶Ç´Â º¹»ç)
+	// 4. ìµœì¢… í–‰ë ¬ ê³„ì‚° (ë³´ê°„ ë˜ëŠ” ë³µì‚¬)
 	const auto& p0 = pc.palettes[idx0];
 	const auto& p1 = pc.palettes[idx1];
 	size_t count = std::min(p0.size(), p1.size());
 
 	outPalette.resize(count);
 
-	// ºÒÇÊ¿äÇÑ Á¶°Ç¹®À» ÁÙÀÌ°í »ïÇ× ¿¬»êÀÚ·Î ±ò²ûÇÏ°Ô Ã³¸®
-	bool doLerp = (idx0 != idx1 && alpha > 0.0001f); // ¹Ì¼¼ÇÑ ¿ÀÂ÷ ¹«½Ã
+	// ë¶ˆí•„ìš”í•œ ì¡°ê±´ë¬¸ì„ ì¤„ì´ê³  ì‚¼í•­ ì—°ì‚°ìë¡œ ê¹”ë”í•˜ê²Œ ì²˜ë¦¬
+	bool doLerp = (idx0 != idx1 && alpha > 0.0001f); // ë¯¸ì„¸í•œ ì˜¤ì°¨ ë¬´ì‹œ
 
 	for (size_t i = 0; i < count; ++i)
 	{
@@ -502,11 +502,11 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 		XMStoreFloat4x4(&outPalette[i], m);
 	}
 
-	// Fallback: on-the-fly Æò°¡
-	// 1. ±âº» À¯È¿¼º °Ë»ç
+	// Fallback: on-the-fly í‰ê°€
+	// 1. ê¸°ë³¸ ìœ íš¨ì„± ê²€ì‚¬
 	if (!m_Scene || !m_BoneNames || !m_GlobalInverse) return;
 
-	// 2. µ¥ÀÌÅÍ °»½Å ¹× Àü¿ª Çà·Ä °è»ê
+	// 2. ë°ì´í„° ê°±ì‹  ë° ì „ì—­ í–‰ë ¬ ê³„ì‚°
 	bool isRigid = (m_Type == AnimType::Rigid);
 
 	if (!isRigid && m_ChannelDirty && !m_ChannelOfNode.empty())
@@ -515,21 +515,21 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 		m_ChannelDirty = false;
 	}
 
-	// m_GlobalScratch¸¦ °ø¿ëÀ¸·Î »ç¿ëÇÏ¿© ¸Ş¸ğ¸® ÇÒ´ç ¹æÁö
+	// m_GlobalScratchë¥¼ ê³µìš©ìœ¼ë¡œ ì‚¬ìš©í•˜ì—¬ ë©”ëª¨ë¦¬ í• ë‹¹ ë°©ì§€
 	EvaluateGlobals(m_Scene, m_NodeIndexOfName, m_GlobalScratch);
 	if (m_GlobalScratch.empty()) return;
-	if (!isRigid && !m_BoneOffsets) return; // ½ºÅ²µå ¾Ö´Ï¸ŞÀÌ¼ÇÀº ¿ÀÇÁ¼Â ÇÊ¼ö
+	if (!isRigid && !m_BoneOffsets) return; // ìŠ¤í‚¨ë“œ ì• ë‹ˆë©”ì´ì…˜ì€ ì˜¤í”„ì…‹ í•„ìˆ˜
 
-	// 3. ÆÈ·¹Æ® ÃÊ±âÈ­
+	// 3. íŒ”ë ˆíŠ¸ ì´ˆê¸°í™”
 	static const XMFLOAT4X4 I = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
-	outPalette.assign(m_BoneNames->size(), I); // resize + fill ÅëÇÕ
+	outPalette.assign(m_BoneNames->size(), I); // resize + fill í†µí•©
 
-	// 4. ÅëÇÕ °è»ê ·çÇÁ
+	// 4. í†µí•© ê³„ì‚° ë£¨í”„
 	XMMATRIX Gi = XMLoadFloat4x4(m_GlobalInverse);
 
 	for (size_t i = 0; i < m_BoneNames->size(); ++i)
 	{
-		// if init ±¸¹®À¸·Î map °Ë»ö °£¼ÒÈ­
+		// if init êµ¬ë¬¸ìœ¼ë¡œ map ê²€ìƒ‰ ê°„ì†Œí™”
 		if (auto it = m_NodeIndexOfName.find((*m_BoneNames)[i]); it != m_NodeIndexOfName.end())
 		{
 			int idx = it->second;
@@ -538,7 +538,7 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 				XMMATRIX G = XMLoadFloat4x4(&m_GlobalScratch[idx]);
 				XMMATRIX FinalM = XMMatrixMultiply(Gi, G);
 
-				// Rigid°¡ ¾Æ´Ï¸é Bone Offset Ãß°¡ Àû¿ë
+				// Rigidê°€ ì•„ë‹ˆë©´ Bone Offset ì¶”ê°€ ì ìš©
 				if (!isRigid)
 				{
 					XMMATRIX Off = XMLoadFloat4x4(&(*m_BoneOffsets)[i]);

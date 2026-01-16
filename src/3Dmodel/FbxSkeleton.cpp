@@ -1,4 +1,4 @@
-#include "FbxSkeleton.h"
+ï»¿#include "FbxSkeleton.h"
 #include "../Core/Helper.h"
 
 #include <assimp/scene.h>
@@ -9,7 +9,7 @@ void FbxSkeleton::BuildFromScene(const aiScene* scene)
 	m_Skeleton.clear(); m_NodeIndexOfName.clear(); m_RootIndex = -1;
 	if (!scene || !scene->mRootNode) return;
 
-    // 1) ³ëµå ¼ö¸¦ ¼¼¾î ¹Ì¸® reserve (ÀçÇÒ´ç ÃÖ¼ÒÈ­)
+    // 1) ë…¸ë“œ ìˆ˜ë¥¼ ì„¸ì–´ ë¯¸ë¦¬ reserve (ì¬í• ë‹¹ ìµœì†Œí™”)
     auto countNodes = [&](const aiNode* root){
         size_t cnt = 0; std::queue<const aiNode*> q; q.push(root);
         while (!q.empty()) { const aiNode* n = q.front(); q.pop(); ++cnt; for (unsigned i=0;i<n->mNumChildren;++i) q.push(n->mChildren[i]); }
@@ -20,7 +20,7 @@ void FbxSkeleton::BuildFromScene(const aiScene* scene)
     m_Skeleton.reserve(nodeCount);
     m_NodeIndexOfName.reserve(nodeCount);
 
-    // 2) ºñÀç±Í BFS·Î ºÎ¸ğ¡æÀÚ½Ä ¼ø¼­·Î »ı¼º
+    // 2) ë¹„ì¬ê·€ BFSë¡œ ë¶€ëª¨â†’ìì‹ ìˆœì„œë¡œ ìƒì„±
     std::queue<std::pair<const aiNode*, int>> q; // (node, parentIndex)
     q.push({ scene->mRootNode, -1 });
     int rootIndex = -1;
@@ -53,7 +53,7 @@ void FbxSkeleton::CollectBonesAndOffsets(const aiScene* scene)
     m_BoneNames.clear(); m_BoneOffset.clear();
     if (!scene) return;
 
-    // »óÇÑÄ¡ ±â¹İ reserve·Î ¸®ÇØ½Ã/ÀçÇÒ´ç ÃÖ¼ÒÈ­
+    // ìƒí•œì¹˜ ê¸°ë°˜ reserveë¡œ ë¦¬í•´ì‹œ/ì¬í• ë‹¹ ìµœì†Œí™”
     size_t totalBonesUpper = 0;
     for (unsigned mi = 0; mi < scene->mNumMeshes; ++mi) 
         totalBonesUpper += scene->mMeshes[mi]->mNumBones;

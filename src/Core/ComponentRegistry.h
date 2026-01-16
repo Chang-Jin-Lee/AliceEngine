@@ -1,7 +1,7 @@
-#pragma once
+ï»¿#pragma once
 
-// RTTR ±â¹İÀ¸·Î ÄÄÆ÷³ÍÆ® µî·Ï
-// ComponentRegistry.cpp ÆÄÀÏ¿¡¼­ ±¸ÇöµÇ¾î ÀÖ½À´Ï´Ù.
+// RTTR ê¸°ë°˜ìœ¼ë¡œ ì»´í¬ë„ŒíŠ¸ ë“±ë¡
+// ComponentRegistry.cpp íŒŒì¼ì—ì„œ êµ¬í˜„ë˜ì–´ ìˆìŠµë‹ˆë‹¤.
 
 namespace Alice
 {

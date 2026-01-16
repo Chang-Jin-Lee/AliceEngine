@@ -1,9 +1,9 @@
-#pragma once
+ï»¿#pragma once
 #include <cassert>
 
 /*
-* @brief Singleton Å¬·¡½º.
-* @details ÀÌ Å¬·¡½º¸¦ »ó¼Ó¹ŞÀº Å¬·¡½º´Â ½Ì±ÛÅæ ÆĞÅÏÀ» Àû¿ëÇÒ ¼ö ÀÖ½À´Ï´Ù.
+* @brief Singleton í´ë˜ìŠ¤.
+* @details ì´ í´ë˜ìŠ¤ë¥¼ ìƒì†ë°›ì€ í´ë˜ìŠ¤ëŠ” ì‹±ê¸€í†¤ íŒ¨í„´ì„ ì ìš©í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
 */
 
 template <typename T>
@@ -22,14 +22,14 @@ public:
 		if (!s_instance)
 			s_instance = new T();
 	}
-	// ¸í½ÃÀûÀÎ ÀÎ½ºÅÏ½º ÆÄ±«
+	// ëª…ì‹œì ì¸ ì¸ìŠ¤í„´ìŠ¤ íŒŒê´´
 	static void Destroy()
 	{
 		delete s_instance;
 		s_instance = nullptr;
 	}
 
-	// º¹»ç ¹× ÀÌµ¿ ±İÁö
+	// ë³µì‚¬ ë° ì´ë™ ê¸ˆì§€
 	Singleton(const Singleton&) = delete;
 	Singleton& operator=(const Singleton&) = delete;
 	Singleton(Singleton&&) = delete;

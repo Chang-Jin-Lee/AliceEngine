@@ -1,4 +1,4 @@
-// Ä³¸¯ÅÍ¸¦ Ä«¸Ş¶ó ¹æÇâ ±âÁØÀ¸·Î ¾ÕµÚÁÂ¿ì·Î ¿òÁ÷ÀÌ°Ô ÇÏ´Â ½ºÅ©¸³Æ®
+ï»¿// ìºë¦­í„°ë¥¼ ì¹´ë©”ë¼ ë°©í–¥ ê¸°ì¤€ìœ¼ë¡œ ì•ë’¤ì¢Œìš°ë¡œ ì›€ì§ì´ê²Œ í•˜ëŠ” ìŠ¤í¬ë¦½íŠ¸
 //#include "CharacterMovement.h"
 // #include "Core/ScriptFactory.h"
 //#include "Core/Logger.h"
@@ -13,7 +13,7 @@
 //    REGISTER_SCRIPT(CharacterMovement);
 //
 //        void CharacterMovement::Attack() {
-//            // °ø°İ ·ÎÁ÷ ±¸Çö (·Î±× Ãâ·Â µî)
+//            // ê³µê²© ë¡œì§ êµ¬í˜„ (ë¡œê·¸ ì¶œë ¥ ë“±)
 //        }
 //
 //        void CharacterMovement::SetSpeed(float newSpeed) {
@@ -31,8 +31,8 @@
 //        if (!t || !anim.IsValid())
 //            return;
 //
-//        // --- 1. Ä«¸Ş¶ó Á¤º¸ °¡Á®¿À±â ---
-//        // (¿ùµå¿¡¼­ Primary Ä«¸Ş¶ó¸¦ Ã£´Â´Ù°í °¡Á¤)
+//        // --- 1. ì¹´ë©”ë¼ ì •ë³´ ê°€ì ¸ì˜¤ê¸° ---
+//        // (ì›”ë“œì—ì„œ Primary ì¹´ë©”ë¼ë¥¼ ì°¾ëŠ”ë‹¤ê³  ê°€ì •)
 //        auto* world = GetWorld();
 //        EntityId camId = world ? world->GetMainCameraEntityId() : 0;
 //        TransformComponent* camT =
@@ -43,9 +43,9 @@
 //            camYawRad = camT->rotation.y * (static_cast<float>(M_PI) / 180.0f);
 //        }
 //
-//        // --- 2. ÀÔ·Â ¼öÁı (·ÎÄÃ ±âÁØ) ---
-//        float inputX = 0.0f; // A, D (ÁÂ¿ì)
-//        float inputZ = 0.0f; // W, S (ÀüÈÄ)
+//        // --- 2. ì…ë ¥ ìˆ˜ì§‘ (ë¡œì»¬ ê¸°ì¤€) ---
+//        float inputX = 0.0f; // A, D (ì¢Œìš°)
+//        float inputZ = 0.0f; // W, S (ì „í›„)
 //
 //        if (input->GetKey(KeyCode::W))
 //            inputZ += 1.0f;
@@ -56,30 +56,30 @@
 //        if (input->GetKey(KeyCode::A))
 //            inputX -= 1.0f;
 //
-//        // --- 3. ÀÔ·Â º¤ÅÍ¸¦ Ä«¸Ş¶ó ¹æÇâÀ¸·Î È¸Àü ---
-//        // 2D È¸Àü Çà·Ä °ø½Ä Àû¿ë:
+//        // --- 3. ì…ë ¥ ë²¡í„°ë¥¼ ì¹´ë©”ë¼ ë°©í–¥ìœ¼ë¡œ íšŒì „ ---
+//        // 2D íšŒì „ í–‰ë ¬ ê³µì‹ ì ìš©:
 //        // x' = x * cos - z * sin
 //        // z' = x * sin + z * cos
-//        // (¿©±â¼­ z´Â Àü¹æÀÌ¹Ç·Î ¼öÇĞÀû yÃà ¿ªÇÒ)
+//        // (ì—¬ê¸°ì„œ zëŠ” ì „ë°©ì´ë¯€ë¡œ ìˆ˜í•™ì  yì¶• ì—­í• )
 //        float sinY = std::sin(camYawRad);
 //        float cosY = std::cos(camYawRad);
 //
 //        float worldX = inputX * cosY + inputZ * sinY;
 //        float worldZ = -inputX * sinY + inputZ * cosY;
 //
-//        // --- 4. ÀÌµ¿ ¹× È¸Àü Àû¿ë ---
+//        // --- 4. ì´ë™ ë° íšŒì „ ì ìš© ---
 //        float len = std::sqrt(worldX * worldX + worldZ * worldZ);
 //        if (len > 0.0001f) {
-//            // Á¤±ÔÈ­
+//            // ì •ê·œí™”
 //            worldX /= len;
 //            worldZ /= len;
 //
-//            // Ä³¸¯ÅÍ È¸Àü: ÀÌµ¿ÇÏ·Á´Â ¿ùµå ¹æÇâÀ» ¹Ù¶óº½
+//            // ìºë¦­í„° íšŒì „: ì´ë™í•˜ë ¤ëŠ” ì›”ë“œ ë°©í–¥ì„ ë°”ë¼ë´„
 //            float radian = std::atan2(worldX, worldZ);
 //            float degree = radian * (180.0f / static_cast<float>(M_PI));
 //            t->SetRotation(0.0f, degree,
-//                0.0f); // atan2(x, z)´Â ºÏÂÊÀÌ 0ÀÌ¹Ç·Î +180 º¸Á¤ ºÒÇÊ¿äÇÒ ¼ö
-//            // ÀÖÀ½ (ÁÂÇ¥°è È®ÀÎ ÇÊ¿ä)
+//                0.0f); // atan2(x, z)ëŠ” ë¶ìª½ì´ 0ì´ë¯€ë¡œ +180 ë³´ì • ë¶ˆí•„ìš”í•  ìˆ˜
+//            // ìˆìŒ (ì¢Œí‘œê³„ í™•ì¸ í•„ìš”)
 //
 //            anim.Play(2); // Walk
 //        }
@@ -87,11 +87,11 @@
 //            anim.Play(0); // Idle
 //        }
 //
-//        // À§Ä¡ ÀÌµ¿
+//        // ìœ„ì¹˜ ì´ë™
 //        t->position.x += worldX * Get_m_moveSpeed() * DeltaTime;
 //        t->position.z += worldZ * Get_m_moveSpeed() * DeltaTime;
 //
-//        // --- 5. Á¡ÇÁ/Áß·Â (±âÁ¸ À¯Áö) ---
+//        // --- 5. ì í”„/ì¤‘ë ¥ (ê¸°ì¡´ ìœ ì§€) ---
 //        if (t->position.y <= 0.0f) {
 //            t->position.y = 0.0f;
 //            if (m_velY < 0.0f)
@@ -106,7 +106,7 @@
 //    }
 //} // namespace Alice
 
-// Ä³¸¯ÅÍ¸¦ ±×³É ´Ü¼øÈ÷ ¾ÕµÚÁÂ¿ì·Î ¿òÁ÷ÀÌ°Ô ÇÏ´Â ½ºÅ©¸³Æ®
+// ìºë¦­í„°ë¥¼ ê·¸ëƒ¥ ë‹¨ìˆœíˆ ì•ë’¤ì¢Œìš°ë¡œ ì›€ì§ì´ê²Œ í•˜ëŠ” ìŠ¤í¬ë¦½íŠ¸
 #include "CharacterMovement.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
@@ -122,7 +122,7 @@ namespace Alice
 {
     REGISTER_SCRIPT(CharacterMovement);
 
-    void CharacterMovement::Attack() { /* °ø°İ ·ÎÁ÷ */ }
+    void CharacterMovement::Attack() { /* ê³µê²© ë¡œì§ */ }
 
     void CharacterMovement::Update(float DeltaTime)
     {
@@ -134,7 +134,7 @@ namespace Alice
         auto anim = go.GetAnimator();
         if (!t || !anim.IsValid()) return;
 
-        // --- 1. ÀÔ·Â ¼öÁı ---
+        // --- 1. ì…ë ¥ ìˆ˜ì§‘ ---
         float inputX = 0.0f; // A, D
         float inputZ = 0.0f; // W, S
 
@@ -143,14 +143,14 @@ namespace Alice
         if (input->GetKey(KeyCode::D)) inputX += 1.0f;
         if (input->GetKey(KeyCode::A)) inputX -= 1.0f;
 
-        // ÀÔ·ÂÀÌ ¾øÀ¸¸é ÀÌµ¿ °è»ê °Ç³Ê¶Ù°í Áß·Â¸¸ Ã³¸®
+        // ì…ë ¥ì´ ì—†ìœ¼ë©´ ì´ë™ ê³„ì‚° ê±´ë„ˆë›°ê³  ì¤‘ë ¥ë§Œ ì²˜ë¦¬
         bool hasInput = (inputX != 0.0f || inputZ != 0.0f);
 
-        // --- 2. Ä«¸Ş¶ó ±âÁØ ¹æÇâ °è»ê (ÇÙ½É ·ÎÁ÷) ---
+        // --- 2. ì¹´ë©”ë¼ ê¸°ì¤€ ë°©í–¥ ê³„ì‚° (í•µì‹¬ ë¡œì§) ---
         float moveX = 0.0f;
         float moveZ = 0.0f;
 
-        // ¸ŞÀÎ Ä«¸Ş¶ó Ã£±â (ÅÂ±×³ª ÀÌ¸§À¸·Î °Ë»ö °¡Á¤)
+        // ë©”ì¸ ì¹´ë©”ë¼ ì°¾ê¸° (íƒœê·¸ë‚˜ ì´ë¦„ìœ¼ë¡œ ê²€ìƒ‰ ê°€ì •)
         auto mainCamObj = GetWorld()->FindGameObject("MainCamera");
         //ALICE_LOG_INFO("TEST");
 
@@ -162,11 +162,11 @@ namespace Alice
             {
                 //ALICE_LOG_INFO("Camera Position: x={0}, y={1}, z={2}",
 				//	camT->position.x, camT->position.y, camT->position.z);
-                // Forward: ³ª(Target) - Ä«¸Ş¶ó(Eye) = È­¸é ±íÀÌ ¹æÇâ
+                // Forward: ë‚˜(Target) - ì¹´ë©”ë¼(Eye) = í™”ë©´ ê¹Šì´ ë°©í–¥
                 float fwdX = t->position.x - camT->position.x;
                 float fwdZ = t->position.z - camT->position.z;
 
-                // YÃà Á¦°Å ¹× Á¤±ÔÈ­
+                // Yì¶• ì œê±° ë° ì •ê·œí™”
                 float lenFwd = std::sqrt(fwdX * fwdX + fwdZ * fwdZ);
                 if (lenFwd > 0.0001f)
                 {
@@ -174,18 +174,18 @@ namespace Alice
                     fwdZ /= lenFwd;
                 }
 
-                // Right: ForwardÀÇ ¼öÁ÷ º¤ÅÍ (z, -x)
+                // Right: Forwardì˜ ìˆ˜ì§ ë²¡í„° (z, -x)
                 float rightX = fwdZ;
                 float rightZ = -fwdX;
 
-                // ÃÖÁ¾ ÀÌµ¿ º¤ÅÍ ÇÕ¼º
+                // ìµœì¢… ì´ë™ ë²¡í„° í•©ì„±
                 moveX = (fwdX * inputZ) + (rightX * inputX);
                 moveZ = (fwdZ * inputZ) + (rightZ * inputX);
             }
         }
         else if (hasInput)
         {
-            // Ä«¸Ş¶ó¸¦ ¸ø Ã£¾ÒÀ» °æ¿ì ºñ»ó¿ë (Àı´ëÁÂÇ¥ ÀÌµ¿)
+            // ì¹´ë©”ë¼ë¥¼ ëª» ì°¾ì•˜ì„ ê²½ìš° ë¹„ìƒìš© (ì ˆëŒ€ì¢Œí‘œ ì´ë™)
             moveX = inputX;
             moveZ = inputZ;
         }
@@ -194,32 +194,32 @@ namespace Alice
 
         if (moveLen > 0.0001f)
         {
-            // Á¤±ÔÈ­
+            // ì •ê·œí™”
             moveX /= moveLen;
             moveZ /= moveLen;
 
-            // [À§Ä¡ ÀÌµ¿]
+            // [ìœ„ì¹˜ ì´ë™]
             t->position.x += moveX * Get_m_moveSpeed() * DeltaTime;
             t->position.z += moveZ * Get_m_moveSpeed() * DeltaTime;
 
-            // [È¸Àü] ÀÌµ¿ÇÏ´Â ¹æÇâ ¹Ù¶óº¸±â
+            // [íšŒì „] ì´ë™í•˜ëŠ” ë°©í–¥ ë°”ë¼ë³´ê¸°
             float radian = std::atan2(moveX, moveZ);
             float degree = radian * (180.0f / static_cast<float>(M_PI));
 
-            // [¼öÁ¤] ¸ğµ¨ÀÌ ¹İ´ë·Î º¸ÀÌ¸é 180µµ¸¦ ´õÇØ¼­ µÚÁı¾î Áİ´Ï´Ù.
-            // ¸¸¾à 90µµ·Î ²ª¿©¼­ ´Ş¸°´Ù¸é 90.0f³ª -90.0f¸¦ ´õÇØº¸¼¼¿ä.
+            // [ìˆ˜ì •] ëª¨ë¸ì´ ë°˜ëŒ€ë¡œ ë³´ì´ë©´ 180ë„ë¥¼ ë”í•´ì„œ ë’¤ì§‘ì–´ ì¤ë‹ˆë‹¤.
+            // ë§Œì•½ 90ë„ë¡œ êº¾ì—¬ì„œ ë‹¬ë¦°ë‹¤ë©´ 90.0fë‚˜ -90.0fë¥¼ ë”í•´ë³´ì„¸ìš”.
             t->SetRotation(0.0f, degree + 180.0f, 0.0f);
 
-            // [¾Ö´Ï¸ŞÀÌ¼Ç] °È±â
+            // [ì• ë‹ˆë©”ì´ì…˜] ê±·ê¸°
             anim.Play(2);
         }
         else
         {
-            // [¾Ö´Ï¸ŞÀÌ¼Ç] ´ë±â
+            // [ì• ë‹ˆë©”ì´ì…˜] ëŒ€ê¸°
             anim.Play(0);
         }
 
-        // --- 4. Á¡ÇÁ ¹× Áß·Â ·ÎÁ÷ (±âÁ¸ À¯Áö) ---
+        // --- 4. ì í”„ ë° ì¤‘ë ¥ ë¡œì§ (ê¸°ì¡´ ìœ ì§€) ---
         const bool grounded = (t->position.y <= 0.0f);
         if (grounded)
         {
@@ -229,7 +229,7 @@ namespace Alice
             if (input->GetKeyDown(KeyCode::Space))
             {
                 m_velY = Get_m_jumpSpeed();
-                // anim.Play(3, true); // Á¡ÇÁ
+                // anim.Play(3, true); // ì í”„
             }
         }
 
