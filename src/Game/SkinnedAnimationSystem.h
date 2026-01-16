@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <unordered_map>
 #include <string>
@@ -13,8 +13,8 @@
 
 namespace Alice
 {
-    /// SkinnedAnimationComponent(Àç»ı »óÅÂ) -> CPU º» ÆÈ·¹Æ® °è»ê -> SkinnedMeshComponent.boneMatrices ¿¬°á
-    /// - ¿£Æ¼Æ¼ ´ÜÀ§·Î FbxAnimation ÀÎ½ºÅÏ½º¸¦ À¯ÁöÇÏ¿©, °°Àº ¸Ş½Ã¸¦ °øÀ¯ÇØµµ °³º° Àç»ıÀÌ °¡´ÉÇÕ´Ï´Ù.
+    /// SkinnedAnimationComponent(ì¬ìƒ ìƒíƒœ) -> CPU ë³¸ íŒ”ë ˆíŠ¸ ê³„ì‚° -> SkinnedMeshComponent.boneMatrices ì—°ê²°
+    /// - ì—”í‹°í‹° ë‹¨ìœ„ë¡œ FbxAnimation ì¸ìŠ¤í„´ìŠ¤ë¥¼ ìœ ì§€í•˜ì—¬, ê°™ì€ ë©”ì‹œë¥¼ ê³µìœ í•´ë„ ê°œë³„ ì¬ìƒì´ ê°€ëŠ¥í•©ë‹ˆë‹¤.
     class SkinnedAnimationSystem
     {
     public:
@@ -25,7 +25,7 @@ namespace Alice
 
         void Update(World& world, double dtSec)
         {
-            auto& skinnedMap = world.GetComponents<SkinnedMeshComponent>();
+            auto skinnedMap = world.GetComponents<SkinnedMeshComponent>();
             if (skinnedMap.empty())
                 return;
 
@@ -42,7 +42,7 @@ namespace Alice
                 if (!animComp)
                     animComp = &world.AddComponent<SkinnedAnimationComponent>(entityId);
 
-                // ÃÊ±â ÆÈ·¹Æ® Å©±â º¸Àå
+                // ì´ˆê¸° íŒ”ë ˆíŠ¸ í¬ê¸° ë³´ì¥
                 const std::size_t boneCount = mesh->sourceModel->GetBoneNames().size();
                 if (boneCount == 0)
                     continue;
@@ -55,7 +55,7 @@ namespace Alice
                         0,0,0,1));
                 }
 
-                // ¿£Æ¼Æ¼º° ·±Å¸ÀÓ ¾Ö´Ï¸ŞÀÌÅÍ
+                // ì—”í‹°í‹°ë³„ ëŸ°íƒ€ì„ ì• ë‹ˆë©”ì´í„°
                 Runtime& rt = m_runtime[entityId];
                 if (rt.meshKey != skinned.meshAssetPath)
                 {
@@ -63,7 +63,7 @@ namespace Alice
                     rt.meshKey = skinned.meshAssetPath;
                     rt.anim.InitMetadata(mesh->sourceModel->GetScenePtr());
 
-                    // °øÀ¯ ÄÁÅØ½ºÆ® ¹ÙÀÎµù(+ÇÁ¸®ÄÄÇ»Æ®)
+                    // ê³µìœ  ì»¨í…ìŠ¤íŠ¸ ë°”ì¸ë”©(+í”„ë¦¬ì»´í“¨íŠ¸)
                     rt.anim.SetSharedContext(
                         mesh->sourceModel->GetScenePtr(),
                         mesh->sourceModel->GetNodeIndexOfName(),
@@ -71,7 +71,7 @@ namespace Alice
                         &mesh->sourceModel->GetBoneOffsets(),
                         &mesh->sourceModel->GetGlobalInverse());
 
-                    // Å¸ÀÔ ¼³Á¤ (Skinned/Rigid)
+                    // íƒ€ì… ì„¤ì • (Skinned/Rigid)
                     const auto t = mesh->sourceModel->GetCurrentAnimationType();
                     if (t == FbxModel::AnimationType::Rigid)  rt.anim.SetType(FbxAnimation::AnimType::Rigid);
                     else if (t == FbxModel::AnimationType::Skinned) rt.anim.SetType(FbxAnimation::AnimType::Skinned);
@@ -82,26 +82,26 @@ namespace Alice
                 if (clipCount <= 0)
                     continue;
 
-                // »óÅÂ º¸Á¤
+                // ìƒíƒœ ë³´ì •
                 if (animComp->clipIndex < 0) animComp->clipIndex = 0;
                 if (animComp->clipIndex >= clipCount) animComp->clipIndex = clipCount - 1;
                 if (animComp->speed < 0.0f) animComp->speed = 0.0f;
 
-                // ½Ã°£ ÁøÇà(¿£Æ¼Æ¼ ´ÜÀ§)
+                // ì‹œê°„ ì§„í–‰(ì—”í‹°í‹° ë‹¨ìœ„)
                 if (animComp->playing && dtSec > 0.0)
                     animComp->timeSec += dtSec * (double)animComp->speed;
 
                 rt.anim.SetCurrentIndex(animComp->clipIndex);
                 rt.anim.SetTimeSec(animComp->timeSec);
 
-                // ÆÈ·¹Æ® °è»ê(ÀüÄ¡ ¾øÀ½: ForwardRenderSystem¿¡¼­ ÀüÄ¡ÇØ¼­ ¾÷·Îµå)
+                // íŒ”ë ˆíŠ¸ ê³„ì‚°(ì „ì¹˜ ì—†ìŒ: ForwardRenderSystemì—ì„œ ì „ì¹˜í•´ì„œ ì—…ë¡œë“œ)
                 rt.anim.BuildCurrentPaletteFloat4x4(animComp->palette);
 				for (auto& mat : animComp->palette) {
 					DirectX::XMMATRIX m = DirectX::XMMatrixTranspose(DirectX::XMLoadFloat4x4(&mat));
 					DirectX::XMStoreFloat4x4(&mat, m);
 				}
 
-                // ·»´õ ½Ã½ºÅÛÀÌ ÀĞÀ» Æ÷ÀÎÅÍ ¿¬°á
+                // ë Œë” ì‹œìŠ¤í…œì´ ì½ì„ í¬ì¸í„° ì—°ê²°
                 auto* skinnedWrite = world.GetComponent<SkinnedMeshComponent>(entityId);
                 if (!skinnedWrite)
                     continue;

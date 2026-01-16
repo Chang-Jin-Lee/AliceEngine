@@ -1,4 +1,4 @@
-#include "FbxGeometry.h"
+Ôªø#include "FbxGeometry.h"
 #include "../Core/Helper.h"
 
 #include <assimp/scene.h>
@@ -47,14 +47,14 @@ void FbxGeometryBuilder::Clear()
 // 	if (!device || !scene || !scene->HasMeshes()) return false;
 // 	Clear();
 
-// 	// ∫Œ∏ ¿⁄Ωƒ ¿ßªÛ ¡§∑ƒ∑Œ ∏µÁ ∏ﬁΩ¨∏¶ ≥™ø≠«œ∞Ì, ∑π∫ß ¥‹¿ß ∫¥∑ƒ √≥∏Æ
+// 	// Î∂ÄÎ™® ÏûêÏãù ÏúÑÏÉÅ Ï†ïÎ†¨Î°ú Î™®Îì† Î©îÏâ¨Î•º ÎÇòÏó¥ÌïòÍ≥†, Î†àÎ≤® Îã®ÏúÑ Î≥ëÎ†¨ Ï≤òÎ¶¨
 // 	struct MeshEntry
 // 	{
 // 		const aiNode* node;
 // 		const aiMesh* mesh;
 // 		uint32_t materialIndex;
 // 		uint32_t vertexCount;
-// 		uint32_t indexCount; // ªÔ∞¢«¸∏∏ ¡˝∞Ë(3¿« πËºˆ)
+// 		uint32_t indexCount; // ÏÇºÍ∞ÅÌòïÎßå ÏßëÍ≥Ñ(3Ïùò Î∞∞Ïàò)
 // 		size_t vertexOffset;
 // 		size_t indexOffset;
 // 		size_t entryIndex;
@@ -77,7 +77,7 @@ void FbxGeometryBuilder::Clear()
 // 			{
 // 				const aiMesh* mesh = scene->mMeshes[node->mMeshes[mi]];
 // 				uint32_t vtx = mesh->mNumVertices;
-// 				uint32_t idx = mesh->mNumFaces * 3; // ¥‹º¯ ∞ˆº¿¿∏∑Œ ¡¯«‡
+// 				uint32_t idx = mesh->mNumFaces * 3; // Îã®Ïàú Í≥±ÏÖàÏúºÎ°ú ÏßÑÌñâ
 
 // 				size_t entryIndex = entries.size();
 // 				entries.push_back({ node, mesh, mesh->mMaterialIndex, vtx, idx, 0, 0, entryIndex });
@@ -90,7 +90,7 @@ void FbxGeometryBuilder::Clear()
 // 		levelRanges.push_back({ start, count });
 // 	}
 
-// 	// ø¿«¡º¬ »Æ¡§(«¡∏Æ«»Ω∫ «’)
+// 	// Ïò§ÌîÑÏÖã ÌôïÏ†ï(ÌîÑÎ¶¨ÌîΩÏä§ Ìï©)
 // 	size_t vOff = 0, iOff = 0;
 // 	for (size_t i = 0; i < entries.size(); ++i)
 // 	{
@@ -101,7 +101,7 @@ void FbxGeometryBuilder::Clear()
 // 		iOff += entries[i].indexCount;
 // 	}
 
-// 	// ∞¯¿Ø πˆ∆€ ªÁ¿¸ «“¥Á »ƒ, ∞¢ ø£∆Æ∏Æ∞° ¿⁄±‚ ±∏∞£¿ª ∫¥∑ƒ∑Œ √§øÚ
+// 	// Í≥µÏú† Î≤ÑÌçº ÏÇ¨Ï†Ñ Ìï†Îãπ ÌõÑ, Í∞Å ÏóîÌä∏Î¶¨Í∞Ä ÏûêÍ∏∞ Íµ¨Í∞ÑÏùÑ Î≥ëÎ†¨Î°ú Ï±ÑÏõÄ
 // 	m_->bindVertices.clear();
 // 	m_->indices.clear();
 // 	m_->owningNode.clear();
@@ -133,7 +133,7 @@ void FbxGeometryBuilder::Clear()
 // 		for (unsigned f = 0; f < mesh->mNumFaces; ++f)
 // 		{
 // 			const aiFace& face = mesh->mFaces[f];
-// 			// Face¥¬ «◊ªÛ 3∞≥¿« ¿Œµ¶Ω∫∏¶ ∞°¡˝¥œ¥Ÿ. ¿Œµ¶Ω∫ πˆ∆€ø° πŸ∑Œ ±‚∑œ
+// 			// FaceÎäî Ìï≠ÏÉÅ 3Í∞úÏùò Ïù∏Îç±Ïä§Î•º Í∞ÄÏßëÎãàÎã§. Ïù∏Îç±Ïä§ Î≤ÑÌçºÏóê Î∞îÎ°ú Í∏∞Î°ù
 // 			m_->indices[iBase + (f * 3) + 0] = (uint32_t)(vBase + face.mIndices[0]);
 // 			m_->indices[iBase + (f * 3) + 1] = (uint32_t)(vBase + face.mIndices[1]);
 // 			m_->indices[iBase + (f * 3) + 2] = (uint32_t)(vBase + face.mIndices[2]);
@@ -163,7 +163,7 @@ void FbxGeometryBuilder::Clear()
 // 	HR_T(device->CreateBuffer(&ib, &ibd, &m_->ib));
 // 	return true;
 // }
-// ∏÷∆ºΩ∫∑πµÂ Ω·º≠ ¥ı ∫¸∏£∞‘ «— ƒ⁄µÂ. ø¿∑˘≥™∏È ¿ß ƒ⁄µÂ∑Œ ∫Ø∞Ê«œº¿
+// Î©ÄÌã∞Ïä§Î†àÎìú Ïç®ÏÑú Îçî Îπ†Î•¥Í≤å Ìïú ÏΩîÎìú. Ïò§Î•òÎÇòÎ©¥ ÏúÑ ÏΩîÎìúÎ°ú Î≥ÄÍ≤ΩÌïòÏÖà
 bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
 {
     if (!device || !scene || !scene->HasMeshes()) return false;
@@ -171,12 +171,12 @@ bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
 
     struct Entry { const aiNode* n; const aiMesh* m; size_t vOff, iOff, id; };
     std::vector<Entry> tasks;
-    // scene ±◊∑°«¡∞° ≈¨ ∞ÊøÏ∏¶ ¥Î∫Ò«ÿ ¿˚¥Á∑Æ øπæ‡ (º±≈√ªÁ«◊)
+    // scene Í∑∏ÎûòÌîÑÍ∞Ä ÌÅ¥ Í≤ΩÏö∞Î•º ÎåÄÎπÑÌï¥ Ï†ÅÎãπÎüâ ÏòàÏïΩ (ÏÑ†ÌÉùÏÇ¨Ìï≠)
     tasks.reserve(scene->mNumMeshes * 2); 
 
     size_t totalV = 0, totalI = 0;
 
-    // [1] ∆Æ∏Æ º¯»∏ (Flattening) & ø¿«¡º¬ ∞ËªÍ: ¿Á±Õ ∂˜¥Ÿ∑Œ ƒ⁄µÂ æ–√‡
+    // [1] Ìä∏Î¶¨ ÏàúÌöå (Flattening) & Ïò§ÌîÑÏÖã Í≥ÑÏÇ∞: Ïû¨Í∑Ä ÎûåÎã§Î°ú ÏΩîÎìú ÏïïÏ∂ï
     auto Traverse = [&](auto&& self, const aiNode* node) -> void {
         for (unsigned i = 0; i < node->mNumMeshes; ++i) {
             const aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
@@ -190,20 +190,20 @@ bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
 
     if (tasks.empty()) return false;
 
-    // [2] πˆ∆€ ¿œ∞˝ «“¥Á
+    // [2] Î≤ÑÌçº ÏùºÍ¥Ñ Ìï†Îãπ
     m_->bindVertices.resize(totalV);
     m_->owningNode.resize(totalV);
     m_->indices.resize(totalI);
     m_->subsets.resize(tasks.size());
 
-    // [3] ∫¥∑ƒ √≥∏Æ (SIMD∂˚ Multi-threading Ω·º≠)
+    // [3] Î≥ëÎ†¨ Ï≤òÎ¶¨ (SIMDÎûë Multi-threading Ïç®ÏÑú)
     std::for_each(std::execution::par_unseq, tasks.begin(), tasks.end(), [&](const Entry& e) {
         const aiMesh* mesh = e.m;
         
-        // Subset ¡§∫∏ µÓ∑œ
+        // Subset Ï†ïÎ≥¥ Îì±Î°ù
         m_->subsets[e.id] = { (uint32_t)e.iOff, (uint32_t)(mesh->mNumFaces * 3), mesh->mMaterialIndex };
 
-        // Vertex ∫πªÁ
+        // Vertex Î≥µÏÇ¨
         for (unsigned i = 0; i < mesh->mNumVertices; ++i) {
             auto& d = m_->bindVertices[e.vOff + i];
             const auto& p = mesh->mVertices[i];
@@ -214,13 +214,13 @@ bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
 
             d.pos = {p.x, p.y, p.z}; d.n = {n.x, n.y, n.z}; d.t = {t.x, t.y, t.z}; d.b = {b.x, b.y, b.z};
             d.uv = {uv.x, uv.y}; d.color = {1,1,1,1};
-            d.boneWeight = {0,0,0,0}; // memset(d.boneIdx, 0, sizeof(d.boneIdx)); ∑Œ ¥Î√º ∞°¥…
+            d.boneWeight = {0,0,0,0}; // memset(d.boneIdx, 0, sizeof(d.boneIdx)); Î°ú ÎåÄÏ≤¥ Í∞ÄÎä•
             
-            // ¡÷¿«: Vertex∏∂¥Ÿ string ∫πªÁ¥¬ ∏≈øÏ π´∞≈øÓ ¿€æ˜¿Ã≥™ ø‰√ªø° ¿««ÿ ¿Ø¡ˆ
+            // Ï£ºÏùò: VertexÎßàÎã§ string Î≥µÏÇ¨Îäî Îß§Ïö∞ Î¨¥Í±∞Ïö¥ ÏûëÏóÖÏù¥ÎÇò ÏöîÏ≤≠Ïóê ÏùòÌï¥ Ïú†ÏßÄ
             m_->owningNode[e.vOff + i] = e.n->mName.C_Str();
         }
 
-        // Index ∫πªÁ
+        // Index Î≥µÏÇ¨
         for (unsigned f = 0; f < mesh->mNumFaces; ++f) {
             const auto& face = mesh->mFaces[f];
             uint32_t offset = (uint32_t)e.vOff;
@@ -230,7 +230,7 @@ bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
         }
     });
 
-    // [4] GPU πˆ∆€ ª˝º∫
+    // [4] GPU Î≤ÑÌçº ÏÉùÏÑ±
     auto CreateBuf = [&](const void* data, UINT size, UINT bind, ID3D11Buffer** out) {
         D3D11_BUFFER_DESC bd{ size, D3D11_USAGE_DEFAULT, bind, 0, 0, 0 };
         D3D11_SUBRESOURCE_DATA sd{ data, 0, 0 };

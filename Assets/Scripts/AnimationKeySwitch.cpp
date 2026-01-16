@@ -1,4 +1,4 @@
-#include "AnimationKeySwitch.h"
+ï»¿#include "AnimationKeySwitch.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 #include "Core/GameObject.h"
@@ -23,7 +23,7 @@ namespace Alice
 
         anim.Play();
 
-        // ³ëÆ¼ÆÄÀÌ Å¸ÀÓ ÃÊ±âÈ­
+        // ë…¸í‹°íŒŒì´ íƒ€ì„ ì´ˆê¸°í™”
         m_prevTime = anim.GetTime();
     }
 
@@ -42,7 +42,7 @@ namespace Alice
         if (input->GetKeyDown(KeyCode::Alpha2)) { anim.SetClip(1); anim.Play(); }
         if (input->GetKeyDown(KeyCode::Alpha3)) { anim.SetClip(2); anim.Play(); }
 
-        // ¸ùÅ¸ÁÖ ´À³¦: Æ¯Á¤ Å¸ÀÓ¿¡ Æ¯Á¤ ÇÔ¼ö¸¦ È£Ãâ
+        // ëª½íƒ€ì£¼ ëŠë‚Œ: íŠ¹ì • íƒ€ì„ì— íŠ¹ì • í•¨ìˆ˜ë¥¼ í˜¸ì¶œ
         UpdateNotifies();
     }
 
@@ -57,15 +57,15 @@ namespace Alice
         const double t = anim.GetTime();
         const double dt = t - m_prevTime;
 
-        // Å¬¸³ÀÌ ¹Ù²î°Å³ª, ½Ã°£ÀÌ µÇ°¨°å´Ù¸é(·çÇÁ/¸®¼Â) ±âÁØÀ» ¸®¼Â
+        // í´ë¦½ì´ ë°”ë€Œê±°ë‚˜, ì‹œê°„ì´ ë˜ê°ê²¼ë‹¤ë©´(ë£¨í”„/ë¦¬ì…‹) ê¸°ì¤€ì„ ë¦¬ì…‹
         if (dt < 0.0)
         {
             m_prevTime = t;
             return;
         }
 
-        // ¾ÆÁÖ ´Ü¼ø ¿¹½Ã:
-        // - clip 0: 0.20ÃÊ¿¡ ¹ß¼Ò¸®, 0.55ÃÊ¿¡ °ø°İ È÷Æ®
+        // ì•„ì£¼ ë‹¨ìˆœ ì˜ˆì‹œ:
+        // - clip 0: 0.20ì´ˆì— ë°œì†Œë¦¬, 0.55ì´ˆì— ê³µê²© íˆíŠ¸
         if (clip == 0)
         {
             if (m_prevTime < 0.20 && t >= 0.20) OnFootstep();

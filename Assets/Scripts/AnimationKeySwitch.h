@@ -1,10 +1,10 @@
-#pragma once
+ï»¿#pragma once
 
 #include "Core/IScript.h"
 
 namespace Alice
 {
-    /// 1/2/3 Å°·Î ¾Ö´Ï¸ŞÀÌ¼Ç Å¬¸³À» ¹Ù²Ù´Â ¿¹½Ã
+    /// 1/2/3 í‚¤ë¡œ ì• ë‹ˆë©”ì´ì…˜ í´ë¦½ì„ ë°”ê¾¸ëŠ” ì˜ˆì‹œ
     class AnimationKeySwitch : public IScript
     {
     public:
@@ -13,7 +13,7 @@ namespace Alice
         void Start() override;
         void Update(float deltaTime) override;
 
-        // ¾Ö´Ï¸ŞÀÌ¼Ç ³ëÆ¼ÆÄÀÌ(¸ùÅ¸ÁÖ) ¿¹½Ã
+        // ì• ë‹ˆë©”ì´ì…˜ ë…¸í‹°íŒŒì´(ëª½íƒ€ì£¼) ì˜ˆì‹œ
         void OnFootstep();
         void OnHit();
 

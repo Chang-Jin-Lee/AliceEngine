@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <filesystem>
 
@@ -7,21 +7,21 @@ namespace Alice
     class World;
     class ResourceManager;
 
-    /// ¾À(.scene) ÆÄÀÏ ÀúÀå/·Îµå À¯Æ¿¸®Æ¼ÀÔ´Ï´Ù.
-    /// - JSON ±â¹İ ÀúÀå/·ÎµåÀÔ´Ï´Ù.
-    // ¿¡µğÅÍ¿¡¼­ ¾ÀÀ» ¸¸µé°í, ÀúÀåÇÏ´Â ±â´É¿¡ ÇØ´çÇÏ´Â ÄÚµåÀÓ
+    /// ì”¬(.scene) íŒŒì¼ ì €ì¥/ë¡œë“œ ìœ í‹¸ë¦¬í‹°ì…ë‹ˆë‹¤.
+    /// - JSON ê¸°ë°˜ ì €ì¥/ë¡œë“œì…ë‹ˆë‹¤.
+    // ì—ë””í„°ì—ì„œ ì”¬ì„ ë§Œë“¤ê³ , ì €ì¥í•˜ëŠ” ê¸°ëŠ¥ì— í•´ë‹¹í•˜ëŠ” ì½”ë“œì„
     namespace SceneFile
     {
-        /// ÇöÀç World ÀÇ »óÅÂ¸¦ JSON(.scene)À¸·Î ÀúÀåÇÕ´Ï´Ù.
+        /// í˜„ì¬ World ì˜ ìƒíƒœë¥¼ JSON(.scene)ìœ¼ë¡œ ì €ì¥í•©ë‹ˆë‹¤.
         bool Save(const World& world, const std::filesystem::path& path);
 
-        /// .scene(JSON)À» ÀĞ¾î¼­ World ¸¦ Àç±¸¼ºÇÕ´Ï´Ù.
-        /// ±âÁ¸ ¿£Æ¼Æ¼µéÀº ¸ğµÎ Á¦°ÅµË´Ï´Ù.
+        /// .scene(JSON)ì„ ì½ì–´ì„œ World ë¥¼ ì¬êµ¬ì„±í•©ë‹ˆë‹¤.
+        /// ê¸°ì¡´ ì—”í‹°í‹°ë“¤ì€ ëª¨ë‘ ì œê±°ë©ë‹ˆë‹¤.
         bool Load(World& world, const std::filesystem::path& path);
 
-        /// ¿¡µğÅÍ/ÃÖÁ¾ºôµå ¸ğµÎ¿¡¼­ µ¿ÀÛÇÏ´Â ÀÚµ¿ ·Î´õÀÔ´Ï´Ù.
-        /// - editorMode: ½ÇÁ¦ ÆÄÀÏ(Assets/...)À» ÀĞ½À´Ï´Ù.
-        /// - gameMode  : ResourceManager¸¦ ÅëÇØ Metas/Chunks¿¡¼­ ¹ÙÀÌÆ®¸¦ ·ÎµåÇØ¼­ JSONÀ¸·Î ÆÄ½ÌÇÕ´Ï´Ù.
+        /// ì—ë””í„°/ìµœì¢…ë¹Œë“œ ëª¨ë‘ì—ì„œ ë™ì‘í•˜ëŠ” ìë™ ë¡œë”ì…ë‹ˆë‹¤.
+        /// - editorMode: ì‹¤ì œ íŒŒì¼(Assets/...)ì„ ì½ìŠµë‹ˆë‹¤.
+        /// - gameMode  : ResourceManagerë¥¼ í†µí•´ Metas/Chunksì—ì„œ ë°”ì´íŠ¸ë¥¼ ë¡œë“œí•´ì„œ JSONìœ¼ë¡œ íŒŒì‹±í•©ë‹ˆë‹¤.
         bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath);
     }
 }

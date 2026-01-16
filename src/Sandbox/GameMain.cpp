@@ -1,23 +1,23 @@
-#define WIN32_LEAN_AND_MEAN
+ï»¿#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
 #include "Engine/Engine.h"
 #include "Core/Logger.h"
 
-// °ÔÀÓ ÇÃ·¹ÀÌ Àü¿ë ¿£Æ®¸® Æ÷ÀÎÆ®ÀÔ´Ï´Ù.
-// - ¿¡µğÅÍ UI(ImGui Docking)´Â Ç¥½ÃÇÏÁö ¾Ê°í,
-//   ºäÆ÷Æ®¿¡ º¸ÀÌ´ø °ÔÀÓ È­¸é¸¸ ÀüÃ¼ Ã¢À¸·Î ½ÇÇàÇÕ´Ï´Ù.
+// ê²Œì„ í”Œë ˆì´ ì „ìš© ì—”íŠ¸ë¦¬ í¬ì¸íŠ¸ì…ë‹ˆë‹¤.
+// - ì—ë””í„° UI(ImGui Docking)ëŠ” í‘œì‹œí•˜ì§€ ì•Šê³ ,
+//   ë·°í¬íŠ¸ì— ë³´ì´ë˜ ê²Œì„ í™”ë©´ë§Œ ì „ì²´ ì°½ìœ¼ë¡œ ì‹¤í–‰í•©ë‹ˆë‹¤.
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 {
-    // °ø¿ë ·Î°Å ÃÊ±âÈ­
+    // ê³µìš© ë¡œê±° ì´ˆê¸°í™”
     Alice::Logger::Initialize();
 
-    // editorMode=false ¡æ °ÔÀÓ Àü¿ë ¸ğµå
+    // editorMode=false â†’ ê²Œì„ ì „ìš© ëª¨ë“œ
     Alice::Engine engine(false);
 
     if (!engine.Initialize(hInstance, nCmdShow))
     {
-        MessageBoxW(nullptr, L"¿£Áø ÃÊ±âÈ­¿¡ ½ÇÆĞÇß½À´Ï´Ù.", L"AliceGame", MB_OK | MB_ICONERROR);
+        MessageBoxW(nullptr, L"ì—”ì§„ ì´ˆê¸°í™”ì— ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤.", L"AliceGame", MB_OK | MB_ICONERROR);
         Alice::Logger::Shutdown();
         return -1;
     }

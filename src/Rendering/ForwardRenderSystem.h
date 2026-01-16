@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -22,36 +22,36 @@
 namespace Alice
 {
     class ResourceManager;
-    /// °£´ÜÇÑ Forward ·»´õ ½Ã½ºÅÛÀÔ´Ï´Ù.
-    /// - Å¥ºê 1°³¸¦ ±×·Á¼­ Phong / Blinn-Phong ¶óÀÌÆ®¸¦ È®ÀÎÇÒ ¼ö ÀÖ½À´Ï´Ù.
-    /// - WorldÀÇ TransformComponent¸¦ ÀĞ¾î¿Í ¿ùµå Çà·ÄÀ» ±¸¼ºÇÕ´Ï´Ù.
+    /// ê°„ë‹¨í•œ Forward ë Œë” ì‹œìŠ¤í…œì…ë‹ˆë‹¤.
+    /// - íë¸Œ 1ê°œë¥¼ ê·¸ë ¤ì„œ Phong / Blinn-Phong ë¼ì´íŠ¸ë¥¼ í™•ì¸í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
+    /// - Worldì˜ TransformComponentë¥¼ ì½ì–´ì™€ ì›”ë“œ í–‰ë ¬ì„ êµ¬ì„±í•©ë‹ˆë‹¤.
     class ForwardRenderSystem
     {
     public:
         explicit ForwardRenderSystem(ID3D11RenderDevice& renderDevice);
         ~ForwardRenderSystem() = default;
 
-        /// ¼ÎÀÌ´õ, ¹öÆÛ µî ·»´õ¸µ¿¡ ÇÊ¿äÇÑ ¸®¼Ò½º¸¦ »ı¼ºÇÕ´Ï´Ù.
+        /// ì…°ì´ë”, ë²„í¼ ë“± ë Œë”ë§ì— í•„ìš”í•œ ë¦¬ì†ŒìŠ¤ë¥¼ ìƒì„±í•©ë‹ˆë‹¤.
         bool Initialize(std::uint32_t width, std::uint32_t height);
 
-        /// ºäÆ÷Æ® Å©±â°¡ º¯°æµÇ¸é ·»´õ Å¸±ê ÅØ½ºÃ³µµ ÇÔ²² ¸®»çÀÌÁîÇÕ´Ï´Ù.
+        /// ë·°í¬íŠ¸ í¬ê¸°ê°€ ë³€ê²½ë˜ë©´ ë Œë” íƒ€ê¹ƒ í…ìŠ¤ì²˜ë„ í•¨ê»˜ ë¦¬ì‚¬ì´ì¦ˆí•©ë‹ˆë‹¤.
         void Resize(std::uint32_t width, std::uint32_t height);
 
-        /// ¸®¼Ò½º ¸Å´ÏÀú¸¦ ÁÖÀÔÇÕ´Ï´Ù.
-        /// - ÅØ½ºÃ³ µîÀÇ ·Îµù/ÄíÅ·¿¡ »ç¿ëµË´Ï´Ù.
+        /// ë¦¬ì†ŒìŠ¤ ë§¤ë‹ˆì €ë¥¼ ì£¼ì…í•©ë‹ˆë‹¤.
+        /// - í…ìŠ¤ì²˜ ë“±ì˜ ë¡œë”©/ì¿ í‚¹ì— ì‚¬ìš©ë©ë‹ˆë‹¤.
         void SetResourceManager(ResourceManager* resources) { m_resources = resources; }
 
-        /// ½ºÅ°´× ¸Ş½Ã ¸ŞÅ¸µ¥ÀÌÅÍ(¼­ºê¼Â/½ºÄÌ·¹Åæ)¸¦ Á¶È¸ÇÏ±â À§ÇÑ ·¹Áö½ºÆ®¸®¸¦ ÁÖÀÔÇÕ´Ï´Ù.
+        /// ìŠ¤í‚¤ë‹ ë©”ì‹œ ë©”íƒ€ë°ì´í„°(ì„œë¸Œì…‹/ìŠ¤ì¼ˆë ˆí†¤)ë¥¼ ì¡°íšŒí•˜ê¸° ìœ„í•œ ë ˆì§€ìŠ¤íŠ¸ë¦¬ë¥¼ ì£¼ì…í•©ë‹ˆë‹¤.
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
         
     public:
-        /// ´ÜÀÏ ¿£Æ¼Æ¼(¿¹: Å¥ºê)¿Í ½ºÅ°´× ¸Ş½ÃµéÀ» ÇÔ²² ·»´õ¸µÇÕ´Ï´Ù.
-        /// \param world        ECS ¿ùµå (Transform Á¤º¸ Á¶È¸)
-        /// \param camera       Ä«¸Ş¶ó (ºä/Åõ¿µ Çà·Ä ¹× Ä«¸Ş¶ó À§Ä¡)
-        /// \param entity       (ÇöÀç´Â »ç¿ëÇÏÁö ¾ÊÁö¸¸, ÇâÈÄ Æ¯Á¤ ¿£Æ¼Æ¼¸¸ ¼±ÅÃ ·»´õ¸µ¿ëÀ¸·Î ¿¹¾à)
+        /// ë‹¨ì¼ ì—”í‹°í‹°(ì˜ˆ: íë¸Œ)ì™€ ìŠ¤í‚¤ë‹ ë©”ì‹œë“¤ì„ í•¨ê»˜ ë Œë”ë§í•©ë‹ˆë‹¤.
+        /// \param world        ECS ì›”ë“œ (Transform ì •ë³´ ì¡°íšŒ)
+        /// \param camera       ì¹´ë©”ë¼ (ë·°/íˆ¬ì˜ í–‰ë ¬ ë° ì¹´ë©”ë¼ ìœ„ì¹˜)
+        /// \param entity       (í˜„ì¬ëŠ” ì‚¬ìš©í•˜ì§€ ì•Šì§€ë§Œ, í–¥í›„ íŠ¹ì • ì—”í‹°í‹°ë§Œ ì„ íƒ ë Œë”ë§ìš©ìœ¼ë¡œ ì˜ˆì•½)
         /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong
-        /// \param enableFillLight º¸Á¶±¤ »ç¿ë ¿©ºÎ
-        /// \param skinnedCommands ½ºÅ°´× ¸Ş½Ã µå·Î¿ì Ä¿¸Çµå ¸ñ·Ï
+        /// \param enableFillLight ë³´ì¡°ê´‘ ì‚¬ìš© ì—¬ë¶€
+        /// \param skinnedCommands ìŠ¤í‚¤ë‹ ë©”ì‹œ ë“œë¡œìš° ì»¤ë§¨ë“œ ëª©ë¡
         void Render(const World& world,
                     const Camera& camera,
                     EntityId entity,
@@ -126,33 +126,33 @@ namespace Alice
 
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbLighting;
-        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbSkybox; // ½ºÄ«ÀÌ¹Ú½º Àü¿ë CB (DYNAMIC)
-        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPostProcess; // Åæ¸ÅÇÎ¿ë PostProcess CB
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbSkybox; // ìŠ¤ì¹´ì´ë°•ìŠ¤ ì „ìš© CB (DYNAMIC)
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPostProcess; // í†¤ë§¤í•‘ìš© PostProcess CB
 
-        // ÅØ½ºÃ³ / »ùÇÃ·¯
+        // í…ìŠ¤ì²˜ / ìƒ˜í”ŒëŸ¬
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_diffuseSRV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_normalSRV;
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_flatNormalSRV; // (0.5,0.5,1) ±âº» ³ë¸»¸Ê
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_flatNormalSRV; // (0.5,0.5,1) ê¸°ë³¸ ë…¸ë§ë§µ
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_specularSRV;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerState;
-        Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerLinear; // Åæ¸ÅÇÎ¿ë Linear Sampler
+        Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_samplerLinear; // í†¤ë§¤í•‘ìš© Linear Sampler
 
-        // ¾ËÆÄ ºí·»µå¿ë State
+        // ì•ŒíŒŒ ë¸”ë Œë“œìš© State
         Microsoft::WRL::ComPtr<ID3D11BlendState> m_alphaBlendState;
 
-        // À½¼ö ½ºÄÉÀÏ(¹İÀü ½ºÄÉÀÏ)À» À§ÇÑ ÄÃ¸µ ¸ğµå Á¦¾î¿ë ·¡½ºÅÍ¶óÀÌÀú »óÅÂ
+        // ìŒìˆ˜ ìŠ¤ì¼€ì¼(ë°˜ì „ ìŠ¤ì¼€ì¼)ì„ ìœ„í•œ ì»¬ë§ ëª¨ë“œ ì œì–´ìš© ë˜ìŠ¤í„°ë¼ì´ì € ìƒíƒœ
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rasterizerStateReversed;
-        // ¼¨µµ¿ì ¸Ê ±íÀÌ ¹ÙÀÌ¾î½º Àü¿ë RS
+        // ì„€ë„ìš° ë§µ ê¹Šì´ ë°”ì´ì–´ìŠ¤ ì „ìš© RS
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_shadowRasterizerState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_shadowRasterizerStateReversed;
 
-        // ¸ÓÆ¼¸®¾ó Àü¿ë ÅØ½ºÃ³ Ä³½Ã (°æ·Î -> SRV)
+        // ë¨¸í‹°ë¦¬ì–¼ ì „ìš© í…ìŠ¤ì²˜ ìºì‹œ (ê²½ë¡œ -> SRV)
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> m_textureCache;
 
         LightingParameters                              m_lightingParameters;
 
-        // ==== ½ºÄ«ÀÌ¹Ú½º ¸®¼Ò½º ====
+        // ==== ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¦¬ì†ŒìŠ¤ ====
         bool                                            m_skyboxEnabled { true };
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_skyboxSRV;
         Microsoft::WRL::ComPtr<ID3D11VertexShader>       m_skyboxVS;
@@ -160,33 +160,33 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11DepthStencilState>  m_skyboxDepthState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_skyboxRasterizerState;
         
-        // ¹è°æ»ö (½ºÄ«ÀÌ¹Ú½º°¡ OffÀÏ ¶§ »ç¿ë)
+        // ë°°ê²½ìƒ‰ (ìŠ¤ì¹´ì´ë°•ìŠ¤ê°€ Offì¼ ë•Œ ì‚¬ìš©)
         DirectX::XMFLOAT4                                m_backgroundColor { 0.1f, 0.1f, 0.1f, 1.0f };
 
-        // ==== Æ÷½ºÆ® ÇÁ·Î¼¼½º ÆÄ¶ó¹ÌÅÍ ====
+        // ==== í¬ìŠ¤íŠ¸ í”„ë¡œì„¸ìŠ¤ íŒŒë¼ë¯¸í„° ====
         PostProcessParams m_postProcessParams;
 
-        // ==== IBL (Image-Based Lighting) ¸®¼Ò½º ====
-        // - Diffuse IBL: Irradiance map (°£Á¢ ³­¹İ»ç)
-        // - Specular IBL: Prefiltered env map (°ÅÄ¥±âº° ¹İ»ç)
-        // - BRDF LUT: (NdotV, Roughness)¿¡ ´ëÇÑ F,G ÀûºĞ Æò±Õ°ª
+        // ==== IBL (Image-Based Lighting) ë¦¬ì†ŒìŠ¤ ====
+        // - Diffuse IBL: Irradiance map (ê°„ì ‘ ë‚œë°˜ì‚¬)
+        // - Specular IBL: Prefiltered env map (ê±°ì¹ ê¸°ë³„ ë°˜ì‚¬)
+        // - BRDF LUT: (NdotV, Roughness)ì— ëŒ€í•œ F,G ì ë¶„ í‰ê· ê°’
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblDiffuseSRV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblSpecularSRV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblBrdfLutSRV;
-        std::string                                      m_currentIblSet; // ÇöÀç IBL ¼¼Æ® ÀÌ¸§ (Bridge/Indoor/Sample)
+        std::string                                      m_currentIblSet; // í˜„ì¬ IBL ì„¸íŠ¸ ì´ë¦„ (Bridge/Indoor/Sample)
 
-        // ==== °ÔÀÓ ºäÆ÷Æ® ·»´õ Å¸±ê (Scene Color) ====
+        // ==== ê²Œì„ ë·°í¬íŠ¸ ë Œë” íƒ€ê¹ƒ (Scene Color) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneColorTex;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView>  m_sceneRTV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneSRV;
 
-        // ==== ¿¡µğÅÍ ºäÆ÷Æ® Ç¥½Ã¿ë LDR °á°ú ÅØ½ºÃ³ (ToneMapped) ====
-        // - ImGui::Image´Â HDR/Åæ¸ÅÇÎ/°¨¸¶¸¦ Ã³¸®ÇÏÁö ¾ÊÀ¸¹Ç·Î, Ç¥½Ã Àü¿ë ÅØ½ºÃ³¸¦ º°µµ·Î »ı¼ºÇÕ´Ï´Ù.
+        // ==== ì—ë””í„° ë·°í¬íŠ¸ í‘œì‹œìš© LDR ê²°ê³¼ í…ìŠ¤ì²˜ (ToneMapped) ====
+        // - ImGui::ImageëŠ” HDR/í†¤ë§¤í•‘/ê°ë§ˆë¥¼ ì²˜ë¦¬í•˜ì§€ ì•Šìœ¼ë¯€ë¡œ, í‘œì‹œ ì „ìš© í…ìŠ¤ì²˜ë¥¼ ë³„ë„ë¡œ ìƒì„±í•©ë‹ˆë‹¤.
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_viewportTex;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView>  m_viewportRTV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_viewportSRV;
 
-        // ==== °ÔÀÓ ºäÆ÷Æ®¿ë ±íÀÌ/½ºÅÙ½Ç ====
+        // ==== ê²Œì„ ë·°í¬íŠ¸ìš© ê¹Šì´/ìŠ¤í…ì‹¤ ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_sceneDSV;
 
@@ -195,7 +195,7 @@ namespace Alice
 
         bool CreateSceneRenderTarget(std::uint32_t width, std::uint32_t height);
 
-        // ==== ¼¨µµ¿ì ¸Ê ¸®¼Ò½º (´ÜÀÏ Directional Light) ====
+        // ==== ì„€ë„ìš° ë§µ ë¦¬ì†ŒìŠ¤ (ë‹¨ì¼ Directional Light) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_shadowTex;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_shadowDSV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_shadowSRV;
@@ -205,12 +205,12 @@ namespace Alice
 
         bool CreateShadowMapResources();
 
-        // ==== ½ºÅ°´× Àü¿ë ¸®¼Ò½º ====
+        // ==== ìŠ¤í‚¤ë‹ ì „ìš© ë¦¬ì†ŒìŠ¤ ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_skinnedVertexShader;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>       m_inputLayoutSkinned;
         Microsoft::WRL::ComPtr<ID3D11Buffer>            m_cbBones;
 
-        // ==== Åæ¸ÅÇÎ ¸®¼Ò½º ====
+        // ==== í†¤ë§¤í•‘ ë¦¬ì†ŒìŠ¤ ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_quadVS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>       m_toneMappingPS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_quadInputLayout;
@@ -219,52 +219,52 @@ namespace Alice
         UINT                                           m_quadIndexCount = 0;
         UINT                                           m_quadStride = 0;
         UINT                                           m_quadOffset = 0;
-        // Åæ¸ÅÇÎ Àü¿ë »óÅÂ °´Ã¼ (Blend OFF, Depth OFF, Cull OFF)
+        // í†¤ë§¤í•‘ ì „ìš© ìƒíƒœ ê°ì²´ (Blend OFF, Depth OFF, Cull OFF)
         Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_ppDepthOff;
         Microsoft::WRL::ComPtr<ID3D11BlendState>        m_ppBlendOpaque;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_ppRasterNoCull;
 
     public:
-        /// ½ºÅ°´× ¸Ş½Ã¸¦ ·»´õ¸µÇÕ´Ï´Ù.
-        /// - AliceGame ÀÇ SkinnedMeshSystem ÀÌ ¸¸µé¾î ÁØ DrawCommand ¸®½ºÆ®¸¦ »ç¿ëÇÕ´Ï´Ù.
+        /// ìŠ¤í‚¤ë‹ ë©”ì‹œë¥¼ ë Œë”ë§í•©ë‹ˆë‹¤.
+        /// - AliceGame ì˜ SkinnedMeshSystem ì´ ë§Œë“¤ì–´ ì¤€ DrawCommand ë¦¬ìŠ¤íŠ¸ë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.
         void RenderSkinnedMeshes(const Camera& camera, const std::vector<SkinnedDrawCommand>& commands);
 
-        /// ÇöÀç Á¶¸í ÆÄ¶ó¹ÌÅÍ(»ö»ó, °­µµ, Shininess µî)¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
-        /// ImGui µî¿¡¼­ ÀÌ °ªÀ» Á÷Á¢ ¼öÁ¤ÇØµµ µË´Ï´Ù.
+        /// í˜„ì¬ ì¡°ëª… íŒŒë¼ë¯¸í„°(ìƒ‰ìƒ, ê°•ë„, Shininess ë“±)ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
+        /// ImGui ë“±ì—ì„œ ì´ ê°’ì„ ì§ì ‘ ìˆ˜ì •í•´ë„ ë©ë‹ˆë‹¤.
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }
         const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
 
-        /// Game Ã¢¿¡¼­ »ç¿ëÇÒ ¾À ÄÃ·¯ ÅØ½ºÃ³ SRV
+        /// Game ì°½ì—ì„œ ì‚¬ìš©í•  ì”¬ ì»¬ëŸ¬ í…ìŠ¤ì²˜ SRV
         ID3D11ShaderResourceView* GetSceneColorSRV() const { return m_sceneSRV.Get(); }
         std::uint32_t GetSceneWidth()  const { return m_sceneWidth; }
         std::uint32_t GetSceneHeight() const { return m_sceneHeight; }
 
 		ID3D11ShaderResourceView* GetSceneSRV() const { return m_sceneSRV.Get(); }
 
-        /// ¿¡µğÅÍ ºäÆ÷Æ® Ç¥½Ã¿ë(Åæ¸ÅÇÎ ¿Ï·á) SRV
+        /// ì—ë””í„° ë·°í¬íŠ¸ í‘œì‹œìš©(í†¤ë§¤í•‘ ì™„ë£Œ) SRV
         ID3D11ShaderResourceView* GetViewportSRV() const { return m_viewportSRV.Get(); }
 
-        /// IBL ¼¼Æ®¸¦ º¯°æÇÕ´Ï´Ù (Bridge/Indoor/Sample)
-        /// - ¾À ÀüÈ¯ ½Ã È£ÃâÇÏ¿© È¯°æ¿¡ ¸Â´Â IBLÀ» ·ÎµåÇÕ´Ï´Ù.
+        /// IBL ì„¸íŠ¸ë¥¼ ë³€ê²½í•©ë‹ˆë‹¤ (Bridge/Indoor/Sample)
+        /// - ì”¬ ì „í™˜ ì‹œ í˜¸ì¶œí•˜ì—¬ í™˜ê²½ì— ë§ëŠ” IBLì„ ë¡œë“œí•©ë‹ˆë‹¤.
         bool SetIblSet(const std::string& iblDir = "Bridge", const std::string& iblName = "bridge");
 
-        /// ½ºÄ«ÀÌ¹Ú½º È°¼ºÈ­/ºñÈ°¼ºÈ­¸¦ ¼³Á¤ÇÕ´Ï´Ù.
-        /// - enabled°¡ falseÀÌ¸é IBLµµ ÇÔ²² ºñÈ°¼ºÈ­µË´Ï´Ù.
+        /// ìŠ¤ì¹´ì´ë°•ìŠ¤ í™œì„±í™”/ë¹„í™œì„±í™”ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
+        /// - enabledê°€ falseì´ë©´ IBLë„ í•¨ê»˜ ë¹„í™œì„±í™”ë©ë‹ˆë‹¤.
         void SetSkyboxEnabled(bool enabled);
 
-        /// ¹è°æ»öÀ» ¼³Á¤ÇÕ´Ï´Ù (½ºÄ«ÀÌ¹Ú½º°¡ OffÀÏ ¶§ »ç¿ë).
+        /// ë°°ê²½ìƒ‰ì„ ì„¤ì •í•©ë‹ˆë‹¤ (ìŠ¤ì¹´ì´ë°•ìŠ¤ê°€ Offì¼ ë•Œ ì‚¬ìš©).
         void SetBackgroundColor(const DirectX::XMFLOAT4& color) { m_backgroundColor = color; }
         const DirectX::XMFLOAT4& GetBackgroundColor() const { return m_backgroundColor; }
 
-        /// Åæ¸ÅÇÎÀ» Àû¿ëÇÏ¿© HDR ¾À ÅØ½ºÃ³¸¦ ¹é¹öÆÛ¿¡ ·»´õ¸µÇÕ´Ï´Ù.
-        /// @param targetRTV ¹é¹öÆÛ RTV
-        /// @param viewport ºäÆ÷Æ® ¿µ¿ª
+        /// í†¤ë§¤í•‘ì„ ì ìš©í•˜ì—¬ HDR ì”¬ í…ìŠ¤ì²˜ë¥¼ ë°±ë²„í¼ì— ë Œë”ë§í•©ë‹ˆë‹¤.
+        /// @param targetRTV ë°±ë²„í¼ RTV
+        /// @param viewport ë·°í¬íŠ¸ ì˜ì—­
         void RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
-        /// Æ÷½ºÆ® ÇÁ·Î¼¼½º ÆÄ¶ó¹ÌÅÍ °¡Á®¿À±â
+        /// í¬ìŠ¤íŠ¸ í”„ë¡œì„¸ìŠ¤ íŒŒë¼ë¯¸í„° ê°€ì ¸ì˜¤ê¸°
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
         
-        /// Æ÷½ºÆ® ÇÁ·Î¼¼½º ÆÄ¶ó¹ÌÅÍ ¼³Á¤ÇÏ±â
+        /// í¬ìŠ¤íŠ¸ í”„ë¡œì„¸ìŠ¤ íŒŒë¼ë¯¸í„° ì„¤ì •í•˜ê¸°
         void SetPostProcessParams(float exposure, float maxHDRNits);
     };
 }

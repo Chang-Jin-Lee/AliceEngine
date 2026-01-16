@@ -1,4 +1,4 @@
-#include "SceneSwitchExample.h"
+ï»¿#include "SceneSwitchExample.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 namespace Alice
@@ -14,13 +14,13 @@ namespace Alice
 
         if (input->GetKeyDown(KeyCode::F1))
         {
-            // ÄÚµå ¾À ÀüÈ¯ (REGISTER_SCENE ·Î µî·ÏµÈ ¾À ÀÌ¸§)
+            // ì½”ë“œ ì”¬ ì „í™˜ (REGISTER_SCENE ë¡œ ë“±ë¡ëœ ì”¬ ì´ë¦„)
             scenes->LoadSceneFile("MaterialTestScene.scene");
         }
 
         if (input->GetKeyDown(KeyCode::F2))
         {
-            // .scene ÆÄÀÏ ·Îµå (ÇÁ·¹ÀÓ ³¡¿¡ Ã³¸®µÊ)
+            // .scene íŒŒì¼ ë¡œë“œ (í”„ë ˆìž„ ëì— ì²˜ë¦¬ë¨)
             scenes->LoadSceneFile("FbxTestScene.scene");
         }
     }

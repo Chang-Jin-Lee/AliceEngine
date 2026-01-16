@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <wchar.h>
 #include <d3d11.h>
 #include <exception>
@@ -152,7 +152,7 @@ HRESULT CompileShaderFromFile(const WCHAR* szFileName, LPCSTR szEntryPoint, LPCS
 
 HRESULT CreateTextureFromFile(ID3D11Device* d3dDevice, const wchar_t* szFileName, ID3D11ShaderResourceView** textureView);
 
-// UTF-8 -> UTF-16 (Windows) º¯È¯
+// UTF-8 -> UTF-16 (Windows) ë³€í™˜
 std::wstring WStringFromUtf8(const std::string& s);
-// UTF-16 (Windows wide) -> UTF-8 º¯È¯
+// UTF-16 (Windows wide) -> UTF-8 ë³€í™˜
 std::string Utf8FromWString(const std::wstring& ws);

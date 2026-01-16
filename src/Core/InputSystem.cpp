@@ -1,4 +1,4 @@
-#include "Core/InputSystem.h"
+ï»¿#include "Core/InputSystem.h"
 
 using namespace DirectX;
 
@@ -22,21 +22,21 @@ namespace Alice
 
     void InputSystem::Update(const float& /*deltaTime*/)
     {
-        // µ¨Å¸´Â ÇÁ·¹ÀÓ¸¶´Ù ÃÊ±âÈ­ÇÕ´Ï´Ù.
+        // ë¸íƒ€ëŠ” í”„ë ˆì„ë§ˆë‹¤ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
         m_mouseDelta.x = 0;
         m_mouseDelta.y = 0;
         m_mouseScrollDelta = 0.0f;
 
         if (!m_keyboard || !m_mouse) return;
 
-        // DirectXTK ÀÔ·Â »óÅÂ °»½Å
+        // DirectXTK ì…ë ¥ ìƒíƒœ ê°±ì‹ 
         m_mouseState = m_mouse->GetState();
         m_mouseTracker.Update(m_mouseState);
 
         m_keyboardState = m_keyboard->GetState();
         m_keyboardTracker.Update(m_keyboardState);
 
-        // ¸¶¿ì½º µ¨Å¸ °è»ê (Å¬¶óÀÌ¾ğÆ® ÁÂÇ¥ ±âÁØ)
+        // ë§ˆìš°ìŠ¤ ë¸íƒ€ ê³„ì‚° (í´ë¼ì´ì–¸íŠ¸ ì¢Œí‘œ ê¸°ì¤€)
         POINT current{ m_mouseState.x, m_mouseState.y };
 
         if (!m_hasPrevMousePos)
@@ -50,8 +50,8 @@ namespace Alice
 
         m_prevMousePos = current;
 
-        // ¸¶¿ì½º ½ºÅ©·Ñ µ¨Å¸ °è»ê
-        // DirectXTKÀÇ scrollWheelValue´Â ´©Àû°ªÀÌ¹Ç·Î ÀÌÀü °ª°úÀÇ Â÷ÀÌ¸¦ °è»êÇÕ´Ï´Ù.
+        // ë§ˆìš°ìŠ¤ ìŠ¤í¬ë¡¤ ë¸íƒ€ ê³„ì‚°
+        // DirectXTKì˜ scrollWheelValueëŠ” ëˆ„ì ê°’ì´ë¯€ë¡œ ì´ì „ ê°’ê³¼ì˜ ì°¨ì´ë¥¼ ê³„ì‚°í•©ë‹ˆë‹¤.
         const int currentScrollWheelValue = m_mouseState.scrollWheelValue;
         m_mouseScrollDelta = static_cast<float>(currentScrollWheelValue - m_prevScrollWheelValue);
         m_prevScrollWheelValue = currentScrollWheelValue;
