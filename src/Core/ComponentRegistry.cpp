@@ -5,6 +5,11 @@
 #include <rttr/registration>
 #include <DirectXMath.h>
 
+// 물리 컴포넌트 헤더
+#include "PhysX/Components/RigidBodyComponent.h"
+#include "PhysX/Components/ColliderComponent.h"
+#include "PhysX/IPhysicsWorld.h"
+
 using namespace DirectX;
 
 namespace Alice
@@ -92,6 +97,62 @@ namespace Alice
             .property("fixedDt", &PhysicsSceneSettingsComponent::fixedDt)
             .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps);
 
+        // === ColliderType enum 등록 ===
+        rttr::registration::enumeration<ColliderType>("ColliderType")
+        (
+            rttr::value("Box", ColliderType::Box),
+            rttr::value("Sphere", ColliderType::Sphere),
+            rttr::value("Capsule", ColliderType::Capsule)
+        );
+
+        // === RigidBodyLockFlags enum 등록 ===
+        rttr::registration::enumeration<RigidBodyLockFlags>("RigidBodyLockFlags")
+        (
+            rttr::value("None", RigidBodyLockFlags::None),
+            rttr::value("LockLinearX", RigidBodyLockFlags::LockLinearX),
+            rttr::value("LockLinearY", RigidBodyLockFlags::LockLinearY),
+            rttr::value("LockLinearZ", RigidBodyLockFlags::LockLinearZ),
+            rttr::value("LockAngularX", RigidBodyLockFlags::LockAngularX),
+            rttr::value("LockAngularY", RigidBodyLockFlags::LockAngularY),
+            rttr::value("LockAngularZ", RigidBodyLockFlags::LockAngularZ)
+        );
+
+        // === RigidBodyComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<RigidBodyComponent>("RigidBodyComponent")
+            .constructor<>()
+            .property("density", &RigidBodyComponent::density)
+            .property("massOverride", &RigidBodyComponent::massOverride)
+            .property("isKinematic", &RigidBodyComponent::isKinematic)
+            .property("gravityEnabled", &RigidBodyComponent::gravityEnabled)
+            .property("startAwake", &RigidBodyComponent::startAwake)
+            .property("enableCCD", &RigidBodyComponent::enableCCD)
+            .property("enableSpeculativeCCD", &RigidBodyComponent::enableSpeculativeCCD)
+            .property("lockFlags", &RigidBodyComponent::lockFlags)
+            .property("linearDamping", &RigidBodyComponent::linearDamping)
+            .property("angularDamping", &RigidBodyComponent::angularDamping)
+            .property("maxLinearVelocity", &RigidBodyComponent::maxLinearVelocity)
+            .property("maxAngularVelocity", &RigidBodyComponent::maxAngularVelocity)
+            .property("solverPositionIterations", &RigidBodyComponent::solverPositionIterations)
+            .property("solverVelocityIterations", &RigidBodyComponent::solverVelocityIterations)
+            .property("sleepThreshold", &RigidBodyComponent::sleepThreshold)
+            .property("stabilizationThreshold", &RigidBodyComponent::stabilizationThreshold);
+
+        // === ColliderComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<ColliderComponent>("ColliderComponent")
+            .constructor<>()
+            .property("type", &ColliderComponent::type)
+            .property("halfExtents", &ColliderComponent::halfExtents)
+            .property("radius", &ColliderComponent::radius)
+            .property("capsuleRadius", &ColliderComponent::capsuleRadius)
+            .property("capsuleHalfHeight", &ColliderComponent::capsuleHalfHeight)
+            .property("capsuleAlignYAxis", &ColliderComponent::capsuleAlignYAxis)
+            .property("staticFriction", &ColliderComponent::staticFriction)
+            .property("dynamicFriction", &ColliderComponent::dynamicFriction)
+            .property("restitution", &ColliderComponent::restitution)
+            .property("layerBits", &ColliderComponent::layerBits)
+            .property("collideMask", &ColliderComponent::collideMask)
+            .property("queryMask", &ColliderComponent::queryMask)
+            .property("isTrigger", &ColliderComponent::isTrigger);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();
