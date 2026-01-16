@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -9,40 +9,40 @@
 
 namespace Alice
 {
-    /// °£´ÜÇÑ 3D Ä«¸Ş¶ó Å¬·¡½ºÀÔ´Ï´Ù.
-    /// - À§Ä¡, Å¸±ê, ¾÷ º¤ÅÍ¸¦ ±â¹İÀ¸·Î ºä Çà·ÄÀ» °è»êÇÕ´Ï´Ù.
-    /// - FOV, Á¾È¾ºñ, near/far ¸¦ ±â¹İÀ¸·Î Åõ¿µ Çà·ÄÀ» °è»êÇÕ´Ï´Ù.
+    /// ê°„ë‹¨í•œ 3D ì¹´ë©”ë¼ í´ë˜ìŠ¤ì…ë‹ˆë‹¤.
+    /// - ìœ„ì¹˜, íƒ€ê¹ƒ, ì—… ë²¡í„°ë¥¼ ê¸°ë°˜ìœ¼ë¡œ ë·° í–‰ë ¬ì„ ê³„ì‚°í•©ë‹ˆë‹¤.
+    /// - FOV, ì¢…íš¡ë¹„, near/far ë¥¼ ê¸°ë°˜ìœ¼ë¡œ íˆ¬ì˜ í–‰ë ¬ì„ ê³„ì‚°í•©ë‹ˆë‹¤.
     class Camera
     {
     public:
         Camera() = default;
 
-        /// Ä«¸Ş¶óÀÇ À§Ä¡¿Í ¹Ù¶óº¸´Â Å¸±ê, ¾÷ º¤ÅÍ¸¦ ¼³Á¤ÇÕ´Ï´Ù.
+        /// ì¹´ë©”ë¼ì˜ ìœ„ì¹˜ì™€ ë°”ë¼ë³´ëŠ” íƒ€ê¹ƒ, ì—… ë²¡í„°ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.
         void SetLookAt(const DirectX::XMFLOAT3& position,
                        const DirectX::XMFLOAT3& target,
                        const DirectX::XMFLOAT3& up);
 
-        /// ¿ø±Ù Åõ¿µ ¼³Á¤À» ÇÕ´Ï´Ù.
+        /// ì›ê·¼ íˆ¬ì˜ ì„¤ì •ì„ í•©ë‹ˆë‹¤.
         void SetPerspective(float fovYRadians,
                             float aspectRatio,
                             float nearPlane,
                             float farPlane);
 
-        /// ÇöÀç Ä«¸Ş¶ó À§Ä¡¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
+        /// í˜„ì¬ ì¹´ë©”ë¼ ìœ„ì¹˜ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
         const DirectX::XMFLOAT3& GetPosition() const { return m_position; }
 
-        /// ÇöÀç FOV (¶óµğ¾È)¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
+        /// í˜„ì¬ FOV (ë¼ë””ì•ˆ)ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
         float GetFovYRadians() const { return m_fovYRadians; }
-        /// ÇöÀç Á¾È¾ºñ¸¦ ¹İÈ¯ÇÕ´Ï´Ù.
+        /// í˜„ì¬ ì¢…íš¡ë¹„ë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
         float GetAspectRatio() const { return m_aspectRatio; }
-        /// ÇöÀç near/far Æò¸éÀ» ¹İÈ¯ÇÕ´Ï´Ù.
+        /// í˜„ì¬ near/far í‰ë©´ì„ ë°˜í™˜í•©ë‹ˆë‹¤.
         float GetNearPlane() const { return m_nearPlane; }
         float GetFarPlane()  const { return m_farPlane; }
 
-        /// ºä Çà·ÄÀ» ¹İÈ¯ÇÕ´Ï´Ù.
+        /// ë·° í–‰ë ¬ì„ ë°˜í™˜í•©ë‹ˆë‹¤.
         DirectX::XMMATRIX GetViewMatrix() const;
 
-        /// Åõ¿µ Çà·ÄÀ» ¹İÈ¯ÇÕ´Ï´Ù.
+        /// íˆ¬ì˜ í–‰ë ¬ì„ ë°˜í™˜í•©ë‹ˆë‹¤.
         DirectX::XMMATRIX GetProjectionMatrix() const;
 
     private:
@@ -50,7 +50,7 @@ namespace Alice
         DirectX::XMFLOAT3 m_target   { 0.0f, 0.0f,  0.0f };
         DirectX::XMFLOAT3 m_up       { 0.0f, 1.0f,  0.0f };
 
-        float m_fovYRadians { DirectX::XM_PIDIV4 }; // 45µµ
+        float m_fovYRadians { DirectX::XM_PIDIV4 }; // 45ë„
         float m_aspectRatio { 16.0f / 9.0f };
         float m_nearPlane   { 0.1f };
         float m_farPlane    { 1000.0f };

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <vector>
 
@@ -9,10 +9,10 @@
 
 namespace Alice
 {
-    /// World 의 SkinnedMeshComponent 들을 훑어서,
-    /// ForwardRenderSystem 이 이해할 수 있는 SkinnedDrawCommand 리스트를 만드는 시스템입니다.
-    /// - 게임 로직/애니메이션 쪽에서 boneMatrices 를 채워 넣으면,
-    ///   이 시스템이 그것을 렌더 명령으로 변환합니다.
+    /// World ??SkinnedMeshComponent ?ㅼ쓣 ?묒뼱??
+    /// ForwardRenderSystem ???댄빐?????덈뒗 SkinnedDrawCommand 由ъ뒪?몃? 留뚮뱶???쒖뒪?쒖엯?덈떎.
+    /// - 寃뚯엫 濡쒖쭅/?좊땲硫붿씠??履쎌뿉??boneMatrices 瑜?梨꾩썙 ?ｌ쑝硫?
+    ///   ???쒖뒪?쒖씠 洹멸쾬???뚮뜑 紐낅졊?쇰줈 蹂?섑빀?덈떎.
     class SkinnedMeshSystem
     {
     public:
@@ -21,7 +21,7 @@ namespace Alice
         {
         }
 
-        /// World + Registry 를 기반으로 스키닝 드로우 명령 리스트를 구성합니다.
+        /// World + Registry 瑜?湲곕컲?쇰줈 ?ㅽ궎???쒕줈??紐낅졊 由ъ뒪?몃? 援ъ꽦?⑸땲??
         void BuildDrawList(const World& world,
             std::vector<SkinnedDrawCommand>& outCommands) const
         {
@@ -30,7 +30,7 @@ namespace Alice
             const auto& skinnedMap = world.GetComponents<SkinnedMeshComponent>();
             if (skinnedMap.empty())
             {
-                // 디폴트 상태(스키닝 컴포넌트가 하나도 없을 때)는 로그를 찍지 않습니다.
+                // ?뷀뤃???곹깭(?ㅽ궎??而댄룷?뚰듃媛 ?섎굹???놁쓣 ????濡쒓렇瑜?李띿? ?딆뒿?덈떎.
                 return;
             }
 
@@ -64,7 +64,7 @@ namespace Alice
                     continue;
                 }
 
-                // 월드 행렬 구성 (S * R * T)
+                // ?붾뱶 ?됰젹 援ъ꽦 (S * R * T)
                 using namespace DirectX;
                 XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
                 XMMATRIX R = XMMatrixRotationRollPitchYaw(t->rotation.x, t->rotation.y, t->rotation.z);
@@ -104,7 +104,7 @@ namespace Alice
 
             //if (!outCommands.empty())
             //{
-            //    // 실제로 드로우 커맨드가 생겼을 때만 1회 로그를 남깁니다.
+            //    // ?ㅼ젣濡??쒕줈??而ㅻ㎤?쒓? ?앷꼈???뚮쭔 1??濡쒓렇瑜??④퉩?덈떎.
             //    ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: commands=%zu",
             //                   outCommands.size());
             //}

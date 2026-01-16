@@ -1,15 +1,15 @@
-#pragma once
+ï»¿#pragma once
 
 #include <cstdint>
 #include <memory>
 #include <string>
 
-#include "../IPhysicsWorld.h" // Vec3/Quat Æ÷ÇÔ
+#include "../IPhysicsWorld.h" // Vec3/Quat í¬í•¨
 
 class PhysicsModule
 {
 public:
-    // Engine lifetime: PhysXContext ¼³Á¤(PhysXContextDesc ¹Ì·¯)
+    // Engine lifetime: PhysXContext ì„¤ì •(PhysXContextDesc ë¯¸ëŸ¬)
     struct ContextInitDesc
     {
         bool enablePvd = false;
@@ -28,7 +28,7 @@ public:
         bool buildGPUData = false;
     };
 
-    // Scene lifetime: PhysXWorld::Desc ¹Ì·¯
+    // Scene lifetime: PhysXWorld::Desc ë¯¸ëŸ¬
     struct WorldDesc
     {
         Vec3 gravity = { 0.0f, -9.81f, 0.0f };
@@ -54,8 +54,8 @@ public:
     void ShutdownContext();
 
     // Scene lifetime
-    // - ¿ùµå´Â shared_ptr·Î ¸®ÅÏ
-    // - shared_ptr deleter°¡ Context¸¦ Ä¸ÃÄÇØ¼­ ¼ö¸í ¾ÈÀüÇÏ°Ô º¸Àå
+    // - ì›”ë“œëŠ” shared_ptrë¡œ ë¦¬í„´
+    // - shared_ptr deleterê°€ Contextë¥¼ ìº¡ì³í•´ì„œ ìˆ˜ëª… ì•ˆì „í•˜ê²Œ ë³´ì¥
     std::shared_ptr<IPhysicsWorld> CreateWorld(const WorldDesc& desc = WorldDesc{});
 
     bool HasContext() const noexcept;

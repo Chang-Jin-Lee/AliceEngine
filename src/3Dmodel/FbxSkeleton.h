@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include <string>
@@ -7,7 +7,7 @@
 
 struct aiScene;
 
-// Builds skeleton tree, node ¡æ index map, bone lists and offsets
+// Builds skeleton tree, node â†’ index map, bone lists and offsets
 class FbxSkeleton
 {
 public:

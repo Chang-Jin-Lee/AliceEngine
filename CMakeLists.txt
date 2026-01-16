@@ -3,6 +3,12 @@ cmake_minimum_required(VERSION 3.20)
 # 프로젝트 이름은 전체 솔루션 이름
 project(AliceRenderer LANGUAGES CXX)
 
+
+# /utf-8 옵션 추가 경고 안뜨게 하기 위함
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 # =========================================================================
 # [설정] VCPKG 경로 (맨 위에서 관리)
 # 1. "AUTO" : 환경변수 -> D드라이브 -> C드라이브 순서로 자동 탐색

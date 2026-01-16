@@ -1,29 +1,29 @@
-#define WIN32_LEAN_AND_MEAN
+ï»¿#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
 #include "Engine/Engine.h"
 #include "Core/Logger.h"
 
-// WinMain: ÇÁ·Î±×·¥ÀÇ ÁøÀÔÁ¡ÀÔ´Ï´Ù.
+// WinMain: í”„ë¡œê·¸ë¨ì˜ ì§„ì…ì ì…ë‹ˆë‹¤.
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 {
-    // °ø¿ë ·Î°Å ÃÊ±âÈ­ (½ÇÇà ÆÄÀÏ ¿· Logs µğ·ºÅÍ¸®¿¡ ·Î±× ÆÄÀÏ »ı¼º)
+    // ê³µìš© ë¡œê±° ì´ˆê¸°í™” (ì‹¤í–‰ íŒŒì¼ ì˜† Logs ë””ë ‰í„°ë¦¬ì— ë¡œê·¸ íŒŒì¼ ìƒì„±)
     Alice::Logger::Initialize();
 
     Alice::Engine engine;
 
-    // 1) ¿£Áø ÃÊ±âÈ­ (À©µµ¿ì + D3D11 ·»´õ µğ¹ÙÀÌ½º)
+    // 1) ì—”ì§„ ì´ˆê¸°í™” (ìœˆë„ìš° + D3D11 ë Œë” ë””ë°”ì´ìŠ¤)
     if (!engine.Initialize(hInstance, nCmdShow))
     {
-        MessageBoxW(nullptr, L"¿£Áø ÃÊ±âÈ­¿¡ ½ÇÆĞÇß½À´Ï´Ù.", L"AliceRenderer", MB_OK | MB_ICONERROR);
+        MessageBoxW(nullptr, L"ì—”ì§„ ì´ˆê¸°í™”ì— ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤.", L"AliceRenderer", MB_OK | MB_ICONERROR);
         Alice::Logger::Shutdown();
         return -1;
     }
 
-    // 2) ¸ŞÀÎ ·çÇÁ ½ÇÇà
+    // 2) ë©”ì¸ ë£¨í”„ ì‹¤í–‰
     int result = engine.Run();
 
-    // 3) ·Î±× ÆÄÀÏ Á¤¸®
+    // 3) ë¡œê·¸ íŒŒì¼ ì •ë¦¬
     Alice::Logger::Shutdown();
 
     return result;

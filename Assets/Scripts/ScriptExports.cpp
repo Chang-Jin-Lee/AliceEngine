@@ -1,10 +1,10 @@
-#include "Core/IScript.h"
+ï»¿#include "Core/IScript.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 
-// µ¿Àû ½ºÅ©¸³Æ® DLLÀÌ ³»º¸³»´Â °£´ÜÇÑ C API ÀÔ´Ï´Ù.
-// - ¿£Áø ÂÊ¿¡¼­ GetProcAddress ·Î ÀÌ ÇÔ¼öµéÀ» Ã£¾Æ¼­
-//   ScriptFactory ¿¡ ¿¬°áÇÕ´Ï´Ù.
+// ë™ì  ìŠ¤í¬ë¦½íŠ¸ DLLì´ ë‚´ë³´ë‚´ëŠ” ê°„ë‹¨í•œ C API ì…ë‹ˆë‹¤.
+// - ì—”ì§„ ìª½ì—ì„œ GetProcAddress ë¡œ ì´ í•¨ìˆ˜ë“¤ì„ ì°¾ì•„ì„œ
+//   ScriptFactory ì— ì—°ê²°í•©ë‹ˆë‹¤.
 
 extern "C"
 {

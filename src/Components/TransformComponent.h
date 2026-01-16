@@ -1,12 +1,12 @@
-#pragma once
+ï»¿#pragma once
 
 #include <DirectXMath.h>
 
-// Æ®·£½ºÆû
+// íŠ¸ëœìŠ¤í¼
 namespace Alice {
     struct TransformComponent 
     {
-        // À§Ä¡, È¸Àü(¶óµğ¾È), ½ºÄÉÀÏ
+        // ìœ„ì¹˜, íšŒì „(ë¼ë””ì•ˆ), ìŠ¤ì¼€ì¼
         DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };

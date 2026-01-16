@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <memory>
 #include <string>
@@ -10,14 +10,14 @@
 
 #include "3Dmodel/FbxTypes.h"
 
-// FbxModelÀº Àü¿ª ³×ÀÓ½ºÆäÀÌ½º(3Dmodel/FbxModel.h) ¿¡ Á¤ÀÇµÇ¾î ÀÖ½À´Ï´Ù.
+// FbxModelì€ ì „ì—­ ë„¤ìž„ìŠ¤íŽ˜ì´ìŠ¤(3Dmodel/FbxModel.h) ì— ì •ì˜ë˜ì–´ ìžˆìŠµë‹ˆë‹¤.
 class FbxModel;
 
 namespace Alice
 {
-    /// GPU »óÀÇ ½ºÅ°´× ¸Þ½Ã 1°³¸¦ Ç¥ÇöÇÏ´Â ±¸Á¶ÀÔ´Ï´Ù.
-    /// - Á¤Á¡/ÀÎµ¦½º ¹öÆÛ + Á¤Á¡ Æ÷¸Ë Á¤º¸
-    /// - FBX ·ÎºÎÅÍ »ý¼ºµÈ ¼­ºê¼Â/¸ÓÆ¼¸®¾ó/½ºÄÌ·¹Åæ ¸ÞÅ¸µ¥ÀÌÅÍ¸¦ ÇÔ²² º¸°üÇÕ´Ï´Ù.
+    /// GPU ìƒì˜ ìŠ¤í‚¤ë‹ ë©”ì‹œ 1ê°œë¥¼ í‘œí˜„í•˜ëŠ” êµ¬ì¡°ìž…ë‹ˆë‹¤.
+    /// - ì •ì /ì¸ë±ìŠ¤ ë²„í¼ + ì •ì  í¬ë§· ì •ë³´
+    /// - FBX ë¡œë¶€í„° ìƒì„±ëœ ì„œë¸Œì…‹/ë¨¸í‹°ë¦¬ì–¼/ìŠ¤ì¼ˆë ˆí†¤ ë©”íƒ€ë°ì´í„°ë¥¼ í•¨ê»˜ ë³´ê´€í•©ë‹ˆë‹¤.
     struct SkinnedMeshGPU
     {
         Microsoft::WRL::ComPtr<ID3D11Buffer> vertexBuffer;
@@ -28,26 +28,26 @@ namespace Alice
         UINT startIndex  { 0 };
         INT  baseVertex  { 0 };
 
-        // === FBX ¼­ºê¼Â/¸ÓÆ¼¸®¾ó ===
-        std::vector<FbxSubset> subsets; // ÀÎµ¦½º ¹üÀ§ + ¸ÓÆ¼¸®¾ó ÀÎµ¦½º
-        std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> materialSRVs; // FBX ±âº» µðÇ»Áî ÅØ½ºÃ³
-        std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> normalSRVs;   // FBX ³ë¸»¸Ê ÅØ½ºÃ³(¼±ÅÃ)
-        std::vector<std::string> materialOverridePaths; // ¿¡µðÅÍ¿¡¼­ ±³Ã¼ÇÑ ÅØ½ºÃ³ °æ·Î (¼±ÅÃ »çÇ×)
+        // === FBX ì„œë¸Œì…‹/ë¨¸í‹°ë¦¬ì–¼ ===
+        std::vector<FbxSubset> subsets; // ì¸ë±ìŠ¤ ë²”ìœ„ + ë¨¸í‹°ë¦¬ì–¼ ì¸ë±ìŠ¤
+        std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> materialSRVs; // FBX ê¸°ë³¸ ë””í“¨ì¦ˆ í…ìŠ¤ì²˜
+        std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> normalSRVs;   // FBX ë…¸ë§ë§µ í…ìŠ¤ì²˜(ì„ íƒ)
+        std::vector<std::string> materialOverridePaths; // ì—ë””í„°ì—ì„œ êµì²´í•œ í…ìŠ¤ì²˜ ê²½ë¡œ (ì„ íƒ ì‚¬í•­)
 
-        // === FBX ½ºÄÌ·¹Åæ ===
-        std::vector<FbxSkeletonNode> skeleton; // ÀüÃ¼ ³ëµå Ä³½Ã
-        int                          skeletonRoot { -1 }; // ·çÆ® ÀÎµ¦½º
-        std::string                  skeletonText;         // °£´ÜÇÑ Æ®¸® ÅØ½ºÆ® (Inspector¿¡¼­ Ç¥½Ã)
+        // === FBX ìŠ¤ì¼ˆë ˆí†¤ ===
+        std::vector<FbxSkeletonNode> skeleton; // ì „ì²´ ë…¸ë“œ ìºì‹œ
+        int                          skeletonRoot { -1 }; // ë£¨íŠ¸ ì¸ë±ìŠ¤
+        std::string                  skeletonText;         // ê°„ë‹¨í•œ íŠ¸ë¦¬ í…ìŠ¤íŠ¸ (Inspectorì—ì„œ í‘œì‹œ)
 
-        // === FBX ¾Ö´Ï¸ÞÀÌ¼Ç/¿øº» ÄÁÅØ½ºÆ® ===
-        // - per-entity ¾Ö´Ï¸ÞÀÌ¼Ç Àç»ýÀ» À§ÇØ "°øÀ¯ µ¥ÀÌÅÍ(Assimp scene + bone metadata)"¸¦ À¯ÁöÇÕ´Ï´Ù.
-        // - Àç»ý »óÅÂ(½Ã°£/Å¬¸³/¼Óµµ)´Â ¿£Æ¼Æ¼ ÄÄÆ÷³ÍÆ®¿¡¼­ °ü¸®ÇÕ´Ï´Ù.
+        // === FBX ì• ë‹ˆë©”ì´ì…˜/ì›ë³¸ ì»¨í…ìŠ¤íŠ¸ ===
+        // - per-entity ì• ë‹ˆë©”ì´ì…˜ ìž¬ìƒì„ ìœ„í•´ "ê³µìœ  ë°ì´í„°(Assimp scene + bone metadata)"ë¥¼ ìœ ì§€í•©ë‹ˆë‹¤.
+        // - ìž¬ìƒ ìƒíƒœ(ì‹œê°„/í´ë¦½/ì†ë„)ëŠ” ì—”í‹°í‹° ì»´í¬ë„ŒíŠ¸ì—ì„œ ê´€ë¦¬í•©ë‹ˆë‹¤.
         std::shared_ptr<FbxModel> sourceModel;
     };
 
-    /// FBX ·ÎºÎÅÍ ¸¸µé¾îÁø ½ºÅ°´× ¸Þ½Ã ÀÚ»êÀ»
-    /// ¹®ÀÚ¿­ Å°(³í¸® °æ·Î)·Î º¸°üÇÏ´Â ·¹Áö½ºÆ®¸®ÀÔ´Ï´Ù.
-    /// - ¿£Áø(Rendering °èÃþ)ÀÇ ÀÏºÎ·Î, °ÔÀÓ/¿¡µðÅÍ ¾çÂÊ¿¡¼­ °øÀ¯ÇÕ´Ï´Ù.
+    /// FBX ë¡œë¶€í„° ë§Œë“¤ì–´ì§„ ìŠ¤í‚¤ë‹ ë©”ì‹œ ìžì‚°ì„
+    /// ë¬¸ìžì—´ í‚¤(ë…¼ë¦¬ ê²½ë¡œ)ë¡œ ë³´ê´€í•˜ëŠ” ë ˆì§€ìŠ¤íŠ¸ë¦¬ìž…ë‹ˆë‹¤.
+    /// - ì—”ì§„(Rendering ê³„ì¸µ)ì˜ ì¼ë¶€ë¡œ, ê²Œìž„/ì—ë””í„° ì–‘ìª½ì—ì„œ ê³µìœ í•©ë‹ˆë‹¤.
     class SkinnedMeshRegistry
     {
     public:

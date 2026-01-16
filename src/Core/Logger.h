@@ -1,12 +1,12 @@
-#pragma once
+ï»¿#pragma once
 
 #include <string>
 
 namespace Alice
 {
-    /// °£´ÜÇÑ °ø¿ë ·Î°ÅÀÔ´Ï´Ù.
-    /// - °¢ ·Î±×´Â ½Ã°£, ·¹º§, ÆÄÀÏ/ÇÔ¼ö/¶óÀÎ Á¤º¸¸¦ Æ÷ÇÔÇÕ´Ï´Ù.
-    /// - µð¹ö°Å(OutputDebugString)¿Í ÇÔ²² ½ÇÇà ÆÄÀÏ ¿·ÀÇ Logs Æú´õ¿¡ .log ÆÄÀÏ·Î ±â·ÏÇÕ´Ï´Ù.
+    /// ê°„ë‹¨í•œ ê³µìš© ë¡œê±°ìž…ë‹ˆë‹¤.
+    /// - ê° ë¡œê·¸ëŠ” ì‹œê°„, ë ˆë²¨, íŒŒì¼/í•¨ìˆ˜/ë¼ì¸ ì •ë³´ë¥¼ í¬í•¨í•©ë‹ˆë‹¤.
+    /// - ë””ë²„ê±°(OutputDebugString)ì™€ í•¨ê»˜ ì‹¤í–‰ íŒŒì¼ ì˜†ì˜ Logs í´ë”ì— .log íŒŒì¼ë¡œ ê¸°ë¡í•©ë‹ˆë‹¤.
     enum class LogLevel
     {
         Info,
@@ -17,21 +17,21 @@ namespace Alice
     class Logger
     {
     public:
-        /// ÇÑ ÇÁ·Î¼¼½º¿¡¼­ ÇÑ ¹ø¸¸ È£ÃâÇÏ¸é µË´Ï´Ù.
-        /// - ½ÇÇà ÆÄÀÏ °æ·Î¸¦ ±âÁØÀ¸·Î Logs/Alice_YYYYMMDD_HHMMSS.log ÆÄÀÏÀ» »ý¼ºÇÕ´Ï´Ù.
+        /// í•œ í”„ë¡œì„¸ìŠ¤ì—ì„œ í•œ ë²ˆë§Œ í˜¸ì¶œí•˜ë©´ ë©ë‹ˆë‹¤.
+        /// - ì‹¤í–‰ íŒŒì¼ ê²½ë¡œë¥¼ ê¸°ì¤€ìœ¼ë¡œ Logs/Alice_YYYYMMDD_HHMMSS.log íŒŒì¼ì„ ìƒì„±í•©ë‹ˆë‹¤.
         static void Initialize();
 
-        /// Á¾·á ½Ã È£ÃâÇØ¼­ ÆÄÀÏ ÇÚµéÀ» ´Ý½À´Ï´Ù.
+        /// ì¢…ë£Œ ì‹œ í˜¸ì¶œí•´ì„œ íŒŒì¼ í•¸ë“¤ì„ ë‹«ìŠµë‹ˆë‹¤.
         static void Shutdown();
 
-        /// ¼­½Ä ¾ø´Â ´Ü¼ø ¹®ÀÚ¿­ ·Î±× (³»ºÎ¿¡¼­¸¸ ÁÖ·Î »ç¿ë).
+        /// ì„œì‹ ì—†ëŠ” ë‹¨ìˆœ ë¬¸ìžì—´ ë¡œê·¸ (ë‚´ë¶€ì—ì„œë§Œ ì£¼ë¡œ ì‚¬ìš©).
         static void Log(LogLevel level,
                         const char* file,
                         int line,
                         const char* function,
                         const char* message);
 
-        /// printf ½ºÅ¸ÀÏÀÇ °¡º¯ ÀÎÀÚ ·Î±× ÇÔ¼öÀÔ´Ï´Ù.
+        /// printf ìŠ¤íƒ€ì¼ì˜ ê°€ë³€ ì¸ìž ë¡œê·¸ í•¨ìˆ˜ìž…ë‹ˆë‹¤.
         static void LogFormat(LogLevel level,
                               const char* file,
                               int line,
@@ -40,8 +40,8 @@ namespace Alice
                               ...);
     };
 
-    // ÆíÀÇ ¸ÅÅ©·Îµé
-    // »ç¿ë ¿¹)
+    // íŽ¸ì˜ ë§¤í¬ë¡œë“¤
+    // ì‚¬ìš© ì˜ˆ)
     //   ALICE_LOG_INFO("value = %d", value);
     //   ALICE_LOG_ERROR("Failed to open: %s", path.c_str());
 #define ALICE_LOG_INFO(...)  ::Alice::Logger::LogFormat(::Alice::LogLevel::Info,    __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)

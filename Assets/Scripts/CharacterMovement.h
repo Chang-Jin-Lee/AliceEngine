@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
 
@@ -11,12 +11,12 @@ namespace Alice
     public:
         void Update(float DeltaTime) override;
 
-        // --- º¯¼ö ¸®ÇÃ·º¼Ç ---
+        // --- ë³€ìˆ˜ ë¦¬í”Œë ‰ì…˜ ---
         ALICE_PROPERTY(float, m_moveSpeed, 10.0f);
         ALICE_PROPERTY(float, m_jumpSpeed, 6.5f);
-        ALICE_PROPERTY(float, m_gravity, 18.0f); // ´©¶ôµÈ Áß·Â º¯¼ö Ãß°¡
+        ALICE_PROPERTY(float, m_gravity, 18.0f); // ëˆ„ë½ëœ ì¤‘ë ¥ ë³€ìˆ˜ ì¶”ê°€
 
-        // --- ÇÔ¼ö ¸®ÇÃ·º¼Ç ---
+        // --- í•¨ìˆ˜ ë¦¬í”Œë ‰ì…˜ ---
         void Attack();
         ALICE_FUNC(Attack);
 

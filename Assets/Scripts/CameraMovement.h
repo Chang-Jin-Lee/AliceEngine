@@ -1,24 +1,24 @@
-#pragma once
+ï»¿#pragma once
 
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
 
 namespace Alice
 {
-	// ¹æÇâÅ°·Î Ä«¸Ş¶ó¸¦ ÀÌµ¿½ÃÅ°´Â ½ºÅ©¸³Æ®
+	// ë°©í–¥í‚¤ë¡œ ì¹´ë©”ë¼ë¥¼ ì´ë™ì‹œí‚¤ëŠ” ìŠ¤í¬ë¦½íŠ¸
 	class CameraMovement : public IScript
 	{
 		ALICE_BODY(CameraMovement);
 	public:
-		// ¿£Áø¿¡¼­ ½Äº°ÇÒ ½ºÅ©¸³Æ® ÀÌ¸§
+		// ì—”ì§„ì—ì„œ ì‹ë³„í•  ìŠ¤í¬ë¦½íŠ¸ ì´ë¦„
 		const char* GetName() const override { return "CameraMovement"; }
 
-		// ÃÊ±âÈ­ ¹× ¸Å ÇÁ·¹ÀÓ ¾÷µ¥ÀÌÆ®
+		// ì´ˆê¸°í™” ë° ë§¤ í”„ë ˆì„ ì—…ë°ì´íŠ¸
 		void Start() override;
 		void Update(float deltaTime) override;
 
 	private:
-		// ÀÌµ¿ ¼Óµµ (±âº»°ª ¼³Á¤)
+		// ì´ë™ ì†ë„ (ê¸°ë³¸ê°’ ì„¤ì •)
 		ALICE_PROPERTY(float, m_moveSpeed, 10.0f);
 	};
 }
