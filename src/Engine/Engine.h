@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -7,54 +7,54 @@
 
 namespace Alice
 {
-    /// ¿£Áø ÀüÃ¼¸¦ °ü¸®ÇÏ´Â °¡Àå »óÀ§ ·¹º§ Å¬·¡½ºÀÔ´Ï´Ù.
-    /// - À©µµ¿ì »ı¼º ¹× ¸Ş½ÃÁö ·çÇÁ °ü¸®
-    /// - World ¹× ½Ã½ºÅÛ ¾÷µ¥ÀÌÆ®
-    /// - ·»´õ µğ¹ÙÀÌ½º¿¡°Ô ·»´õ¸µÀ» ¿äÃ»
+    /// ì—”ì§„ ì „ì²´ë¥¼ ê´€ë¦¬í•˜ëŠ” ê°€ì¥ ìƒìœ„ ë ˆë²¨ í´ë˜ìŠ¤ì…ë‹ˆë‹¤.
+    /// - ìœˆë„ìš° ìƒì„± ë° ë©”ì‹œì§€ ë£¨í”„ ê´€ë¦¬
+    /// - World ë° ì‹œìŠ¤í…œ ì—…ë°ì´íŠ¸
+    /// - ë Œë” ë””ë°”ì´ìŠ¤ì—ê²Œ ë Œë”ë§ì„ ìš”ì²­
     class Engine
     {
     public:
-        /// \param editorMode true ÀÌ¸é ¿¡µğÅÍ(µµÅ· UI) ¸ğµå, false ÀÌ¸é °ÔÀÓ Àü¿ë ¸ğµå
+        /// \param editorMode true ì´ë©´ ì—ë””í„°(ë„í‚¹ UI) ëª¨ë“œ, false ì´ë©´ ê²Œì„ ì „ìš© ëª¨ë“œ
         Engine(bool editorMode = true);
         ~Engine();
 
-        /// ¿£Áø°ú À©µµ¿ì, ·»´õ µğ¹ÙÀÌ½º¸¦ ÃÊ±âÈ­ÇÕ´Ï´Ù.
+        /// ì—”ì§„ê³¼ ìœˆë„ìš°, ë Œë” ë””ë°”ì´ìŠ¤ë¥¼ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
         bool Initialize(HINSTANCE hInstance, int nCmdShow);
 
-        /// ¸ŞÀÎ ·çÇÁ¸¦ ½ÇÇàÇÕ´Ï´Ù.
+        /// ë©”ì¸ ë£¨í”„ë¥¼ ì‹¤í–‰í•©ë‹ˆë‹¤.
         int Run();
 
-        /// À©µµ¿ì ¸Ş½ÃÁö¸¦ Ã³¸®ÇÏ´Â ¸â¹ö ÇÔ¼öÀÔ´Ï´Ù.
+        /// ìœˆë„ìš° ë©”ì‹œì§€ë¥¼ ì²˜ë¦¬í•˜ëŠ” ë©¤ë²„ í•¨ìˆ˜ì…ë‹ˆë‹¤.
         LRESULT HandleMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
     private:
-        // Win32 Àü¿ª À©µµ¿ì ÇÁ·Î½ÃÀú ¡æ Engine ÀÎ½ºÅÏ½º·Î À§ÀÓ
+        // Win32 ì „ì—­ ìœˆë„ìš° í”„ë¡œì‹œì € â†’ Engine ì¸ìŠ¤í„´ìŠ¤ë¡œ ìœ„ì„
         static LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-        /// ÇÑ ÇÁ·¹ÀÓÀÇ ¾÷µ¥ÀÌÆ®(°ÔÀÓ ·ÎÁ÷)¸¦ ¼öÇàÇÕ´Ï´Ù.
+        /// í•œ í”„ë ˆì„ì˜ ì—…ë°ì´íŠ¸(ê²Œì„ ë¡œì§)ë¥¼ ìˆ˜í–‰í•©ë‹ˆë‹¤.
         void Update();
 
-        /// ÇÑ ÇÁ·¹ÀÓÀÇ ·»´õ¸µÀ» ¼öÇàÇÕ´Ï´Ù.
+        /// í•œ í”„ë ˆì„ì˜ ë Œë”ë§ì„ ìˆ˜í–‰í•©ë‹ˆë‹¤.
         void Render();
 
-        /// ±âº» À©µµ¿ì¸¦ »ı¼ºÇÕ´Ï´Ù.
+        /// ê¸°ë³¸ ìœˆë„ìš°ë¥¼ ìƒì„±í•©ë‹ˆë‹¤.
         bool CreateMainWindow(int nCmdShow);
 
-        /// À©µµ¿ì Å©±â º¯°æ ½Ã È£ÃâµË´Ï´Ù.
+        /// ìœˆë„ìš° í¬ê¸° ë³€ê²½ ì‹œ í˜¸ì¶œë©ë‹ˆë‹¤.
         void OnResize(std::uint32_t width, std::uint32_t height);
 
-        /// ¿ùµå ¾ÈÀÇ SkinnedMeshComponent µé¿¡ ´ëÇØ,
-        /// SkinnedMeshRegistry ¿¡ GPU ¸Ş½Ã°¡ µî·ÏµÇ¾î ÀÖ´ÂÁö È®ÀÎÇÏ°í,
-        /// ÇÊ¿ä ½Ã FBX ¸¦ ´Ù½Ã ÀÓÆ÷Æ®ÇØ¼­ µî·ÏÇÕ´Ï´Ù.
+        /// ì›”ë“œ ì•ˆì˜ SkinnedMeshComponent ë“¤ì— ëŒ€í•´,
+        /// SkinnedMeshRegistry ì— GPU ë©”ì‹œê°€ ë“±ë¡ë˜ì–´ ìˆëŠ”ì§€ í™•ì¸í•˜ê³ ,
+        /// í•„ìš” ì‹œ FBX ë¥¼ ë‹¤ì‹œ ì„í¬íŠ¸í•´ì„œ ë“±ë¡í•©ë‹ˆë‹¤.
         void EnsureSkinnedMeshesRegisteredForWorld();
 
-        /// ¾À ÀüÈ¯ ½Ã IBL ¼¼Æ®¸¦ ¾÷µ¥ÀÌÆ®ÇÕ´Ï´Ù.
-        /// - onAfterSceneLoaded µ¨¸®°ÔÀÌÆ®¿¡ ¿¬°áµÇ¾î ÀÚµ¿À¸·Î È£ÃâµË´Ï´Ù.
+        /// ì”¬ ì „í™˜ ì‹œ IBL ì„¸íŠ¸ë¥¼ ì—…ë°ì´íŠ¸í•©ë‹ˆë‹¤.
+        /// - onAfterSceneLoaded ë¸ë¦¬ê²Œì´íŠ¸ì— ì—°ê²°ë˜ì–´ ìë™ìœ¼ë¡œ í˜¸ì¶œë©ë‹ˆë‹¤.
         void UpdateIblForScene();
 
         void TrimVideoMemory();
 
-        /// ·»´õ¸µ ¸ğµå¸¦ ¼³Á¤ÇÕ´Ï´Ù (true: Forward, false: Deferred)
+        /// ë Œë”ë§ ëª¨ë“œë¥¼ ì„¤ì •í•©ë‹ˆë‹¤ (true: Forward, false: Deferred)
         void SetUseForwardRendering(bool useForward);
         bool GetUseForwardRendering() const;
         //===========================================

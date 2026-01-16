@@ -1,4 +1,4 @@
-#include "Rendering/DebugDrawSystem.h"
+ï»¿#include "Rendering/DebugDrawSystem.h"
 
 #include <d3dcompiler.h>
 
@@ -9,7 +9,7 @@ namespace Alice
 {
     namespace
     {
-        // ¾ÆÁÖ ´Ü¼øÇÑ ÄÃ·¯ ¶óÀÎ Àü¿ë ¼ÎÀÌ´õÀÔ´Ï´Ù.
+        // ì•„ì£¼ ë‹¨ìˆœí•œ ì»¬ëŸ¬ ë¼ì¸ ì „ìš© ì…°ì´ë”ì…ë‹ˆë‹¤.
         const char* g_DebugLineVS = R"(
 cbuffer CBViewProj : register(b0)
 {
@@ -63,7 +63,7 @@ float4 main(PSInput input) : SV_TARGET
     {
         if (!m_device || !m_context || !CreateShadersAndInputLayout()) return false;
 
-        // ViewProj »ó¼ö ¹öÆÛ »ı¼º
+        // ViewProj ìƒìˆ˜ ë²„í¼ ìƒì„±
         D3D11_BUFFER_DESC desc = { sizeof(CBViewProj), D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 };
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbViewProj.ReleaseAndGetAddressOf()))) return false;
 
@@ -86,17 +86,17 @@ float4 main(PSInput input) : SV_TARGET
         if (m_vertices.empty() || !m_vertexShader || !m_pixelShader || !m_inputLayout) return;
         if (!EnsureVertexBufferSize(m_vertices.size())) return;
 
-        // 1. Vertex Buffer ¾÷µ¥ÀÌÆ® (Map -> Copy -> Unmap)
+        // 1. Vertex Buffer ì—…ë°ì´íŠ¸ (Map -> Copy -> Unmap)
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (FAILED(m_context->Map(m_vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
         std::memcpy(mapped.pData, m_vertices.data(), m_vertices.size() * sizeof(DebugVertex));
         m_context->Unmap(m_vertexBuffer.Get(), 0);
 
-        // 2. View-Proj Çà·Ä ¾÷µ¥ÀÌÆ®
+        // 2. View-Proj í–‰ë ¬ ì—…ë°ì´íŠ¸
         CBViewProj cb = { XMMatrixTranspose(camera.GetViewMatrix() * camera.GetProjectionMatrix()) };
         m_context->UpdateSubresource(m_cbViewProj.Get(), 0, nullptr, &cb, 0, 0);
 
-        // 3. ÆÄÀÌÇÁ¶óÀÎ ¼³Á¤ ¹× ±×¸®±â
+        // 3. íŒŒì´í”„ë¼ì¸ ì„¤ì • ë° ê·¸ë¦¬ê¸°
         UINT stride = sizeof(DebugVertex), offset = 0;
         ID3D11Buffer* vb = m_vertexBuffer.Get();
 
@@ -115,15 +115,15 @@ float4 main(PSInput input) : SV_TARGET
     {
         ComPtr<ID3DBlob> vsBlob, psBlob;
 
-        // 1. VS ÄÄÆÄÀÏ ¹× »ı¼º
+        // 1. VS ì»´íŒŒì¼ ë° ìƒì„±
         if (FAILED(D3DCompile(g_DebugLineVS, std::strlen(g_DebugLineVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vertexShader.ReleaseAndGetAddressOf()))) return false;
 
-        // 2. PS ÄÄÆÄÀÏ ¹× »ı¼º
+        // 2. PS ì»´íŒŒì¼ ë° ìƒì„±
         if (FAILED(D3DCompile(g_DebugLinePS, std::strlen(g_DebugLinePS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
         if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_pixelShader.ReleaseAndGetAddressOf()))) return false;
 
-        // 3. Input Layout »ı¼º (¿ÀÇÁ¼Â ÀÚµ¿ Á¤·Ä »ç¿ë)
+        // 3. Input Layout ìƒì„± (ì˜¤í”„ì…‹ ìë™ ì •ë ¬ ì‚¬ìš©)
         D3D11_INPUT_ELEMENT_DESC desc[] = {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,                            D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -141,7 +141,7 @@ float4 main(PSInput input) : SV_TARGET
         m_vertexBuffer.Reset();
         m_vertexCapacity = vertexCount;
 
-        // µ¿Àû ¹öÆÛ »ı¼º (Dynamic Usage, CPU Write)
+        // ë™ì  ë²„í¼ ìƒì„± (Dynamic Usage, CPU Write)
         D3D11_BUFFER_DESC desc = { (UINT)(sizeof(DebugVertex) * vertexCount), D3D11_USAGE_DYNAMIC, D3D11_BIND_VERTEX_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0 };
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_vertexBuffer.ReleaseAndGetAddressOf()))) return false;
 

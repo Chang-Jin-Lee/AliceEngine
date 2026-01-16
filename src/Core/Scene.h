@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <memory>
 #include <string>
@@ -11,30 +11,30 @@ namespace Alice
 {
     class ResourceManager;
 
-    /// ¸ğµç ¾ÀÀÌ °øÅëÀ¸·Î ±¸ÇöÇØ¾ß ÇÏ´Â ÃÖ¼Ò ÀÎÅÍÆäÀÌ½ºÀÔ´Ï´Ù.
+    /// ëª¨ë“  ì”¬ì´ ê³µí†µìœ¼ë¡œ êµ¬í˜„í•´ì•¼ í•˜ëŠ” ìµœì†Œ ì¸í„°í˜ì´ìŠ¤ì…ë‹ˆë‹¤.
     class IScene
     {
     public:
         virtual ~IScene() = default;
 
-        /// ÀÌ ¾ÀÀÇ ÀÌ¸§(µğ¹ö±ë/¸®ÇÃ·º¼Ç¿ë) ÀÔ´Ï´Ù.
+        /// ì´ ì”¬ì˜ ì´ë¦„(ë””ë²„ê¹…/ë¦¬í”Œë ‰ì…˜ìš©) ì…ë‹ˆë‹¤.
         virtual const char* GetName() const = 0;
 
-        /// ¾ÀÀÌ È°¼ºÈ­µÉ ¶§ ÇÑ ¹ø È£ÃâµË´Ï´Ù.
+        /// ì”¬ì´ í™œì„±í™”ë  ë•Œ í•œ ë²ˆ í˜¸ì¶œë©ë‹ˆë‹¤.
         virtual void OnEnter(World& world, ResourceManager& resources) { (void)world; (void)resources; }
 
-        /// ¾ÀÀÌ ºñÈ°¼ºÈ­µÇ±â Á÷Àü¿¡ ÇÑ ¹ø È£ÃâµË´Ï´Ù.
+        /// ì”¬ì´ ë¹„í™œì„±í™”ë˜ê¸° ì§ì „ì— í•œ ë²ˆ í˜¸ì¶œë©ë‹ˆë‹¤.
         virtual void OnExit(World& world, ResourceManager& resources) { (void)world; (void)resources; }
 
-        /// ¸Å ÇÁ·¹ÀÓ ¾À ·ÎÁ÷À» °»½ÅÇÕ´Ï´Ù.
+        /// ë§¤ í”„ë ˆì„ ì”¬ ë¡œì§ì„ ê°±ì‹ í•©ë‹ˆë‹¤.
         virtual void Update(World& world, ResourceManager& resources, float deltaTime) = 0;
 
-        /// Forward ·»´õ¸µ¿¡ »ç¿ëÇÒ ´ëÇ¥ ¿£Æ¼Æ¼ ID¸¦ µ¹·ÁÁİ´Ï´Ù.
-        /// (ÇÊ¿ä ¾øÀ¸¸é InvalidEntityId ¹İÈ¯)
+        /// Forward ë Œë”ë§ì— ì‚¬ìš©í•  ëŒ€í‘œ ì—”í‹°í‹° IDë¥¼ ëŒë ¤ì¤ë‹ˆë‹¤.
+        /// (í•„ìš” ì—†ìœ¼ë©´ InvalidEntityId ë°˜í™˜)
         virtual EntityId GetPrimaryRenderableEntity() const { return InvalidEntityId; }
     };
 
-    // ==== ¾À ¸®ÇÃ·º¼Ç/ÆÑÅä¸® ====
+    // ==== ì”¬ ë¦¬í”Œë ‰ì…˜/íŒ©í† ë¦¬ ====
 
     using SceneCreateFunc = IScene* (*)();
 
@@ -58,19 +58,19 @@ namespace Alice
         }
     };
 
-    /// ÇöÀç È°¼º ¾À ÇÑ °³¸¦ °ü¸®ÇÏ´Â °£´ÜÇÑ ¸Å´ÏÀúÀÔ´Ï´Ù.
+    /// í˜„ì¬ í™œì„± ì”¬ í•œ ê°œë¥¼ ê´€ë¦¬í•˜ëŠ” ê°„ë‹¨í•œ ë§¤ë‹ˆì €ì…ë‹ˆë‹¤.
     class SceneManager
     {
     public:
         SceneManager(World& world, ResourceManager& resources);
 
-        /// ÀÌ¸§À¸·Î ¾ÀÀ» »ı¼º/ÀüÈ¯ÇÕ´Ï´Ù.
+        /// ì´ë¦„ìœ¼ë¡œ ì”¬ì„ ìƒì„±/ì „í™˜í•©ë‹ˆë‹¤.
         bool SwitchTo(const char* sceneName);
 
-        /// ÇöÀç ¾À ¾÷µ¥ÀÌÆ®
+        /// í˜„ì¬ ì”¬ ì—…ë°ì´íŠ¸
         void Update(float deltaTime);
 
-        /// ÇöÀç ¾ÀÀÇ ´ëÇ¥ ·»´õ¸µ ¿£Æ¼Æ¼ ID
+        /// í˜„ì¬ ì”¬ì˜ ëŒ€í‘œ ë Œë”ë§ ì—”í‹°í‹° ID
         EntityId GetPrimaryRenderableEntity() const;
 
     private:
@@ -79,7 +79,7 @@ namespace Alice
         std::unique_ptr<IScene> m_currentScene;
     };
 
-    // ¸ÅÅ©·Î·Î °£´ÜÇÏ°Ô ¾À µî·ÏÀ» ÇÒ ¼ö ÀÖ°Ô ÇÕ´Ï´Ù.
+    // ë§¤í¬ë¡œë¡œ ê°„ë‹¨í•˜ê²Œ ì”¬ ë“±ë¡ì„ í•  ìˆ˜ ìˆê²Œ í•©ë‹ˆë‹¤.
     #define REGISTER_SCENE(SceneType) \
         static Alice::SceneRegistrar<SceneType> s_scene_registrar_##SceneType(#SceneType);
 }

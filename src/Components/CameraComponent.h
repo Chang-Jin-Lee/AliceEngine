@@ -1,9 +1,9 @@
-#include <DirectXMath.h>
+ï»¿#include <DirectXMath.h>
 
 namespace Alice {
-    /// ¾À ³» Ä«¸Ş¶ó(À¯´ÏÆ¼ÀÇ Main Camera ´À³¦)
-    /// - °ÔÀÓ ¸ğµå¿¡¼­´Â "Ã¹¹øÂ°(primary ¿ì¼±)" Ä«¸Ş¶ó ¿£Æ¼Æ¼¸¦ µû¶ó
-    /// Camera(view/proj)¸¦ °»½ÅÇÕ´Ï´Ù.
+    /// ì”¬ ë‚´ ì¹´ë©”ë¼(ìœ ë‹ˆí‹°ì˜ Main Camera ëŠë‚Œ)
+    /// - ê²Œì„ ëª¨ë“œì—ì„œëŠ” "ì²«ë²ˆì§¸(primary ìš°ì„ )" ì¹´ë©”ë¼ ì—”í‹°í‹°ë¥¼ ë”°ë¼
+    /// Camera(view/proj)ë¥¼ ê°±ì‹ í•©ë‹ˆë‹¤.
     struct CameraComponent 
     {
         bool primary{ true };

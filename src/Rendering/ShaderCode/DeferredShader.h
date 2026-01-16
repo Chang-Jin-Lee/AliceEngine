@@ -1,8 +1,8 @@
-#pragma once
+ï»¿#pragma once
 
 namespace Alice
 {
-    /// µğÆÛµå ·»´õ¸µ Àü¿ë ¼ÎÀÌ´õ ÄÚµå
+    /// ë””í¼ë“œ ë Œë”ë§ ì „ìš© ì…°ì´ë” ì½”ë“œ
     class DeferredShader
     {
     public:
@@ -219,7 +219,7 @@ GBufferOut main(VertexOut pIn)
 
         // Deferred Light Pixel Shader
         inline static const char* LightPS = R"(
-// PBR ÇïÆÛ ÇÔ¼öµé
+// PBR í—¬í¼ í•¨ìˆ˜ë“¤
 static const float PI = 3.14159265f;
 static const float INV_PI = 0.31830988618f;
 
@@ -261,7 +261,7 @@ cbuffer ShadowCB : register(b4)
     float3   g_ShadowPad2;
 };
 
-// ±×¸²ÀÚ °è»ê ÇÔ¼ö (PCF)
+// ê·¸ë¦¼ì ê³„ì‚° í•¨ìˆ˜ (PCF)
 float CalcShadowFactorDeferred(float3 posW, Texture2D<float> shadowMap, SamplerComparisonState shadowSampler)
 {
     if (g_ShadowEnabled2 == 0) return 1.0f;
@@ -292,14 +292,14 @@ float CalcShadowFactorDeferred(float3 posW, Texture2D<float> shadowMap, SamplerC
     return sum / 9.0f;
 }
 
-// ±¸Á¶Ã¼ Á¤ÀÇ
+// êµ¬ì¡°ì²´ ì •ì˜
 struct PS_INPUT_QUAD
 {
     float4 position : SV_POSITION;
     float2 uv : TEXCOORD0;
 };
 
-// G-Buffer ÅØ½ºÃ³
+// G-Buffer í…ìŠ¤ì²˜
 Texture2D g_PositionWS : register(t0);
 Texture2D g_NormalWS : register(t1);
 Texture2D g_Metalness : register(t2);
@@ -314,7 +314,7 @@ SamplerState g_Sam : register(s0);
 SamplerComparisonState g_ShadowSampler : register(s1);
 SamplerState g_SamplerLinear : register(s2);
 
-// »ó¼ö ¹öÆÛ
+// ìƒìˆ˜ ë²„í¼
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 g_World;
@@ -367,17 +367,17 @@ cbuffer DirectionalLightBuffer : register(b3)
 
 float4 main(PS_INPUT_QUAD pIn) : SV_Target
 {
-    // G-Buffer °¡Á®¿À±â
+    // G-Buffer ê°€ì ¸ì˜¤ê¸°
     float4 positionWS = g_PositionWS.Sample(g_Sam, pIn.uv);
     float4 normalWS_packed = g_NormalWS.Sample(g_Sam, pIn.uv);
     float4 metalness_packed = g_Metalness.Sample(g_Sam, pIn.uv);
     float4 roughness_packed = g_Roughness.Sample(g_Sam, pIn.uv);
     float4 baseColor = g_BaseColor.Sample(g_Sam, pIn.uv);
     
-    // ¹è°æ Ã¼Å©
+    // ë°°ê²½ ì²´í¬
     if (length(normalWS_packed.xyz) < 0.1f) discard;
 
-    // µ¥ÀÌÅÍ º¹¿ø
+    // ë°ì´í„° ë³µì›
     float3 posW = positionWS.xyz;
     float3 N = normalize(normalWS_packed.xyz);
     float metalness = metalness_packed.r;
@@ -385,7 +385,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 albedo = baseColor.rgb;
     float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
     
-    // ¶óÀÌÆÃ º¤ÅÍ °è»ê
+    // ë¼ì´íŒ… ë²¡í„° ê³„ì‚°
     float3 L = normalize(-g_LightDirection.xyz);
     float3 V = normalize(g_EyePosW - posW);
     float3 H = normalize(L + V);
@@ -396,7 +396,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float NdotH = saturate(dot(N, H));
     float VdotH = saturate(dot(V, H));
     
-    // PBR ¿¬»ê
+    // PBR ì—°ì‚°
     float3 albedoPBR = albedoLinear;
     roughness = max(roughness, 0.04f);
     float ao = saturate(g_PBRAmbientOcclusion);
@@ -430,7 +430,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     
     float3 iblColor = (diffuseIBL + specularIBL) * ao;
     
-    // ÃÖÁ¾ »ö»ó
+    // ìµœì¢… ìƒ‰ìƒ
     float3 color = directLighting + iblColor;
     
     return float4(color, 1.0f);
@@ -543,7 +543,7 @@ float3 FresnelSchlick(float3 F0, float cosTheta)
     return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
 }
 
-// ÅØ½ºÃ³
+// í…ìŠ¤ì²˜
 Texture2D  g_DiffuseMap : register(t0);
 Texture2D  g_NormalMap  : register(t1);
 
@@ -599,9 +599,9 @@ float4 main(PSIn pIn) : SV_Target
 
     float alphaTex = tex.a * gMaterialColor.a;
 
-    // ÄÆ¾Æ¿ô(¿ÏÀü Åõ¸í ±ÙÃ³) Á¦°Å
+    // ì»·ì•„ì›ƒ(ì™„ì „ íˆ¬ëª… ê·¼ì²˜) ì œê±°
     clip(alphaTex - 0.99f);
-    // °ÅÀÇ ºÒÅõ¸íÀº µğÆÛµå¿¡¼­ Ã³¸®ÇÏ¹Ç·Î ¿©±â¼­´Â Á¦¿Ü
+    // ê±°ì˜ ë¶ˆíˆ¬ëª…ì€ ë””í¼ë“œì—ì„œ ì²˜ë¦¬í•˜ë¯€ë¡œ ì—¬ê¸°ì„œëŠ” ì œì™¸
     if (alphaTex >= 0.99f) discard;
 
     float3 baseColor = gMaterialColor.rgb;
@@ -741,17 +741,17 @@ VSOutput main(VSInput input)
 {
     VSOutput o;
     
-    // º» ÀÎµ¦½º¿Í °¡ÁßÄ¡¸¦ °¡Á®¿È
+    // ë³¸ ì¸ë±ìŠ¤ì™€ ê°€ì¤‘ì¹˜ë¥¼ ê°€ì ¸ì˜´
     uint4 bi = input.BoneIndices;
     float4 bw = input.BoneWeights;
     
-    // ½ºÅ°´× Çà·Ä °è»ê
+    // ìŠ¤í‚¤ë‹ í–‰ë ¬ ê³„ì‚°
     matrix M = bw.x * gBones[bi.x]
              + bw.y * gBones[bi.y]
              + bw.z * gBones[bi.z]
              + bw.w * gBones[bi.w];
     
-    // À§Ä¡ º¯È¯ (Local -> Skinned -> World -> View -> Proj)
+    // ìœ„ì¹˜ ë³€í™˜ (Local -> Skinned -> World -> View -> Proj)
     float4 posL = float4(input.Position, 1.0f);
     float4 skinnedPos = mul(posL, M);
     float4 posW = mul(skinnedPos, gWorld);

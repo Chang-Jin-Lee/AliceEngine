@@ -1,9 +1,9 @@
-#ifndef NOMINMAX
+ï»¿#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
 #include "Core/Prefab.h"
-#include "Core/ComponentRegistry.h"  // RTTR µî·Ï ÄÚµå Æ÷ÇÔ
+#include "Core/ComponentRegistry.h"  // RTTR ë“±ë¡ ì½”ë“œ í¬í•¨
 #include "Core/JsonRttr.h"
 
 #include "Core/World.h"
@@ -23,7 +23,7 @@ namespace Alice
             if (!root.is_object())
                 return InvalidEntityId;
 
-            // ¿£Æ¼Æ¼ »ı¼º ¹× Transform / Script ºÎÂø
+            // ì—”í‹°í‹° ìƒì„± ë° Transform / Script ë¶€ì°©
             EntityId entity = world.CreateEntity();
             TransformComponent& t = world.AddComponent<TransformComponent>(entity);
             auto itT = root.find("Transform");
@@ -57,7 +57,7 @@ namespace Alice
                         const rttr::type t = rttr::type::get_by_name(sc.scriptName);
                         if (!JsonRttr::FromJsonObject(inst, *itP, t))
                             return InvalidEntityId;
-                        sc.defaultsApplied = true; // ÇÁ¸®ÆÕÀÌ °ª ÁÖÀÔ ¿Ï·á
+                        sc.defaultsApplied = true; // í”„ë¦¬íŒ¹ì´ ê°’ ì£¼ì… ì™„ë£Œ
                     }
                 }
             }

@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include <wrl/client.h>
@@ -10,27 +10,27 @@
 
 namespace Alice
 {
-    /// ¾ÆÁÖ ´Ü¼øÇÑ DebugDraw ½Ã½ºÅÛÀÔ´Ï´Ù.
-    /// - ¼±(line)¸¸ ±×¸³´Ï´Ù.
-    /// - ECS/World ¿¡ ÀÇÁ¸ÇÏÁö ¾Ê½À´Ï´Ù.
+    /// ì•„ì£¼ ë‹¨ìˆœí•œ DebugDraw ì‹œìŠ¤í…œì…ë‹ˆë‹¤.
+    /// - ì„ (line)ë§Œ ê·¸ë¦½ë‹ˆë‹¤.
+    /// - ECS/World ì— ì˜ì¡´í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
     class DebugDrawSystem
     {
     public:
         explicit DebugDrawSystem(ID3D11RenderDevice& renderDevice);
         ~DebugDrawSystem() = default;
 
-        /// ¼ÎÀÌ´õ, ¹öÆÛ µîÀ» ÃÊ±âÈ­ÇÕ´Ï´Ù.
+        /// ì…°ì´ë”, ë²„í¼ ë“±ì„ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
         bool Initialize();
 
-        /// ¸ğµç µğ¹ö±× ¶óÀÎÀ» ºñ¿ó´Ï´Ù.
+        /// ëª¨ë“  ë””ë²„ê·¸ ë¼ì¸ì„ ë¹„ì›ë‹ˆë‹¤.
         void Clear();
 
-        /// ¿ùµå °ø°£¿¡¼­ ¼±À» Ãß°¡ÇÕ´Ï´Ù.
+        /// ì›”ë“œ ê³µê°„ì—ì„œ ì„ ì„ ì¶”ê°€í•©ë‹ˆë‹¤.
         void AddLine(const DirectX::XMFLOAT3& from,
                      const DirectX::XMFLOAT3& to,
                      const DirectX::XMFLOAT4& color);
 
-        /// Ä«¸Ş¶ó ±âÁØÀ¸·Î ¸ğµç µğ¹ö±× ¶óÀÎÀ» ·»´õ¸µÇÕ´Ï´Ù.
+        /// ì¹´ë©”ë¼ ê¸°ì¤€ìœ¼ë¡œ ëª¨ë“  ë””ë²„ê·¸ ë¼ì¸ì„ ë Œë”ë§í•©ë‹ˆë‹¤.
         void Render(const Camera& camera);
 
     private:
