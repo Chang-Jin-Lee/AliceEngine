@@ -1,6 +1,6 @@
 ﻿#include "PhysicsDebug.h"
-#include "Components/ColliderComponent.h"
-#include "Components/RigidBodyComponent.h"
+#include "PhysX/Components/ColliderComponent.h"
+#include "PhysX/Components/RigidBodyComponent.h"
 #include <Core/World.h>
 #include <Rendering/DebugDrawSystem.h>
 #include <DirectXMath.h>
