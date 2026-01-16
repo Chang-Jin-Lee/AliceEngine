@@ -18,10 +18,13 @@
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/CameraComponent.h"
 
-// ���� ������Ʈ
+
+// 물리 컴포넌트들
+#include "PhysX/Components/RigidBodyComponent.h"
+#include "PhysX/Components/ColliderComponent.h"
 #include "PhysX/Components/PhysicsSceneSettingsComponent.h"
 
-class IPhysicsWorld; // ���� �������̽� ���漱��
+class IPhysicsWorld; // 물리 인터페이스 전방선언
 
 namespace Alice
 {
@@ -353,7 +356,9 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
-            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
+            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;  
+            else if constexpr (std::is_same_v<T, RigidBodyComponent>) return m_rigidBodies;
+            else if constexpr (std::is_same_v<T, ColliderComponent>) return m_colliders;
             else static_assert(std::is_same_v<T, void>, "�������� �ʴ� ������Ʈ Ÿ���Դϴ�.");
         }
 
@@ -367,6 +372,8 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
             else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
+            else if constexpr (std::is_same_v<T, RigidBodyComponent>) return m_rigidBodies;
+            else if constexpr (std::is_same_v<T, ColliderComponent>) return m_colliders;            
             else static_assert(std::is_same_v<T, void>, "�������� �ʴ� ������Ʈ Ÿ���Դϴ�.");
         }
 
@@ -382,6 +389,9 @@ namespace Alice
         ComponentStorage<SkinnedAnimationComponent> m_skinnedAnimations;
         ComponentStorage<CameraComponent> m_cameras;
 
+
+        ComponentStorage<RigidBodyComponent> m_rigidBodies;
+        ComponentStorage<ColliderComponent> m_colliders;
         ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
 
         // ��ũ��Ʈ�� vector�� ������ �����Ƿ� �Ϲ� T�� ������ �޶� ���� ��

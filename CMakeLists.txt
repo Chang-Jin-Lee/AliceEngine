@@ -130,7 +130,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Core.cpp
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Joints.cpp
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Queries.cpp
-    ${ALICE_SRC_DIR}/PhysX/Module/
+    ${ALICE_SRC_DIR}/PhysX/PhysicsSystem.cpp
     #Physx Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
@@ -219,6 +219,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
+	${ALICE_SRC_DIR}/PhysX/PhysicsSystem.h
     #Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
@@ -226,7 +227,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.h
     #Components
     ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
-
+	${ALICE_SRC_DIR}/PhysX/Components/ColliderComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/RigidBodyComponent.h	
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
