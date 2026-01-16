@@ -3,7 +3,7 @@
 #endif
 
 #include "Core/SceneFile.h"
-#include "Core/ComponentRegistry.h"  // RTTR µî·Ï ÄÚµå Æ÷ÇÔ
+#include "Core/ComponentRegistry.h"  // RTTR ë“±ë¡ ì½”ë“œ í¬í•¨
 #include "Core/JsonRttr.h"
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
@@ -24,27 +24,27 @@ namespace Alice
 {
     namespace
     {
-        // ½ºÅ°´× ¸Ş½Ã°¡ ¾ÆÁ÷ ¾Ö´Ï¸ŞÀÌ¼Ç ½Ã½ºÅÛ°ú ¿¬°áµÇÁö ¾Ê¾ÒÀ» ¶§ »ç¿ëÇÒ
-        // 1°³Â¥¸® Ç×µî º» ÆÈ·¹Æ®ÀÔ´Ï´Ù. (Á¤ÀûÀÎ ¸Ş½ÃÃ³·³ ·»´õ¸µµÇµµ·Ï ÇÔ)
+        // ìŠ¤í‚¤ë‹ ë©”ì‹œê°€ ì•„ì§ ì• ë‹ˆë©”ì´ì…˜ ì‹œìŠ¤í…œê³¼ ì—°ê²°ë˜ì§€ ì•Šì•˜ì„ ë•Œ ì‚¬ìš©í• 
+        // 1ê°œì§œë¦¬ í•­ë“± ë³¸ íŒ”ë ˆíŠ¸ì…ë‹ˆë‹¤. (ì •ì ì¸ ë©”ì‹œì²˜ëŸ¼ ë Œë”ë§ë˜ë„ë¡ í•¨)
         static DirectX::XMFLOAT4X4 g_IdentityBone(
             1, 0, 0, 0,
             0, 1, 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1);
 
-        // ÇÁ·ÎÁ§Æ® ·çÆ® °æ·Î¸¦ ±¸ÇÏ´Â ÇïÆÛ ÇÔ¼ö
+        // í”„ë¡œì íŠ¸ ë£¨íŠ¸ ê²½ë¡œë¥¼ êµ¬í•˜ëŠ” í—¬í¼ í•¨ìˆ˜
         static std::filesystem::path GetProjectRoot()
         {
             wchar_t exePathW[MAX_PATH] = {};
             GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
             std::filesystem::path exePath = exePathW;
             std::filesystem::path exeDir = exePath.parent_path();
-            // build/bin/Debug ¶Ç´Â build/bin/Release °¡ ³ª¿È. ÇÁ·ÎÁ§Æ® ·çÆ®ÀÓ
+            // build/bin/Debug ë˜ëŠ” build/bin/Release ê°€ ë‚˜ì˜´. í”„ë¡œì íŠ¸ ë£¨íŠ¸ì„
             return exeDir.parent_path().parent_path().parent_path();
         }
 
-        // Àı´ë °æ·Î¸¦ »ó´ë °æ·Î·Î º¯È¯ÇÏ´Â ÇïÆÛ ÇÔ¼ö
-        // Assets/ ¶Ç´Â Resource/·Î ½ÃÀÛÇÏ´Â °æ·Î´Â ±×´ë·Î À¯ÁöÇÔ
+        // ì ˆëŒ€ ê²½ë¡œë¥¼ ìƒëŒ€ ê²½ë¡œë¡œ ë³€í™˜í•˜ëŠ” í—¬í¼ í•¨ìˆ˜
+        // Assets/ ë˜ëŠ” Resource/ë¡œ ì‹œì‘í•˜ëŠ” ê²½ë¡œëŠ” ê·¸ëŒ€ë¡œ ìœ ì§€í•¨
         static std::string NormalizePathToRelative(const std::string& path)
         {
             if (path.empty())
@@ -52,7 +52,7 @@ namespace Alice
 
             std::filesystem::path p(path);
             
-            // ÀÌ¹Ì »ó´ë °æ·ÎÀÌ°Å³ª Assets/ ¶Ç´Â Resource/·Î ½ÃÀÛÇÏ¸é ±×´ë·Î ¹İÈ¯
+            // ì´ë¯¸ ìƒëŒ€ ê²½ë¡œì´ê±°ë‚˜ Assets/ ë˜ëŠ” Resource/ë¡œ ì‹œì‘í•˜ë©´ ê·¸ëŒ€ë¡œ ë°˜í™˜
             if (!p.is_absolute())
             {
                 const std::string s = p.generic_string();
@@ -60,7 +60,7 @@ namespace Alice
                     return s;
             }
 
-            // Àı´ë °æ·ÎÀÎ °æ¿ì ÇÁ·ÎÁ§Æ® ·çÆ® ±âÁØ »ó´ë °æ·Î·Î º¯È¯
+            // ì ˆëŒ€ ê²½ë¡œì¸ ê²½ìš° í”„ë¡œì íŠ¸ ë£¨íŠ¸ ê¸°ì¤€ ìƒëŒ€ ê²½ë¡œë¡œ ë³€í™˜
             if (p.is_absolute())
             {
                 const std::filesystem::path projectRoot = GetProjectRoot();
@@ -70,15 +70,15 @@ namespace Alice
                     if (!relative.empty())
                     {
                         const std::string result = relative.generic_string();
-                        // Assets/ ¶Ç´Â Resource/·Î ½ÃÀÛÇÏ´ÂÁö È®ÀÎ
+                        // Assets/ ë˜ëŠ” Resource/ë¡œ ì‹œì‘í•˜ëŠ”ì§€ í™•ì¸
                         if (result.find("Assets/") == 0 || result.find("Resource/") == 0 || result.find("Cooked/") == 0)
                             return result;
-                        // »ó´ë °æ·Î º¯È¯ÀÌ ½ÇÆĞÇÏ°Å³ª ¿¹»ó°ú ´Ù¸¥ °æ¿ì ¿øº» ¹İÈ¯
+                        // ìƒëŒ€ ê²½ë¡œ ë³€í™˜ì´ ì‹¤íŒ¨í•˜ê±°ë‚˜ ì˜ˆìƒê³¼ ë‹¤ë¥¸ ê²½ìš° ì›ë³¸ ë°˜í™˜
                     }
                 }
                 catch (...)
                 {
-                    // relative() ½ÇÆĞ ½Ã ¿øº» ¹İÈ¯
+                    // relative() ì‹¤íŒ¨ ì‹œ ì›ë³¸ ë°˜í™˜
                 }
             }
 
@@ -125,7 +125,7 @@ namespace Alice
             
             if (const auto* mat = world.GetComponent<MaterialComponent>(id); mat)
             {
-                // °æ·Î¸¦ »ó´ë °æ·Î·Î º¯È¯ÇÏ±â À§ÇØ º¹»çº» »ı¼º
+                // ê²½ë¡œë¥¼ ìƒëŒ€ ê²½ë¡œë¡œ ë³€í™˜í•˜ê¸° ìœ„í•´ ë³µì‚¬ë³¸ ìƒì„±
                 MaterialComponent matCopy = *mat;
                 matCopy.assetPath = NormalizePathToRelative(matCopy.assetPath);
                 matCopy.albedoTexturePath = NormalizePathToRelative(matCopy.albedoTexturePath);
@@ -137,10 +137,10 @@ namespace Alice
             
             if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(id); skinned)
             {
-                // °æ·Î¸¦ »ó´ë °æ·Î·Î º¯È¯ÇÏ±â À§ÇØ º¹»çº» »ı¼º
+                // ê²½ë¡œë¥¼ ìƒëŒ€ ê²½ë¡œë¡œ ë³€í™˜í•˜ê¸° ìœ„í•´ ë³µì‚¬ë³¸ ìƒì„±
                 SkinnedMeshComponent skinnedCopy = *skinned;
                 skinnedCopy.instanceAssetPath = NormalizePathToRelative(skinnedCopy.instanceAssetPath);
-                // meshAssetPath´Â ÀÌ¹Ì »ó´ë °æ·ÎÀÏ °¡´É¼ºÀÌ ³ôÁö¸¸ ¾ÈÀüÀ» À§ÇØ º¯È¯
+                // meshAssetPathëŠ” ì´ë¯¸ ìƒëŒ€ ê²½ë¡œì¼ ê°€ëŠ¥ì„±ì´ ë†’ì§€ë§Œ ì•ˆì „ì„ ìœ„í•´ ë³€í™˜
                 skinnedCopy.meshAssetPath = NormalizePathToRelative(skinnedCopy.meshAssetPath);
                 
                 rttr::instance inst = skinnedCopy;
@@ -158,6 +158,24 @@ namespace Alice
             {
                 rttr::instance inst = const_cast<CameraComponent&>(*cam);
                 outEntity["Camera"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* point = world.GetComponent<PointLightComponent>(id); point)
+            {
+                rttr::instance inst = const_cast<PointLightComponent&>(*point);
+                outEntity["PointLight"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* spot = world.GetComponent<SpotLightComponent>(id); spot)
+            {
+                rttr::instance inst = const_cast<SpotLightComponent&>(*spot);
+                outEntity["SpotLight"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* rect = world.GetComponent<RectLightComponent>(id); rect)
+            {
+                rttr::instance inst = const_cast<RectLightComponent&>(*rect);
+                outEntity["RectLight"] = JsonRttr::ToJsonObject(inst);
             }
 
             return true;
@@ -182,7 +200,7 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
             }
 
-            // Scripts (¿©·¯ °³)
+            // Scripts (ì—¬ëŸ¬ ê°œ)
             auto itS = e.find("Scripts");
             if (itS != e.end() && itS->is_array())
             {
@@ -201,13 +219,13 @@ namespace Alice
                         rttr::instance inst = *sc.instance;
                         const rttr::type t = rttr::type::get_by_name(sc.scriptName);
                         if (!JsonRttr::FromJsonObject(inst, *itP, t)) return false;
-                        sc.defaultsApplied = true; // ¾ÀÀÌ °ª ÁÖÀÔ ¿Ï·á
+                        sc.defaultsApplied = true; // ì”¬ì´ ê°’ ì£¼ì… ì™„ë£Œ
                     }
                 }
             }
             else
             {
-                // Script (·¹°Å½Ã ´ÜÀÏ)
+                // Script (ë ˆê±°ì‹œ ë‹¨ì¼)
                 auto itLegacy = e.find("Script");
                 if (itLegacy != e.end() && itLegacy->is_object())
                 {
@@ -247,7 +265,7 @@ namespace Alice
                 }
             }
 
-            // SkinnedAnimation (¼±ÅÃ)
+            // SkinnedAnimation (ì„ íƒ)
             auto itSA = e.find("SkinnedAnimation");
             if (itSA != e.end() && itSA->is_object())
             {
@@ -256,13 +274,40 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
             }
 
-            // Camera (¼±ÅÃ)
+            // Camera (ì„ íƒ)
             auto itC = e.find("Camera");
             if (itC != e.end() && itC->is_object())
             {
                 CameraComponent& cc = world.AddComponent<CameraComponent>(id);
                 rttr::instance inst = cc;
                 if (!JsonRttr::FromJsonObject(inst, *itC)) return false;
+            }
+
+            // Point Light ì„ íƒ
+            auto itPL = e.find("PointLight");
+            if (itPL != e.end() && itPL->is_object())
+            {
+                PointLightComponent& pl = world.AddComponent<PointLightComponent>(id);
+                rttr::instance inst = pl;
+                if (!JsonRttr::FromJsonObject(inst, *itPL)) return false;
+            }
+
+            // Spot Light ì„ íƒ
+            auto itSL = e.find("SpotLight");
+            if (itSL != e.end() && itSL->is_object())
+            {
+                SpotLightComponent& sl = world.AddComponent<SpotLightComponent>(id);
+                rttr::instance inst = sl;
+                if (!JsonRttr::FromJsonObject(inst, *itSL)) return false;
+            }
+
+            // Rect Light ì„ íƒ
+            auto itRL = e.find("RectLight");
+            if (itRL != e.end() && itRL->is_object())
+            {
+                RectLightComponent& rl = world.AddComponent<RectLightComponent>(id);
+                rttr::instance inst = rl;
+                if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
             }
 
             return true;
@@ -333,9 +378,9 @@ namespace Alice
 
         bool Load(World& world, const std::filesystem::path& path)
         {
-            // ·¹°Å½Ã ºó ¾À(ÅØ½ºÆ® Çì´õ¸¸ Á¸Àç) ÀÚµ¿ Ã³¸®:
-            // - ¿¹Àü Æ÷¸ËÀ¸·Î »ı¼ºµÈ "# AliceRenderer scene" ÆÄÀÏÀº JSONÀÌ ¾Æ´Ï¹Ç·Î ÆÄ½Ì¿¡ ½ÇÆĞÇÕ´Ï´Ù.
-            // - ÀÌ °æ¿ì ±âº» ¿£Æ¼Æ¼ 1°³¸¦ ³Ö¾î JSON ¾ÀÀ¸·Î Áï½Ã ¾÷±×·¹ÀÌµåÇÕ´Ï´Ù.
+            // ë ˆê±°ì‹œ ë¹ˆ ì”¬(í…ìŠ¤íŠ¸ í—¤ë”ë§Œ ì¡´ì¬) ìë™ ì²˜ë¦¬:
+            // - ì˜ˆì „ í¬ë§·ìœ¼ë¡œ ìƒì„±ëœ "# AliceRenderer scene" íŒŒì¼ì€ JSONì´ ì•„ë‹ˆë¯€ë¡œ íŒŒì‹±ì— ì‹¤íŒ¨í•©ë‹ˆë‹¤.
+            // - ì´ ê²½ìš° ê¸°ë³¸ ì—”í‹°í‹° 1ê°œë¥¼ ë„£ì–´ JSON ì”¬ìœ¼ë¡œ ì¦‰ì‹œ ì—…ê·¸ë ˆì´ë“œí•©ë‹ˆë‹¤.
             {
                 std::ifstream ifs(path);
                 if (!ifs.is_open()) return false;
@@ -360,12 +405,12 @@ namespace Alice
 
         bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath)
         {
-            // (1) ¿¡µğÅÍ: ½ÇÁ¦ ÆÄÀÏ
-            // (2) °ÔÀÓ  : Assets/... ´Â Metas/Chunks ·Î ÆĞÅ·µÇ¾î ÀÖÀ¸¹Ç·Î, ¹ÙÀÌÆ® ·Îµå ÈÄ JSON ÆÄ½Ì
+            // (1) ì—ë””í„°: ì‹¤ì œ íŒŒì¼
+            // (2) ê²Œì„  : Assets/... ëŠ” Metas/Chunks ë¡œ íŒ¨í‚¹ë˜ì–´ ìˆìœ¼ë¯€ë¡œ, ë°”ì´íŠ¸ ë¡œë“œ í›„ JSON íŒŒì‹±
             const std::filesystem::path resolved = resources.Resolve(logicalPath);
             const std::string resolvedStr = resolved.generic_string();
 
-            // Metas/Chunks ·Î ¸ÅÇÎµÈ °æ¿ì: chunk ÆÄÀÏ(.alice)ÀÌ¹Ç·Î Á÷Á¢ ÆÄÀÏ ÆÄ½ÌÇÏ¸é ¾È µÊ
+            // Metas/Chunks ë¡œ ë§¤í•‘ëœ ê²½ìš°: chunk íŒŒì¼(.alice)ì´ë¯€ë¡œ ì§ì ‘ íŒŒì¼ íŒŒì‹±í•˜ë©´ ì•ˆ ë¨
             if (resolved.extension() == ".alice")
             {
                 auto sp = resources.LoadSharedBinaryAuto(logicalPath);
@@ -384,7 +429,7 @@ namespace Alice
                 return LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string());
             }
 
-            // ÀÏ¹İ ÆÄÀÏ: resolved °æ·Î·Î ·Îµå
+            // ì¼ë°˜ íŒŒì¼: resolved ê²½ë¡œë¡œ ë¡œë“œ
             ALICE_LOG_INFO("[SceneFile] LoadAuto: file load. logical=\"%s\" resolved=\"%s\"",
                            logicalPath.generic_string().c_str(),
                            resolvedStr.c_str());

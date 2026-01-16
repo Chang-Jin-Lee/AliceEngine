@@ -7,39 +7,39 @@
 
 namespace Alice
 {
-    /// Æ÷½ºÆ® ÇÁ·Î¼¼½º ÆÄ¶ó¹ÌÅÍ ±¸Á¶Ã¼
-    /// Forward/Deferred ·»´õ¸µ ½Ã½ºÅÛ¿¡¼­ °øÅëÀ¸·Î »ç¿ëµË´Ï´Ù.
+    /// í¬ìŠ¤íŠ¸ í”„ë¡œì„¸ìŠ¤ íŒŒë¼ë¯¸í„° êµ¬ì¡°ì²´
+    /// Forward/Deferred ë Œë”ë§ ì‹œìŠ¤í…œì—ì„œ ê³µí†µìœ¼ë¡œ ì‚¬ìš©ë©ë‹ˆë‹¤.
     struct PostProcessParams
     {
-        float exposure = 0.0f;        // Exposure °ª (±âº»°ª: 0 = 1.0¹è)
-        float maxHDRNits = 1000.0f;   // HDR ¸ğ´ÏÅÍ ÃÖ´ë ¹à±â (nits)
+        float exposure = 0.0f;        // Exposure ê°’ (ê¸°ë³¸ê°’: 0 = 1.0ë°°)
+        float maxHDRNits = 1000.0f;   // HDR ëª¨ë‹ˆí„° ìµœëŒ€ ë°ê¸° (nits)
     };
 
-    /// Á¶¸í/ÀçÁú ÆÄ¶ó¹ÌÅÍ ±¸Á¶Ã¼
-    /// Forward/Deferred ·»´õ¸µ ½Ã½ºÅÛ¿¡¼­ °øÅëÀ¸·Î »ç¿ëµË´Ï´Ù.
+    /// ì¡°ëª…/ì¬ì§ˆ íŒŒë¼ë¯¸í„° êµ¬ì¡°ì²´
+    /// Forward/Deferred ë Œë”ë§ ì‹œìŠ¤í…œì—ì„œ ê³µí†µìœ¼ë¡œ ì‚¬ìš©ë©ë‹ˆë‹¤.
     struct LightingParameters
     {
-        // ÀçÁú »ö»ó/ÇÏÀÌ¶óÀÌÆ® (·¹°Å½Ã ½¦ÀÌ´õ¿ë)
+        // ì¬ì§ˆ ìƒ‰ìƒ/í•˜ì´ë¼ì´íŠ¸ (ë ˆê±°ì‹œ ì‰ì´ë”ìš©)
         DirectX::XMFLOAT3 diffuseColor  { 0.7f, 0.7f, 0.9f };
         DirectX::XMFLOAT3 specularColor { 1.0f, 1.0f, 1.0f };
         float             shininess     { 32.0f };
 
-        // PBR ÀçÁú ÆÄ¶ó¹ÌÅÍ
+        // PBR ì¬ì§ˆ íŒŒë¼ë¯¸í„°
         DirectX::XMFLOAT3 baseColor     { 0.3f, 0.3f, 0.3f };  // PBR Base Color (Albedo)
-        float             metalness    { 0.0f };                // 0.0 = ºñ±İ¼Ó, 1.0 = ±İ¼Ó
-        float             roughness    { 0.5f };                // 0.0 = °Å¿ï, 1.0 = °ÅÄ£ Ç¥¸é
+        float             metalness    { 0.0f };                // 0.0 = ë¹„ê¸ˆì†, 1.0 = ê¸ˆì†
+        float             roughness    { 0.5f };                // 0.0 = ê±°ìš¸, 1.0 = ê±°ì¹œ í‘œë©´
         float             ambientOcclusion { 1.0f };            // AO (0.0 ~ 1.0)
 
-        // ±¤¿ø ¼¼±â
+        // ê´‘ì› ì„¸ê¸°
         float             keyIntensity  { 1.0f };
         float             fillIntensity { 0.0f };
 
-        // ±¤¿ø ¹æÇâ (¿ùµå ±âÁØ)
+        // ê´‘ì› ë°©í–¥ (ì›”ë“œ ê¸°ì¤€)
         DirectX::XMFLOAT3 keyDirection  {  0.5f, -1.0f,  0.5f };
         DirectX::XMFLOAT3 fillDirection { -0.5f, -0.5f, -0.2f };
     };
 
-    // ==== Ãß°¡ ¶óÀÌÆ® (Point/Spot/Rect) ====
+    // ==== ì¶”ê°€ ë¼ì´íŠ¸ (Point/Spot/Rect) ====
     static constexpr int MaxPointLights = 16;
     static constexpr int MaxSpotLights = 16;
     static constexpr int MaxRectLights = 16;
@@ -87,7 +87,7 @@ namespace Alice
         RectLightGPU rectLights[MaxRectLights];
     };
 
-     /// ½ºÅ°´× ¸Ş½Ã¸¦ ±×¸®±â À§ÇÑ µå·Î¿ì Ä¿¸ÇµåÀÔ´Ï´Ù.
+     /// ìŠ¤í‚¤ë‹ ë©”ì‹œë¥¼ ê·¸ë¦¬ê¸° ìœ„í•œ ë“œë¡œìš° ì»¤ë§¨ë“œì…ë‹ˆë‹¤.
     struct SkinnedDrawCommand
     {
         ID3D11Buffer*     vertexBuffer { nullptr };
@@ -105,20 +105,20 @@ namespace Alice
         float             roughness   { 0.5f };
         float             metalness   { 0.0f };
 
-        // ¼±ÅÃÀûÀÎ ¾Ëº£µµ ÅØ½ºÃ³ °æ·Î (.alice ´ÜÀÏ Æ÷¸Ë ¶Ç´Â ¿øº» ÀÌ¹ÌÁö °æ·Î)
+        // ì„ íƒì ì¸ ì•Œë² ë„ í…ìŠ¤ì²˜ ê²½ë¡œ (.alice ë‹¨ì¼ í¬ë§· ë˜ëŠ” ì›ë³¸ ì´ë¯¸ì§€ ê²½ë¡œ)
         std::string       albedoTexturePath;
-        // ¾î¶² ½ºÅ°´× ¸Ş½Ã(·¹Áö½ºÆ®¸® Å°)¸¦ »ç¿ëÇÒÁö ³ªÅ¸³»´Â ³í¸® Å°
+        // ì–´ë–¤ ìŠ¤í‚¤ë‹ ë©”ì‹œ(ë ˆì§€ìŠ¤íŠ¸ë¦¬ í‚¤)ë¥¼ ì‚¬ìš©í• ì§€ ë‚˜íƒ€ë‚´ëŠ” ë…¼ë¦¬ í‚¤
         std::string       meshKey;
     };
 
 
     struct ShadowSettings
 	{
-		// Æ©Åä¸®¾ó(34_ToneMapping)°ú µ¿ÀÏÇÑ ±âº»°ª ½ºÄÉÀÏ
-		std::uint32_t mapSizePx = 2048;   // ¼¨µµ¿ì¸Ê ÇØ»óµµ(ÇÑ º¯)
+		// íŠœí† ë¦¬ì–¼(34_ToneMapping)ê³¼ ë™ì¼í•œ ê¸°ë³¸ê°’ ìŠ¤ì¼€ì¼
+		std::uint32_t mapSizePx = 2048;   // ì„€ë„ìš°ë§µ í•´ìƒë„(í•œ ë³€)
 		float         bias = 0.0015f;
-		float         pcfRadius = 1.0f;   // texel ´ÜÀ§(0~3 ±ÇÀå)
-		float         orthoRadius = 20.0f; // ¿ùµå ´ÜÀ§(¾À Å©±â¿¡ ¸Â°Ô Á¶Àı)
+		float         pcfRadius = 1.0f;   // texel ë‹¨ìœ„(0~3 ê¶Œì¥)
+		float         orthoRadius = 20.0f; // ì›”ë“œ ë‹¨ìœ„(ì”¬ í¬ê¸°ì— ë§ê²Œ ì¡°ì ˆ)
 		bool          enabled = true;
 	};
 
@@ -129,9 +129,9 @@ namespace Alice
 		float padding[2];
 	};
 
-	// µğÆÛµå¿¡¼­ ¾²ÀÌ´Â Áß
-	// ConstantBuffer (register b0) ¾÷µ¥ÀÌÆ®
-	// HLSLÀÇ ConstantBuffer ±¸Á¶Ã¼¿Í ÀÏÄ¡ÇØ¾ß ÇÔ
+	// ë””í¼ë“œì—ì„œ ì“°ì´ëŠ” ì¤‘
+	// ConstantBuffer (register b0) ì—…ë°ì´íŠ¸
+	// HLSLì˜ ConstantBuffer êµ¬ì¡°ì²´ì™€ ì¼ì¹˜í•´ì•¼ í•¨
 	struct ConstantBufferData
 	{
 		DirectX::XMMATRIX g_World;
@@ -173,41 +173,41 @@ namespace Alice
 		int      g_BoundsBoneIndex;
 		DirectX::XMFLOAT3 g_BoundsPad;
 
-		// »ı¼ºÀÚ: ±âº»°ª ÃÊ±âÈ­
+		// ìƒì„±ì: ê¸°ë³¸ê°’ ì´ˆê¸°í™”
 		ConstantBufferData()
 		{
-			// 1. Çà·Ä ÃÊ±âÈ­ (Identity)
+			// 1. í–‰ë ¬ ì´ˆê¸°í™” (Identity)
 			g_World = DirectX::XMMatrixIdentity();
 			g_View = DirectX::XMMatrixIdentity();
 			g_Proj = DirectX::XMMatrixIdentity();
 			g_WorldInvTranspose = DirectX::XMMatrixIdentity();
-			g_LightViewProj = DirectX::XMMatrixIdentity(); // ¿ÜºÎ °ª(lightViewProj) ÀÇÁ¸ -> Identity·Î ÃÊ±âÈ­
+			g_LightViewProj = DirectX::XMMatrixIdentity(); // ì™¸ë¶€ ê°’(lightViewProj) ì˜ì¡´ -> Identityë¡œ ì´ˆê¸°í™”
 
-			// 2. ¸ÓÆ¼¸®¾ó ±âº»°ª
+			// 2. ë¨¸í‹°ë¦¬ì–¼ ê¸°ë³¸ê°’
 			g_Material_ambient = DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.0f);
 			g_Material_diffuse = DirectX::XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
 			g_Material_specular = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 			g_Material_reflect = DirectX::XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
 
-			// 3. ¶óÀÌÆ® ±âº»°ª
+			// 3. ë¼ì´íŠ¸ ê¸°ë³¸ê°’
 			g_DirLight_ambient = DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.0f);
 			g_DirLight_diffuse = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 			g_DirLight_specular = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 			g_DirLight_direction = DirectX::XMFLOAT3(0.5f, -1.0f, 0.5f);
 			g_DirLight_intensity = 1.0f;
 
-			// 4. Ä«¸Ş¶ó À§Ä¡ (¿ÜºÎ °ª ÀÇÁ¸ -> 0À¸·Î ÃÊ±âÈ­)
+			// 4. ì¹´ë©”ë¼ ìœ„ì¹˜ (ì™¸ë¶€ ê°’ ì˜ì¡´ -> 0ìœ¼ë¡œ ì´ˆê¸°í™”)
 			g_EyePosW = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
 
-			// 5. ¼ÎÀÌµù ¹× ÅØ½ºÃ³ ¿É¼Ç
-			g_ShadingMode = 0; // È¤Àº ±âº» ¸ğµå°ª
+			// 5. ì…°ì´ë”© ë° í…ìŠ¤ì²˜ ì˜µì…˜
+			g_ShadingMode = 0; // í˜¹ì€ ê¸°ë³¸ ëª¨ë“œê°’
 			g_EnableNormalMap = 0;
 			g_UseSpecularMap = 0;
 			g_UseDiffuseMap = 0;
 			g_UseTextureColor = 1;
 			g_Pad = 0.0f;
 
-			// 6. PBR ÆÄ¶ó¹ÌÅÍ
+			// 6. PBR íŒŒë¼ë¯¸í„°
 			g_PBRBaseColor = DirectX::XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
 			g_PBRMetalness = 0.0f;
 			g_PBRRoughness = 0.5f;
@@ -215,24 +215,24 @@ namespace Alice
 			g_PBRPad = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
 			g_PBRPad2 = 0.0f;
 
-			// 7. ¾Æ¿ô¶óÀÎ (»ç¿ë ¾È ÇÔ)
+			// 7. ì•„ì›ƒë¼ì¸ (ì‚¬ìš© ì•ˆ í•¨)
 			g_OutlineWidth = 0.0f;
 			g_OutlinePow = 0.0f;
 			g_OutlineThickness = 0.0f;
 			g_OutlineStrength = 0.0f;
 			g_OutlineColor = DirectX::XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
 
-			// 8. ¼¨µµ¿ì (¿ÜºÎ ¼³Á¤ ÀÇÁ¸ -> ¾ÈÀüÇÑ ±âº»°ª)
-			g_ShadowBias = 0.005f; // ÀÏ¹İÀûÀÎ ¹ÙÀÌ¾î½º °ª ¿¹½Ã
-			g_ShadowMapSize = 2048.0f; // ÀÏ¹İÀûÀÎ Å©±â ¿¹½Ã
+			// 8. ì„€ë„ìš° (ì™¸ë¶€ ì„¤ì • ì˜ì¡´ -> ì•ˆì „í•œ ê¸°ë³¸ê°’)
+			g_ShadowBias = 0.005f; // ì¼ë°˜ì ì¸ ë°”ì´ì–´ìŠ¤ ê°’ ì˜ˆì‹œ
+			g_ShadowMapSize = 2048.0f; // ì¼ë°˜ì ì¸ í¬ê¸° ì˜ˆì‹œ
 			g_ShadowPCFRadius = 1.0f;
-			g_ShadowEnabled = 0; // ±âº»ÀûÀ¸·Î ²û (¿ÜºÎ¿¡¼­ ÄÑ¾ß ÇÔ)
+			g_ShadowEnabled = 0; // ê¸°ë³¸ì ìœ¼ë¡œ ë” (ì™¸ë¶€ì—ì„œ ì¼œì•¼ í•¨)
 			g_BoundsBoneIndex = -1;
 			g_BoundsPad = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
 		}
 	};
 
-	// Directional Light CB ¾÷µ¥ÀÌÆ® (b3)
+	// Directional Light CB ì—…ë°ì´íŠ¸ (b3)
 	struct DirectionalLightData
 	{
 		DirectX::XMFLOAT4 direction;
@@ -242,15 +242,15 @@ namespace Alice
 	};
 
 
-	// ½ºÅ°´×¿ë º» Çà·Ä »ó¼ö ¹öÆÛ
-		// - D3D11 »ó¼ö¹öÆÛ ÃÖ´ë Å©±â(64KB)¿¡ ¸ÂÃç 1023°³(= 1023 * 64B = 65472B)¸¦ »ç¿ëÇÕ´Ï´Ù.
-		// - D3D11-AliceTutorial/31_IBL °ú µ¿ÀÏÇÑ ½ºÄÉÀÏ.
+	// ìŠ¤í‚¤ë‹ìš© ë³¸ í–‰ë ¬ ìƒìˆ˜ ë²„í¼
+		// - D3D11 ìƒìˆ˜ë²„í¼ ìµœëŒ€ í¬ê¸°(64KB)ì— ë§ì¶° 1023ê°œ(= 1023 * 64B = 65472B)ë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.
+		// - D3D11-AliceTutorial/31_IBL ê³¼ ë™ì¼í•œ ìŠ¤ì¼€ì¼.
 	static constexpr std::uint32_t MaxBones = 1023;
 	struct CBBones
 	{
 		DirectX::XMMATRIX bones[1023];
 		std::uint32_t     boneCount{ 0 };
-		std::uint32_t     pad[3]{ 0, 0, 0 }; // 16¹ÙÀÌÆ® Á¤·Ä
+		std::uint32_t     pad[3]{ 0, 0, 0 }; // 16ë°”ì´íŠ¸ ì •ë ¬
 	};
 
 
@@ -266,15 +266,15 @@ namespace Alice
 		DirectX::XMMATRIX world;
 		DirectX::XMMATRIX view;
 		DirectX::XMMATRIX projection;
-		DirectX::XMFLOAT4 materialColor; // per-object º£ÀÌ½º ÄÃ·¯
+		DirectX::XMFLOAT4 materialColor; // per-object ë² ì´ìŠ¤ ì»¬ëŸ¬
 
 		float             roughness;     // 0~1
 		float             metalness;     // 0~1
-		int               useTexture;   // 0: »ö¸¸, 1: µğÇ»Áî ÅØ½ºÃ³ »ç¿ë
-		int               enableNormalMap; // 0/1: ³ë¸»¸Ê »ç¿ë
+		int               useTexture;   // 0: ìƒ‰ë§Œ, 1: ë””í“¨ì¦ˆ í…ìŠ¤ì²˜ ì‚¬ìš©
+		int               enableNormalMap; // 0/1: ë…¸ë§ë§µ ì‚¬ìš©
 	};
 
-	/// ´Ü¼ø Directional Light 2°³¿Í ÀçÁú ÆÄ¶ó¹ÌÅÍ¸¦ ´ã´Â ±¸Á¶Ã¼ÀÔ´Ï´Ù.
+	/// ë‹¨ìˆœ Directional Light 2ê°œì™€ ì¬ì§ˆ íŒŒë¼ë¯¸í„°ë¥¼ ë‹´ëŠ” êµ¬ì¡°ì²´ì…ë‹ˆë‹¤.
 	struct LightData
 	{
 		DirectX::XMFLOAT3 direction;
@@ -292,18 +292,18 @@ namespace Alice
 		DirectX::XMFLOAT3 cameraPosition;
 		float             pad1;
 
-		DirectX::XMFLOAT4 materialDiffuse;   // rgb: »ö»ó, a: »ç¿ë ¾È ÇÔ
-		DirectX::XMFLOAT4 materialSpecular;  // rgb: »ö»ó, a: shininess
+		DirectX::XMFLOAT4 materialDiffuse;   // rgb: ìƒ‰ìƒ, a: ì‚¬ìš© ì•ˆ í•¨
+		DirectX::XMFLOAT4 materialSpecular;  // rgb: ìƒ‰ìƒ, a: shininess
 
 		int               shadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon
-		int               pad2[3];           // 16¹ÙÀÌÆ® Á¤·Ä
+		int               pad2[3];           // 16ë°”ì´íŠ¸ ì •ë ¬
 
-		DirectX::XMMATRIX lightViewProj;     // ¼¨µµ¿ì ¸Ê °è»ê¿ë ¶óÀÌÆ® ºä-ÇÁ·ÎÁ§¼Ç
+		DirectX::XMMATRIX lightViewProj;     // ì„€ë„ìš° ë§µ ê³„ì‚°ìš© ë¼ì´íŠ¸ ë·°-í”„ë¡œì ì…˜
 
-		// Shadow params (34_ToneMapping ¹æ½Ä)
-		float             shadowBias;        // ±íÀÌ ¹ÙÀÌ¾î½º(0~)
-		float             shadowMapSize;     // ¼¨µµ¿ì¸Ê ÇÑ º¯(px)
-		float             shadowPcfRadius;   // PCF ¹İ°æ(texel)
+		// Shadow params (34_ToneMapping ë°©ì‹)
+		float             shadowBias;        // ê¹Šì´ ë°”ì´ì–´ìŠ¤(0~)
+		float             shadowMapSize;     // ì„€ë„ìš°ë§µ í•œ ë³€(px)
+		float             shadowPcfRadius;   // PCF ë°˜ê²½(texel)
 		int               shadowEnabled;     // 0/1
 	};
 }
