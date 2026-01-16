@@ -166,9 +166,12 @@ set(ENGINE_HEADERS
     #컴포넌트들
     ${ALICE_SRC_DIR}/Components/CameraComponent.h
     ${ALICE_SRC_DIR}/Components/MaterialComponent.h
+    ${ALICE_SRC_DIR}/Components/PointLightComponent.h
+    ${ALICE_SRC_DIR}/Components/RectLightComponent.h
     ${ALICE_SRC_DIR}/Components/ScriptComponent.h
     ${ALICE_SRC_DIR}/Components/SkinnedAnimationComponent.h
     ${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
+    ${ALICE_SRC_DIR}/Components/SpotLightComponent.h
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
 
     # FBX/3D 모델 로더 헤더
