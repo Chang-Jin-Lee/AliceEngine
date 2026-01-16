@@ -338,7 +338,7 @@ namespace Alice
 
 
         //==============================================================
-        // ���� �� �Լ�
+        // 물리
         void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
         IPhysicsWorld* GetPhysicsWorld();
         const IPhysicsWorld* GetPhysicsWorld() const;
@@ -359,7 +359,7 @@ namespace Alice
             else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;  
             else if constexpr (std::is_same_v<T, RigidBodyComponent>) return m_rigidBodies;
             else if constexpr (std::is_same_v<T, ColliderComponent>) return m_colliders;
-            else static_assert(std::is_same_v<T, void>, "�������� �ʴ� ������Ʈ Ÿ���Դϴ�.");
+            else static_assert(std::is_same_v<T, void>, "컴포넌트 타입이 아닙니다."); // 한글 깨져서 임의로 채워놨어용
         }
 
         // const 버전 저장소 반환
@@ -374,7 +374,7 @@ namespace Alice
             else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
             else if constexpr (std::is_same_v<T, RigidBodyComponent>) return m_rigidBodies;
             else if constexpr (std::is_same_v<T, ColliderComponent>) return m_colliders;            
-            else static_assert(std::is_same_v<T, void>, "�������� �ʴ� ������Ʈ Ÿ���Դϴ�.");
+            else static_assert(std::is_same_v<T, void>, "컴포넌트 타입이 아닙니다.");
         }
 
     private:
@@ -393,8 +393,7 @@ namespace Alice
         ComponentStorage<RigidBodyComponent> m_rigidBodies;
         ComponentStorage<ColliderComponent> m_colliders;
         ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
-
-        // ��ũ��Ʈ�� vector�� ������ �����Ƿ� �Ϲ� T�� ������ �޶� ���� ��
+        
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
 
         // 지연 파괴 시스템 (EntityId -> 남은 시간)

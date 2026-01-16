@@ -478,9 +478,11 @@ namespace Alice
 	}
 
 	//=========================================================
-	// 물리
+	// 물리 시스템
 	void Alice::Engine::RefreshPhysicsForCurrentWorld()
 	{
+		// 현재 씬의 물리 월드 설정을 갱신
+		// PhysicsSceneSettingsComponent를 기반으로 물리 월드를 생성/재사용
 		// 기존 테스트 바디 정리 (씬 전환 시 안전하게 정리)
 		if (pImpl->m_testBox)
 		{
@@ -612,6 +614,8 @@ namespace Alice
 
 	void Engine::TickPhysics(float dt)
 	{
+		// 물리 시뮬레이션 수행 (고정 시간 스텝)
+		// Physics → Game 동기화 및 이벤트 수집
 		IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
 		if (!pw) return;
 
@@ -694,6 +698,7 @@ namespace Alice
 	void Engine::ProcessPhysicsEvents()
 	{
 		// 물리 이벤트 큐 처리 (한 프레임 안전하게 처리)
+		// 물리 시뮬레이션에서 발생한 충돌/트리거 이벤트를 게임 로직으로 전달
 		for (const auto& e : pImpl->m_physicsEventQueue)
 		{
 			if (!e.userDataA || !e.userDataB) continue;

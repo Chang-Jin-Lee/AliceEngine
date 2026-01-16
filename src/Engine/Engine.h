@@ -58,8 +58,9 @@ namespace Alice
         void SetUseForwardRendering(bool useForward);
         bool GetUseForwardRendering() const;
         //===========================================
-        //����
+        // 물리
         void RefreshPhysicsForCurrentWorld();
+        void ProcessPhysicsEvents(); // 물리 이벤트 큐 처리
         void TickPhysics(float dt);
         //===========================================
 
