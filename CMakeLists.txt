@@ -3,6 +3,12 @@ cmake_minimum_required(VERSION 3.20)
 # 프로젝트 이름은 전체 솔루션 이름
 project(AliceRenderer LANGUAGES CXX)
 
+
+# /utf-8 옵션 추가 경고 안뜨게 하기 위함
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 # =========================================================================
 # [설정] VCPKG 경로 (맨 위에서 관리)
 # 1. "AUTO" : 환경변수 -> D드라이브 -> C드라이브 순서로 자동 탐색
@@ -118,6 +124,18 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
     
+    #PhysX
+    ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Actors.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Core.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Joints.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Queries.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/
+    #Physx Module
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.cpp
+
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
@@ -194,6 +212,20 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
+
+    #PhysX 물리
+    ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
+    ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
+    #Module
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.h
+    #Components
+    ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
 
     # json
     ${ALICE_SRC_DIR}/json/json.hpp

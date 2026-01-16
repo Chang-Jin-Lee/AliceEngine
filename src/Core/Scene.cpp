@@ -1,4 +1,4 @@
-#include "Core/Scene.h"
+﻿#include "Core/Scene.h"
 #include "Core/ResourceManager.h"
 
 namespace Alice

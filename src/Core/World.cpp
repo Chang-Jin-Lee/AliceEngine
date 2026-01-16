@@ -1,13 +1,17 @@
-#include "Core/World.h"
+ï»¿#include "Core/World.h"
 #include "Core/GameObject.h"
 #include "Core/ScriptFactory.h"
 
 namespace Alice {
 	void World::Clear()
 	{
-		// 1. ½ºÅ©¸³Æ® ÄÄÆ÷³ÍÆ®µéÀÇ Á¤¸®(Cleanup) ÇÔ¼ö È£Ãâ
+		// 1. ìŠ¤í¬ë¦½íŠ¸ ì»´í¬ë„ŒíŠ¸ë“¤ì˜ ì •ë¦¬(Cleanup) í•¨ìˆ˜ í˜¸ì¶œ
 		RemoveAllScript();
-		// 2. ¸ğµç ÄÄÆ÷³ÍÆ® ÄÁÅ×ÀÌ³Ê ºñ¿ì±â (¸Ş¸ğ¸® ÇØÁ¦)
+
+		// 1.5 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+		m_physicsWorld.reset();
+
+		// 2. ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½Ş¸ï¿½ ï¿½ï¿½ï¿½ï¿½)
 		m_names.clear();
 		m_transforms.Clear();
 		m_scripts.clear();
@@ -18,15 +22,15 @@ namespace Alice {
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
-		// 3. ¿£Æ¼Æ¼ ID Ä«¿îÅÍ ÃÊ±âÈ­ (¼±ÅÃ »çÇ×ÀÌÁö¸¸ ±ÇÀå)
-		//    »õ ¾ÀÀ» ·ÎµåÇÒ ¶§ ID°¡ 1¹øºÎÅÍ ´Ù½Ã ½ÃÀÛÇÏµµ·Ï ÇÔ.
+		// 3. ì—”í‹°í‹° ID ì¹´ìš´í„° ì´ˆê¸°í™” (ì„ íƒ ì‚¬í•­ì´ì§€ë§Œ ê¶Œì¥)
+		//    ìƒˆ ì”¬ì„ ë¡œë“œí•  ë•Œ IDê°€ 1ë²ˆë¶€í„° ë‹¤ì‹œ ì‹œì‘í•˜ë„ë¡ í•¨.
 		m_nextEntityId = 1;
 	}
 	EntityId World::CreateEntity()
 	{
-		// °£´ÜÇÑ Áõ°¡Çü ID¸¦ »ç¿ëÇÕ´Ï´Ù.
+		// ê°„ë‹¨í•œ ì¦ê°€í˜• IDë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤.
 		const EntityId newId = m_nextEntityId++;
-		// SlotMap: »õ·Î »ı¼ºµÈ ¿£Æ¼Æ¼ÀÇ generationÀ» 0À¸·Î ÃÊ±âÈ­ÇÕ´Ï´Ù.
+		// SlotMap: ìƒˆë¡œ ìƒì„±ëœ ì—”í‹°í‹°ì˜ generationì„ 0ìœ¼ë¡œ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
 		m_entityGenerations[newId] = 0;
 		return newId;
 	}
@@ -36,14 +40,14 @@ namespace Alice {
 		if (id == InvalidEntityId)
 			return;
 
-		// Áö¿¬ ÆÄ±« ¿¹¾àÀÌ ÀÖÀ¸¸é Á¦°Å
+		// ì§€ì—° íŒŒê´´ ì˜ˆì•½ì´ ìˆìœ¼ë©´ ì œê±°
 		m_delayedDestructions.erase(id);
 
-		// SlotMap: ¿£Æ¼Æ¼°¡ ÆÄ±«µÉ ¶§ generationÀ» Áõ°¡½ÃÄÑ ÀÌÀü ÂüÁ¶¸¦ ¹«È¿È­ÇÕ´Ï´Ù.
+		// SlotMap: ì—”í‹°í‹°ê°€ íŒŒê´´ë  ë•Œ generationì„ ì¦ê°€ì‹œì¼œ ì´ì „ ì°¸ì¡°ë¥¼ ë¬´íš¨í™”í•©ë‹ˆë‹¤.
 		auto genIt = m_entityGenerations.find(id);
 		if (genIt != m_entityGenerations.end())
 		{
-		    genIt->second++; // generation Áõ°¡
+		    genIt->second++; // generation ì¦ê°€
 		}
 
 		m_names.erase(id);
@@ -67,18 +71,18 @@ namespace Alice {
 
 	GameObject World::FindGameObject(const std::string& name)
 	{
-		// ÀÌ¸§À¸·Î ¿£Æ¼Æ¼ °Ë»ö (¼±Çü °Ë»ö)
-		// ¿£Æ¼Æ¼°¡ ¸¹¾ÆÁö¸é º°µµ Map<String, EntityId> °ü¸® ±ÇÀå
+		// ì´ë¦„ìœ¼ë¡œ ì—”í‹°í‹° ê²€ìƒ‰ (ì„ í˜• ê²€ìƒ‰)
+		// ì—”í‹°í‹°ê°€ ë§ì•„ì§€ë©´ ë³„ë„ Map<String, EntityId> ê´€ë¦¬ ê¶Œì¥
 		for (const auto& [id, entityName] : m_names)
 		{
 			if (entityName == name)
 			{
-				// GameObject »ı¼º (ScriptServices´Â nullptr·Î Àü´Ş)
-				// ½ºÅ©¸³Æ®¿¡¼­ »ç¿ëÇÒ ¶§´Â IScript::gameObject()¸¦ ÅëÇØ ScriptServices°¡ Æ÷ÇÔµÈ GameObject¸¦ ¾òÀ» ¼ö ÀÖÀ½
+				// GameObject ìƒì„± (ScriptServicesëŠ” nullptrë¡œ ì „ë‹¬)
+				// ìŠ¤í¬ë¦½íŠ¸ì—ì„œ ì‚¬ìš©í•  ë•ŒëŠ” IScript::gameObject()ë¥¼ í†µí•´ ScriptServicesê°€ í¬í•¨ëœ GameObjectë¥¼ ì–»ì„ ìˆ˜ ìˆìŒ
 				return GameObject(this, id, nullptr);
 			}
 		}
-		// Ã£Áö ¸øÇÑ °æ¿ì ºó GameObject ¹İÈ¯ (IsValid() == false)
+		// ì°¾ì§€ ëª»í•œ ê²½ìš° ë¹ˆ GameObject ë°˜í™˜ (IsValid() == false)
 		return GameObject();
 	}
 
@@ -161,7 +165,7 @@ namespace Alice {
 	}
 
 	EntityId World::GetMainCameraEntityId() {
-		// Sparse Set ±â¹İ: Ä«¸Ş¶ó ÄÄÆ÷³ÍÆ® ºä¿¡¼­ Ã¹ ¹øÂ° EntityId¸¦ ¹İÈ¯
+		// Sparse Set ê¸°ë°˜: ì¹´ë©”ë¼ ì»´í¬ë„ŒíŠ¸ ë·°ì—ì„œ ì²« ë²ˆì§¸ EntityIdë¥¼ ë°˜í™˜
 		auto cameras = GetComponents<CameraComponent>();
 		if (cameras.empty())
 			return InvalidEntityId;
@@ -173,7 +177,7 @@ namespace Alice {
 		if (id == InvalidEntityId || delay <= 0.0f)
 			return;
 
-		// ÀÌ¹Ì ¿¹¾àµÈ ÆÄ±«°¡ ÀÖÀ¸¸é ´õ ÂªÀº ½Ã°£À¸·Î ¾÷µ¥ÀÌÆ®
+		// ì´ë¯¸ ì˜ˆì•½ëœ íŒŒê´´ê°€ ìˆìœ¼ë©´ ë” ì§§ì€ ì‹œê°„ìœ¼ë¡œ ì—…ë°ì´íŠ¸
 		auto it = m_delayedDestructions.find(id);
 		if (it != m_delayedDestructions.end())
 		{
@@ -187,7 +191,7 @@ namespace Alice {
 
 	void World::UpdateDelayedDestruction(float deltaTime)
 	{
-		// ¿ª¼øÀ¸·Î ¼øÈ¸ÇÏ¿© »èÁ¦ ½Ã iterator ¹«È¿È­ ¹æÁö
+		// ì—­ìˆœìœ¼ë¡œ ìˆœíšŒí•˜ì—¬ ì‚­ì œ ì‹œ iterator ë¬´íš¨í™” ë°©ì§€
 		std::vector<EntityId> toDestroy;
 		toDestroy.reserve(m_delayedDestructions.size());
 
@@ -200,7 +204,7 @@ namespace Alice {
 			}
 		}
 
-		// ½Ã°£ÀÌ Áö³­ ¿£Æ¼Æ¼µéÀ» ÆÄ±«
+		// ì‹œê°„ì´ ì§€ë‚œ ì—”í‹°í‹°ë“¤ì„ íŒŒê´´
 		for (EntityId id : toDestroy)
 		{
 			m_delayedDestructions.erase(id);
@@ -212,7 +216,7 @@ namespace Alice {
 	{
 		auto it = m_entityGenerations.find(id);
 		if (it == m_entityGenerations.end())
-    		return 0; // Á¸ÀçÇÏÁö ¾Ê´Â ¿£Æ¼Æ¼´Â generation 0
+    		return 0; // ì¡´ì¬í•˜ì§€ ì•ŠëŠ” ì—”í‹°í‹°ëŠ” generation 0
 		return it->second;
 	}
 
@@ -223,9 +227,9 @@ namespace Alice {
 
 		auto it = m_entityGenerations.find(id);
 		if (it == m_entityGenerations.end())
-    		return false; // ¿£Æ¼Æ¼°¡ Á¸ÀçÇÏÁö ¾ÊÀ½
+    		return false; // ì—”í‹°í‹°ê°€ ì¡´ì¬í•˜ì§€ ì•ŠìŒ
 
-		// generationÀÌ ÀÏÄ¡ÇÏ¸é À¯È¿, ´Ù¸£¸é ¹«È¿ (ÆÄ±« ÈÄ Àç»ç¿ëµÈ °æ¿ì)
+		// generationì´ ì¼ì¹˜í•˜ë©´ ìœ íš¨, ë‹¤ë¥´ë©´ ë¬´íš¨ (íŒŒê´´ í›„ ì¬ì‚¬ìš©ëœ ê²½ìš°)
 		return it->second == generation;
 	}
 
@@ -234,7 +238,7 @@ namespace Alice {
 		EntityId e = CreateEntity();
 		auto& t = AddComponent<TransformComponent>(e);
 		t.SetPosition(0.0f, 0.0f, 0.0f)
-		 .SetScale(1.0f, 1.0f, 1.0f);
+			.SetScale(1.0f, 1.0f, 1.0f);
 		SetEntityName(e, "GameObject" + std::to_string((std::uint32_t)e));
 		return e;
 	}
@@ -246,10 +250,10 @@ namespace Alice {
 		t.SetPosition(0.0f, 0.0f, 0.0f)
 		 .SetScale(1.0f, 1.0f, 1.0f);
 		
-		// ±âº» È¸»ö ¸ÓÆ¼¸®¾óÀ» ÇÔ²² Ãß°¡ÇÕ´Ï´Ù.
+		// ê¸°ë³¸ íšŒìƒ‰ ë¨¸í‹°ë¦¬ì–¼ì„ í•¨ê»˜ ì¶”ê°€í•©ë‹ˆë‹¤.
 		DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
 		AddComponent<MaterialComponent>(e, defaultColor);
-		
+
 		SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
 		return e;
 	}
@@ -271,4 +275,15 @@ namespace Alice {
 		SetEntityName(e, "Camera" + std::to_string(camIndex));
 		return e;
 	}
+
+
+
+	//========================================================
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
+	void World::SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld) { m_physicsWorld = std::move(physicsWorld); }
+	IPhysicsWorld* World::GetPhysicsWorld() { return m_physicsWorld.get(); }
+	const IPhysicsWorld* World::GetPhysicsWorld() const { return m_physicsWorld.get(); }
+	//========================================================
+
+
 } // namespace Alice

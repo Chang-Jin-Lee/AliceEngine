@@ -1,17 +1,17 @@
-#include <vector>
+ï»¿#include <vector>
 #include <DirectXMath.h>
 
 namespace Alice {
-    /// ½ºÅ°´× ¾Ö´Ï¸ŞÀÌ¼Ç Àç»ı »óÅÂ(¿£Æ¼Æ¼ ´ÜÀ§)
-    /// - ½ÇÁ¦ Æò°¡/ÆÈ·¹Æ® °è»êÀº SkinnedAnimationSystem ÀÌ ¼öÇàÇÕ´Ï´Ù.
+    /// ìŠ¤í‚¤ë‹ ì• ë‹ˆë©”ì´ì…˜ ì¬ìƒ ìƒíƒœ(ì—”í‹°í‹° ë‹¨ìœ„)
+    /// - ì‹¤ì œ í‰ê°€/íŒ”ë ˆíŠ¸ ê³„ì‚°ì€ SkinnedAnimationSystem ì´ ìˆ˜í–‰í•©ë‹ˆë‹¤.
     struct SkinnedAnimationComponent 
     {
-        int clipIndex{ 0 }; // ÇöÀç Àç»ı Å¬¸³ ÀÎµ¦½º
+        int clipIndex{ 0 }; // í˜„ì¬ ì¬ìƒ í´ë¦½ ì¸ë±ìŠ¤
         bool playing{ true };
-        float speed{ 1.0f };   // ¹è¼Ó(1.0 = Á¤»ó)
-        double timeSec{ 0.0 }; // ÇöÀç ½Ã°£(ÃÊ)
+        float speed{ 1.0f };   // ë°°ì†(1.0 = ì •ìƒ)
+        double timeSec{ 0.0 }; // í˜„ì¬ ì‹œê°„(ì´ˆ)
 
-        // CPU º» ÆÈ·¹Æ®(ForwardRenderSystemÀÌ ¿©±â¼­ ÀĞ¾î VS CB·Î ¾÷·Îµå)
+        // CPU ë³¸ íŒ”ë ˆíŠ¸(ForwardRenderSystemì´ ì—¬ê¸°ì„œ ì½ì–´ VS CBë¡œ ì—…ë¡œë“œ)
         std::vector<DirectX::XMFLOAT4X4> palette;
     };
 }

@@ -1,13 +1,13 @@
-//#pragma once
+ï»¿//#pragma once
 //
 //#include "Core/IScript.h"
 //#include "Core/ScriptReflection.h"
 //
 //namespace Alice
 //{
-//    /// À¯´ÏÆ¼ ´À³¦ÀÇ °£´ÜÇÑ Ä«¸Ş¶ó ÆÈ·Î¿ì ½ºÅ©¸³Æ®ÀÔ´Ï´Ù.
-//    /// - FixedUpdate¿¡¼­ "Ã¹¹øÂ° SkinnedMesh ¿£Æ¼Æ¼"¸¦ µû¶ó°©´Ï´Ù.
-//    /// - ¸ñÇ¥°¡ ¾øÀ¸¸é ¾Æ¹« °Íµµ ÇÏÁö ¾Ê½À´Ï´Ù.
+//    /// ìœ ë‹ˆí‹° ëŠë‚Œì˜ ê°„ë‹¨í•œ ì¹´ë©”ë¼ íŒ”ë¡œìš° ìŠ¤í¬ë¦½íŠ¸ì…ë‹ˆë‹¤.
+//    /// - FixedUpdateì—ì„œ "ì²«ë²ˆì§¸ SkinnedMesh ì—”í‹°í‹°"ë¥¼ ë”°ë¼ê°‘ë‹ˆë‹¤.
+//    /// - ëª©í‘œê°€ ì—†ìœ¼ë©´ ì•„ë¬´ ê²ƒë„ í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
 //    class CameraFollow : public IScript
 //    {
 //    public:
@@ -16,10 +16,10 @@
 //        void LateUpdate(float lateDeltaTime) override;
 //
 //    private:
-//        // °£´Ü ¿ÀÇÁ¼Â (À¯´ÏÆ¼ÀÇ third-person Ä«¸Ş¶ó ´À³¦)
-//        ALICE_SERIALIZE_FIELD(float, m_distance, 0.0f);         // Å¸°Ù°úÀÇ °Å¸®
-//        ALICE_SERIALIZE_FIELD(float, m_sensitivity, 28.0f);     // ¸¶¿ì½º È¸Àü °¨µµ
-//        ALICE_SERIALIZE_FIELD(float, m_heightOffset, -13.0f);   // Å¸°ÙÀÇ ³ôÀÌ º¸Á¤ (¸Ó¸® À§ µî)
+//        // ê°„ë‹¨ ì˜¤í”„ì…‹ (ìœ ë‹ˆí‹°ì˜ third-person ì¹´ë©”ë¼ ëŠë‚Œ)
+//        ALICE_SERIALIZE_FIELD(float, m_distance, 0.0f);         // íƒ€ê²Ÿê³¼ì˜ ê±°ë¦¬
+//        ALICE_SERIALIZE_FIELD(float, m_sensitivity, 28.0f);     // ë§ˆìš°ìŠ¤ íšŒì „ ê°ë„
+//        ALICE_SERIALIZE_FIELD(float, m_heightOffset, -13.0f);   // íƒ€ê²Ÿì˜ ë†’ì´ ë³´ì • (ë¨¸ë¦¬ ìœ„ ë“±)
 //    };
 //}
 
@@ -31,9 +31,9 @@
 //
 //namespace Alice
 //{
-//    /// À¯´ÏÆ¼ ´À³¦ÀÇ °£´ÜÇÑ Ä«¸Ş¶ó ÆÈ·Î¿ì ½ºÅ©¸³Æ®ÀÔ´Ï´Ù.
-//    /// - FixedUpdate¿¡¼­ "Ã¹¹øÂ° SkinnedMesh ¿£Æ¼Æ¼"¸¦ µû¶ó°©´Ï´Ù.
-//    /// - ¸ñÇ¥°¡ ¾øÀ¸¸é ¾Æ¹« °Íµµ ÇÏÁö ¾Ê½À´Ï´Ù.
+//    /// ìœ ë‹ˆí‹° ëŠë‚Œì˜ ê°„ë‹¨í•œ ì¹´ë©”ë¼ íŒ”ë¡œìš° ìŠ¤í¬ë¦½íŠ¸ì…ë‹ˆë‹¤.
+//    /// - FixedUpdateì—ì„œ "ì²«ë²ˆì§¸ SkinnedMesh ì—”í‹°í‹°"ë¥¼ ë”°ë¼ê°‘ë‹ˆë‹¤.
+//    /// - ëª©í‘œê°€ ì—†ìœ¼ë©´ ì•„ë¬´ ê²ƒë„ í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
 //    class CameraFollow : public IScript
 //    {
 //    public:
@@ -45,7 +45,7 @@
 //        void LateUpdate(float lateDeltaTime) override;
 //
 //    private:
-//        // °£´Ü ¿ÀÇÁ¼Â (À¯´ÏÆ¼ÀÇ third-person Ä«¸Ş¶ó ´À³¦)
+//        // ê°„ë‹¨ ì˜¤í”„ì…‹ (ìœ ë‹ˆí‹°ì˜ third-person ì¹´ë©”ë¼ ëŠë‚Œ)
 //        ALICE_SERIALIZE_FIELD(float, m_offsetX, 0.0f);
 //        ALICE_SERIALIZE_FIELD(float, m_offsetY, 28.0f);
 //        ALICE_SERIALIZE_FIELD(float, m_offsetZ, -13.0f);
@@ -70,31 +70,31 @@ namespace Alice
     public:
         void LateUpdate(float lateDeltaTime) override;
 
-        // °íÁ¤ ¿ÀÇÁ¼Â ÀÌµ¿
+        // ê³ ì • ì˜¤í”„ì…‹ ì´ë™
         void MoveDirectly();
         ALICE_FUNC(MoveDirectly);
 
         void MoveLerp(const float& lateDeltaTime);
         ALICE_FUNC(MoveLerp);
 
-        // ¸¶¿ì½º µå·¡±×·Î Ä³¸¯ÅÍ ÁÖº¯ È¸Àü
+        // ë§ˆìš°ìŠ¤ ë“œë˜ê·¸ë¡œ ìºë¦­í„° ì£¼ë³€ íšŒì „
         void MoveOrbit();
         ALICE_FUNC(MoveOrbit);
 
-        // MoveDirectly º¯¼ö
+        // MoveDirectly ë³€ìˆ˜
         ALICE_PROPERTY(float, m_offsetX, 0.0f);
         ALICE_PROPERTY(float, m_offsetY, 28.0f);
         ALICE_PROPERTY(float, m_offsetZ, -13.0f);
         ALICE_PROPERTY(float, m_smoothSpeed, 0.0f);
 
-        // MoveOrbit º¯¼ö
-        ALICE_PROPERTY(float, m_distance, 35.0f);      // Ä³¸¯ÅÍ¿ÍÀÇ °Å¸® (Arm Length)
-        ALICE_PROPERTY(float, m_heightOffset, 1.5f);  // È¸Àü Áß½ÉÁ¡ ³ôÀÌ (¸Ó¸®/°¡½¿)
-        ALICE_PROPERTY(float, m_sensitivity, 0.2f);   // ¸¶¿ì½º °¨µµ
-        ALICE_PROPERTY(float, m_currentYaw, 0.0f);    // ÇöÀç ÁÂ¿ì °¢µµ
-        ALICE_PROPERTY(float, m_currentPitch, 20.0f); // ÇöÀç »óÇÏ °¢µµ
-        ALICE_PROPERTY(float, m_minDistance, 10.0f);   // ÃÖ¼Ò °Å¸® (³Ê¹« °¡±î¿öÁü ¹æÁö)
-        ALICE_PROPERTY(float, m_maxDistance, 55.0f);  // ÃÖ´ë °Å¸®
-        ALICE_PROPERTY(float, m_zoomSpeed, 0.01f);     // ÈÙ ÁÜ ¼Óµµ
+        // MoveOrbit ë³€ìˆ˜
+        ALICE_PROPERTY(float, m_distance, 35.0f);      // ìºë¦­í„°ì™€ì˜ ê±°ë¦¬ (Arm Length)
+        ALICE_PROPERTY(float, m_heightOffset, 1.5f);  // íšŒì „ ì¤‘ì‹¬ì  ë†’ì´ (ë¨¸ë¦¬/ê°€ìŠ´)
+        ALICE_PROPERTY(float, m_sensitivity, 0.2f);   // ë§ˆìš°ìŠ¤ ê°ë„
+        ALICE_PROPERTY(float, m_currentYaw, 0.0f);    // í˜„ì¬ ì¢Œìš° ê°ë„
+        ALICE_PROPERTY(float, m_currentPitch, 20.0f); // í˜„ì¬ ìƒí•˜ ê°ë„
+        ALICE_PROPERTY(float, m_minDistance, 10.0f);   // ìµœì†Œ ê±°ë¦¬ (ë„ˆë¬´ ê°€ê¹Œì›Œì§ ë°©ì§€)
+        ALICE_PROPERTY(float, m_maxDistance, 55.0f);  // ìµœëŒ€ ê±°ë¦¬
+        ALICE_PROPERTY(float, m_zoomSpeed, 0.01f);     // íœ  ì¤Œ ì†ë„
     };
 }

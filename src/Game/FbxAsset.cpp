@@ -1,4 +1,4 @@
-#include "Game/FbxAsset.h"
+ï»¿#include "Game/FbxAsset.h"
 
 #include <fstream>
 
@@ -76,7 +76,7 @@ namespace Alice
     {
         const std::filesystem::path resolved = resources.Resolve(logicalPath);
 
-        // Metas/Chunks ·Î ¸ÅÇÎµÈ °æ¿ì: chunk ÆÄÀÏ(.alice)ÀÌ¹Ç·Î Á÷Á¢ ÆÄÀÏ ÆÄ½ÌÇÏ¸é ¾È µÊ
+        // Metas/Chunks ë¡œ ë§¤í•‘ëœ ê²½ìš°: chunk íŒŒì¼(.alice)ì´ë¯€ë¡œ ì§ì ‘ íŒŒì¼ íŒŒì‹±í•˜ë©´ ì•ˆ ë¨
         if (resolved.extension() == ".alice")
         {
             auto sp = resources.LoadSharedBinaryAuto(logicalPath);
@@ -123,7 +123,7 @@ namespace Alice
             return true;
         }
 
-        // ÀÏ¹İ ÆÄÀÏ: resolved °æ·Î·Î ·Îµå
+        // ì¼ë°˜ íŒŒì¼: resolved ê²½ë¡œë¡œ ë¡œë“œ
         const bool ok = LoadFbxInstanceAsset(resolved, out);
         if (!ok)
         {
