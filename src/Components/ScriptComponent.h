@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
 #include <string>
@@ -7,9 +7,9 @@ namespace Alice
 {
     class IScript;
 
-    /// 한 엔티티에 붙는 단일 스크립트 컴포넌트입니다.
-    /// - scriptName 은 팩토리/리플렉션용 이름입니다.
-    /// - instance 는 실제 실행되는 스크립트 객체입니다.
+    /// ???뷀떚?곗뿉 遺숇뒗 ?⑥씪 ?ㅽ겕由쏀듃 而댄룷?뚰듃?낅땲??
+    /// - scriptName ? ?⑺넗由?由ы뵆?됱뀡???대쫫?낅땲??
+    /// - instance ???ㅼ젣 ?ㅽ뻾?섎뒗 ?ㅽ겕由쏀듃 媛앹껜?낅땲??
     struct ScriptComponent
     {
         std::string                scriptName;
@@ -19,7 +19,7 @@ namespace Alice
         bool started { false };
         bool wasEnabled { true };
 
-        // .meta 기본값을 한 번만 주입하기 위한 플래그입니다.
+        // .meta 湲곕낯媛믪쓣 ??踰덈쭔 二쇱엯?섍린 ?꾪븳 ?뚮옒洹몄엯?덈떎.
         bool defaultsApplied { false };
     };
 }

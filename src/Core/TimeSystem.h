@@ -1,4 +1,4 @@
-/**
+﻿/**
     @file      TimeSystem.h
     @brief     High resolution game timer
 */

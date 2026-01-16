@@ -1,4 +1,4 @@
-//#include "CameraFollow.h"
+ï»¿//#include "CameraFollow.h"
 // #include "Core/ScriptFactory.h"
 //#include "Core/Logger.h"
 //#include "Core/GameObject.h"
@@ -14,9 +14,9 @@
 //    REGISTER_SCRIPT(CameraFollow);
 //
 //    ALICE_SCRIPT_REFLECT_BEGIN(CameraFollow)
-//        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_distance)     // Å¸°Ù°úÀÇ °Å¸®
-//        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_sensitivity)  // ¸¶¿ì½º È¸Àü °¨µµ
-//        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_heightOffset) // Å¸°ÙÀÇ ³ôÀÌ º¸Á¤ (¸Ó¸® À§ µî)
+//        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_distance)     // íƒ€ê²Ÿê³¼ì˜ ê±°ë¦¬
+//        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_sensitivity)  // ë§ˆìš°ìŠ¤ íšŒì „ ê°ë„
+//        ALICE_SCRIPT_SERIALIZE_FIELD(CameraFollow, m_heightOffset) // íƒ€ê²Ÿì˜ ë†’ì´ ë³´ì • (ë¨¸ë¦¬ ìœ„ ë“±)
 //        ALICE_SCRIPT_REFLECT_END()
 //
 //        void CameraFollow::LateUpdate(float lateDeltaTime)
@@ -24,7 +24,7 @@
 //        auto go = gameObject();
 //        if (!go.IsValid()) return;
 //
-//        // ÇÃ·¹ÀÌ¾î(SkinnedMesh) Ã£±â
+//        // í”Œë ˆì´ì–´(SkinnedMesh) ì°¾ê¸°
 //        auto target = go.FindFirstSkinnedMesh();
 //        if (!target.IsValid()) return;
 //
@@ -34,43 +34,43 @@
 //
 //        auto* input = Input();
 //
-//        // 1. ¸¶¿ì½º ¿ìÅ¬¸¯ ½Ã È¸Àü °ª °»½Å
+//        // 1. ë§ˆìš°ìŠ¤ ìš°í´ë¦­ ì‹œ íšŒì „ ê°’ ê°±ì‹ 
 //        if (input && input->GetMouseButton(1))
 //        {
-//            // ¸¶¿ì½º ÀÌµ¿·® °¡Á®¿À±â (¿£Áø API¿¡ µû¶ó ´Ù¸¦ ¼ö ÀÖÀ½)
+//            // ë§ˆìš°ìŠ¤ ì´ë™ëŸ‰ ê°€ì ¸ì˜¤ê¸° (ì—”ì§„ APIì— ë”°ë¼ ë‹¤ë¥¼ ìˆ˜ ìˆìŒ)
 //            float mouseX = input->GetMouseDeltaX();
 //            float mouseY = input->GetMouseDeltaY();
 //
 //            m_yaw += mouseX * Get_m_sensitivity();
 //            m_pitch -= mouseY * Get_m_sensitivity();
 //
-//            // »óÇÏ È¸Àü Á¦ÇÑ (³Ê¹« À§/¾Æ·¡·Î ²ªÀÌÁö ¾Ê°Ô)
+//            // ìƒí•˜ íšŒì „ ì œí•œ (ë„ˆë¬´ ìœ„/ì•„ë˜ë¡œ êº¾ì´ì§€ ì•Šê²Œ)
 //            m_pitch = std::clamp(m_pitch, -89.0f, 89.0f);
 //        }
 //
-//        // 2. ±¸¸é ÁÂÇ¥°è¸¦ ÀÌ¿ëÇÑ Ä«¸Ş¶ó À§Ä¡ °è»ê
-//        // Yaw/Pitch¸¦ ¶óµğ¾ÈÀ¸·Î º¯È¯
+//        // 2. êµ¬ë©´ ì¢Œí‘œê³„ë¥¼ ì´ìš©í•œ ì¹´ë©”ë¼ ìœ„ì¹˜ ê³„ì‚°
+//        // Yaw/Pitchë¥¼ ë¼ë””ì•ˆìœ¼ë¡œ ë³€í™˜
 //        float radYaw = m_yaw * (static_cast<float>(M_PI) / 180.0f);
 //        float radPitch = m_pitch * (static_cast<float>(M_PI) / 180.0f);
 //
-//        // Å¸°Ù À§Ä¡ (³ôÀÌ ¿ÀÇÁ¼Â Àû¿ë)
+//        // íƒ€ê²Ÿ ìœ„ì¹˜ (ë†’ì´ ì˜¤í”„ì…‹ ì ìš©)
 //        float targetX = tT->position.x;
 //        float targetY = tT->position.y + Get_m_heightOffset();
 //        float targetZ = tT->position.z;
 //
-//        // È¸ÀüµÈ ¿ÀÇÁ¼Â °è»ê (Spherical -> Cartesian)
-//        float hDist = Get_m_distance() * std::cos(radPitch); // ¼öÆò °Å¸®
+//        // íšŒì „ëœ ì˜¤í”„ì…‹ ê³„ì‚° (Spherical -> Cartesian)
+//        float hDist = Get_m_distance() * std::cos(radPitch); // ìˆ˜í‰ ê±°ë¦¬
 //        float offsetX = hDist * std::sin(radYaw);
 //        float offsetY = Get_m_distance() * std::sin(radPitch);
 //        float offsetZ = hDist * std::cos(radYaw);
 //
-//        // 3. ÃÖÁ¾ À§Ä¡ ¹× È¸Àü Àû¿ë
-//        // Ä«¸Ş¶ó´Â Å¸°Ù µÚÂÊ(°Å¸®¸¸Å­ ¶³¾îÁø °÷)¿¡ À§Ä¡ÇØ¾ß ÇÏ¹Ç·Î »®´Ï´Ù.
+//        // 3. ìµœì¢… ìœ„ì¹˜ ë° íšŒì „ ì ìš©
+//        // ì¹´ë©”ë¼ëŠ” íƒ€ê²Ÿ ë’¤ìª½(ê±°ë¦¬ë§Œí¼ ë–¨ì–´ì§„ ê³³)ì— ìœ„ì¹˜í•´ì•¼ í•˜ë¯€ë¡œ ëºë‹ˆë‹¤.
 //        myT->position.x = targetX - offsetX;
 //        myT->position.y = targetY + offsetY;
 //        myT->position.z = targetZ - offsetZ;
 //
-//        // Ä«¸Ş¶ó°¡ Å¸°ÙÀ» ¹Ù¶óº¸µµ·Ï È¸Àü ¼³Á¤
+//        // ì¹´ë©”ë¼ê°€ íƒ€ê²Ÿì„ ë°”ë¼ë³´ë„ë¡ íšŒì „ ì„¤ì •
 //        myT->rotation.x = m_pitch;
 //        myT->rotation.y = m_yaw;
 //    }
@@ -78,7 +78,7 @@
 
 
 
-// Ä«¸Ş¶ó°¡ ±×³É ÇÃ·¹ÀÌ¾î¸¦ µû¶ó´Ù´Ï´Â ½ºÅ©¸³Æ®
+// ì¹´ë©”ë¼ê°€ ê·¸ëƒ¥ í”Œë ˆì´ì–´ë¥¼ ë”°ë¼ë‹¤ë‹ˆëŠ” ìŠ¤í¬ë¦½íŠ¸
 #include "CameraFollow.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
@@ -94,7 +94,7 @@ namespace Alice
 {
     REGISTER_SCRIPT(CameraFollow);
 
-    // ÇïÆÛ ÇÔ¼ö: ¼±Çü º¸°£ (a¿¡¼­ b·Î t¸¸Å­ ÀÌµ¿)
+    // í—¬í¼ í•¨ìˆ˜: ì„ í˜• ë³´ê°„ (aì—ì„œ bë¡œ të§Œí¼ ì´ë™)
     float Lerp(float a, float b, float t)
     {
         return a + (b - a) * t;
@@ -119,7 +119,7 @@ namespace Alice
         myT->position.y = tT->position.y + Get_m_offsetY();
         myT->position.z = tT->position.z + Get_m_offsetZ();
 
-        // Å¸°ÙÀ» ¹Ù¶óº¸°Ô È¸Àü(yaw/pitch) ¸ÂÃß±â
+        // íƒ€ê²Ÿì„ ë°”ë¼ë³´ê²Œ íšŒì „(yaw/pitch) ë§ì¶”ê¸°
         const float dx = tT->position.x - myT->position.x;
         const float dy = tT->position.y - myT->position.y;
         const float dz = tT->position.z - myT->position.z;
@@ -147,20 +147,20 @@ namespace Alice
         if (!myT || !tT)
             return;
 
-        // 1. ¸ñÇ¥ À§Ä¡ °è»ê (¾ÆÁ÷ ´ëÀÔÇÏÁö ¾ÊÀ½)
+        // 1. ëª©í‘œ ìœ„ì¹˜ ê³„ì‚° (ì•„ì§ ëŒ€ì…í•˜ì§€ ì•ŠìŒ)
         float targetX = tT->position.x + Get_m_offsetX();
         float targetY = tT->position.y + Get_m_offsetY();
         float targetZ = tT->position.z + Get_m_offsetZ();
 
-        // 2. º¸°£(Lerp) Àû¿ë
-        // °ø½Ä: ÇöÀçÀ§Ä¡ += (¸ñÇ¥À§Ä¡ - ÇöÀçÀ§Ä¡) * ¼Óµµ * ½Ã°£
-        // smoothSpeed°¡ ³ôÀ»¼ö·Ï ºü¸£°Ô ´Ş¶óºÙ°í, ³·À»¼ö·Ï ºÎµå·´°Ô(´À¸®°Ô) µû¶ó¿É´Ï´Ù.
+        // 2. ë³´ê°„(Lerp) ì ìš©
+        // ê³µì‹: í˜„ì¬ìœ„ì¹˜ += (ëª©í‘œìœ„ì¹˜ - í˜„ì¬ìœ„ì¹˜) * ì†ë„ * ì‹œê°„
+        // smoothSpeedê°€ ë†’ì„ìˆ˜ë¡ ë¹ ë¥´ê²Œ ë‹¬ë¼ë¶™ê³ , ë‚®ì„ìˆ˜ë¡ ë¶€ë“œëŸ½ê²Œ(ëŠë¦¬ê²Œ) ë”°ë¼ì˜µë‹ˆë‹¤.
         //float t = Get_m_smoothSpeed() * lateDeltaTime;
         //myT->position.x = Lerp(myT->position.x, targetX, t);
         //myT->position.y = Lerp(myT->position.y, targetY, t);
         //myT->position.z = Lerp(myT->position.z, targetZ, t);
 
-        // º¸°£ ¾È¾²°í ±×³É µû¶óºÙ°Ô ÇÏ±â
+        // ë³´ê°„ ì•ˆì“°ê³  ê·¸ëƒ¥ ë”°ë¼ë¶™ê²Œ í•˜ê¸°
         float t = lateDeltaTime;
         myT->position.x = myT->position.x * lateDeltaTime;
         myT->position.y = myT->position.y * lateDeltaTime;
@@ -180,7 +180,7 @@ namespace Alice
         auto* tT = target.GetComponent<TransformComponent>();
         if (!myT || !tT) return;
 
-        // --- 1. È¸Àü Ã³¸® (¸¶¿ì½º ¿ŞÂÊ µå·¡±×) ---
+        // --- 1. íšŒì „ ì²˜ë¦¬ (ë§ˆìš°ìŠ¤ ì™¼ìª½ ë“œë˜ê·¸) ---
         float yaw = Get_m_currentYaw();
         float pitch = Get_m_currentPitch();
 
@@ -188,60 +188,60 @@ namespace Alice
         {
             float sensitivity = Get_m_sensitivity();
 
-            // ¸¶¿ì½º ÀÌµ¿·®¸¸Å­ È¸Àü (¹æÇâ ¹İÀü: -=, -=)
+            // ë§ˆìš°ìŠ¤ ì´ë™ëŸ‰ë§Œí¼ íšŒì „ (ë°©í–¥ ë°˜ì „: -=, -=)
             yaw -= input->GetMouseDeltaX() * sensitivity;
             pitch -= input->GetMouseDeltaY() * sensitivity;
 
-            // »óÇÏ È¸Àü Á¦ÇÑ (-89 ~ 89µµ)
+            // ìƒí•˜ íšŒì „ ì œí•œ (-89 ~ 89ë„)
             pitch = std::clamp(pitch, -89.0f, 89.0f);
 
             Set_m_currentYaw(yaw);
             Set_m_currentPitch(pitch);
         }
 
-        // --- 2. [ÁÜÀÎ/¾Æ¿ô] °Å¸® Á¶Àı (¸¶¿ì½º ÈÙ ½ºÅ©·Ñ) ---
+        // --- 2. [ì¤Œì¸/ì•„ì›ƒ] ê±°ë¦¬ ì¡°ì ˆ (ë§ˆìš°ìŠ¤ íœ  ìŠ¤í¬ë¡¤) ---
         float dist = Get_m_distance();
 
-        // Input Å¬·¡½º¿¡ ÈÙ ½ºÅ©·Ñ °ªÀ» °¡Á®¿À´Â ÇÔ¼ö°¡ ÀÖ¾î¾ß ÇÕ´Ï´Ù.
-        // (º¸Åë ÈÙ À§·Î=+1.0, ¾Æ·¡·Î=-1.0 ¹İÈ¯)
+        // Input í´ë˜ìŠ¤ì— íœ  ìŠ¤í¬ë¡¤ ê°’ì„ ê°€ì ¸ì˜¤ëŠ” í•¨ìˆ˜ê°€ ìˆì–´ì•¼ í•©ë‹ˆë‹¤.
+        // (ë³´í†µ íœ  ìœ„ë¡œ=+1.0, ì•„ë˜ë¡œ=-1.0 ë°˜í™˜)
         float wheel = input->GetMouseScrollDelta();
 
         if (wheel != 0.0f)
         {
-            // ÈÙ ¿Ã¸²(+) -> °Å¸® °¨¼Ò(ÁÜÀÎ)
-            // ÈÙ ³»¸²(-) -> °Å¸® Áõ°¡(ÁÜ¾Æ¿ô)
+            // íœ  ì˜¬ë¦¼(+) -> ê±°ë¦¬ ê°ì†Œ(ì¤Œì¸)
+            // íœ  ë‚´ë¦¼(-) -> ê±°ë¦¬ ì¦ê°€(ì¤Œì•„ì›ƒ)
             dist -= wheel * Get_m_zoomSpeed();
 
-            // ÃÖ¼Ò/ÃÖ´ë °Å¸® Á¦ÇÑ (º® ¶Õ±â³ª ³Ê¹« ¸Ö¾îÁü ¹æÁö)
+            // ìµœì†Œ/ìµœëŒ€ ê±°ë¦¬ ì œí•œ (ë²½ ëš«ê¸°ë‚˜ ë„ˆë¬´ ë©€ì–´ì§ ë°©ì§€)
             dist = std::clamp(dist, Get_m_minDistance(), Get_m_maxDistance());
 
             Set_m_distance(dist);
         }
 
-        // --- 3. À§Ä¡ °è»ê (±¸¸é ÁÂÇ¥°è: Distance ¹İ¿µ) ---
-        // Å¸°ÙÀÇ ¸Ó¸® ³ôÀÌ(Pivot) ±âÁØ
+        // --- 3. ìœ„ì¹˜ ê³„ì‚° (êµ¬ë©´ ì¢Œí‘œê³„: Distance ë°˜ì˜) ---
+        // íƒ€ê²Ÿì˜ ë¨¸ë¦¬ ë†’ì´(Pivot) ê¸°ì¤€
         float pivotX = tT->position.x;
         float pivotY = tT->position.y + Get_m_heightOffset();
         float pivotZ = tT->position.z;
 
-        // °¢µµ¸¦ ¶óµğ¾ÈÀ¸·Î º¯È¯
+        // ê°ë„ë¥¼ ë¼ë””ì•ˆìœ¼ë¡œ ë³€í™˜
         float radYaw = yaw * (static_cast<float>(M_PI) / 180.0f);
         float radPitch = pitch * (static_cast<float>(M_PI) / 180.0f);
 
-        // ±¸¸é ÁÂÇ¥°è °ø½Ä¿¡ dist(°Å¸®) Àû¿ë
-        float hDist = dist * std::cos(radPitch); // ¼öÆò °Å¸®
-        float vDist = dist * std::sin(radPitch); // ¼öÁ÷ ³ôÀÌ
+        // êµ¬ë©´ ì¢Œí‘œê³„ ê³µì‹ì— dist(ê±°ë¦¬) ì ìš©
+        float hDist = dist * std::cos(radPitch); // ìˆ˜í‰ ê±°ë¦¬
+        float vDist = dist * std::sin(radPitch); // ìˆ˜ì§ ë†’ì´
 
         float offsetX = hDist * std::sin(radYaw);
         float offsetZ = hDist * std::cos(radYaw);
         float offsetY = vDist;
 
-        // ÃÖÁ¾ À§Ä¡ Àû¿ë (Pivot - Offset)
+        // ìµœì¢… ìœ„ì¹˜ ì ìš© (Pivot - Offset)
         myT->position.x = pivotX - offsetX;
         myT->position.y = pivotY + offsetY;
         myT->position.z = pivotZ - offsetZ;
 
-        // --- 4. È¸Àü °è»ê (LookAt: Ç×»ó Å¸°Ù ¹Ù¶óº¸±â) ---
+        // --- 4. íšŒì „ ê³„ì‚° (LookAt: í•­ìƒ íƒ€ê²Ÿ ë°”ë¼ë³´ê¸°) ---
         const float dx = pivotX - myT->position.x;
         const float dy = pivotY - myT->position.y;
         const float dz = pivotZ - myT->position.z;

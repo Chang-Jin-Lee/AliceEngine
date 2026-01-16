@@ -1,6 +1,6 @@
-#include "Core/ResourceManager.h"
+ï»¿#include "Core/ResourceManager.h"
 
-// ±¸ÇöºÎ¿¡¼­¸¸ ÇÊ¿äÇÑ ¹«°Å¿î Çì´õµé
+// êµ¬í˜„ë¶€ì—ì„œë§Œ í•„ìš”í•œ ë¬´ê±°ìš´ í—¤ë”ë“¤
 #include <d3d11.h>
 #include <DirectXTK/WICTextureLoader.h>
 #include <DirectXTK/DDSTextureLoader.h>
@@ -34,9 +34,9 @@ namespace Alice
 
     std::filesystem::path ResourceManager::NormalizeLegacyDotDot(const std::filesystem::path& p)
     {
-        // ·¹°Å½Ã: "../Assets/...", "../Resource/...", "../Cooked/..." ¸¦
-        //        "Assets/...",  "Resource/...",  "Cooked/..." ·Î Á¤±ÔÈ­ÇÕ´Ï´Ù.
-        // C++20: generic_string()À¸·Î ½½·¡½Ã ÅëÀÏ ÈÄ prefix °Ë»ç
+        // ë ˆê±°ì‹œ: "../Assets/...", "../Resource/...", "../Cooked/..." ë¥¼
+        //        "Assets/...",  "Resource/...",  "Cooked/..." ë¡œ ì •ê·œí™”í•©ë‹ˆë‹¤.
+        // C++20: generic_string()ìœ¼ë¡œ ìŠ¬ë˜ì‹œ í†µì¼ í›„ prefix ê²€ì‚¬
         const std::string s = p.generic_string();
         if (StartsWith(s, "../Assets/"))   return std::filesystem::path("Assets")   / s.substr(std::string_view("../Assets/").size());
         if (StartsWith(s, "../Resource/")) return std::filesystem::path("Resource") / s.substr(std::string_view("../Resource/").size());
@@ -46,7 +46,7 @@ namespace Alice
 
     std::filesystem::path ResourceManager::ToAlicePath(std::filesystem::path p)
     {
-        // µğ·ºÅÍ¸®(È®ÀåÀÚ ¾øÀ½)¿¡´Â Àû¿ëÇÏÁö ¾Ê½À´Ï´Ù.
+        // ë””ë ‰í„°ë¦¬(í™•ì¥ì ì—†ìŒ)ì—ëŠ” ì ìš©í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
         if (!p.has_filename())
             return p;
         p.replace_extension(".alice");
@@ -57,12 +57,12 @@ namespace Alice
     // -> Resource/Textures/player.png 
     std::filesystem::path ResourceManager::NormalizeResourcePathAbsoluteToLogical(const std::filesystem::path& p)
     {
-		// Àı´ë °æ·Î°¡ ¾Æ´Ï¸é ±×´ë·Î ¹İÈ¯ÇÔ
+		// ì ˆëŒ€ ê²½ë¡œê°€ ì•„ë‹ˆë©´ ê·¸ëŒ€ë¡œ ë°˜í™˜í•¨
         if (!p.is_absolute()) return p;
 
-        // absolute °æ·Î ¾È¿¡ ".../Resource/<rel>" ¶Ç´Â "...\\Resource\\<rel>" °¡ ÀÖÀ¸¸é
-        // "Resource/<rel>" ·Î Á¤±ÔÈ­ÇÔ (ÃÖÁ¾ ºôµå¿¡¼­ °æ·Î ³ëÃâ ÃÖ¼ÒÈ­).
-        const std::string s = p.generic_string(); // '/' ·Î ÅëÀÏ
+        // absolute ê²½ë¡œ ì•ˆì— ".../Resource/<rel>" ë˜ëŠ” "...\\Resource\\<rel>" ê°€ ìˆìœ¼ë©´
+        // "Resource/<rel>" ë¡œ ì •ê·œí™”í•¨ (ìµœì¢… ë¹Œë“œì—ì„œ ê²½ë¡œ ë…¸ì¶œ ìµœì†Œí™”).
+        const std::string s = p.generic_string(); // '/' ë¡œ í†µì¼
         std::string lower = s;
         for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
@@ -95,7 +95,7 @@ namespace Alice
 
     std::uint64_t ResourceManager::ComputeBufferHashSampled(const std::vector<std::uint8_t>& data)
     {
-        // AssetManager ½ºÅ¸ÀÏ: size + sample(first/last 4KB) Á¶ÇÕ
+        // AssetManager ìŠ¤íƒ€ì¼: size + sample(first/last 4KB) ì¡°í•©
         constexpr std::size_t SAMPLE = 4096;
         const std::uint64_t sizeHash = static_cast<std::uint64_t>(data.size());
         if (data.empty())
@@ -121,16 +121,16 @@ namespace Alice
     {
         m_gameMode = gameMode;
 
-        // gameMode: exeDir ±âÁØ(¹èÆ÷ Æú´õ¿¡ Assets/Resource/Cooked°¡ ÀÖ´Ù°í °¡Á¤)
+        // gameMode: exeDir ê¸°ì¤€(ë°°í¬ í´ë”ì— Assets/Resource/Cookedê°€ ìˆë‹¤ê³  ê°€ì •)
         if (m_gameMode)
         {
             m_rootDir = exeDir;
             return;
         }
 
-        // editorMode: exeDir = build/bin/(Debug|Release) ÀÌ¹Ç·Î,
-        //            ÇÁ·ÎÁ§Æ® ·çÆ®´Â exeDir/../../.. ·Î °¡Á¤ÇÕ´Ï´Ù.
-        //            (³Ê¹« º¹ÀâÇÏ°Ô ºĞ±âÇÏÁö ¾Ê°í, ±âÁ¸ ±ÔÄ¢À» ±×´ë·Î »ç¿ë)
+        // editorMode: exeDir = build/bin/(Debug|Release) ì´ë¯€ë¡œ,
+        //            í”„ë¡œì íŠ¸ ë£¨íŠ¸ëŠ” exeDir/../../.. ë¡œ ê°€ì •í•©ë‹ˆë‹¤.
+        //            (ë„ˆë¬´ ë³µì¡í•˜ê²Œ ë¶„ê¸°í•˜ì§€ ì•Šê³ , ê¸°ì¡´ ê·œì¹™ì„ ê·¸ëŒ€ë¡œ ì‚¬ìš©)
         m_rootDir = exeDir.parent_path().parent_path().parent_path();
     }
 
@@ -138,7 +138,7 @@ namespace Alice
     {
         if (logicalOrRelative.empty()) return {};
 
-        // lexically_normal()¸¦ ¾²¸é »çÀÌ»çÀÌ¿¡ ÀÖ´Â ./ or ../ or /// µîÀ» Á¤¸®ÇØÁÜ
+        // lexically_normal()ë¥¼ ì“°ë©´ ì‚¬ì´ì‚¬ì´ì— ìˆëŠ” ./ or ../ or /// ë“±ì„ ì •ë¦¬í•´ì¤Œ
         if (logicalOrRelative.is_absolute())
             return NormalizeResourcePathAbsoluteToLogical(logicalOrRelative).lexically_normal();
 
@@ -147,8 +147,8 @@ namespace Alice
         const std::string s = p.generic_string();
 
         // Assets:
-        // - editorMode: Assets/<rel> ¸¦ ½ÇÁ¦ ÆÄÀÏ·Î
-        // - gameMode  : Assets/<rel> ´Â Metas/Chunks ·Î ¸ÅÇÎ(Æú´õ ±¸Á¶ ¼û±è)
+        // - editorMode: Assets/<rel> ë¥¼ ì‹¤ì œ íŒŒì¼ë¡œ
+        // - gameMode  : Assets/<rel> ëŠ” Metas/Chunks ë¡œ ë§¤í•‘(í´ë” êµ¬ì¡° ìˆ¨ê¹€)
         if (StartsWith(s, "Assets/"))
         {
             if (m_gameMode)
@@ -163,8 +163,8 @@ namespace Alice
             return (m_rootDir / (m_gameMode ? std::filesystem::path("Metas") : std::filesystem::path("Assets"))).lexically_normal();
         }
 
-        // gameMode¿¡¼­´Â Resource/... ¿øº»À» µé°í ÀÖÁö ¾ÊÀ¸¹Ç·Î,
-        // Resource/<rel> ¿äÃ»Àº Cooked/Chunks/<hash>/c0000.alice ·Î ¸ÅÇÎÇÕ´Ï´Ù.
+        // gameModeì—ì„œëŠ” Resource/... ì›ë³¸ì„ ë“¤ê³  ìˆì§€ ì•Šìœ¼ë¯€ë¡œ,
+        // Resource/<rel> ìš”ì²­ì€ Cooked/Chunks/<hash>/c0000.alice ë¡œ ë§¤í•‘í•©ë‹ˆë‹¤.
         if (StartsWith(s, "Resource/"))
         {
             if (m_gameMode)
@@ -182,14 +182,14 @@ namespace Alice
         if (StartsWith(s, "Cooked/") || s == "Cooked")
             return (m_rootDir / p).lexically_normal();
 
-        // ±× ¿Ü: ·çÆ® ±âÁØ »ó´ë°æ·Î·Î Ãë±Ş (È£È¯¿ë)
+        // ê·¸ ì™¸: ë£¨íŠ¸ ê¸°ì¤€ ìƒëŒ€ê²½ë¡œë¡œ ì·¨ê¸‰ (í˜¸í™˜ìš©)
         return (m_rootDir / p).lexically_normal();
     }
 
     void ResourceManager::Clear()
     {
-        // ¾ÆÁ÷ ±¸Ã¼ÀûÀÎ ¸®¼Ò½º´Â ¾øÀ¸¹Ç·Î ºó ±¸ÇöÀÔ´Ï´Ù.
-        // ÀÌÈÄ ÅØ½ºÃ³/¸Ş½Ã/¼ÎÀÌ´õ µîÀ» Ãß°¡ÇÒ ¶§ ÀÌ°÷¿¡¼­ Á¤¸®ÇÕ´Ï´Ù.
+        // ì•„ì§ êµ¬ì²´ì ì¸ ë¦¬ì†ŒìŠ¤ëŠ” ì—†ìœ¼ë¯€ë¡œ ë¹ˆ êµ¬í˜„ì…ë‹ˆë‹¤.
+        // ì´í›„ í…ìŠ¤ì²˜/ë©”ì‹œ/ì…°ì´ë” ë“±ì„ ì¶”ê°€í•  ë•Œ ì´ê³³ì—ì„œ ì •ë¦¬í•©ë‹ˆë‹¤.
     }
 
     bool ResourceManager::LoadBinary(const std::filesystem::path& path,
@@ -203,7 +203,7 @@ namespace Alice
 
         ifs.seekg(0, std::ios::end);
         const std::streamoff size = ifs.tellg();
-        if (size <= 0) return true; // ºó ÆÄÀÏ
+        if (size <= 0) return true; // ë¹ˆ íŒŒì¼
 
         ifs.seekg(0, std::ios::beg);
         outData.resize(static_cast<std::size_t>(size));
@@ -223,7 +223,7 @@ namespace Alice
         outData.clear();
         if (auto sp = LoadSharedBinaryAuto(logicalPath))
         {
-            outData = *sp; // È£È¯ API: º¹»ç
+            outData = *sp; // í˜¸í™˜ API: ë³µì‚¬
             return true;
         }
         return false;
@@ -234,7 +234,7 @@ namespace Alice
         const std::filesystem::path normalized = NormalizeResourcePathAbsoluteToLogical(NormalizeLegacyDotDot(logicalPath));
         const std::string logicalKey = normalized.generic_string();
 
-        // 0) logicalPath -> contentHash Ä³½Ã
+        // 0) logicalPath -> contentHash ìºì‹œ
         {
             std::lock_guard<std::mutex> lock(m_cacheMutex);
             if (auto it = m_pathToHash.find(logicalKey); it != m_pathToHash.end())
@@ -248,7 +248,7 @@ namespace Alice
             }
         }
 
-        // 1) gameMode: Resource´Â Ã»Å© ½ºÅä¾î¿¡¼­ ·Îµå
+        // 1) gameMode: ResourceëŠ” ì²­í¬ ìŠ¤í† ì–´ì—ì„œ ë¡œë“œ
         if (m_gameMode)
         {
             const std::string s = normalized.generic_string();
@@ -281,7 +281,7 @@ namespace Alice
                 return nullptr;
             }
 
-            // ±× ¿Ü Cooked °æ·Î´Â ´ÜÀÏ .alice ÆÄÀÏ(¾ÏÈ£È­)·Î ·Îµå
+            // ê·¸ ì™¸ Cooked ê²½ë¡œëŠ” ë‹¨ì¼ .alice íŒŒì¼(ì•”í˜¸í™”)ë¡œ ë¡œë“œ
             const auto resolved = Resolve(normalized);
             if (StartsWith(resolved.generic_string(), (CookedDir().generic_string() + "/")))
             {
@@ -296,7 +296,7 @@ namespace Alice
                 return sp;
             }
 
-            // ¸¶Áö¸· Æú¹é: ±×´ë·Î ÆÄÀÏ ·Îµå(°³¹ß ÆíÀÇ)
+            // ë§ˆì§€ë§‰ í´ë°±: ê·¸ëŒ€ë¡œ íŒŒì¼ ë¡œë“œ(ê°œë°œ í¸ì˜)
             std::vector<std::uint8_t> data;
             if (!LoadBinary(Resolve(normalized), data, false))
                 return nullptr;
@@ -308,7 +308,7 @@ namespace Alice
             return sp;
         }
 
-        // 2) editorMode: ¿øº» ÆÄÀÏÀ» ±×´ë·Î ·Îµå
+        // 2) editorMode: ì›ë³¸ íŒŒì¼ì„ ê·¸ëŒ€ë¡œ ë¡œë“œ
         std::vector<std::uint8_t> data;
         if (!LoadBinary(Resolve(normalized), data, false))
             return nullptr;
@@ -322,7 +322,7 @@ namespace Alice
 
     std::filesystem::path ResourceManager::Chunk0PathForResourceRel(std::string_view resourceRel) const
     {
-        // fileId = rel ¹®ÀÚ¿­ ÇØ½Ã (Æú´õ±¸Á¶ ³ëÃâ ¹æÁö¿ë)
+        // fileId = rel ë¬¸ìì—´ í•´ì‹œ (í´ë”êµ¬ì¡° ë…¸ì¶œ ë°©ì§€ìš©)
         const std::uint64_t fileId = HashString64(resourceRel);
 
         char hex[17] = {};
@@ -529,7 +529,7 @@ namespace Alice
                        cookedPath.string().c_str(),
                        data.size());
 
-        // °£´ÜÇÑ XOR ¾ÏÈ£È­
+        // ê°„ë‹¨í•œ XOR ì•”í˜¸í™”
         XorCrypt(data);
 
         auto parent = cookedPath.parent_path();
@@ -634,7 +634,7 @@ namespace Alice
             {
                 ALICE_LOG_ERRORF("ResourceManager::CookDirectoryRecursive: CookAndSave failed. in=\"%s\" out=\"%s\"",
                                  inPath.string().c_str(), outPath.string().c_str());
-                return false; // ½ÇÆĞ´Â Áï½Ã Áß´Ü (¹èÆ÷ °á°ú°¡ ºÒ¿ÏÀüÇØÁö¸é ¾È µÊ)
+                return false; // ì‹¤íŒ¨ëŠ” ì¦‰ì‹œ ì¤‘ë‹¨ (ë°°í¬ ê²°ê³¼ê°€ ë¶ˆì™„ì „í•´ì§€ë©´ ì•ˆ ë¨)
             }
             ++cookedCount;
         }
@@ -679,7 +679,7 @@ namespace Alice
             fs::path rel = fs::relative(inPath, resourceDirAbs, ec);
             if (ec) { ec.clear(); continue; }
 
-            const std::string relStr = rel.generic_string(); // fileId´Â ÀÌ ¹®ÀÚ¿­·Î °áÁ¤
+            const std::string relStr = rel.generic_string(); // fileIdëŠ” ì´ ë¬¸ìì—´ë¡œ ê²°ì •
             const std::uint64_t fileId = HashString64(relStr);
 
             char hex[17] = {};
@@ -689,7 +689,7 @@ namespace Alice
             fs::create_directories(outDir, ec);
             ec.clear();
 
-            // ÆÄÀÏ ÀĞ±â
+            // íŒŒì¼ ì½ê¸°
             std::vector<std::uint8_t> data;
             if (!LoadBinary(inPath, data, false))
             {
@@ -760,10 +760,10 @@ namespace Alice
     }
 
     // -----------------------------------------------------------------------
-    // [Template Specialization ±¸Çö]
+    // [Template Specialization êµ¬í˜„]
     // -----------------------------------------------------------------------
 
-    // ID3D11ShaderResourceView ·Îµå ±¸Çö
+    // ID3D11ShaderResourceView ë¡œë“œ êµ¬í˜„
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> 
     ResourceLoader<ID3D11ShaderResourceView>::Load(const ResourceManager& rm, 
                                                    const std::filesystem::path& path, 
@@ -777,7 +777,7 @@ namespace Alice
 
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> outSrv = nullptr;
 
-        // 1. ResourceManagerÀÇ ÀÚµ¿ ·Îµå(¾ÏÈ£È­/°æ·Î Ã³¸®) ±â´ÉÀ» »ç¿ëÇÏ¿© ¹ÙÀÌ³Ê¸® È®º¸
+        // 1. ResourceManagerì˜ ìë™ ë¡œë“œ(ì•”í˜¸í™”/ê²½ë¡œ ì²˜ë¦¬) ê¸°ëŠ¥ì„ ì‚¬ìš©í•˜ì—¬ ë°”ì´ë„ˆë¦¬ í™•ë³´
         std::vector<std::uint8_t> data;
         if (!rm.LoadBinaryAuto(path, data) || data.empty())
         {
@@ -785,32 +785,32 @@ namespace Alice
             return nullptr;
         }
 
-        // 2. È®ÀåÀÚ¸¦ È®ÀÎÇÏ¿© WIC ¶Ç´Â DDS ·Îµå ½Ãµµ
+        // 2. í™•ì¥ìë¥¼ í™•ì¸í•˜ì—¬ WIC ë˜ëŠ” DDS ë¡œë“œ ì‹œë„
         std::filesystem::path ext = path.extension();
         std::string extLower = ext.string();
         for (auto& c : extLower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
         HRESULT hr = E_FAIL;
 
-        // DDS ÆÄÀÏÀÎ °æ¿ì
+        // DDS íŒŒì¼ì¸ ê²½ìš°
         if (extLower == ".dds")
         {
             hr = DirectX::CreateDDSTextureFromMemory(
                 device,
                 data.data(),
                 static_cast<size_t>(data.size()),
-                nullptr, // texture resource ÇÊ¿ä½Ã ÀÎÀÚ Ãß°¡
+                nullptr, // texture resource í•„ìš”ì‹œ ì¸ì ì¶”ê°€
                 outSrv.GetAddressOf()
             );
         }
         else
         {
-            // WIC·Î ·Îµå ½Ãµµ (JPG, PNG, TGA µî)
+            // WICë¡œ ë¡œë“œ ì‹œë„ (JPG, PNG, TGA ë“±)
             hr = DirectX::CreateWICTextureFromMemory(
                 device,
                 data.data(),
                 static_cast<size_t>(data.size()),
-                nullptr, // texture resource ÇÊ¿ä½Ã ÀÎÀÚ Ãß°¡
+                nullptr, // texture resource í•„ìš”ì‹œ ì¸ì ì¶”ê°€
                 outSrv.GetAddressOf()
             );
         }

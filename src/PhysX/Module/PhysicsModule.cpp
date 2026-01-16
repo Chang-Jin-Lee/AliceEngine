@@ -1,4 +1,4 @@
-#include "PhysicsModule.h"
+ï»¿#include "PhysicsModule.h"
 
 #include "../PhysXContext.h"
 #include "../PhysXWorld.h"
@@ -64,7 +64,7 @@ bool PhysicsModule::InitializeContext(const ContextInitDesc& desc)
 
     try
     {
-        // ±âÁ¸ ctx ±³Ã¼
+        // ê¸°ì¡´ ctx êµì²´
         m->ctx.reset();
         m->ctx = std::make_shared<PhysXContext>(ToPhysX(desc));
         return true;
@@ -84,9 +84,9 @@ bool PhysicsModule::InitializeContext(const ContextInitDesc& desc)
 
 void PhysicsModule::ShutdownContext()
 {
-    // Áß¿äÇÑ Æ÷ÀÎÆ®:
-    // - ¿ùµå°¡ »ì¾ÆÀÖÀ¸¸é deleter°¡ ctx¸¦ ºÙÀâ°í ÀÖ¾î¼­ ¾ÈÀüÇÔ.
-    // - ¿©±â¼­´Â ¸ğµâÀÌ µé°í ÀÖ´Â ctx ÂüÁ¶¸¸ ²÷´Â´Ù.
+    // ì¤‘ìš”í•œ í¬ì¸íŠ¸:
+    // - ì›”ë“œê°€ ì‚´ì•„ìˆìœ¼ë©´ deleterê°€ ctxë¥¼ ë¶™ì¡ê³  ìˆì–´ì„œ ì•ˆì „í•¨.
+    // - ì—¬ê¸°ì„œëŠ” ëª¨ë“ˆì´ ë“¤ê³  ìˆëŠ” ctx ì°¸ì¡°ë§Œ ëŠëŠ”ë‹¤.
     m->ctx.reset();
 }
 
@@ -102,7 +102,7 @@ std::shared_ptr<IPhysicsWorld> PhysicsModule::CreateWorld(const WorldDesc& desc)
 
     try
     {
-        auto ctxKeepAlive = m->ctx; // deleter°¡ Ä¸ÃÄ
+        auto ctxKeepAlive = m->ctx; // deleterê°€ ìº¡ì³
         PhysXWorld::Desc wdesc = ToPhysX(desc);
 
         auto world = std::shared_ptr<PhysXWorld>(
@@ -110,7 +110,7 @@ std::shared_ptr<IPhysicsWorld> PhysicsModule::CreateWorld(const WorldDesc& desc)
             [ctxKeepAlive](PhysXWorld* p)
             {
                 delete p;
-                // ctxKeepAlive´Â ¸¶Áö¸· ¿ùµå°¡ Á×À» ¶§ °°ÀÌ ÇØÁ¦µÊ
+                // ctxKeepAliveëŠ” ë§ˆì§€ë§‰ ì›”ë“œê°€ ì£½ì„ ë•Œ ê°™ì´ í•´ì œë¨
             }
         );
 

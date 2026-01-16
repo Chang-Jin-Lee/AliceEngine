@@ -1,4 +1,4 @@
-#include "RotateAndScale.h"
+﻿#include "RotateAndScale.h"
 #include "Core/World.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"

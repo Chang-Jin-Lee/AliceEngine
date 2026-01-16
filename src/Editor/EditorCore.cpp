@@ -2716,8 +2716,8 @@ namespace Alice
                         if (cfs.is_open())
                         {
                             cfs << "#include \"" << headerPath.filename().string() << "\"\n";
-                            cfs << "#include \"" << "Core/ScriptFactory.h";
-                            cfs << "#include \"" << "Core/Logger.h";
+                            cfs << "#include \"" << "Core/ScriptFactory.h\n";
+                            cfs << "#include \"" << "Core/Logger.h\n";
                             cfs << "#include \"Core/World.h\"\n\n";
                             cfs << "namespace Alice\n";
                             cfs << "{\n";

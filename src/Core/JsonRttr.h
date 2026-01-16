@@ -1,8 +1,8 @@
-#pragma once
+ï»¿#pragma once
 
-// RTTR <-> nlohmann::json º¯È¯ À¯Æ¿
-// - ¸ñÀû: ÄÄÆ÷³ÍÆ®ÀÇ ÇÁ·ÎÆÛÆ¼¸¦ RTTR·Î ¿­°ÅÇØ¼­ JSONÀ¸·Î ÀúÀå/·Îµå
-// - ¿øÄ¢: Âª°í ´Ü¼øÇÏ°Ô, ½ÇÆĞ´Â Áï½Ã false, ¼º°øÀº ¸¶Áö¸· return true
+// RTTR <-> nlohmann::json ë³€í™˜ ìœ í‹¸
+// - ëª©ì : ì»´í¬ë„ŒíŠ¸ì˜ í”„ë¡œí¼í‹°ë¥¼ RTTRë¡œ ì—´ê±°í•´ì„œ JSONìœ¼ë¡œ ì €ì¥/ë¡œë“œ
+// - ì›ì¹™: ì§§ê³  ë‹¨ìˆœí•˜ê²Œ, ì‹¤íŒ¨ëŠ” ì¦‰ì‹œ false, ì„±ê³µì€ ë§ˆì§€ë§‰ return true
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -81,9 +81,9 @@ namespace Alice
             const rttr::type t = obj.get_type();
             for (const auto& prop : t.get_properties())
             {
-                // Unity ·ê:
-                // - public  : ±âº» ÀúÀå/³ëÃâ
-                // - private : SerializeField ¸ŞÅ¸µ¥ÀÌÅÍ°¡ ÀÖÀ» ¶§¸¸ ÀúÀå/³ëÃâ
+                // Unity ë£°:
+                // - public  : ê¸°ë³¸ ì €ì¥/ë…¸ì¶œ
+                // - private : SerializeField ë©”íƒ€ë°ì´í„°ê°€ ìˆì„ ë•Œë§Œ ì €ì¥/ë…¸ì¶œ
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
                     continue;
@@ -97,9 +97,9 @@ namespace Alice
             return j;
         }
 
-        // Å¸ÀÔÀ» "¸í½Ã"ÇØ¼­ ÇÁ·ÎÆÛÆ¼¸¦ ¿­°ÅÇÕ´Ï´Ù.
-        // - IScript*Ã³·³ º£ÀÌ½º Å¸ÀÔÀ¸·Î ÀÎ½ºÅÏ½º¸¦ ¸¸µé¸é obj.get_type()Àº º£ÀÌ½º·Î ³ª¿É´Ï´Ù.
-        // - Editor/Serializer¿¡¼­ scriptNameÀ¸·Î typeÀ» ¾Ë ¼ö ÀÖÀ¸¹Ç·Î ÀÌ°É »ç¿ëÇÕ´Ï´Ù.
+        // íƒ€ì…ì„ "ëª…ì‹œ"í•´ì„œ í”„ë¡œí¼í‹°ë¥¼ ì—´ê±°í•©ë‹ˆë‹¤.
+        // - IScript*ì²˜ëŸ¼ ë² ì´ìŠ¤ íƒ€ì…ìœ¼ë¡œ ì¸ìŠ¤í„´ìŠ¤ë¥¼ ë§Œë“¤ë©´ obj.get_type()ì€ ë² ì´ìŠ¤ë¡œ ë‚˜ì˜µë‹ˆë‹¤.
+        // - Editor/Serializerì—ì„œ scriptNameìœ¼ë¡œ typeì„ ì•Œ ìˆ˜ ìˆìœ¼ë¯€ë¡œ ì´ê±¸ ì‚¬ìš©í•©ë‹ˆë‹¤.
         inline json ToJsonObject(rttr::instance obj, const rttr::type& t)
         {
             json j = json::object();
@@ -175,7 +175,7 @@ namespace Alice
 
         inline json ToJsonAssociative(const rttr::variant_associative_view& view)
         {
-            // Å°°¡ ¹®ÀÚ¿­ÀÌ¸é object, ¾Æ´Ï¸é array of [k,v]
+            // í‚¤ê°€ ë¬¸ìì—´ì´ë©´ object, ì•„ë‹ˆë©´ array of [k,v]
             const rttr::type keyType = view.get_key_type();
             if (keyType == rttr::type::get<std::string>())
             {
@@ -227,7 +227,7 @@ namespace Alice
 
             if (t.is_enumeration())
             {
-                // ±âº»Àº ¹®ÀÚ¿­ ÀÌ¸§
+                // ê¸°ë³¸ì€ ë¬¸ìì—´ ì´ë¦„
                 return v.to_string();
             }
 
@@ -303,7 +303,7 @@ namespace Alice
                 return true;
             }
 
-            // ³ª¸ÓÁö »ê¼úÇüÀº ¹®ÀÚ¿­·Î¶óµµ ½Ãµµ(ÃÖ¼Ò ¾ÈÀü)
+            // ë‚˜ë¨¸ì§€ ì‚°ìˆ í˜•ì€ ë¬¸ìì—´ë¡œë¼ë„ ì‹œë„(ìµœì†Œ ì•ˆì „)
             prop.set_value(obj, rttr::variant(jval.dump()));
             return true;
         }
@@ -330,7 +330,7 @@ namespace Alice
                 return true;
             }
 
-            // ¼ıÀÚ´Â ±×´ë·Î set_value()·Î ³Ö°í, RTTR º¯È¯¿¡ ¸Ã±é´Ï´Ù.
+            // ìˆ«ìëŠ” ê·¸ëŒ€ë¡œ set_value()ë¡œ ë„£ê³ , RTTR ë³€í™˜ì— ë§¡ê¹ë‹ˆë‹¤.
             if (!prop.set_value(obj, jval.get<int>())) return false;
 
             return true;
@@ -372,7 +372,7 @@ namespace Alice
             if (t.is_class())
                 return SetClass(obj, prop, jval);
 
-            // ÄÁÅ×ÀÌ³Ê´Â ÇöÀç "ÀĞ±â"´Â ÃÖ¼Ò ±¸Çö(ÇÊ¿äÇÏ¸é È®Àå)
+            // ì»¨í…Œì´ë„ˆëŠ” í˜„ì¬ "ì½ê¸°"ëŠ” ìµœì†Œ êµ¬í˜„(í•„ìš”í•˜ë©´ í™•ì¥)
             return true;
         }
     }

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <unordered_map>
 #include <vector>
@@ -20,6 +20,11 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
+
+// ���� ������Ʈ
+#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
+
+class IPhysicsWorld; // ���� �������̽� ���漱��
 
 namespace Alice
 {
@@ -340,6 +345,16 @@ namespace Alice
         /// 엔티티가 유효한지 확인합니다. (generation 비교)
         bool IsEntityValid(EntityId id, std::uint32_t generation) const;
 
+
+        //==============================================================
+        // ���� �� �Լ�
+        void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
+        IPhysicsWorld* GetPhysicsWorld();
+        const IPhysicsWorld* GetPhysicsWorld() const;
+    private:
+        std::shared_ptr<IPhysicsWorld> m_physicsWorld;
+        //==============================================================
+
     private:
         // if constexpr을 사용하여 타입에 맞는 저장소를 반환
         template <typename T>
@@ -353,6 +368,7 @@ namespace Alice
             else if constexpr (std::is_same_v<T, PointLightComponent>) return m_pointLights;
             else if constexpr (std::is_same_v<T, SpotLightComponent>) return m_spotLights;
             else if constexpr (std::is_same_v<T, RectLightComponent>) return m_rectLights;
+            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
             else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
         }
 
@@ -368,7 +384,9 @@ namespace Alice
             else if constexpr (std::is_same_v<T, PointLightComponent>) return m_pointLights;
             else if constexpr (std::is_same_v<T, SpotLightComponent>) return m_spotLights;
             else if constexpr (std::is_same_v<T, RectLightComponent>) return m_rectLights;
+            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
             else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
+            
         }
 
     private:
@@ -387,6 +405,9 @@ namespace Alice
         ComponentStorage<RectLightComponent> m_rectLights;
 
         // 스크립트는 vector를 값으로 가지므로 일반 T와 구조가 달라 따로 둠
+        ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
+
+        // ��ũ��Ʈ�� vector�� ������ �����Ƿ� �Ϲ� T�� ������ �޶� ���� ��
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
 
         // 지연 파괴 시스템 (EntityId -> 남은 시간)
