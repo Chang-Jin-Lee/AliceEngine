@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -124,7 +124,8 @@ namespace Alice
                         const Camera& camera,
                         const std::vector<SkinnedDrawCommand>& skinnedCommands,
                         const std::unordered_set<EntityId>& cameraEntities);
-        void PassDeferredLight(const Camera& camera,
+        void PassDeferredLight(const World& world,
+                               const Camera& camera,
                                int shadingMode,
                                bool enableFillLight,
                                DirectX::CXMMATRIX lightViewProj);
@@ -150,6 +151,7 @@ namespace Alice
                               int shadingMode,
                               bool enableFillLight,
                               DirectX::CXMMATRIX lightViewProj);
+        void UpdateExtraLightsCB(const World& world);
         void UpdateBonesCB(const DirectX::XMFLOAT4X4* boneMatrices, std::uint32_t boneCount);
         
         // 월드 행렬 구성
@@ -217,6 +219,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbLighting;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbDirectionalLight;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbExtraLights;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbBones;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPostProcess;
         // Transparent Forward-Style 패스용 최소 조명 CB

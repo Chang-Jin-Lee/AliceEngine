@@ -1,8 +1,8 @@
-#pragma once
+Ôªø#pragma once
 
 namespace Alice
 {
-    /// µ∆€µÂ ∑ª¥ı∏µ ¿¸øÎ ºŒ¿Ã¥ı ƒ⁄µÂ
+    /// ÎîîÌçºÎìú Î†åÎçîÎßÅ Ï†ÑÏö© ÏÖ∞Ïù¥Îçî ÏΩîÎìú
     class DeferredShader
     {
     public:
@@ -219,7 +219,7 @@ GBufferOut main(VertexOut pIn)
 
         // Deferred Light Pixel Shader
         inline static const char* LightPS = R"(
-// PBR «Ô∆€ «‘ºˆµÈ
+// PBR Ìó¨Ìçº Ìï®ÏàòÎì§
 static const float PI = 3.14159265f;
 static const float INV_PI = 0.31830988618f;
 
@@ -261,7 +261,7 @@ cbuffer ShadowCB : register(b4)
     float3   g_ShadowPad2;
 };
 
-// ±◊∏≤¿⁄ ∞ËªÍ «‘ºˆ (PCF)
+// Í∑∏Î¶ºÏûê Í≥ÑÏÇ∞ Ìï®Ïàò (PCF)
 float CalcShadowFactorDeferred(float3 posW, Texture2D<float> shadowMap, SamplerComparisonState shadowSampler)
 {
     if (g_ShadowEnabled2 == 0) return 1.0f;
@@ -292,14 +292,14 @@ float CalcShadowFactorDeferred(float3 posW, Texture2D<float> shadowMap, SamplerC
     return sum / 9.0f;
 }
 
-// ±∏¡∂√º ¡§¿«
+// Íµ¨Ï°∞Ï≤¥ Ï†ïÏùò
 struct PS_INPUT_QUAD
 {
     float4 position : SV_POSITION;
     float2 uv : TEXCOORD0;
 };
 
-// G-Buffer ≈ÿΩ∫√≥
+// G-Buffer ÌÖçÏä§Ï≤ò
 Texture2D g_PositionWS : register(t0);
 Texture2D g_NormalWS : register(t1);
 Texture2D g_Metalness : register(t2);
@@ -314,7 +314,7 @@ SamplerState g_Sam : register(s0);
 SamplerComparisonState g_ShadowSampler : register(s1);
 SamplerState g_SamplerLinear : register(s2);
 
-// ªÛºˆ πˆ∆€
+// ÏÉÅÏàò Î≤ÑÌçº
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 g_World;
@@ -365,19 +365,109 @@ cbuffer DirectionalLightBuffer : register(b3)
     float g_pad[3];
 };
 
+#define MAX_POINT_LIGHTS 16
+#define MAX_SPOT_LIGHTS 16
+#define MAX_RECT_LIGHTS 16
+
+struct PointLight
+{
+    float3 position;
+    float  range;
+    float3 color;
+    float  intensity;
+};
+
+struct SpotLight
+{
+    float3 position;
+    float  range;
+    float3 direction;
+    float  innerCos;
+    float3 color;
+    float  outerCos;
+    float  intensity;
+    float  pad0;
+};
+
+struct RectLight
+{
+    float3 position;
+    float  range;
+    float3 direction;
+    float  width;
+    float3 color;
+    float  height;
+    float  intensity;
+    float  pad0;
+};
+
+cbuffer ExtraLightsBuffer : register(b5)
+{
+    int g_PointLightCount;
+    int g_SpotLightCount;
+    int g_RectLightCount;
+    int g_ExtraPad0;
+    PointLight g_PointLights[MAX_POINT_LIGHTS];
+    SpotLight  g_SpotLights[MAX_SPOT_LIGHTS];
+    RectLight  g_RectLights[MAX_RECT_LIGHTS];
+};
+
+float ComputeAttenuation(float dist, float range)
+{
+    float r = max(range, 0.001f);
+    float att = saturate(1.0f - dist / r);
+    return att * att;
+}
+
+float ComputeSpotFactor(float3 L, float3 lightDir, float innerCos, float outerCos)
+{
+    float cosTheta = dot(-L, normalize(lightDir));
+    float denom = max(innerCos - outerCos, 1e-4f);
+    return saturate((cosTheta - outerCos) / denom);
+}
+
+float ComputeRectFactor(float3 L, float3 lightDir)
+{
+    return saturate(dot(-L, normalize(lightDir)));
+}
+
+float3 EvaluatePBRLight(float3 N, float3 V, float3 L, float3 albedoPBR, float metalness, float roughness, float3 lightColor)
+{
+    float3 H = normalize(L + V);
+    float NdotL = saturate(dot(N, L));
+    float NdotV = saturate(dot(N, V));
+    float NdotH = saturate(dot(N, H));
+    float VdotH = saturate(dot(V, H));
+
+    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoPBR, metalness);
+    float D = DistributionGGX(NdotH, roughness);
+    float G = GeometrySmith(NdotV, NdotL, roughness);
+    float3 F = FresnelSchlick(F0, VdotH);
+
+    float3 numerator = D * G * F;
+    float denomSpec = max(4.0f * NdotV * NdotL, 1e-4f);
+    float3 specular = numerator / denomSpec;
+
+    float3 kS = F;
+    float3 kD = (1.0f - kS) * (1.0f - metalness);
+    float3 diffuse = kD * albedoPBR * INV_PI;
+
+    return (diffuse + specular) * lightColor * NdotL;
+}
+
 float4 main(PS_INPUT_QUAD pIn) : SV_Target
 {
-    // G-Buffer ∞°¡Æø¿±‚
+    // G-Buffer Í∞ÄÏ†∏Ïò§Í∏∞
     float4 positionWS = g_PositionWS.Sample(g_Sam, pIn.uv);
     float4 normalWS_packed = g_NormalWS.Sample(g_Sam, pIn.uv);
     float4 metalness_packed = g_Metalness.Sample(g_Sam, pIn.uv);
     float4 roughness_packed = g_Roughness.Sample(g_Sam, pIn.uv);
     float4 baseColor = g_BaseColor.Sample(g_Sam, pIn.uv);
     
-    // πË∞Ê √º≈©
+    // Î∞∞Í≤Ω Ï≤¥ÌÅ¨
     if (length(normalWS_packed.xyz) < 0.1f) discard;
 
-    // µ•¿Ã≈Õ ∫πø¯
+    // Îç∞Ïù¥ÌÑ∞ Î≥µÏõê
     float3 posW = positionWS.xyz;
     float3 N = normalize(normalWS_packed.xyz);
     float metalness = metalness_packed.r;
@@ -385,7 +475,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 albedo = baseColor.rgb;
     float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
     
-    // ∂Û¿Ã∆√ ∫§≈Õ ∞ËªÍ
+    // ÎùºÏù¥ÌåÖ Î≤°ÌÑ∞ Í≥ÑÏÇ∞
     float3 L = normalize(-g_LightDirection.xyz);
     float3 V = normalize(g_EyePosW - posW);
     float3 H = normalize(L + V);
@@ -396,28 +486,59 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float NdotH = saturate(dot(N, H));
     float VdotH = saturate(dot(V, H));
     
-    // PBR ø¨ªÍ
+    // PBR Ïó∞ÏÇ∞
     float3 albedoPBR = albedoLinear;
     roughness = max(roughness, 0.04f);
     float ao = saturate(g_PBRAmbientOcclusion);
-    
-    // Direct Light
+
+    // IBL Í≥ÑÏÇ∞ÏùÑ ÏúÑÌï¥ ÌïÑÏöîÌïú F0ÏôÄ kDÎ•º Ïó¨Í∏∞ÏÑú ÎØ∏Î¶¨ Í≥ÑÏÇ∞Ìï¥Ïïº Ìï©ÎãàÎã§.
+    // --------------------------------------------------------------------------
     float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoPBR, metalness);
-    float D = DistributionGGX(NdotH, roughness);
-    float G = GeometrySmith(NdotV, theta, roughness);
-    float3 F = FresnelSchlick(F0, VdotH);
+    float3 kS_IBL = FresnelSchlick(F0, NdotV);
+    float3 kD = (1.0f - kS_IBL) * (1.0f - metalness);
     
-    float3 numerator = D * G * F;
-    float denomSpec = max(4.0f * NdotV * theta, 1e-4f);
-    float3 specular = numerator / denomSpec;
-    
-    float3 kS = F;
-    float3 kD = (1.0f - kS) * (1.0f - metalness);
-    float3 diffuse = kD * albedoPBR * INV_PI;
-    
+    // Direct Light (Directional + Extra Lights)
     float shadowVis = CalcShadowFactorDeferred(posW, g_ShadowMap, g_ShadowSampler);
-    float3 radiance = g_LightColor.rgb * PI;
-    float3 directLighting = (diffuse + specular) * radiance * theta * ao * shadowVis * g_intensity;
+    float3 lightColorDir = g_LightColor.rgb * g_intensity * PI;
+    float3 directLighting = EvaluatePBRLight(N, V, L, albedoPBR, metalness, roughness, lightColorDir) * shadowVis * ao;
+
+    float3 extraLighting = float3(0.0f, 0.0f, 0.0f);
+
+    [loop] for (int i = 0; i < g_PointLightCount; ++i)
+    {
+        PointLight pl = g_PointLights[i];
+        float3 toLight = pl.position - posW;
+        float dist = length(toLight);
+        float3 Lp = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, pl.range);
+        float3 lc = pl.color * pl.intensity * atten * PI;
+        extraLighting += EvaluatePBRLight(N, V, Lp, albedoPBR, metalness, roughness, lc) * ao;
+    }
+
+    [loop] for (int i = 0; i < g_SpotLightCount; ++i)
+    {
+        SpotLight sl = g_SpotLights[i];
+        float3 toLight = sl.position - posW;
+        float dist = length(toLight);
+        float3 Ls = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, sl.range);
+        float spot = ComputeSpotFactor(Ls, sl.direction, sl.innerCos, sl.outerCos);
+        float3 lc = sl.color * sl.intensity * atten * spot * PI;
+        extraLighting += EvaluatePBRLight(N, V, Ls, albedoPBR, metalness, roughness, lc) * ao;
+    }
+
+    [loop] for (int i = 0; i < g_RectLightCount; ++i)
+    {
+        RectLight rl = g_RectLights[i];
+        float3 toLight = rl.position - posW;
+        float dist = length(toLight);
+        float3 Lr = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, rl.range);
+        float facing = ComputeRectFactor(Lr, rl.direction);
+        float areaScale = max(rl.width * rl.height, 0.01f);
+        float3 lc = rl.color * rl.intensity * atten * facing * areaScale * PI;
+        extraLighting += EvaluatePBRLight(N, V, Lr, albedoPBR, metalness, roughness, lc) * ao;
+    }
     
     // Indirect Light (IBL)
     float3 diffuseIBL = kD * g_IBL_Diffuse.Sample(g_Sam, N).rgb * albedoPBR;
@@ -429,9 +550,9 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
     
     float3 iblColor = (diffuseIBL + specularIBL) * ao;
-    
-    // √÷¡æ ªˆªÛ
-    float3 color = directLighting + iblColor;
+
+    // ÏµúÏ¢Ö ÏÉâÏÉÅ Í≥ÑÏÇ∞
+    float3 color = directLighting + extraLighting + iblColor;
     
     return float4(color, 1.0f);
 }
@@ -543,7 +664,7 @@ float3 FresnelSchlick(float3 F0, float cosTheta)
     return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
 }
 
-// ≈ÿΩ∫√≥
+// ÌÖçÏä§Ï≤ò
 Texture2D  g_DiffuseMap : register(t0);
 Texture2D  g_NormalMap  : register(t1);
 
@@ -599,9 +720,9 @@ float4 main(PSIn pIn) : SV_Target
 
     float alphaTex = tex.a * gMaterialColor.a;
 
-    // ƒ∆æ∆øÙ(øœ¿¸ ≈ı∏Ì ±Ÿ√≥) ¡¶∞≈
+    // Ïª∑ÏïÑÏõÉ(ÏôÑÏ†Ñ Ìà¨Î™Ö Í∑ºÏ≤ò) Ï†úÍ±∞
     clip(alphaTex - 0.99f);
-    // ∞≈¿« ∫“≈ı∏Ì¿∫ µ∆€µÂø°º≠ √≥∏Æ«œπ«∑Œ ø©±‚º≠¥¬ ¡¶ø‹
+    // Í±∞Ïùò Î∂àÌà¨Î™ÖÏùÄ ÎîîÌçºÎìúÏóêÏÑú Ï≤òÎ¶¨ÌïòÎØÄÎ°ú Ïó¨Í∏∞ÏÑúÎäî Ï†úÏô∏
     if (alphaTex >= 0.99f) discard;
 
     float3 baseColor = gMaterialColor.rgb;
@@ -741,17 +862,17 @@ VSOutput main(VSInput input)
 {
     VSOutput o;
     
-    // ∫ª ¿Œµ¶Ω∫øÕ ∞°¡ﬂƒ°∏¶ ∞°¡Æø»
+    // Î≥∏ Ïù∏Îç±Ïä§ÏôÄ Í∞ÄÏ§ëÏπòÎ•º Í∞ÄÏ†∏Ïò¥
     uint4 bi = input.BoneIndices;
     float4 bw = input.BoneWeights;
     
-    // Ω∫≈∞¥◊ «‡∑ƒ ∞ËªÍ
+    // Ïä§ÌÇ§Îãù ÌñâÎ†¨ Í≥ÑÏÇ∞
     matrix M = bw.x * gBones[bi.x]
              + bw.y * gBones[bi.y]
              + bw.z * gBones[bi.z]
              + bw.w * gBones[bi.w];
     
-    // ¿ßƒ° ∫Ø»Ø (Local -> Skinned -> World -> View -> Proj)
+    // ÏúÑÏπò Î≥ÄÌôò (Local -> Skinned -> World -> View -> Proj)
     float4 posL = float4(input.Position, 1.0f);
     float4 skinnedPos = mul(posL, M);
     float4 posW = mul(skinnedPos, gWorld);
