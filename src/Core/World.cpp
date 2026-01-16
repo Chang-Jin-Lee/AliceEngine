@@ -7,7 +7,11 @@ namespace Alice {
 	{
 		// 1. 스크립트 컴포넌트들의 정리(Cleanup) 함수 호출
 		RemoveAllScript();
-		// 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
+
+		// 1.5 �������� ���� ����
+		m_physicsWorld.reset();
+
+		// 2. ��� ������Ʈ �����̳� ���� (�޸� ����)
 		m_names.clear();
 		m_transforms.Clear();
 		m_scripts.clear();
@@ -234,7 +238,7 @@ namespace Alice {
 		EntityId e = CreateEntity();
 		auto& t = AddComponent<TransformComponent>(e);
 		t.SetPosition(0.0f, 0.0f, 0.0f)
-		 .SetScale(1.0f, 1.0f, 1.0f);
+			.SetScale(1.0f, 1.0f, 1.0f);
 		SetEntityName(e, "GameObject" + std::to_string((std::uint32_t)e));
 		return e;
 	}
@@ -249,7 +253,7 @@ namespace Alice {
 		// 기본 회색 머티리얼을 함께 추가합니다.
 		DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
 		AddComponent<MaterialComponent>(e, defaultColor);
-		
+
 		SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
 		return e;
 	}
@@ -271,4 +275,15 @@ namespace Alice {
 		SetEntityName(e, "Camera" + std::to_string(camIndex));
 		return e;
 	}
+
+
+
+	//========================================================
+	// ���� ���� �Լ�
+	void World::SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld) { m_physicsWorld = std::move(physicsWorld); }
+	IPhysicsWorld* World::GetPhysicsWorld() { return m_physicsWorld.get(); }
+	const IPhysicsWorld* World::GetPhysicsWorld() const { return m_physicsWorld.get(); }
+	//========================================================
+
+
 } // namespace Alice
