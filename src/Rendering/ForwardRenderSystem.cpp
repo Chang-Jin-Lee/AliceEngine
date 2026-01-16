@@ -1,7 +1,7 @@
 #include "Rendering/ForwardRenderSystem.h"
 
 #include <d3dcompiler.h>
-// ÅØ½ºÃ³ ·Î´õ (vcpkgÀÇ DirectXTK »ç¿ë)
+// í…ìŠ¤ì²˜ ë¡œë” (vcpkgì˜ DirectXTK ì‚¬ìš©)
 #include <DirectXTK/WICTextureLoader.h>
 #include <DirectXTK/DDSTextureLoader.h>
 #include <filesystem>
@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cfloat>
 #include <algorithm>
+#include <cstring>
 
 #include <Core/ResourceManager.h>
 #include <Core/Logger.h>
@@ -113,7 +114,7 @@ namespace Alice
     {
         if (!m_device) return;
         if (width == 0 || height == 0) return;
-        // ±âÁ¸ ¸®¼Ò½º ÇØÁ¦ ÈÄ »õ·Î »ı¼º
+        // ê¸°ì¡´ ë¦¬ì†ŒìŠ¤ í•´ì œ í›„ ìƒˆë¡œ ìƒì„±
         m_sceneColorTex.Reset();
         m_sceneRTV.Reset();
         m_sceneSRV.Reset();
@@ -131,15 +132,15 @@ namespace Alice
         m_sceneWidth = width; m_sceneHeight = height;
         if (width == 0 || height == 0) return false;
 
-        // 1. Scene Color Texture & Views (RTV, SRV) - HDR Æ÷¸Ë: Åæ¸ÅÇÎÀ» À§ÇØ R16G16B16A16_FLOAT »ç¿ë
-        // ¼ø¼­: Width, Height, MipLevels, ArraySize, Format, SampleDesc{Count, Quality}, Usage, BindFlags, CPUAccess, Misc
+        // 1. Scene Color Texture & Views (RTV, SRV) - HDR í¬ë§·: í†¤ë§¤í•‘ì„ ìœ„í•´ R16G16B16A16_FLOAT ì‚¬ìš©
+        // ìˆœì„œ: Width, Height, MipLevels, ArraySize, Format, SampleDesc{Count, Quality}, Usage, BindFlags, CPUAccess, Misc
         D3D11_TEXTURE2D_DESC cDesc = { width, height, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
         if (FAILED(m_device->CreateTexture2D(&cDesc, nullptr, m_sceneColorTex.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreateRenderTargetView(m_sceneColorTex.Get(), nullptr, m_sceneRTV.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreateShaderResourceView(m_sceneColorTex.Get(), nullptr, m_sceneSRV.ReleaseAndGetAddressOf()))) return false;
 
         // 1-1. Editor Viewport Output (ToneMapped LDR)
-        // - ImGui::Image Ç¥½Ã¿ë (UNORM, °¨¸¶ Àû¿ëµÈ °ªÀÌ µé¾î°¥ ¿¹Á¤)
+        // - ImGui::Image í‘œì‹œìš© (UNORM, ê°ë§ˆ ì ìš©ëœ ê°’ì´ ë“¤ì–´ê°ˆ ì˜ˆì •)
         D3D11_TEXTURE2D_DESC vDesc = { width, height, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
         if (FAILED(m_device->CreateTexture2D(&vDesc, nullptr, m_viewportTex.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreateRenderTargetView(m_viewportTex.Get(), nullptr, m_viewportRTV.ReleaseAndGetAddressOf()))) return false;
@@ -149,7 +150,7 @@ namespace Alice
         D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_D24_UNORM_S8_UINT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL, 0, 0 };
         if (FAILED(m_device->CreateTexture2D(&dDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf()))) return false;
 
-        // DSV ¼³Á¤ (MipSlice 0)
+        // DSV ì„¤ì • (MipSlice 0)
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { dDesc.Format, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
         if (FAILED(m_device->CreateDepthStencilView(m_sceneDepthTex.Get(), &dsvDesc, m_sceneDSV.ReleaseAndGetAddressOf()))) return false;
 
@@ -187,7 +188,7 @@ namespace Alice
     {
         ComPtr<ID3DBlob> vsBlob, psBlob;
 
-        // 1. ¼ÎÀÌ´õ ÄÄÆÄÀÏ ¹× »ı¼º (ErrorBlob »ı·«)
+        // 1. ì…°ì´ë” ì»´íŒŒì¼ ë° ìƒì„± (ErrorBlob ìƒëµ)
         if (FAILED(D3DCompile(CommonShaderCode::SkyboxVS, strlen(CommonShaderCode::SkyboxVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
         if (FAILED(D3DCompile(CommonShaderCode::SkyboxPS, strlen(CommonShaderCode::SkyboxPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
 
@@ -210,10 +211,10 @@ namespace Alice
         if (!m_resources) return false;
 
         namespace fs = std::filesystem;
-        // °æ·Î ¹× ÀÌ¸§ ¼³Á¤ (Sample -> BakerSample, ±× ¿Ü ¼Ò¹®ÀÚ º¯È¯)
+        // ê²½ë¡œ ë° ì´ë¦„ ì„¤ì • (Sample -> BakerSample, ê·¸ ì™¸ ì†Œë¬¸ì ë³€í™˜)
         fs::path base = fs::path("Resource/Skybox") / iblDir;
 
-        // Diffuse, Specular, Brdf ·Îµå
+        // Diffuse, Specular, Brdf ë¡œë“œ
         if (!(m_iblDiffuseSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "DiffuseHDR.dds"), m_device.Get())))
             ALICE_LOG_WARN("Failed IBL Diffuse: %s", (base / iblName).string().c_str());
 
@@ -223,7 +224,7 @@ namespace Alice
         if (!(m_iblBrdfLutSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "Brdf.dds"), m_device.Get())))
             ALICE_LOG_WARN("Failed IBL BRDF %s", (base / iblName).string().c_str());
 
-        // Skybox Env ·Îµå ¹× »óÅÂ ¼³Á¤
+        // Skybox Env ë¡œë“œ ë° ìƒíƒœ ì„¤ì •
         m_skyboxEnabled = (m_skyboxSRV = m_resources->LoadData<ID3D11ShaderResourceView>(base / (iblName + "EnvHDR.dds"), m_device.Get())) != nullptr;
         if (!m_skyboxEnabled) ALICE_LOG_WARN("Failed Skybox Env");
 
@@ -233,13 +234,13 @@ namespace Alice
 
     bool ForwardRenderSystem::SetIblSet(const std::string& iblDir, const std::string& iblName)
     {
-        // ±âÁ¸ ¸®¼Ò½º ÇØÁ¦
+        // ê¸°ì¡´ ë¦¬ì†ŒìŠ¤ í•´ì œ
         m_iblDiffuseSRV.Reset();
         m_iblSpecularSRV.Reset();
         m_iblBrdfLutSRV.Reset();
         m_skyboxSRV.Reset();
 
-        // »õ IBL ¼¼Æ® ·Îµå
+        // ìƒˆ IBL ì„¸íŠ¸ ë¡œë“œ
         return CreateIblResources(iblDir, iblName);
     }
 
@@ -247,7 +248,7 @@ namespace Alice
     {
         m_skyboxEnabled = enabled;
         
-        // ½ºÄ«ÀÌ¹Ú½º¸¦ ²ô¸é IBLµµ ÇÔ²² ²ü´Ï´Ù
+        // ìŠ¤ì¹´ì´ë°•ìŠ¤ë¥¼ ë„ë©´ IBLë„ í•¨ê»˜ ë•ë‹ˆë‹¤
         if (!enabled)
         {
             m_iblDiffuseSRV.Reset();
@@ -259,7 +260,7 @@ namespace Alice
 
     bool ForwardRenderSystem::CreateCubeGeometry()
     {
-        // 1. Å¥ºê µ¥ÀÌÅÍ Á¤ÀÇ (Pos, Normal, UV) - Áß°ıÈ£ ÃÊ±âÈ­·Î Å¸ÀÔ¸í »ı·«
+        // 1. íë¸Œ ë°ì´í„° ì •ì˜ (Pos, Normal, UV) - ì¤‘ê´„í˜¸ ì´ˆê¸°í™”ë¡œ íƒ€ì…ëª… ìƒëµ
         SimpleVertex v[] = {
             // Front (+Z)
             { {-1,-1, 1}, { 0, 0, 1}, {0,1} }, { {-1, 1, 1}, { 0, 0, 1}, {0,0} }, { { 1, 1, 1}, { 0, 0, 1}, {1,0} }, { { 1,-1, 1}, { 0, 0, 1}, {1,1} },
@@ -282,13 +283,13 @@ namespace Alice
 
         m_indexCount = (UINT)std::size(i);
 
-        // 2. Vertex Buffer »ı¼º
+        // 2. Vertex Buffer ìƒì„±
         D3D11_BUFFER_DESC desc = { sizeof(v), D3D11_USAGE_DEFAULT, D3D11_BIND_VERTEX_BUFFER, 0, 0, 0 };
         D3D11_SUBRESOURCE_DATA data = { v, 0, 0 };
 
         if (FAILED(m_device->CreateBuffer(&desc, &data, m_vertexBuffer.ReleaseAndGetAddressOf()))) return false;
 
-        // 3. Index Buffer »ı¼º (±¸Á¶Ã¼ Àç»ç¿ë)
+        // 3. Index Buffer ìƒì„± (êµ¬ì¡°ì²´ ì¬ì‚¬ìš©)
         desc.ByteWidth = sizeof(i);
         desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
         data.pSysMem = i;
@@ -301,17 +302,17 @@ namespace Alice
     {
         ComPtr<ID3DBlob> vsBlob, psBlob;
 
-        // 1. Vertex Shader ÄÄÆÄÀÏ ¹× »ı¼º
+        // 1. Vertex Shader ì»´íŒŒì¼ ë° ìƒì„±
         if (FAILED(D3DCompile(ForwardShader::PhongVS, strlen(ForwardShader::PhongVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr)))
             return false;
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vertexShader.ReleaseAndGetAddressOf()))) return false;
 
-        // 2. Pixel Shader ÄÄÆÄÀÏ ¹× »ı¼º
+        // 2. Pixel Shader ì»´íŒŒì¼ ë° ìƒì„±
         if (FAILED(D3DCompile(ForwardShader::PBRPS, strlen(ForwardShader::PBRPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) 
             return false;
         if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_pixelShader.ReleaseAndGetAddressOf()))) return false;
 
-        // 3. Input Layout »ı¼º (¿ÀÇÁ¼Â ÀÚµ¿ Á¤·Ä: D3D11_APPEND_ALIGNED_ELEMENT)
+        // 3. Input Layout ìƒì„± (ì˜¤í”„ì…‹ ìë™ ì •ë ¬: D3D11_APPEND_ALIGNED_ELEMENT)
         D3D11_INPUT_ELEMENT_DESC desc[] = {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,                            D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -324,23 +325,29 @@ namespace Alice
 
     bool ForwardRenderSystem::CreateConstantBuffers()
     {
-        // 1. °øÅë ¼³Á¤ (±âº» Á¤Àû ¹öÆÛ¿ë)
-        // ¼ø¼­: ByteWidth, Usage, BindFlags, CPUAccessFlags, MiscFlags, StructureByteStride
+        // 1. ê³µí†µ ì„¤ì • (ê¸°ë³¸ ì •ì  ë²„í¼ìš©)
+        // ìˆœì„œ: ByteWidth, Usage, BindFlags, CPUAccessFlags, MiscFlags, StructureByteStride
         D3D11_BUFFER_DESC desc = { sizeof(CBPerObject), D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 };
 
-        // 2. PerObject ¹× Lighting ¹öÆÛ »ı¼º (½ÇÆĞ ½Ã Áï½Ã ¹İÈ¯)
+        // 2. PerObject ë° Lighting ë²„í¼ ìƒì„± (ì‹¤íŒ¨ ì‹œ ì¦‰ì‹œ ë°˜í™˜)
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbPerObject.ReleaseAndGetAddressOf()))) return false;
 
         desc.ByteWidth = sizeof(CBLighting);
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbLighting.ReleaseAndGetAddressOf()))) return false;
 
-        // 3. ½ºÄ«ÀÌ¹Ú½º¿ë µ¿Àû ¹öÆÛ ¼³Á¤ º¯°æ ¹× »ı¼º
+        // Extra lights buffer (Point/Spot/Rect)
+        desc.ByteWidth = (sizeof(ExtraLightsCB) + 15) / 16 * 16;
+        desc.Usage = D3D11_USAGE_DYNAMIC;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbExtraLights.ReleaseAndGetAddressOf()))) return false;
+
+        // 3. ????????? ???? ???? ???? ???? ?? ????
         desc.ByteWidth = sizeof(XMMATRIX);
         desc.Usage = D3D11_USAGE_DYNAMIC;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbSkybox.ReleaseAndGetAddressOf()))) return false;
 
-        // 4. PostProcess »ó¼ö ¹öÆÛ »ı¼º (Åæ¸ÅÇÎ¿ë)
+        // 4. PostProcess ìƒìˆ˜ ë²„í¼ ìƒì„± (í†¤ë§¤í•‘ìš©)
         desc.ByteWidth = sizeof(float) * 4; // exposure, maxHDRNits, padding[2]
         desc.Usage = D3D11_USAGE_DYNAMIC;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -357,7 +364,7 @@ namespace Alice
 
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &m_skinnedVertexShader))) return false;
 
-        // 2. ÀÔ·Â ·¹ÀÌ¾Æ¿ô (Color(offset 48)´Â °Ç³Ê¶Ù°í UV(64)ºÎÅÍ ¸ÅÇÎ)
+        // 2. ì…ë ¥ ë ˆì´ì•„ì›ƒ (Color(offset 48)ëŠ” ê±´ë„ˆë›°ê³  UV(64)ë¶€í„° ë§¤í•‘)
         D3D11_INPUT_ELEMENT_DESC desc[] = {
             { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -370,7 +377,7 @@ namespace Alice
 
         if (FAILED(m_device->CreateInputLayout(desc, (UINT)std::size(desc), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &m_inputLayoutSkinned))) return false;
 
-        // 3. º» »ó¼ö ¹öÆÛ (Dynamic/WriteDiscard)
+        // 3. ë³¸ ìƒìˆ˜ ë²„í¼ (Dynamic/WriteDiscard)
         D3D11_BUFFER_DESC bd = { sizeof(CBBones), D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE };
         if (FAILED(m_device->CreateBuffer(&bd, nullptr, m_cbBones.ReleaseAndGetAddressOf()))) return false;
 
@@ -381,21 +388,21 @@ namespace Alice
     {
         if (!m_resources) return false;
 
-        // 1. ±âº» ÅØ½ºÃ³ ·Îµå
+        // 1. ê¸°ë³¸ í…ìŠ¤ì²˜ ë¡œë“œ
         m_diffuseSRV = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Image/Bricks059_1K-JPG_Color.jpg", m_device.Get());
         m_normalSRV = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Image/Bricks059_1K-JPG_NormalDX.jpg", m_device.Get());
         m_specularSRV = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Image/Bricks059_Specular.png", m_device.Get());
 
         if (!m_diffuseSRV || !m_normalSRV || !m_specularSRV) ALICE_LOG_WARN("[ForwardRenderSystem] Default textures incomplete.");
 
-        // 2. Flat Normal (1x1, RGBA = 128,128,255,255) »ı¼º
-        // D3D11_TEXTURE2D_DESC¸¦ ÇÑ ÁÙ·Î ÃÊ±âÈ­ (Width, Height, Mips, Array, Format, Sample(Cnt,Q), Usage, Bind, CPU, Misc)
+        // 2. Flat Normal (1x1, RGBA = 128,128,255,255) ìƒì„±
+        // D3D11_TEXTURE2D_DESCë¥¼ í•œ ì¤„ë¡œ ì´ˆê¸°í™” (Width, Height, Mips, Array, Format, Sample(Cnt,Q), Usage, Bind, CPU, Misc)
         D3D11_TEXTURE2D_DESC desc = { 1, 1, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_IMMUTABLE, D3D11_BIND_SHADER_RESOURCE };
         const uint8_t color[] = { 128, 128, 255, 255 };
         D3D11_SUBRESOURCE_DATA sd = { color, 4, 0 };
 
         ComPtr<ID3D11Texture2D> tex;
-        // 2¹øÂ° ÀÎÀÚ¿¡ nullptr¸¦ ³ÖÀ¸¸é ÅØ½ºÃ³ÀÇ Æ÷¸Ë°ú ÀüÃ¼ ¹üÀ§¸¦ »ç¿ëÇÏ´Â ±âº» ºä°¡ »ı¼ºµÊ
+        // 2ë²ˆì§¸ ì¸ìì— nullptrë¥¼ ë„£ìœ¼ë©´ í…ìŠ¤ì²˜ì˜ í¬ë§·ê³¼ ì „ì²´ ë²”ìœ„ë¥¼ ì‚¬ìš©í•˜ëŠ” ê¸°ë³¸ ë·°ê°€ ìƒì„±ë¨
         {
             const HRESULT hr = m_device->CreateTexture2D(&desc, &sd, tex.GetAddressOf());
             if (FAILED(hr))
@@ -424,7 +431,7 @@ namespace Alice
 
         if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_samplerState.ReleaseAndGetAddressOf()))) return false;
 
-        // Linear Sampler (Åæ¸ÅÇÎ¿ë)
+        // Linear Sampler (í†¤ë§¤í•‘ìš©)
         samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
         samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
         samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -457,7 +464,7 @@ namespace Alice
         desc.CullMode = D3D11_CULL_BACK;
         desc.DepthClipEnable = TRUE;
 
-        // 1. ÀÏ¹İ ·»´õ¸µ (CCW: ±âº», CW: ¹İÀü/°Å¿ï)
+        // 1. ì¼ë°˜ ë Œë”ë§ (CCW: ê¸°ë³¸, CW: ë°˜ì „/ê±°ìš¸)
         desc.FrontCounterClockwise = TRUE;
         desc.DepthBias = 0;
         desc.SlopeScaledDepthBias = 0.0f;
@@ -468,7 +475,7 @@ namespace Alice
         desc.SlopeScaledDepthBias = 0.0f;
         if (FAILED(m_device->CreateRasterizerState(&desc, m_rasterizerStateReversed.ReleaseAndGetAddressOf()))) return false;
 
-        // 2. ¼¨µµ¿ì ÆĞ½º (DepthBias Àû¿ë)
+        // 2. ì„€ë„ìš° íŒ¨ìŠ¤ (DepthBias ì ìš©)
         desc.FrontCounterClockwise = TRUE;
         desc.DepthBias = 1000;
         desc.SlopeScaledDepthBias = 1.0f;
@@ -482,8 +489,8 @@ namespace Alice
         return true;
     }
 
-    // °æ·Î ¹®ÀÚ¿­À» ±â¹İÀ¸·Î ¸ÓÆ¼¸®¾ó Àü¿ë ÅØ½ºÃ³ SRV ¸¦ °¡Á®¿À°Å³ª »ı¼ºÇÕ´Ï´Ù.
-    // - LoadData¸¦ ÅëÇØ °æ·Î Ã³¸®, ¾ÏÈ£È­ ÇØµ¶, ¸®¼Ò½º »ı¼ºÀÌ ¸ğµÎ ³»ºÎ¿¡¼­ Ã³¸®µË´Ï´Ù.
+    // ê²½ë¡œ ë¬¸ìì—´ì„ ê¸°ë°˜ìœ¼ë¡œ ë¨¸í‹°ë¦¬ì–¼ ì „ìš© í…ìŠ¤ì²˜ SRV ë¥¼ ê°€ì ¸ì˜¤ê±°ë‚˜ ìƒì„±í•©ë‹ˆë‹¤.
+    // - LoadDataë¥¼ í†µí•´ ê²½ë¡œ ì²˜ë¦¬, ì•”í˜¸í™” í•´ë…, ë¦¬ì†ŒìŠ¤ ìƒì„±ì´ ëª¨ë‘ ë‚´ë¶€ì—ì„œ ì²˜ë¦¬ë©ë‹ˆë‹¤.
     ID3D11ShaderResourceView* ForwardRenderSystem::GetOrCreateTexture(const std::string& path)
     {
         if (path.empty()) return nullptr;
@@ -517,7 +524,7 @@ namespace Alice
                                                 const bool& enableNormalMap)
     {
         CBPerObject data = {};
-        // HLSL¿¡¼­ row-major·Î »ç¿ëÇÒ ¼ö ÀÖµµ·Ï ÀüÄ¡ Çà·Ä »ç¿ë
+        // HLSLì—ì„œ row-majorë¡œ ì‚¬ìš©í•  ìˆ˜ ìˆë„ë¡ ì „ì¹˜ í–‰ë ¬ ì‚¬ìš©
         data.world         = XMMatrixTranspose(world);
         data.view          = XMMatrixTranspose(view);
         data.projection    = XMMatrixTranspose(projection);
@@ -543,7 +550,7 @@ namespace Alice
         auto* cb = reinterpret_cast<CBBones*>(mapped.pData);
         cb->boneCount = (std::min)(boneCount, (uint32_t)MaxBones);
 
-        // À¯È¿ÇÑ º»Àº TransposeÇØ¼­ ³Ö°í, ³ª¸ÓÁö´Â Identity·Î Ã¤¿ò
+        // ìœ íš¨í•œ ë³¸ì€ Transposeí•´ì„œ ë„£ê³ , ë‚˜ë¨¸ì§€ëŠ” Identityë¡œ ì±„ì›€
         for (std::uint32_t i = 0; i < MaxBones; ++i)
         {
             if (i < cb->boneCount) cb->bones[i] = XMMatrixTranspose(XMLoadFloat4x4(&boneMatrices[i]));
@@ -559,9 +566,9 @@ namespace Alice
                                                bool enableFillLight,
                                                const XMMATRIX& lightViewProj)
     {
-        CBLighting data = {}; // 0À¸·Î ÃÊ±âÈ­ (FillLight ¹Ì»ç¿ë ½Ã ÀÚµ¿ Ã³¸®)
+        CBLighting data = {}; // 0ìœ¼ë¡œ ì´ˆê¸°í™” (FillLight ë¯¸ì‚¬ìš© ì‹œ ìë™ ì²˜ë¦¬)
 
-        // ¹æÇâ º¤ÅÍ ¾ÈÀüÇÏ°Ô Á¤±ÔÈ­ÇÏ´Â ¶÷´Ù
+        // ë°©í–¥ ë²¡í„° ì•ˆì „í•˜ê²Œ ì •ê·œí™”í•˜ëŠ” ëŒë‹¤
         auto GetSafeDir = [](const XMFLOAT3& val) {
             XMVECTOR v = XMLoadFloat3(&val);
             return XMVector3Equal(v, XMVectorZero()) ? XMVectorSet(0, -1, 0, 0) : XMVector3Normalize(v);
@@ -573,7 +580,7 @@ namespace Alice
         data.keyLight.color = m_lightingParameters.diffuseColor;
         data.keyLight.intensity = m_lightingParameters.keyIntensity;
 
-        // Fill Light (ÄÑÁ® ÀÖÀ» ¶§¸¸ °ª ¼³Á¤)
+        // Fill Light (ì¼œì ¸ ìˆì„ ë•Œë§Œ ê°’ ì„¤ì •)
         if (enableFillLight)
         {
             XMStoreFloat3(&data.fillLight.direction, GetSafeDir(m_lightingParameters.fillDirection));
@@ -581,7 +588,7 @@ namespace Alice
             data.fillLight.intensity = m_lightingParameters.fillIntensity;
         }
 
-        // Ä«¸Ş¶ó ¹× ÀçÁú (Brace Init È°¿ë)
+        // ì¹´ë©”ë¼ ë° ì¬ì§ˆ (Brace Init í™œìš©)
         data.cameraPosition = camera.GetPosition();
         const auto& diff = m_lightingParameters.diffuseColor;
         const auto& spec = m_lightingParameters.specularColor;
@@ -589,7 +596,7 @@ namespace Alice
         data.materialDiffuse = { diff.x, diff.y, diff.z, 1.0f };
         data.materialSpecular = { spec.x, spec.y, spec.z, m_lightingParameters.shininess };
 
-        // ¼¨µµ¿ì ¹× ±âÅ¸ ÆÄ¶ó¹ÌÅÍ
+        // ì„€ë„ìš° ë° ê¸°íƒ€ íŒŒë¼ë¯¸í„°
         data.shadingMode = shadingMode;
         data.lightViewProj = XMMatrixTranspose(lightViewProj);
         data.shadowBias = m_shadowSettings.bias;
@@ -597,22 +604,104 @@ namespace Alice
         data.shadowPcfRadius = m_shadowSettings.pcfRadius;
         data.shadowEnabled = m_shadowSettings.enabled;
 
-        // GPU ¾÷µ¥ÀÌÆ® ¹× ¹ÙÀÎµù (VS/PS ½½·Ô 1¹ø)
+        // GPU ì—…ë°ì´íŠ¸ ë° ë°”ì¸ë”© (VS/PS ìŠ¬ë¡¯ 1ë²ˆ)
         m_context->UpdateSubresource(m_cbLighting.Get(), 0, nullptr, &data, 0, 0);
         m_context->VSSetConstantBuffers(1, 1, m_cbLighting.GetAddressOf());
         m_context->PSSetConstantBuffers(1, 1, m_cbLighting.GetAddressOf());
     }
 
+    void ForwardRenderSystem::UpdateExtraLightsCB(const World& world)
+    {
+        if (!m_cbExtraLights) return;
+
+        ExtraLightsCB data = {};
+
+        // Point lights
+        for (const auto& [id, light] : world.GetComponents<PointLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.pointCount >= MaxPointLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            auto& dst = data.pointLights[data.pointCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        // Spot lights
+        for (const auto& [id, light] : world.GetComponents<SpotLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.spotCount >= MaxSpotLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
+            XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
+            XMVECTOR dirW = XMVector3Normalize(XMVector3TransformNormal(forward, rot));
+            XMFLOAT3 dir{};
+            XMStoreFloat3(&dir, dirW);
+
+            float innerRad = DirectX::XMConvertToRadians((std::max)(0.0f, light.innerAngleDeg));
+            float outerRad = DirectX::XMConvertToRadians((std::max)(light.innerAngleDeg, light.outerAngleDeg));
+
+            auto& dst = data.spotLights[data.spotCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.direction = dir;
+            dst.innerCos = std::cosf(innerRad);
+            dst.outerCos = std::cosf(outerRad);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        // Rect lights
+        for (const auto& [id, light] : world.GetComponents<RectLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.rectCount >= MaxRectLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
+            XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
+            XMVECTOR dirW = XMVector3Normalize(XMVector3TransformNormal(forward, rot));
+            XMFLOAT3 dir{};
+            XMStoreFloat3(&dir, dirW);
+
+            auto& dst = data.rectLights[data.rectCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.direction = dir;
+            dst.width = (std::max)(light.width, 0.01f);
+            dst.height = (std::max)(light.height, 0.01f);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (SUCCEEDED(m_context->Map(m_cbExtraLights.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            std::memcpy(mapped.pData, &data, sizeof(ExtraLightsCB));
+            m_context->Unmap(m_cbExtraLights.Get(), 0);
+        }
+
+        m_context->PSSetConstantBuffers(5, 1, m_cbExtraLights.GetAddressOf());
+    }
+
     void ForwardRenderSystem::RenderSkybox(const Camera& camera)
     {
-        // À¯È¿¼º Ã¼Å©
+        // ìœ íš¨ì„± ì²´í¬
         if (!m_skyboxEnabled || !m_skyboxSRV || !m_skyboxVS || !m_skyboxPS || !m_cbSkybox) return;
 
-        // ÀÌÀü »óÅÂ ¹é¾÷
+        // ì´ì „ ìƒíƒœ ë°±ì—…
         ID3D11RasterizerState* pRS = nullptr; 
         ID3D11DepthStencilState* pDS = nullptr; 
         ID3D11ShaderResourceView* pSRV = nullptr;
-        ID3D11BlendState* pBS = nullptr; // ºí·»µå »óÅÂ ¹é¾÷
+        ID3D11BlendState* pBS = nullptr; // ë¸”ë Œë“œ ìƒíƒœ ë°±ì—…
         UINT ref = 0;
         float blendFactor[4] = { 0.0f };
         UINT sampleMask = 0;
@@ -620,9 +709,9 @@ namespace Alice
         m_context->RSGetState(&pRS);
         m_context->OMGetDepthStencilState(&pDS, &ref);
         m_context->PSGetShaderResources(0, 1, &pSRV);
-        m_context->OMGetBlendState(&pBS, blendFactor, &sampleMask); // ÇöÀç ºí·»µå »óÅÂ ÀúÀå
+        m_context->OMGetBlendState(&pBS, blendFactor, &sampleMask); // í˜„ì¬ ë¸”ë Œë“œ ìƒíƒœ ì €ì¥
 
-        // IA ¹× ¼ÎÀÌ´õ ¼³Á¤
+        // IA ë° ì…°ì´ë” ì„¤ì •
         UINT stride = sizeof(SimpleVertex), offset = 0;
         ID3D11Buffer* vb = m_vertexBuffer.Get();
         m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
@@ -636,12 +725,12 @@ namespace Alice
         if (m_skyboxDepthState) m_context->OMSetDepthStencilState(m_skyboxDepthState.Get(), 0);
         if (m_skyboxRasterizerState) m_context->RSSetState(m_skyboxRasterizerState.Get());
 
-        // ½ºÄ«ÀÌ¹Ú½º´Â ¹è°æ°ú ¼¯ÀÌ¸é ¾È µÇ¹Ç·Î ºí·»µùÀ» ²ü´Ï´Ù. (Opaque)
-        // DeferredRenderSystem°ú µ¿ÀÏÇÑ m_ppBlendOpaque(Blend Disable) »ç¿ë
+        // ìŠ¤ì¹´ì´ë°•ìŠ¤ëŠ” ë°°ê²½ê³¼ ì„ì´ë©´ ì•ˆ ë˜ë¯€ë¡œ ë¸”ë Œë”©ì„ ë•ë‹ˆë‹¤. (Opaque)
+        // DeferredRenderSystemê³¼ ë™ì¼í•œ m_ppBlendOpaque(Blend Disable) ì‚¬ìš©
         float zeroFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), zeroFactor, 0xFFFFFFFF);
 
-        // Çà·Ä °è»ê (Translation Á¦°Å) ¹× CB ¾÷µ¥ÀÌÆ®
+        // í–‰ë ¬ ê³„ì‚° (Translation ì œê±°) ë° CB ì—…ë°ì´íŠ¸
         XMMATRIX view = camera.GetViewMatrix();
         view.r[3] = XMVectorSet(0.f, 0.f, 0.f, 1.f);
         XMMATRIX wvpT = XMMatrixTranspose(view * camera.GetProjectionMatrix());
@@ -650,7 +739,7 @@ namespace Alice
         const HRESULT hr = m_context->Map(m_cbSkybox.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &map);
         if (FAILED(hr))
         {
-            // ½ÇÆĞ ½Ã »óÅÂ º¹¿ø
+            // ì‹¤íŒ¨ ì‹œ ìƒíƒœ ë³µì›
             m_context->OMSetDepthStencilState(pDS, ref);
             m_context->RSSetState(pRS);
             m_context->OMSetBlendState(pBS, blendFactor, sampleMask);
@@ -664,7 +753,7 @@ namespace Alice
         memcpy(map.pData, &wvpT, sizeof(XMMATRIX));
         m_context->Unmap(m_cbSkybox.Get(), 0);
 
-        // ¸®¼Ò½º ¹ÙÀÎµù ¹× µå·Î¿ì
+        // ë¦¬ì†ŒìŠ¤ ë°”ì¸ë”© ë° ë“œë¡œìš°
         ID3D11Buffer* cb = m_cbSkybox.Get();
         ID3D11ShaderResourceView* srv = m_skyboxSRV.Get();
         ID3D11SamplerState* sam = m_samplerState.Get();
@@ -675,12 +764,12 @@ namespace Alice
 
         m_context->DrawIndexed(m_indexCount, 0, 0);
 
-        // »óÅÂ º¹¿ø ¹× ¸±¸®Áî
+        // ìƒíƒœ ë³µì› ë° ë¦´ë¦¬ì¦ˆ
         m_context->OMSetDepthStencilState(pDS, ref);
         m_context->RSSetState(pRS);
-        m_context->OMSetBlendState(pBS, blendFactor, sampleMask); // ºí·»µå »óÅÂ º¹¿ø
+        m_context->OMSetBlendState(pBS, blendFactor, sampleMask); // ë¸”ë Œë“œ ìƒíƒœ ë³µì›
         
-        // ¸®¼Ò½º ÇØÁ¦
+        // ë¦¬ì†ŒìŠ¤ í•´ì œ
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
 
@@ -700,7 +789,7 @@ namespace Alice
             return;
         }
 
-        // 1. °øÅë ÆÄÀÌÇÁ¶óÀÎ ¼³Á¤
+        // 1. ê³µí†µ íŒŒì´í”„ë¼ì¸ ì„¤ì •
         m_context->VSSetShader(m_skinnedVertexShader.Get(), nullptr, 0);
         m_context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -713,18 +802,18 @@ namespace Alice
         {
             if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
 
-            // 2. ÄÃ¸µ ¹× RS ¼³Á¤ (FBX ¿ÍÀÎµù º¸Á¤)
-            // det >= 0ÀÌ¸é µÚÁıÈ÷Áö ¾Ê¾ÒÀ¸¹Ç·Î(!flipped) -> useCWFront -> Reversed State »ç¿ë
+            // 2. ì»¬ë§ ë° RS ì„¤ì • (FBX ì™€ì¸ë”© ë³´ì •)
+            // det >= 0ì´ë©´ ë’¤ì§‘íˆì§€ ì•Šì•˜ìœ¼ë¯€ë¡œ(!flipped) -> useCWFront -> Reversed State ì‚¬ìš©
             bool isPositiveDet = XMVectorGetX(XMMatrixDeterminant(cmd.world)) >= 0.0f;
             m_context->RSSetState(isPositiveDet ? m_rasterizerStateReversed.Get() : m_rasterizerState.Get());
 
-            // 3. ¹öÆÛ ¼³Á¤
+            // 3. ë²„í¼ ì„¤ì •
             UINT stride = cmd.stride, offset = 0;
             ID3D11Buffer* vb = cmd.vertexBuffer;
             m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
             m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
-            // 4. »ó¼ö ¹öÆÛ ¾÷µ¥ÀÌÆ®
+            // 4. ìƒìˆ˜ ë²„í¼ ì—…ë°ì´íŠ¸
             UpdateBonesCB(cmd.bones, cmd.boneCount);
 
             float r = (cmd.roughness != 0.0f) ? cmd.roughness : m_lightingParameters.roughness;
@@ -732,7 +821,7 @@ namespace Alice
             UpdatePerObjectCB(cmd.world, view, proj,
                 XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr));
 
-            // 6. ¸Ş½¬/¼­ºê¼Â Á¶È¸ ¹× ·»´õ¸µ
+            // 6. ë©”ì‰¬/ì„œë¸Œì…‹ ì¡°íšŒ ë° ë Œë”ë§
             auto mesh = (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
             ID3D11ShaderResourceView* baseNormal = m_flatNormalSRV ? m_flatNormalSRV.Get() : m_normalSRV.Get();
 
@@ -782,12 +871,12 @@ namespace Alice
     {
         if (!m_sceneRTV || !m_sceneDSV) return XMMatrixIdentity();
 
-        // 1. Á¶¸í ¹æÇâ ¼³Á¤
+        // 1. ì¡°ëª… ë°©í–¥ ì„¤ì •
         XMVECTOR lightDir = XMLoadFloat3(&m_lightingParameters.keyDirection);
         if (XMVector3Equal(lightDir, XMVectorZero())) lightDir = XMVectorSet(0.5f, -1.0f, 0.5f, 0.0f);
         lightDir = XMVector3Normalize(lightDir);
 
-        // 2. ¾À ¹Ù¿îµù ¹Ú½º °è»ê (SetÀ» ÀÌ¿ëÇÑ O(1) Á¦¿Ü Ã³¸®)
+        // 2. ì”¬ ë°”ìš´ë”© ë°•ìŠ¤ ê³„ì‚° (Setì„ ì´ìš©í•œ O(1) ì œì™¸ ì²˜ë¦¬)
         XMFLOAT3 minP{ FLT_MAX, FLT_MAX, FLT_MAX };
         XMFLOAT3 maxP{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
         bool hasObjects = false;
@@ -802,57 +891,57 @@ namespace Alice
             maxP.x = (std::max)(maxP.x, tr.position.x); maxP.y = (std::max)(maxP.y, tr.position.y); maxP.z = (std::max)(maxP.z, tr.position.z);
         }
 
-        // ¿ÀºêÁ§Æ®°¡ ¾øÀ¸¸é ±âº»°ª Ã³¸®
+        // ì˜¤ë¸Œì íŠ¸ê°€ ì—†ìœ¼ë©´ ê¸°ë³¸ê°’ ì²˜ë¦¬
         if (!hasObjects)
         {
             minP = { -10.0f, -10.0f, -10.0f };
             maxP = { 10.0f, 10.0f, 10.0f };
         }
 
-        // 3. ¾ÀÀÇ Áß½É(Focus) °è»ê
+        // 3. ì”¬ì˜ ì¤‘ì‹¬(Focus) ê³„ì‚°
         XMVECTOR vMin = XMLoadFloat3(&minP);
         XMVECTOR vMax = XMLoadFloat3(&maxP);
         XMVECTOR focus = (vMin + vMax) * 0.5f;
 
-        // 4. ±×¸²ÀÚ ¹üÀ§(Radius)¸¦ ´õ Å©°Ô ¸¸µë
-        // ¾ÀÀÇ ´ë°¢¼± ±æÀÌ¸¦ ±¸ÇØ¼­ È¸ÀüÇØµµ Àß¸®Áö ¾Êµµ·Ï ÇÔ
+        // 4. ê·¸ë¦¼ì ë²”ìœ„(Radius)ë¥¼ ë” í¬ê²Œ ë§Œë“¬
+        // ì”¬ì˜ ëŒ€ê°ì„  ê¸¸ì´ë¥¼ êµ¬í•´ì„œ íšŒì „í•´ë„ ì˜ë¦¬ì§€ ì•Šë„ë¡ í•¨
         XMVECTOR diagonal = XMVector3Length(vMax - vMin);
         float sceneRadius = XMVectorGetX(diagonal) * 0.5f;
 
-        // ¼³Á¤°ª°ú °è»êµÈ ¹İÁö¸§ Áß Å« °ªÀ» »ç¿ëÇÏ°í, Ãß°¡ ¿©À¯ºĞ(Multiplier)À» ÁÜ
+        // ì„¤ì •ê°’ê³¼ ê³„ì‚°ëœ ë°˜ì§€ë¦„ ì¤‘ í° ê°’ì„ ì‚¬ìš©í•˜ê³ , ì¶”ê°€ ì—¬ìœ ë¶„(Multiplier)ì„ ì¤Œ
         float r = (std::max)(m_shadowSettings.orthoRadius, sceneRadius);
-        r *= 1.5f; // 1.5¹è ¿©À¯¸¦ µÖ¼­ °æ°è¸é ±×¸²ÀÚ Àß¸²À» ¹æÁö
+        r *= 1.5f; // 1.5ë°° ì—¬ìœ ë¥¼ ë‘¬ì„œ ê²½ê³„ë©´ ê·¸ë¦¼ì ì˜ë¦¼ì„ ë°©ì§€
 
-        // 5. ºä Çà·Ä »ı¼º (°¡»óÀÇ ±¤¿ø À§Ä¡¸¦ ¸Ö¸® ÀÌµ¿)
-        // Á¶¸íÀ» ¹İÁö¸§ÀÇ 3¹è¸¸Å­ µÚ·Î ´ç°Ü¼­, Áß½É ¾ÕÂÊÀÇ ¹°Ã¼µµ Near Plane¿¡ ¾È Àß¸®°Ô ÇÔ
+        // 5. ë·° í–‰ë ¬ ìƒì„± (ê°€ìƒì˜ ê´‘ì› ìœ„ì¹˜ë¥¼ ë©€ë¦¬ ì´ë™)
+        // ì¡°ëª…ì„ ë°˜ì§€ë¦„ì˜ 3ë°°ë§Œí¼ ë’¤ë¡œ ë‹¹ê²¨ì„œ, ì¤‘ì‹¬ ì•ìª½ì˜ ë¬¼ì²´ë„ Near Planeì— ì•ˆ ì˜ë¦¬ê²Œ í•¨
         float distFromCenter = r * 3.0f;
         XMVECTOR lightPos = focus - lightDir * distFromCenter;
 
-        // Up º¤ÅÍ º¸Á¤
+        // Up ë²¡í„° ë³´ì •
         XMVECTOR up = (fabsf(XMVectorGetX(XMVector3Dot(XMVectorSet(0, 1, 0, 0), lightDir))) > 0.99f)
             ? XMVectorSet(0, 0, 1, 0) : XMVectorSet(0, 1, 0, 0);
         XMMATRIX lightView = XMMatrixLookToLH(lightPos, lightDir, up);
 
-        // 6. Åõ¿µ Çà·Ä »ı¼º (Z ¹üÀ§ ´ëÆø È®Àå)
-        // Near´Â 0¿¡ °¡±õ°Ô, Far´Â ±¤¿ø °Å¸® + ¹İÁö¸§ µÚÂÊ±îÁö Ä¿¹ö
+        // 6. íˆ¬ì˜ í–‰ë ¬ ìƒì„± (Z ë²”ìœ„ ëŒ€í­ í™•ì¥)
+        // NearëŠ” 0ì— ê°€ê¹ê²Œ, FarëŠ” ê´‘ì› ê±°ë¦¬ + ë°˜ì§€ë¦„ ë’¤ìª½ê¹Œì§€ ì»¤ë²„
         float nearZ = 0.01f;
-        float farZ = distFromCenter + r * 2.0f; // Far PlaneÀ» ÃæºĞÈ÷ ±í°Ô ¼³Á¤
+        float farZ = distFromCenter + r * 2.0f; // Far Planeì„ ì¶©ë¶„íˆ ê¹Šê²Œ ì„¤ì •
 
         XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(-r, r, -r, r, nearZ, farZ);
 
-        // 7. ÅØ¼¿ ½º³À (Texel Snapping) - ±ôºıÀÓ ¹æÁö
+        // 7. í…ì…€ ìŠ¤ëƒ… (Texel Snapping) - ê¹œë¹¡ì„ ë°©ì§€
         XMVECTOR focusLS = XMVector3TransformCoord(focus, lightView);
         float texelWorld = (2.0f * r) / static_cast<float>(m_shadowSettings.mapSizePx);
 
         float snapX = floorf(XMVectorGetX(focusLS) / texelWorld) * texelWorld;
         float snapY = floorf(XMVectorGetY(focusLS) / texelWorld) * texelWorld;
 
-        // ½º³À Àû¿ëÀ» À§ÇØ ºä Çà·Ä ¹Ì¼¼ Á¶Á¤
+        // ìŠ¤ëƒ… ì ìš©ì„ ìœ„í•´ ë·° í–‰ë ¬ ë¯¸ì„¸ ì¡°ì •
         lightView = XMMatrixTranslation(snapX - XMVectorGetX(focusLS), snapY - XMVectorGetY(focusLS), 0.0f) * lightView;
 
         XMMATRIX lightViewProj = lightView * lightProj;
 
-        // --- ·»´õ¸µ ÆÄÀÌÇÁ¶óÀÎ ¼³Á¤ ---
+        // --- ë Œë”ë§ íŒŒì´í”„ë¼ì¸ ì„¤ì • ---
         if (m_shadowDSV)
         {
             ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
@@ -869,7 +958,7 @@ namespace Alice
 
             if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
 
-            // Á¤Àû ¸Ş½Ã ±×¸®±â
+            // ì •ì  ë©”ì‹œ ê·¸ë¦¬ê¸°
             UINT stride = sizeof(SimpleVertex), offset = 0;
             ID3D11Buffer* vb = m_vertexBuffer.Get();
             m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
@@ -882,8 +971,8 @@ namespace Alice
 
                 XMMATRIX worldM = BuildWorldMatrix(transform);
 
-                // ±×¸²ÀÚ ¸ÊÀº º¸Åë Back-Face CullingÀ» ÇÏ°Å³ª, Peter Panning ¹æÁö¸¦ À§ÇØ Front-Face CullingÀ» ÇÏ±âµµ ÇÔ
-                // ¼³Á¤¿¡ µû¶ó »óÅÂ º¯°æ
+                // ê·¸ë¦¼ì ë§µì€ ë³´í†µ Back-Face Cullingì„ í•˜ê±°ë‚˜, Peter Panning ë°©ì§€ë¥¼ ìœ„í•´ Front-Face Cullingì„ í•˜ê¸°ë„ í•¨
+                // ì„¤ì •ì— ë”°ë¼ ìƒíƒœ ë³€ê²½
                 bool flipped = XMVectorGetX(XMMatrixDeterminant(worldM)) < 0.0f;
                 if (flipped && m_shadowRasterizerStateReversed)
                     m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
@@ -895,7 +984,7 @@ namespace Alice
                 //m_context->DrawIndexed(m_indexCount, 0, 0);
             }
 
-            // ½ºÅ°´× ¸Ş½Ã ±×¸®±â
+            // ìŠ¤í‚¤ë‹ ë©”ì‹œ ê·¸ë¦¬ê¸°
             if (!skinnedCommands.empty() && m_skinnedVertexShader && m_inputLayoutSkinned)
             {
                 m_context->IASetInputLayout(m_inputLayoutSkinned.Get());
@@ -925,28 +1014,29 @@ namespace Alice
         bool enableFillLight,
         CXMMATRIX lightViewProj)
     {
-        // --- ·»´õ Å¸°Ù ¼³Á¤ ¹× Å¬¸®¾î ---
+        // --- ë Œë” íƒ€ê²Ÿ ì„¤ì • ë° í´ë¦¬ì–´ ---
         float clearColor[4] = { m_backgroundColor.x, m_backgroundColor.y, m_backgroundColor.z, m_backgroundColor.w };
 
-        // ºäÆ÷Æ® ¼³Á¤
+        // ë·°í¬íŠ¸ ì„¤ì •
         D3D11_VIEWPORT vp{};
         vp.Width = (float)m_sceneWidth; vp.Height = (float)m_sceneHeight; vp.MaxDepth = 1.0f;
         m_context->RSSetViewports(1, &vp);
 
-        // Shadow Map SRV(t4) ÇØÁ¦ (¸Å¿ì Áß¿ä: DSV Ãæµ¹ ¹æÁö)
+        // Shadow Map SRV(t4) í•´ì œ (ë§¤ìš° ì¤‘ìš”: DSV ì¶©ëŒ ë°©ì§€)
         ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
         m_context->PSSetShaderResources(4, 1, nullSRV);
 
-        // RTV/DSV ¹ÙÀÎµù ¹× Å¬¸®¾î
+        // RTV/DSV ë°”ì¸ë”© ë° í´ë¦¬ì–´
         ID3D11RenderTargetView* rtvs[] = { m_sceneRTV.Get() };
         m_context->OMSetRenderTargets(1, rtvs, m_sceneDSV.Get());
         m_context->ClearRenderTargetView(m_sceneRTV.Get(), clearColor);
         m_context->ClearDepthStencilView(m_sceneDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-        // --- Àü¿ª »óÅÂ ¹× ¸®¼Ò½º ¹ÙÀÎµù ---
+        // --- ì „ì—­ ìƒíƒœ ë° ë¦¬ì†ŒìŠ¤ ë°”ì¸ë”© ---
         XMMATRIX viewM = camera.GetViewMatrix();
         XMMATRIX projM = camera.GetProjectionMatrix();
         UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
+        UpdateExtraLightsCB(world);
 
         // IA & Shaders
         UINT stride = sizeof(SimpleVertex), offset = 0;
@@ -958,31 +1048,31 @@ namespace Alice
         m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
         m_context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
 
-        // SRV ¹ÙÀÎµù (t0 ~ t7)
+        // SRV ë°”ì¸ë”© (t0 ~ t7)
         ID3D11ShaderResourceView* srvs[8] = {
             m_diffuseSRV.Get(), m_normalSRV.Get(), m_specularSRV.Get(), m_skyboxSRV.Get(),
             m_shadowSRV.Get(),  m_iblDiffuseSRV.Get(), m_iblSpecularSRV.Get(), m_iblBrdfLutSRV.Get()
         };
         m_context->PSSetShaderResources(0, 8, srvs);
 
-        // Sampler ¹ÙÀÎµù
+        // Sampler ë°”ì¸ë”©
         ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
         m_context->PSSetSamplers(0, 1, samplers);
         ID3D11SamplerState* shadowSamplers[] = { m_shadowSampler.Get() };
         m_context->PSSetSamplers(1, 1, shadowSamplers);
-		// Blend State (¾ËÆÄ ºí·»µù)
+		// Blend State (ì•ŒíŒŒ ë¸”ë Œë”©)
         float blendFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         m_context->OMSetBlendState(m_alphaBlendState.Get(), blendFactor, 0xffffffff);
 
-        // --- Á¤Àû ¸Ş½Ã ·çÇÁ (Static Meshes) ---
+        // --- ì •ì  ë©”ì‹œ ë£¨í”„ (Static Meshes) ---
         const auto& transforms = world.GetComponents<TransformComponent>();
         for (const auto& [id, transform] : transforms)
         {
-            if (world.GetComponent<SkinnedMeshComponent>(id)) continue; // ½ºÅ°´× ¸Ş½Ã´Â Á¦¿Ü
+            if (world.GetComponent<SkinnedMeshComponent>(id)) continue; // ìŠ¤í‚¤ë‹ ë©”ì‹œëŠ” ì œì™¸
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
 
-            // Material ¼³Á¤
+            // Material ì„¤ì •
             XMFLOAT4 color = { m_lightingParameters.baseColor.x, m_lightingParameters.baseColor.y, m_lightingParameters.baseColor.z, 1.0f };
             float rough = m_lightingParameters.roughness;
             float metal = m_lightingParameters.metalness;
@@ -1030,22 +1120,22 @@ namespace Alice
                                      bool enableFillLight,
                                      const std::vector<SkinnedDrawCommand>& skinnedCommands)
     {
-        // 0. ÃÊ±âÈ­ ¹× À¯È¿¼º °Ë»ç
+        // 0. ì´ˆê¸°í™” ë° ìœ íš¨ì„± ê²€ì‚¬
         if (!IsValidPipeline()) return;
 
-        // 1. ¼¨µµ¿ì ¸Ê ÆĞ½º (Shadow Map Generation) - ¹İÈ¯°ª: Main Pass¿¡¼­ »ç¿ëÇÒ Light View-Projection Çà·Ä
+        // 1. ì„€ë„ìš° ë§µ íŒ¨ìŠ¤ (Shadow Map Generation) - ë°˜í™˜ê°’: Main Passì—ì„œ ì‚¬ìš©í•  Light View-Projection í–‰ë ¬
         XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities);
 
-        // 2. ¸ŞÀÎ ÄÃ·¯ ÆĞ½º & Á¤Àû ¸Ş½Ã ·»´õ¸µ (Main Color Pass & Static Meshes) - ¾À RTV Å¬¸®¾î, °øÅë ¸®¼Ò½º ¹ÙÀÎµù, Á¤Àû ¿ÀºêÁ§Æ® ±×¸®±â
+        // 2. ë©”ì¸ ì»¬ëŸ¬ íŒ¨ìŠ¤ & ì •ì  ë©”ì‹œ ë Œë”ë§ (Main Color Pass & Static Meshes) - ì”¬ RTV í´ë¦¬ì–´, ê³µí†µ ë¦¬ì†ŒìŠ¤ ë°”ì¸ë”©, ì •ì  ì˜¤ë¸Œì íŠ¸ ê·¸ë¦¬ê¸°
         RenderMainPass(world, camera, shadingMode, enableFillLight, lightViewProj);
 
-        // 3. ½ºÅ°´× ¸Ş½Ã ÆĞ½º (Skinned Meshes) - ÀÌ¹Ì Main Pass¿¡¼­ RTV°¡ ¼³Á¤µÇ¾î ÀÖÀ¸¹Ç·Î ¹Ù·Î ±×¸³´Ï´Ù.
+        // 3. ìŠ¤í‚¤ë‹ ë©”ì‹œ íŒ¨ìŠ¤ (Skinned Meshes) - ì´ë¯¸ Main Passì—ì„œ RTVê°€ ì„¤ì •ë˜ì–´ ìˆìœ¼ë¯€ë¡œ ë°”ë¡œ ê·¸ë¦½ë‹ˆë‹¤.
         if (!skinnedCommands.empty()) RenderSkinnedMeshes(camera, skinnedCommands);
 
-        // 4. ½ºÄ«ÀÌ¹Ú½º ·»´õ¸µ (Skybox)
+        // 4. ìŠ¤ì¹´ì´ë°•ìŠ¤ ë Œë”ë§ (Skybox)
         RenderSkybox(camera);
 
-        // 5. ¿¡µğÅÍ ºäÆ÷Æ® Ç¥½Ã¿ë LDR ÅØ½ºÃ³·Î Åæ¸ÅÇÎ (ImGui::Image¿¡¼­ »ç¿ë)
+        // 5. ì—ë””í„° ë·°í¬íŠ¸ í‘œì‹œìš© LDR í…ìŠ¤ì²˜ë¡œ í†¤ë§¤í•‘ (ImGui::Imageì—ì„œ ì‚¬ìš©)
         if (m_viewportRTV)
         {
             D3D11_VIEWPORT viewport = {};
@@ -1055,7 +1145,7 @@ namespace Alice
             RenderToneMapping(m_viewportRTV.Get(), viewport);
         }
 
-        // 6. ÃÖÁ¾ ¹é¹öÆÛ º¹±Í (ImGui µî UI ·»´õ¸µÀ» À§ÇØ)
+        // 6. ìµœì¢… ë°±ë²„í¼ ë³µê·€ (ImGui ë“± UI ë Œë”ë§ì„ ìœ„í•´)
         RestoreBackBuffer();
     }
 
@@ -1063,7 +1153,7 @@ namespace Alice
     {
         ComPtr<ID3DBlob> vsBlob, psBlob, errorBlob;
 
-        // Quad Vertex Shader ÄÄÆÄÀÏ
+        // Quad Vertex Shader ì»´íŒŒì¼
         if (FAILED(D3DCompile(CommonShaderCode::QuadVS, strlen(CommonShaderCode::QuadVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
         {
             if (errorBlob)
@@ -1089,13 +1179,13 @@ namespace Alice
             return false;
         }
 
-        // HDR Áö¿ø ¿©ºÎ È®ÀÎ ¹× ÀûÀıÇÑ ¼ÎÀÌ´õ ¼±ÅÃ
+        // HDR ì§€ì› ì—¬ë¶€ í™•ì¸ ë° ì ì ˆí•œ ì…°ì´ë” ì„ íƒ
         float maxNits = 100.0f;
         bool isHDRSupported = m_renderDevice.IsHDRSupported(maxNits);
         const char* toneMappingShaderSource = isHDRSupported ? CommonShaderCode::ToneMappingPS_HDR : CommonShaderCode::ToneMappingPS_LDR;
         const char* shaderName = isHDRSupported ? "HDR" : "LDR";
 
-        // Tone Mapping Pixel Shader ÄÄÆÄÀÏ
+        // Tone Mapping Pixel Shader ì»´íŒŒì¼
         psBlob.Reset();
         errorBlob.Reset();
         if (FAILED(D3DCompile(toneMappingShaderSource, strlen(toneMappingShaderSource), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
@@ -1114,14 +1204,14 @@ namespace Alice
 
         if (isHDRSupported)
         {
-            ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: HDR Åæ¸ÅÇÎ ¼ÎÀÌ´õ »ç¿ë. MaxNits: %.1f", maxNits);
+            ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: HDR í†¤ë§¤í•‘ ì…°ì´ë” ì‚¬ìš©. MaxNits: %.1f", maxNits);
         }
         else
         {
-            ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: LDR Åæ¸ÅÇÎ ¼ÎÀÌ´õ »ç¿ë.");
+            ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: LDR í†¤ë§¤í•‘ ì…°ì´ë” ì‚¬ìš©.");
         }
 
-        // Åæ¸ÅÇÎ Àü¿ë »óÅÂ °´Ã¼ »ı¼º (Blend OFF, Depth OFF, Cull OFF)
+        // í†¤ë§¤í•‘ ì „ìš© ìƒíƒœ ê°ì²´ ìƒì„± (Blend OFF, Depth OFF, Cull OFF)
         // Depth OFF
         {
             D3D11_DEPTH_STENCIL_DESC ds = {};
@@ -1165,7 +1255,7 @@ namespace Alice
             }
         }
 
-        // Quad Áö¿À¸ŞÆ®¸® »ı¼º
+        // Quad ì§€ì˜¤ë©”íŠ¸ë¦¬ ìƒì„±
         struct QuadVertex
         {
             DirectX::XMFLOAT3 position;
@@ -1215,13 +1305,13 @@ namespace Alice
     {
         if (!m_toneMappingPS || !m_quadVS || !m_sceneSRV || !targetRTV) return;
 
-        // ºäÆ÷Æ® ¼³Á¤
+        // ë·°í¬íŠ¸ ì„¤ì •
         m_context->RSSetViewports(1, &viewport);
 
-        // ·»´õ Å¸°Ù ¼³Á¤
+        // ë Œë” íƒ€ê²Ÿ ì„¤ì •
         m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
 
-        // »óÅÂ Á¤¸® (Áß¿ä: ÀÌÀü ÆĞ½ºÀÇ »óÅÂ°¡ ³²¾ÆÀÖÀ¸¸é ÈÄÃ³¸®°¡ ¿À¿°µÊ)
+        // ìƒíƒœ ì •ë¦¬ (ì¤‘ìš”: ì´ì „ íŒ¨ìŠ¤ì˜ ìƒíƒœê°€ ë‚¨ì•„ìˆìœ¼ë©´ í›„ì²˜ë¦¬ê°€ ì˜¤ì—¼ë¨)
         float blendFactor[4] = { 0, 0, 0, 0 };
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
         m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
@@ -1237,16 +1327,16 @@ namespace Alice
             m_context->Unmap(m_cbPostProcess.Get(), 0);
         }
 
-        // ¸®¼Ò½º ¹ÙÀÎµù
+        // ë¦¬ì†ŒìŠ¤ ë°”ì¸ë”©
         ID3D11ShaderResourceView* srv = m_sceneSRV.Get();
         ID3D11SamplerState* sampler = m_samplerLinear.Get();
         ID3D11Buffer* cb = m_cbPostProcess.Get();
 
         m_context->PSSetShaderResources(0, 1, &srv);
         m_context->PSSetSamplers(0, 1, &sampler);
-        m_context->PSSetConstantBuffers(2, 1, &cb); // register(b2)¿¡ ¸ÂÃç ½½·Ô 2 »ç¿ë
+        m_context->PSSetConstantBuffers(2, 1, &cb); // register(b2)ì— ë§ì¶° ìŠ¬ë¡¯ 2 ì‚¬ìš©
 
-        // Quad ±×¸®±â (VB ¹ÙÀÎµùÀº ·ÎÄÃ º¯¼ö·Î ¾ÈÀüÇÏ°Ô)
+        // Quad ê·¸ë¦¬ê¸° (VB ë°”ì¸ë”©ì€ ë¡œì»¬ ë³€ìˆ˜ë¡œ ì•ˆì „í•˜ê²Œ)
         UINT stride = m_quadStride, offset = m_quadOffset;
         ID3D11Buffer* vb = m_quadVB.Get();
 
@@ -1259,7 +1349,7 @@ namespace Alice
         m_context->PSSetShader(m_toneMappingPS.Get(), nullptr, 0);
         m_context->DrawIndexed(m_quadIndexCount, 0, 0);
 
-        // ¸®¼Ò½º ÇØÁ¦
+        // ë¦¬ì†ŒìŠ¤ í•´ì œ
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
     }
@@ -1268,10 +1358,10 @@ namespace Alice
     {
         outExposure = m_postProcessParams.exposure;
         
-        // RenderDevice¿¡¼­ HDR Áö¿ø ¿©ºÎ ¹× ÃÖ´ë ¹à±â °¡Á®¿À±â
+        // RenderDeviceì—ì„œ HDR ì§€ì› ì—¬ë¶€ ë° ìµœëŒ€ ë°ê¸° ê°€ì ¸ì˜¤ê¸°
         float maxNits = 100.0f;
         m_renderDevice.IsHDRSupported(maxNits);
-        // »ç¿ëÀÚ°¡ ¼³Á¤ÇÑ °ªÀÌ ÀÖÀ¸¸é »ç¿ë, ¾øÀ¸¸é ¸ğ´ÏÅÍ ÃÖ´ë ¹à±â »ç¿ë
+        // ì‚¬ìš©ìê°€ ì„¤ì •í•œ ê°’ì´ ìˆìœ¼ë©´ ì‚¬ìš©, ì—†ìœ¼ë©´ ëª¨ë‹ˆí„° ìµœëŒ€ ë°ê¸° ì‚¬ìš©
         outMaxHDRNits = (m_postProcessParams.maxHDRNits > 0.0f) ? m_postProcessParams.maxHDRNits : maxNits;
     }
 

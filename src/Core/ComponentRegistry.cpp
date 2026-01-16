@@ -10,20 +10,20 @@ using namespace DirectX;
 namespace Alice
 {
 	void LinkComponentRegistry() {
-        ALICE_LOG_INFO("[¸®ÇÃ·º¼Ç] rttr Success");
+        ALICE_LOG_INFO("[ë¦¬í”Œë ‰ì…˜] rttr Success");
     }
 
     RTTR_REGISTRATION
     {
-        // === DirectX Å¸ÀÔ µî·Ï ===
+        // === DirectX íƒ€ì… ë“±ë¡ ===
         rttr::registration::class_<XMFLOAT3>("XMFLOAT3")
             .constructor<>()
             .property("x", &XMFLOAT3::x)
             .property("y", &XMFLOAT3::y)
             .property("z", &XMFLOAT3::z);
 
-        // XMFLOAT4X4´Â 4x4 Çà·ÄÀ» ³ªÅ¸³»´Â Å¸ÀÔ
-        // ·»´õ¸µÇÒ ¶§ 4x4 Çà·ÄÀ» ·»´õ¸µÇÏ±â À§ÇØ µî·Ï
+        // XMFLOAT4X4ëŠ” 4x4 í–‰ë ¬ì„ ë‚˜íƒ€ë‚´ëŠ” íƒ€ì…
+        // ë Œë”ë§í•  ë•Œ 4x4 í–‰ë ¬ì„ ë Œë”ë§í•˜ê¸° ìœ„í•´ ë“±ë¡
         rttr::registration::class_<XMFLOAT4X4>("XMFLOAT4X4")
             .constructor<>()
             .property("_11", &XMFLOAT4X4::_11)
@@ -43,14 +43,14 @@ namespace Alice
             .property("_43", &XMFLOAT4X4::_43)
             .property("_44", &XMFLOAT4X4::_44);
 
-        // === TransformComponent µî·Ï ===
+        // === TransformComponent ë“±ë¡ ===
         rttr::registration::class_<TransformComponent>("TransformComponent")
             .constructor<>()
             .property("position", &TransformComponent::position)
             .property("rotation", &TransformComponent::rotation)
             .property("scale", &TransformComponent::scale);
 
-        // === MaterialComponent µî·Ï ===
+        // === MaterialComponent ë“±ë¡ ===
         rttr::registration::class_<MaterialComponent>("MaterialComponent")
             .constructor<>()
             .property("color", &MaterialComponent::color)
@@ -59,15 +59,15 @@ namespace Alice
             .property("assetPath", &MaterialComponent::assetPath)
             .property("albedoTexturePath", &MaterialComponent::albedoTexturePath);
 
-        // === SkinnedMeshComponent µî·Ï ===
-        // boneMatrices´Â »À Çà·ÄÀ» ³ªÅ¸³»´Â ÇÁ·ÎÆÛÆ¼
+        // === SkinnedMeshComponent ë“±ë¡ ===
+        // boneMatricesëŠ” ë¼ˆ í–‰ë ¬ì„ ë‚˜íƒ€ë‚´ëŠ” í”„ë¡œí¼í‹°
         rttr::registration::class_<SkinnedMeshComponent>("SkinnedMeshComponent")
             .constructor<>()
             .property("meshAssetPath", &SkinnedMeshComponent::meshAssetPath)
             .property("instanceAssetPath", &SkinnedMeshComponent::instanceAssetPath)
             .property("boneCount", &SkinnedMeshComponent::boneCount);
 
-        // === SkinnedAnimationComponent µî·Ï ===
+        // === SkinnedAnimationComponent ë“±ë¡ ===
         rttr::registration::class_<SkinnedAnimationComponent>("SkinnedAnimationComponent")
             .constructor<>()
             .property("clipIndex", &SkinnedAnimationComponent::clipIndex)
@@ -75,15 +75,43 @@ namespace Alice
             .property("speed", &SkinnedAnimationComponent::speed)
             .property("timeSec", &SkinnedAnimationComponent::timeSec);
         
-        // palette´Â ÆÈ·¹Æ®¸¦ ³ªÅ¸³»´Â ÇÁ·ÎÆÛÆ¼
+        // paletteëŠ” íŒ”ë ˆíŠ¸ë¥¼ ë‚˜íƒ€ë‚´ëŠ” í”„ë¡œí¼í‹°
 
-        // === CameraComponent µî·Ï ===
+        // === CameraComponent ë“±ë¡ ===
         rttr::registration::class_<CameraComponent>("CameraComponent")
             .constructor<>()
             .property("primary", &CameraComponent::primary)
             .property("fovYRad", &CameraComponent::fovYRad)
             .property("nearPlane", &CameraComponent::nearPlane)
             .property("farPlane", &CameraComponent::farPlane);
+
+        // === PointLightComponent ë“±ë¡ ===
+        rttr::registration::class_<PointLightComponent>("PointLightComponent")
+            .constructor<>()
+            .property("color", &PointLightComponent::color)
+            .property("intensity", &PointLightComponent::intensity)
+            .property("range", &PointLightComponent::range)
+            .property("enabled", &PointLightComponent::enabled);
+
+        // === SpotLightComponent ë“±ë¡ ===
+        rttr::registration::class_<SpotLightComponent>("SpotLightComponent")
+            .constructor<>()
+            .property("color", &SpotLightComponent::color)
+            .property("intensity", &SpotLightComponent::intensity)
+            .property("range", &SpotLightComponent::range)
+            .property("innerAngleDeg", &SpotLightComponent::innerAngleDeg)
+            .property("outerAngleDeg", &SpotLightComponent::outerAngleDeg)
+            .property("enabled", &SpotLightComponent::enabled);
+
+        // === RectLightComponent ë“±ë¡ ===
+        rttr::registration::class_<RectLightComponent>("RectLightComponent")
+            .constructor<>()
+            .property("color", &RectLightComponent::color)
+            .property("intensity", &RectLightComponent::intensity)
+            .property("width", &RectLightComponent::width)
+            .property("height", &RectLightComponent::height)
+            .property("range", &RectLightComponent::range)
+            .property("enabled", &RectLightComponent::enabled);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

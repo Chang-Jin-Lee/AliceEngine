@@ -1,6 +1,6 @@
 #pragma once
 
-// Windows.hÀÇ min/max ¸ÅÅ©·Î Ãæµ¹ ¹æÁö (RTTR Çì´õ¿ÍÀÇ Ãæµ¹ ¹æÁö)
+// Windows.hì˜ min/max ë§¤í¬ë¡œ ì¶©ëŒ ë°©ì§€ (RTTR í—¤ë”ì™€ì˜ ì¶©ëŒ ë°©ì§€)
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -26,28 +26,28 @@ namespace Alice
     class SkinnedMeshRegistry;
     class DeferredRenderSystem;
 
-    /// ImGui ÄÁÅØ½ºÆ® ¼ö¸í°ú ±âº» ¿¡µğÅÍ À¯Æ¿(µµÅ·, µğ·ºÅÍ¸® ºä, ¿¡µğÅÍ ÆĞ³Î µî)À» °ü¸®ÇÏ´Â
-    /// °£´ÜÇÑ ÄÚ¾î Å¬·¡½ºÀÔ´Ï´Ù.
+    /// ImGui ì»¨í…ìŠ¤íŠ¸ ìˆ˜ëª…ê³¼ ê¸°ë³¸ ì—ë””í„° ìœ í‹¸(ë„í‚¹, ë””ë ‰í„°ë¦¬ ë·°, ì—ë””í„° íŒ¨ë„ ë“±)ì„ ê´€ë¦¬í•˜ëŠ”
+    /// ê°„ë‹¨í•œ ì½”ì–´ í´ë˜ìŠ¤ì…ë‹ˆë‹¤.
     class EditorCore
     {
     public:
         EditorCore() = default;
         ~EditorCore();
 
-        /// ImGui ÄÁÅØ½ºÆ®¿Í ¹é¿£µå(Win32 + DX11)¸¦ ÃÊ±âÈ­ÇÕ´Ï´Ù.
+        /// ImGui ì»¨í…ìŠ¤íŠ¸ì™€ ë°±ì—”ë“œ(Win32 + DX11)ë¥¼ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
         bool Initialize(HWND hwnd, ID3D11RenderDevice& renderDevice);
 
-        /// ImGui ¸®¼Ò½º¸¦ Á¤¸®ÇÕ´Ï´Ù.
+        /// ImGui ë¦¬ì†ŒìŠ¤ë¥¼ ì •ë¦¬í•©ë‹ˆë‹¤.
         void Shutdown();
 
-        /// »õ ImGui ÇÁ·¹ÀÓÀ» ½ÃÀÛÇÕ´Ï´Ù.
+        /// ìƒˆ ImGui í”„ë ˆì„ì„ ì‹œì‘í•©ë‹ˆë‹¤.
         void BeginFrame();
 
-        /// ImGui µå·Î¿ì µ¥ÀÌÅÍ¸¦ ·»´õ¸µÇÕ´Ï´Ù.
+        /// ImGui ë“œë¡œìš° ë°ì´í„°ë¥¼ ë Œë”ë§í•©ë‹ˆë‹¤.
         void RenderDrawData();
 
-        /// ¿¡µğÅÍ ÀüÃ¼ UI(Hierarchy, Inspector, Game, Project µî)¸¦ ±×¸³´Ï´Ù.
-        /// - »óÅÂ°ª(Àç»ı ¿©ºÎ, ¼ÎÀÌµù ¸ğµå, ¼±ÅÃµÈ ¿£Æ¼Æ¼ µî)Àº ÂüÁ¶·Î ¹Ş¾Æ Á÷Á¢ °»½ÅÇÕ´Ï´Ù.
+        /// ì—ë””í„° ì „ì²´ UI(Hierarchy, Inspector, Game, Project ë“±)ë¥¼ ê·¸ë¦½ë‹ˆë‹¤.
+        /// - ìƒíƒœê°’(ì¬ìƒ ì—¬ë¶€, ì…°ì´ë”© ëª¨ë“œ, ì„ íƒëœ ì—”í‹°í‹° ë“±)ì€ ì°¸ì¡°ë¡œ ë°›ì•„ ì§ì ‘ ê°±ì‹ í•©ë‹ˆë‹¤.
         void DrawEditorUI(World& world,
                           Camera& camera,
                           ForwardRenderSystem& forward,
@@ -66,8 +66,11 @@ namespace Alice
         void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
         void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
         void DrawInspectorMaterial(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
 
-        /// ÇÁ·ÎÁ§Æ® ºä¿¡¼­ »ç¿ëÇÒ °£´ÜÇÑ µğ·ºÅÍ¸® Æ®¸® ±×¸®±â ÇÔ¼öÀÔ´Ï´Ù.
+        /// í”„ë¡œì íŠ¸ ë·°ì—ì„œ ì‚¬ìš©í•  ê°„ë‹¨í•œ ë””ë ‰í„°ë¦¬ íŠ¸ë¦¬ ê·¸ë¦¬ê¸° í•¨ìˆ˜ì…ë‹ˆë‹¤.
         void DrawDirectoryNode(World& world,
                                EntityId& selectedEntity,
                                const std::filesystem::path& path);
@@ -78,9 +81,9 @@ namespace Alice
         void SetInputSystem(InputSystem* inputSystem) { m_inputSystem = inputSystem; }
 
     private:
-        /// ¾ÀÀ» ·ÎµåÇÑ µÚ, World ¿¡ Á¸ÀçÇÏ´Â SkinnedMeshComponent µéÀÌ
-        /// SkinnedMeshRegistry ¿¡µµ µî·ÏµÇ¾î ÀÖ´ÂÁö È®ÀÎÇÏ°í,
-        /// ´©¶ôµÈ °æ¿ì .fbxasset / FBX ¿øº»À» ÅëÇØ °£´ÜÈ÷ Àç-ÀÓÆ÷Æ®ÇÕ´Ï´Ù.
+        /// ì”¬ì„ ë¡œë“œí•œ ë’¤, World ì— ì¡´ì¬í•˜ëŠ” SkinnedMeshComponent ë“¤ì´
+        /// SkinnedMeshRegistry ì—ë„ ë“±ë¡ë˜ì–´ ìˆëŠ”ì§€ í™•ì¸í•˜ê³ ,
+        /// ëˆ„ë½ëœ ê²½ìš° .fbxasset / FBX ì›ë³¸ì„ í†µí•´ ê°„ë‹¨íˆ ì¬-ì„í¬íŠ¸í•©ë‹ˆë‹¤.
         void EnsureSkinnedMeshesRegistered(World& world);
         void SaveScene(World& );
         void LoadScene(World& );
