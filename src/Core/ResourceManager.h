@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <filesystem>
 #include <string_view>
@@ -9,97 +9,97 @@
 #include <memory>
 #include <wrl/client.h>
 
-// D3D11 Å¸ÀÔ Àü¹æ ¼±¾ğ (Çì´õ¿¡ d3d11.h Æ÷ÇÔ ¹æÁö)
+// D3D11 íƒ€ì… ì „ë°© ì„ ì–¸ (í—¤ë”ì— d3d11.h í¬í•¨ ë°©ì§€)
 struct ID3D11Device;
 struct ID3D11ShaderResourceView;
 
 namespace Alice
 {
-    // [ÅÛÇÃ¸´ È®ÀåÀ» À§ÇÑ ·Î´õ ±¸Á¶Ã¼ ¼±¾ğ]
-    // ÀÌ ±¸Á¶Ã¼¸¦ Æ¯¼öÈ­ÇÏ¿© Å¸ÀÔº° ·Îµù Àü·«À» Á¤ÀÇÇÕ´Ï´Ù.
+    // [í…œí”Œë¦¿ í™•ì¥ì„ ìœ„í•œ ë¡œë” êµ¬ì¡°ì²´ ì„ ì–¸]
+    // ì´ êµ¬ì¡°ì²´ë¥¼ íŠ¹ìˆ˜í™”í•˜ì—¬ íƒ€ì…ë³„ ë¡œë”© ì „ëµì„ ì •ì˜í•©ë‹ˆë‹¤.
     template <typename T>
     struct ResourceLoader;
 
-    /// - ÀÌÈÄ ÅØ½ºÃ³/¸Ş½Ã/¼ÎÀÌ´õ µîÀ» Ä³½Ì/½ºÆ®¸®¹ÖÇÏ´Â ÂÊÀ¸·Î È®ÀåÇÒ ¼ö ÀÖ½À´Ï´Ù.
-    /// - ÇöÀç´Â "¾ÏÈ£È­/º¹È£È­µÈ ¹ÙÀÌ³Ê¸® ÆÄÀÏ ÀÔÃâ·Â" ¸¸ ´ã´çÇÕ´Ï´Ù.
+    /// - ì´í›„ í…ìŠ¤ì²˜/ë©”ì‹œ/ì…°ì´ë” ë“±ì„ ìºì‹±/ìŠ¤íŠ¸ë¦¬ë°í•˜ëŠ” ìª½ìœ¼ë¡œ í™•ì¥í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
+    /// - í˜„ì¬ëŠ” "ì•”í˜¸í™”/ë³µí˜¸í™”ëœ ë°”ì´ë„ˆë¦¬ íŒŒì¼ ì…ì¶œë ¥" ë§Œ ë‹´ë‹¹í•©ë‹ˆë‹¤.
     class ResourceManager
     {
     public:
         ResourceManager()  = default;
         ~ResourceManager() = default;
 
-        /// GameMode(¹èÆ÷¿ë ½ÇÇà)ÀÎÁö ¿©ºÎ¿¡ µû¶ó, Assets/Resource/Cooked ·çÆ® ÇØ¼® ±âÁØÀ» ¼³Á¤ÇÕ´Ï´Ù.
-        /// - editorMode(false): ÇÁ·ÎÁ§Æ® ·çÆ®(= exeDir ±âÁØ 3´Ü°è »óÀ§)¸¦ ±âÁØÀ¸·Î Assets/Resource/Cooked ¸¦ Ã£½À´Ï´Ù.
-        /// - gameMode(true)   : exeDir(= ½ÇÇà ÆÄÀÏ Æú´õ) ±âÁØÀ¸·Î Assets/Resource/Cooked ¸¦ Ã£½À´Ï´Ù.
+        /// GameMode(ë°°í¬ìš© ì‹¤í–‰)ì¸ì§€ ì—¬ë¶€ì— ë”°ë¼, Assets/Resource/Cooked ë£¨íŠ¸ í•´ì„ ê¸°ì¤€ì„ ì„¤ì •í•©ë‹ˆë‹¤.
+        /// - editorMode(false): í”„ë¡œì íŠ¸ ë£¨íŠ¸(= exeDir ê¸°ì¤€ 3ë‹¨ê³„ ìƒìœ„)ë¥¼ ê¸°ì¤€ìœ¼ë¡œ Assets/Resource/Cooked ë¥¼ ì°¾ìŠµë‹ˆë‹¤.
+        /// - gameMode(true)   : exeDir(= ì‹¤í–‰ íŒŒì¼ í´ë”) ê¸°ì¤€ìœ¼ë¡œ Assets/Resource/Cooked ë¥¼ ì°¾ìŠµë‹ˆë‹¤.
         ///
-        /// »ç¿ë ¿¹:
+        /// ì‚¬ìš© ì˜ˆ:
         ///   resources.Configure(/*gameMode=*/!m_editorMode, exeDir);
         void Configure(bool gameMode, const std::filesystem::path& exeDir);
 
-        /// ³í¸® °æ·Î("Assets/..", "Resource/..", "Cooked/..")¸¦ ½ÇÁ¦ °æ·Î·Î º¯È¯ÇÕ´Ï´Ù.
-        /// - "../Assets/..." °°Àº ·¹°Å½Ã °æ·Îµµ ÀÚµ¿À¸·Î "Assets/..." ·Î Á¤±ÔÈ­ÇØ¼­ Ã³¸®ÇÕ´Ï´Ù.
+        /// ë…¼ë¦¬ ê²½ë¡œ("Assets/..", "Resource/..", "Cooked/..")ë¥¼ ì‹¤ì œ ê²½ë¡œë¡œ ë³€í™˜í•©ë‹ˆë‹¤.
+        /// - "../Assets/..." ê°™ì€ ë ˆê±°ì‹œ ê²½ë¡œë„ ìë™ìœ¼ë¡œ "Assets/..." ë¡œ ì •ê·œí™”í•´ì„œ ì²˜ë¦¬í•©ë‹ˆë‹¤.
         std::filesystem::path Resolve(const std::filesystem::path& logicalOrRelative) const;
 
-        /// ·çÆ® µğ·ºÅÍ¸®µé(µğ¹ö±×/·Î±×/Åø¿¡¼­ »ç¿ë)
+        /// ë£¨íŠ¸ ë””ë ‰í„°ë¦¬ë“¤(ë””ë²„ê·¸/ë¡œê·¸/íˆ´ì—ì„œ ì‚¬ìš©)
         const std::filesystem::path& RootDir()   const { return m_rootDir; }
         std::filesystem::path        AssetsDir() const { return m_rootDir / "Assets"; }
         std::filesystem::path        MetasDir() const { return m_rootDir / "Metas"; }
         std::filesystem::path        ResourceDir() const { return m_rootDir / "Resource"; }
         std::filesystem::path        CookedDir() const { return m_rootDir / "Cooked"; }
 
-        /// º¸°ü ÁßÀÎ ¸®¼Ò½º¸¦ ¸ğµÎ Á¤¸®ÇÕ´Ï´Ù.
+        /// ë³´ê´€ ì¤‘ì¸ ë¦¬ì†ŒìŠ¤ë¥¼ ëª¨ë‘ ì •ë¦¬í•©ë‹ˆë‹¤.
         void Clear();
 
-        /// ¹ÙÀÌ³Ê¸® ÆÄÀÏÀ» ÀĞ¾î¿É´Ï´Ù.
-        /// - encrypted °¡ true ÀÌ¸é, °£´ÜÇÑ XOR ±â¹İ º¹È£È­¸¦ ¼öÇàÇÕ´Ï´Ù.
+        /// ë°”ì´ë„ˆë¦¬ íŒŒì¼ì„ ì½ì–´ì˜µë‹ˆë‹¤.
+        /// - encrypted ê°€ true ì´ë©´, ê°„ë‹¨í•œ XOR ê¸°ë°˜ ë³µí˜¸í™”ë¥¼ ìˆ˜í–‰í•©ë‹ˆë‹¤.
         bool LoadBinary(const std::filesystem::path& path,
                         std::vector<std::uint8_t>& outData,
                         bool encrypted) const;
 
-        /// "³í¸® °æ·Î"¸¦ ¹Ş¾Æ¼­ ÀÚµ¿À¸·Î ·ÎµåÇÕ´Ï´Ù.
-        /// - gameMode ¿¡¼­´Â Cooked ÂÊ(¾ÏÈ£È­)À» ¿ì¼± »ç¿ëÇÕ´Ï´Ù.
-        /// - editorMode ¿¡¼­´Â ¿øº»(Resource/Assets) ÆÄÀÏÀ» ¿ì¼± »ç¿ëÇÕ´Ï´Ù.
+        /// "ë…¼ë¦¬ ê²½ë¡œ"ë¥¼ ë°›ì•„ì„œ ìë™ìœ¼ë¡œ ë¡œë“œí•©ë‹ˆë‹¤.
+        /// - gameMode ì—ì„œëŠ” Cooked ìª½(ì•”í˜¸í™”)ì„ ìš°ì„  ì‚¬ìš©í•©ë‹ˆë‹¤.
+        /// - editorMode ì—ì„œëŠ” ì›ë³¸(Resource/Assets) íŒŒì¼ì„ ìš°ì„  ì‚¬ìš©í•©ë‹ˆë‹¤.
         bool LoadBinaryAuto(const std::filesystem::path& logicalPath,
                             std::vector<std::uint8_t>& outData) const;
 
-        /// LoadBinaryAutoÀÇ shared_ptr ¹öÀü (³»ºÎ Ä³½Ã »ç¿ë)
+        /// LoadBinaryAutoì˜ shared_ptr ë²„ì „ (ë‚´ë¶€ ìºì‹œ ì‚¬ìš©)
         std::shared_ptr<const std::vector<std::uint8_t>> LoadSharedBinaryAuto(const std::filesystem::path& logicalPath) const;
 
-        /// ¿øº» ÆÄÀÏÀ» ÀĞ¾î °£´ÜÈ÷ ¾ÏÈ£È­ÇØ¼­ ´ë»ó °æ·Î¿¡ ÀúÀåÇÕ´Ï´Ù.
-        /// - "ÄíÅ·(cooking)" ¿ëµµ·Î »ç¿ëÇÕ´Ï´Ù.
+        /// ì›ë³¸ íŒŒì¼ì„ ì½ì–´ ê°„ë‹¨íˆ ì•”í˜¸í™”í•´ì„œ ëŒ€ìƒ ê²½ë¡œì— ì €ì¥í•©ë‹ˆë‹¤.
+        /// - "ì¿ í‚¹(cooking)" ìš©ë„ë¡œ ì‚¬ìš©í•©ë‹ˆë‹¤.
         bool CookAndSave(const std::filesystem::path& srcPath,
                          const std::filesystem::path& cookedPath) const;
 
-        /// ¸Ş¸ğ¸®(Æò¹®) ¹ÙÀÌÆ®¸¦ ¹Ù·Î ¾ÏÈ£È­ÇØ¼­ ÀúÀåÇÕ´Ï´Ù. (ÀÓ½Ã Æò¹® ÆÄÀÏ »ı¼º ±İÁö¿ë)
+        /// ë©”ëª¨ë¦¬(í‰ë¬¸) ë°”ì´íŠ¸ë¥¼ ë°”ë¡œ ì•”í˜¸í™”í•´ì„œ ì €ì¥í•©ë‹ˆë‹¤. (ì„ì‹œ í‰ë¬¸ íŒŒì¼ ìƒì„± ê¸ˆì§€ìš©)
         bool CookAndSaveBytes(const std::vector<std::uint8_t>& plainBytes,
                               const std::filesystem::path& cookedPath) const;
 
-        /// µğ·ºÅÍ¸® ÀüÃ¼¸¦ ¾ÏÈ£È­ Cooked ·Î ³»º¸³À´Ï´Ù.
-        /// - srcDir ÇÏÀ§ÀÇ ÆÄÀÏµéÀ» dstDir ÇÏÀ§¿¡ µ¿ÀÏÇÑ »ó´ë °æ·Î·Î ÀúÀåÇÕ´Ï´Ù.
+        /// ë””ë ‰í„°ë¦¬ ì „ì²´ë¥¼ ì•”í˜¸í™” Cooked ë¡œ ë‚´ë³´ëƒ…ë‹ˆë‹¤.
+        /// - srcDir í•˜ìœ„ì˜ íŒŒì¼ë“¤ì„ dstDir í•˜ìœ„ì— ë™ì¼í•œ ìƒëŒ€ ê²½ë¡œë¡œ ì €ì¥í•©ë‹ˆë‹¤.
         bool CookDirectoryRecursive(const std::filesystem::path& srcDir,
                                     const std::filesystem::path& dstDir) const;
 
-        /// Resource Æú´õ¸¦ "Æú´õ±¸Á¶¸¦ ¼û±ä Ã»Å© ÆÄÀÏµé"·Î Cooked/Chunks ¾Æ·¡¿¡ ÆĞÅ·ÇÕ´Ï´Ù.
-        /// - ÀÔ·Â: Resource/<rel>
-        /// - Ãâ·Â: Cooked/Chunks/<hash>/c0000.alice, c0001.alice...
+        /// Resource í´ë”ë¥¼ "í´ë”êµ¬ì¡°ë¥¼ ìˆ¨ê¸´ ì²­í¬ íŒŒì¼ë“¤"ë¡œ Cooked/Chunks ì•„ë˜ì— íŒ¨í‚¹í•©ë‹ˆë‹¤.
+        /// - ì…ë ¥: Resource/<rel>
+        /// - ì¶œë ¥: Cooked/Chunks/<hash>/c0000.alice, c0001.alice...
         bool CookResourceToChunkStore(const std::filesystem::path& resourceDirAbs,
                                       const std::filesystem::path& cookedDirAbs,
                                       std::size_t chunkBytes = 256 * 1024) const;
 
         /// -----------------------------------------------------------------------
-        /// [ÅÛÇÃ¸´ ·Îµå ÇÔ¼ö]
-        /// »ç¿ë¹ı: auto srv = mgr.LoadData<ID3D11ShaderResourceView>("Path", device);
+        /// [í…œí”Œë¦¿ ë¡œë“œ í•¨ìˆ˜]
+        /// ì‚¬ìš©ë²•: auto srv = mgr.LoadData<ID3D11ShaderResourceView>("Path", device);
         /// -----------------------------------------------------------------------
         template <typename T, typename... Args>
         auto LoadData(const std::filesystem::path& logicalPath, Args&&... args) const
         {
-            // ÄÄÆÄÀÏ·¯´Â ResourceLoader<T>ÀÇ ¼±¾ğÀ» º¸°í ¹İÈ¯ Å¸ÀÔÀ» Ãß·ĞÇÕ´Ï´Ù.
-            // ±¸ÇöÀº cpp¿¡ ÀÖ¾îµµ ¸µÅ· ½ÃÁ¡¿¡ ÇØ°áµË´Ï´Ù.
+            // ì»´íŒŒì¼ëŸ¬ëŠ” ResourceLoader<T>ì˜ ì„ ì–¸ì„ ë³´ê³  ë°˜í™˜ íƒ€ì…ì„ ì¶”ë¡ í•©ë‹ˆë‹¤.
+            // êµ¬í˜„ì€ cppì— ìˆì–´ë„ ë§í‚¹ ì‹œì ì— í•´ê²°ë©ë‹ˆë‹¤.
             return ResourceLoader<T>::Load(*this, logicalPath, std::forward<Args>(args)...);
         }
 
     private:
-        /// ¸Å¿ì ´Ü¼øÇÑ XOR ±â¹İ ½ºÆ®¸² ¾Ï¡¤º¹È£È­
+        /// ë§¤ìš° ë‹¨ìˆœí•œ XOR ê¸°ë°˜ ìŠ¤íŠ¸ë¦¼ ì•”Â·ë³µí˜¸í™”
         void XorCrypt(std::vector<std::uint8_t>& data) const;
 
         static bool StartsWith(std::string_view s, std::string_view prefix);
@@ -116,31 +116,31 @@ namespace Alice
         std::shared_ptr<const std::vector<std::uint8_t>> LoadMetasChunksByRel(std::string_view assetsRel) const;
         std::filesystem::path Chunk0PathForMetasRel(std::string_view assetsRel) const;
 
-        // ÇÊ¿äÇÏ¸é ³ªÁß¿¡ Å°¸¦ ¿ÜºÎ¿¡¼­ ÁÖÀÔ¹ŞÀ» ¼ö ÀÖ°Ô ¹Ù²Ü ¼ö ÀÖ½À´Ï´Ù.
+        // í•„ìš”í•˜ë©´ ë‚˜ì¤‘ì— í‚¤ë¥¼ ì™¸ë¶€ì—ì„œ ì£¼ì…ë°›ì„ ìˆ˜ ìˆê²Œ ë°”ê¿€ ìˆ˜ ìˆìŠµë‹ˆë‹¤.
         const std::string m_key = "AliceRendererSimpleKey";
 
         bool m_gameMode = false;
         std::filesystem::path m_rootDir; // editorMode: projectRoot, gameMode: exeDir
 
-        // ³»ºÎ Ä³½Ã (AssetManager ¹æ½Ä: ÇØ½Ã ±â¹İ + weak_ptr)
+        // ë‚´ë¶€ ìºì‹œ (AssetManager ë°©ì‹: í•´ì‹œ ê¸°ë°˜ + weak_ptr)
         mutable std::mutex m_cacheMutex;
         mutable std::unordered_map<std::uint64_t, std::weak_ptr<const std::vector<std::uint8_t>>> m_blobCache; // key: contentHash
         mutable std::unordered_map<std::string, std::uint64_t> m_pathToHash; // logicalPath -> contentHash
     };
 
     // -----------------------------------------------------------------------
-    // [Æ¯¼öÈ­ ¼±¾ğ] 
-    // Çì´õ¿¡´Â "ÀÌ·± Å¸ÀÔÀÇ ·Î´õ°¡ ÀÖ´Ù"´Â °Í¸¸ ¾Ë¸®°í, ±¸Çö({ ... })Àº ÇÏÁö ¾Ê½À´Ï´Ù.
+    // [íŠ¹ìˆ˜í™” ì„ ì–¸] 
+    // í—¤ë”ì—ëŠ” "ì´ëŸ° íƒ€ì…ì˜ ë¡œë”ê°€ ìˆë‹¤"ëŠ” ê²ƒë§Œ ì•Œë¦¬ê³ , êµ¬í˜„({ ... })ì€ í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
     // -----------------------------------------------------------------------
 
-    // ID3D11ShaderResourceView (Texture) Æ¯¼öÈ­
+    // ID3D11ShaderResourceView (Texture) íŠ¹ìˆ˜í™”
     template <>
     struct ResourceLoader<ID3D11ShaderResourceView>
     {
-        // ¸®ÅÏ Å¸ÀÔ: ComPtr
+        // ë¦¬í„´ íƒ€ì…: ComPtr
         using ReturnType = Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>;
 
-        // Load ÇÔ¼ö ¼±¾ğ (±¸ÇöÀº CPP ÆÄÀÏ¿¡¼­)
+        // Load í•¨ìˆ˜ ì„ ì–¸ (êµ¬í˜„ì€ CPP íŒŒì¼ì—ì„œ)
         static ReturnType Load(const ResourceManager& rm, 
                                const std::filesystem::path& path, 
                                ID3D11Device* device); 

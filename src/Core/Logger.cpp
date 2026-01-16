@@ -1,4 +1,4 @@
-#include "Core/Logger.h"
+Ôªø#include "Core/Logger.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -25,7 +25,7 @@ namespace Alice
         {
             wchar_t pathW[MAX_PATH] = {};
             const DWORD len = ::GetModuleFileNameW(nullptr, pathW, MAX_PATH);
-            // æ¯¥Ÿ∏È
+            // ÏóÜÎã§Î©¥
             if (len == 0 || len == MAX_PATH) return std::filesystem::current_path();
 
             std::filesystem::path exePath(pathW);
@@ -72,7 +72,7 @@ namespace Alice
         std::error_code ec;
         std::filesystem::create_directories(logDir, ec);
 
-        // ∆ƒ¿œ ¿Ã∏ß: Alice_YYYYMMDD_HHMMSS.log
+        // ÌååÏùº Ïù¥Î¶Ñ: Alice_YYYYMMDD_HHMMSS.log
         using namespace std::chrono;
         const auto now      = system_clock::now();
         const auto now_time = system_clock::to_time_t(now);
@@ -133,14 +133,14 @@ namespace Alice
 
         const std::string finalLine = oss.str();
 
-        // ∆ƒ¿œ √‚∑¬
+        // ÌååÏùº Ï∂úÎ†•
         if (g_LogFile.is_open())
         {
             g_LogFile << finalLine;
             g_LogFile.flush();
         }
 
-        // µπˆ∞≈ √‚∑¬ (∞£¥‹«œ∞‘ ANSI ∑Œ)
+        // ÎîîÎ≤ÑÍ±∞ Ï∂úÎ†• (Í∞ÑÎã®ÌïòÍ≤å ANSI Î°ú)
         ::OutputDebugStringA(finalLine.c_str());
     }
 

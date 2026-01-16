@@ -1,4 +1,4 @@
-#include "FbxModel.h"
+﻿#include "FbxModel.h"
 #include "FbxMaterial.h"
 #include "FbxGeometry.h"
 #include "FbxSkeleton.h"
@@ -86,13 +86,13 @@ namespace
 	}
 }
 
-// pathW�� �����ΰ� ���´�.
+// pathW占쏙옙 占쏙옙占쏙옙占싸곤옙 占쏙옙占승댐옙.
 bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 {
 	Release();
 	m_->importer = std::make_unique<Assimp::Importer>();
-    // FBX �ǹ�/����/����Ʈ ȸ�� ������ ���� Assimp�� �����ϴ� _$AssimpFbx$* ���� ��尡 ���ŵǾ�
-    // ��/��� ���� DCC(Blender)�� �� ��ġ�ϰ� �˴ϴ�.
+    // FBX 占실뱄옙/占쏙옙占쏙옙/占쏙옙占쏙옙트 회占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 Assimp占쏙옙 占쏙옙占쏙옙占싹댐옙 _$AssimpFbx$* 占쏙옙占쏙옙 占쏙옙弱?占쏙옙占신되억옙
+    // 占쏙옙/占쏙옙占?占쏙옙占쏙옙 DCC(Blender)占쏙옙 占쏙옙 占쏙옙치占싹곤옙 占싯니댐옙.
     m_->importer->SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
 	m_->importer->SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, 4);
 	std::string pathA = Utf8FromWString(pathW);
@@ -117,7 +117,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 	auto baseDir = std::filesystem::path(pathW).parent_path().wstring();
 
 	// Build subsystems
-	// �ش��ϴ� ������ �ִ� ��� �ؽ��ĸ� �о.
+	// 占쌔댐옙占싹댐옙 占쏙옙占쏙옙占쏙옙 占쌍댐옙 占쏙옙占?占쌔쏙옙占식몌옙 占싻어봄.
 	if (!m_->materials.Load(device, m_->scene, baseDir)) return false;
 	if (!m_->geometry.Build(device, m_->scene)) return false;
 	m_->skeleton.BuildFromScene(m_->scene);
@@ -126,7 +126,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 
 	// Decide animation mode and prepare
 	bool hasBones = m_->skeleton.HasBones();
-	// ���� ���µ� �ִϸ��̼��� �ִ°��. �� ������ �ִϸ��̼��϶�
+	// 占쏙옙占쏙옙 占쏙옙占승듸옙 占쌍니몌옙占싱쇽옙占쏙옙 占쌍는곤옙占? 占쏙옙 占쏙옙占쏙옙占쏙옙 占쌍니몌옙占싱쇽옙占싹띰옙
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{
 		m_->animType = AnimationType::Rigid;
@@ -170,7 +170,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			}
 		}
 	}
-	// ���� �ְ� �ִϸ��̼ǵ� �ִ� ���. Skinned �ִϸ��̼� �϶�.
+	// 占쏙옙占쏙옙 占쌍곤옙 占쌍니몌옙占싱션듸옙 占쌍댐옙 占쏙옙占? Skinned 占쌍니몌옙占싱쇽옙 占싹띰옙.
 	else if (hasBones)
 	{
 		m_->animType = AnimationType::Skinned;
@@ -203,21 +203,21 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 
 			//while (!q.empty()) {
 			//	const aiNode* node = q.front(); q.pop();
-			//	// �޽� ó��
+			//	// 占쌨쏙옙 처占쏙옙
 			//	// NOTE:
-			//	// - node->mMeshes �� "�޽� �ε��� �迭"�Դϴ�.
-			//	// - std::views::counted(node->mMeshes, node->mNumMeshes) �� for-each �ϸ�
-			//	//   mi ��ü�� meshIdx ���ε�, �Ʒ����� node->mMeshes[mi] �� �ٽ� �ε����ϸ�
-			//	//   �߸��� �޸𸮸� �����Ͽ� baseVertex ���̺��� ������, ��������� ��Ű�� ����ġ��
-			//	//   ������ ������ ���εǾ� �޽ð� '��ê��/����'ó�� �������ϴ�.
-			//	// - D3D11-AliceTutorial/31_IBL(App.cpp)�� ���ó��, �ε���(0..mNumMeshes-1)�� ��ȸ�մϴ�.
+			//	// - node->mMeshes 占쏙옙 "占쌨쏙옙 占싸듸옙占쏙옙 占썼열"占쌉니댐옙.
+			//	// - std::views::counted(node->mMeshes, node->mNumMeshes) 占쏙옙 for-each 占싹몌옙
+			//	//   mi 占쏙옙체占쏙옙 meshIdx 占쏙옙占싸듸옙, 占싣뤄옙占쏙옙占쏙옙 node->mMeshes[mi] 占쏙옙 占쌕쏙옙 占싸듸옙占쏙옙占싹몌옙
+			//	//   占쌩몌옙占쏙옙 占쌨모리몌옙 占쏙옙占쏙옙占싹울옙 baseVertex 占쏙옙占싱븝옙占쏙옙 占쏙옙占쏙옙占쏙옙, 占쏙옙占쏙옙占쏙옙占쏙옙占?占쏙옙키占쏙옙 占쏙옙占쏙옙치占쏙옙
+			//	//   占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙占싸되억옙 占쌨시곤옙 '占쏙옙챗占쏙옙/占쏙옙占쏙옙'처占쏙옙 占쏙옙占쏙옙占쏙옙占싹댐옙.
+			//	// - D3D11-AliceTutorial/31_IBL(App.cpp)占쏙옙 占쏙옙占시놂옙占? 占싸듸옙占쏙옙(0..mNumMeshes-1)占쏙옙 占쏙옙회占쌌니댐옙.
 			//	for (unsigned mi = 0; mi < node->mNumMeshes; ++mi)
 			//	{
 			//		const unsigned meshIdx = node->mMeshes[mi];
 			//		baseVertex[meshIdx] = cursor;
 			//		cursor += m_->scene->mMeshes[meshIdx]->mNumVertices;
 			//	}
-			//	// �ڽ� ��� ť�� �߰�
+			//	// 占쌘쏙옙 占쏙옙占?큐占쏙옙 占쌩곤옙
 			//	for (const aiNode* child : std::views::counted(node->mChildren, node->mNumChildren)) {
 			//		q.push(child);
 			//	}
@@ -262,7 +262,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 				verts[i].boneWeight = { inf[i].w[0], inf[i].w[1], inf[i].w[2], inf[i].w[3] };
 			}
 
-			// === Debug: ��Ű�� �ε���/����ġ�� ���� �������� ������ Ȯ�� ===
+			// === Debug: 占쏙옙키占쏙옙 占싸듸옙占쏙옙/占쏙옙占쏙옙치占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 확占쏙옙 ===
 			// {
 			// 	const auto& boneNamesDbg = m_->skeleton.GetBoneNames();
 			// 	unsigned short maxIdx = 0;
@@ -294,29 +294,29 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			m_->geometry.RebuildVBFromCPU(device);
 		}
 	}
-	// ���� ���� �ִϸ��̼ǵ� ������. �� Static�� ���϶�.
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙 占쌍니몌옙占싱션듸옙 占쏙옙占쏙옙占쏙옙. 占쏙옙 Static占쏙옙 占쏙옙占싹띰옙.
 	else
 	{
 		m_->animType = AnimationType::None;
-		// ��Ű�� ���̴��� �����ϱ� ����, ��� ������ 0�� ��(Identity)�� ������
-		// ����ġ(Weight)�� 0�̸� ȭ�鿡 �׷����� �����Ƿ� 1.0���� �����ؾ� ��.
+		// 占쏙옙키占쏙옙 占쏙옙占싱댐옙占쏙옙 占쏙옙占쏙옙占싹깍옙 占쏙옙占쏙옙, 占쏙옙占?占쏙옙占쏙옙占쏙옙 0占쏙옙 占쏙옙(Identity)占쏙옙 占쏙옙占쏙옙占쏙옙
+		// 占쏙옙占쏙옙치(Weight)占쏙옙 0占싱몌옙 화占썽에 占쌓뤄옙占쏙옙占쏙옙 占쏙옙占쏙옙占실뤄옙 1.0占쏙옙占쏙옙 占쏙옙占쏙옙占쌔억옙 占쏙옙.
 		auto& verts = m_->geometry.GetCPUVertices();
 		if (!verts.empty())
 		{
 			for (auto& v : verts)
 			{
-				// 0�� �� �ε��� ��� Identity ���
+				// 0占쏙옙 占쏙옙 占싸듸옙占쏙옙 占쏙옙占?Identity 占쏙옙占?
 				v.boneIdx[0] = 0;
 				v.boneIdx[1] = 0;
 				v.boneIdx[2] = 0;
 				v.boneIdx[3] = 0;
 
-				// ù ��° ���� ����ġ 100% �Ҵ�
+				// 첫 占쏙옙째 占쏙옙占쏙옙 占쏙옙占쏙옙치 100% 占쌀댐옙
 				v.boneWeight = DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
 			}
 		}
 
-		// ����� ���� �����͸� GPU ���ۿ� �ٽ� ���ε�
+		// 占쏙옙占쏙옙占?占쏙옙占쏙옙 占쏙옙占쏙옙占싶몌옙 GPU 占쏙옙占쌜울옙 占쌕쏙옙 占쏙옙占싸듸옙
 		m_->geometry.RebuildVBFromCPU(device);
 	}
 
@@ -351,7 +351,7 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 		aiProcess_GenSmoothNormals | aiProcess_CalcTangentSpace | aiProcess_ConvertToLeftHanded |
 		aiProcess_OptimizeMeshes | aiProcess_OptimizeGraph | aiProcess_LimitBoneWeights;
 
-	// pHint �� Ȯ���� ��Ʈ(��: "fbx")�� ���Դϴ�.
+	// pHint 占쏙옙 확占쏙옙占쏙옙 占쏙옙트(占쏙옙: "fbx")占쏙옙 占쏙옙占쌉니댐옙.
 	const char* hint = nullptr;
 	std::string ext;
 	{
@@ -382,7 +382,7 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 	m_->skeleton.CollectBonesAndOffsets(m_->scene);
 	m_->nodeIndexOfName = m_->skeleton.NodeIndexOfName();
 
-	// Decide animation mode and prepare (Load()�� ����)
+	// Decide animation mode and prepare (Load()占쏙옙 占쏙옙占쏙옙)
 	bool hasBones = m_->skeleton.HasBones();
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{
@@ -491,25 +491,25 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 	{
 		m_->animType = AnimationType::None;
 
-		// ��Ű�� ���̴��� �����ϱ� ����, ��� ������ 0�� ��(Identity)�� ������
-		// ����ġ(Weight)�� 0�̸� ȭ�鿡 �׷����� �����Ƿ� 1.0���� �����ؾ� ��.
+		// 占쏙옙키占쏙옙 占쏙옙占싱댐옙占쏙옙 占쏙옙占쏙옙占싹깍옙 占쏙옙占쏙옙, 占쏙옙占?占쏙옙占쏙옙占쏙옙 0占쏙옙 占쏙옙(Identity)占쏙옙 占쏙옙占쏙옙占쏙옙
+		// 占쏙옙占쏙옙치(Weight)占쏙옙 0占싱몌옙 화占썽에 占쌓뤄옙占쏙옙占쏙옙 占쏙옙占쏙옙占실뤄옙 1.0占쏙옙占쏙옙 占쏙옙占쏙옙占쌔억옙 占쏙옙.
 		auto& verts = m_->geometry.GetCPUVertices();
 		if (!verts.empty())
 		{
 			for (auto& v : verts)
 			{
-				// 0�� �� �ε��� ��� Identity ���
+				// 0占쏙옙 占쏙옙 占싸듸옙占쏙옙 占쏙옙占?Identity 占쏙옙占?
 				v.boneIdx[0] = 0;
 				v.boneIdx[1] = 0;
 				v.boneIdx[2] = 0;
 				v.boneIdx[3] = 0;
 
-				// ù ��° ���� ����ġ 100% �Ҵ�
+				// 첫 占쏙옙째 占쏙옙占쏙옙 占쏙옙占쏙옙치 100% 占쌀댐옙
 				v.boneWeight = DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
 			}
 		}
 
-		// ����� ���� �����͸� GPU ���ۿ� �ٽ� ���ε�
+		// 占쏙옙占쏙옙占?占쏙옙占쏙옙 占쏙옙占쏙옙占싶몌옙 GPU 占쏙옙占쌜울옙 占쌕쏙옙 占쏙옙占싸듸옙
 		m_->geometry.RebuildVBFromCPU(device);
 	}
 

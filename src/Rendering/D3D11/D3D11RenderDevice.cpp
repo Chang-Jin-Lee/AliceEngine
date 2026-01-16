@@ -1,4 +1,4 @@
-#include "Rendering/D3D11/D3D11RenderDevice.h"
+ï»¿#include "Rendering/D3D11/D3D11RenderDevice.h"
 
 #include <cassert>
 #include "Core/Logger.h"
@@ -8,46 +8,46 @@
 
 namespace Alice
 {
-    // ³»ºÎ¿¡¼­ »ç¿ëÇÒ ÇïÆÛ Å¸ÀÔ
+    // ë‚´ë¶€ì—ì„œ ì‚¬ìš©í•  í—¬í¼ íƒ€ì…
     using Microsoft::WRL::ComPtr;
 
     bool D3D11RenderDevice::Initialize(HWND window, std::uint32_t width, std::uint32_t height)
     {
-        // 1) ±âº» »óÅÂ°ª ÀúÀå
+        // 1) ê¸°ë³¸ ìƒíƒœê°’ ì €ì¥
         m_width  = width;
         m_height = height;
 
-        // 2) HDR Áö¿ø ¿©ºÎ È®ÀÎ
+        // 2) HDR ì§€ì› ì—¬ë¶€ í™•ì¸
         float maxNits = 100.0f;
         bool isHDRSupported = IsHDRSupported(maxNits);
         m_maxHDRNits = maxNits;
         m_backBufferFormat = isHDRSupported ? DXGI_FORMAT_R10G10B10A2_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM;
 
-        // 3) ½º¿Ò Ã¼ÀÎ ¼³¸í ±¸Á¶Ã¼ ¼³Á¤
+        // 3) ìŠ¤ì™‘ ì²´ì¸ ì„¤ëª… êµ¬ì¡°ì²´ ì„¤ì •
         DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
-        swapChainDesc.BufferCount = 2; // ´õºí ¹öÆÛ¸µ
+        swapChainDesc.BufferCount = 2; // ë”ë¸” ë²„í¼ë§
         swapChainDesc.BufferDesc.Width  = width;
         swapChainDesc.BufferDesc.Height = height;
         swapChainDesc.BufferDesc.Format = m_backBufferFormat;
         swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         swapChainDesc.OutputWindow = window;
-        swapChainDesc.SampleDesc.Count = 1; // ¸ÖÆ¼ »ùÇÃ¸µ ¾øÀ½(°£´Ü ¹öÀü)
+        swapChainDesc.SampleDesc.Count = 1; // ë©€í‹° ìƒ˜í”Œë§ ì—†ìŒ(ê°„ë‹¨ ë²„ì „)
         swapChainDesc.Windowed = TRUE;
-        swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // HDR Áö¿øÀ» À§ÇØ FLIP_DISCARD »ç¿ë
+        swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // HDR ì§€ì›ì„ ìœ„í•´ FLIP_DISCARD ì‚¬ìš©
 
         UINT createDeviceFlags = 0;
 #ifdef _DEBUG
-        // µğ¹ö±× ºôµå¿¡¼­´Â D3D µğ¹ö±× ·¹ÀÌ¾î¸¦ È°¼ºÈ­ÇÕ´Ï´Ù.
+        // ë””ë²„ê·¸ ë¹Œë“œì—ì„œëŠ” D3D ë””ë²„ê·¸ ë ˆì´ì–´ë¥¼ í™œì„±í™”í•©ë‹ˆë‹¤.
         createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
         D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
 
-        // 4) µğ¹ÙÀÌ½º + ½º¿Ò Ã¼ÀÎÀ» ÇÑ ¹ø¿¡ »ı¼º
+        // 4) ë””ë°”ì´ìŠ¤ + ìŠ¤ì™‘ ì²´ì¸ì„ í•œ ë²ˆì— ìƒì„±
         HRESULT hr = D3D11CreateDeviceAndSwapChain(
-            nullptr,                    // ±âº» ¾î´ğÅÍ »ç¿ë
-            D3D_DRIVER_TYPE_HARDWARE,   // ÇÏµå¿ş¾î °¡¼Ó
-            nullptr,                    // ¼ÒÇÁÆ®¿ş¾î ·¡½ºÅÍ¶óÀÌÀú ¹Ì»ç¿ë
+            nullptr,                    // ê¸°ë³¸ ì–´ëŒ‘í„° ì‚¬ìš©
+            D3D_DRIVER_TYPE_HARDWARE,   // í•˜ë“œì›¨ì–´ ê°€ì†
+            nullptr,                    // ì†Œí”„íŠ¸ì›¨ì–´ ë˜ìŠ¤í„°ë¼ì´ì € ë¯¸ì‚¬ìš©
             createDeviceFlags,
             &featureLevel,
             1,
@@ -55,7 +55,7 @@ namespace Alice
             &swapChainDesc,
             m_swapChain.ReleaseAndGetAddressOf(),
             m_device.ReleaseAndGetAddressOf(),
-            nullptr, // ½ÇÁ¦ »ı¼ºµÈ feature levelÀº ÇÊ¿ä ¾øÀ¸¹Ç·Î nullptr
+            nullptr, // ì‹¤ì œ ìƒì„±ëœ feature levelì€ í•„ìš” ì—†ìœ¼ë¯€ë¡œ nullptr
             m_immediateContext.ReleaseAndGetAddressOf()
         );
         if (FAILED(hr))
@@ -64,7 +64,7 @@ namespace Alice
             return false;
         }
 
-        // 5) HDRÀÎ °æ¿ì »ö °ø°£ ¼³Á¤
+        // 5) HDRì¸ ê²½ìš° ìƒ‰ ê³µê°„ ì„¤ì •
         if (isHDRSupported)
         {
             Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
@@ -73,30 +73,30 @@ namespace Alice
                 HRESULT hr = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
                 if (SUCCEEDED(hr))
                 {
-                    ALICE_LOG_INFO("D3D11RenderDevice: HDR »ö °ø°£ ¼³Á¤ ¿Ï·á. MaxNits: %.1f", maxNits);
+                    ALICE_LOG_INFO("D3D11RenderDevice: HDR ìƒ‰ ê³µê°„ ì„¤ì • ì™„ë£Œ. MaxNits: %.1f", maxNits);
                 }
                 else
                 {
-                    ALICE_LOG_WARN("D3D11RenderDevice: HDR »ö °ø°£ ¼³Á¤ ½ÇÆĞ. hr=0x%08X", hr);
+                    ALICE_LOG_WARN("D3D11RenderDevice: HDR ìƒ‰ ê³µê°„ ì„¤ì • ì‹¤íŒ¨. hr=0x%08X", hr);
                 }
             }
         }
 
-        // 6) ·»´õ Å¸±ê »ı¼º
+        // 6) ë Œë” íƒ€ê¹ƒ ìƒì„±
         if (!CreateRenderTarget())
         {
             ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: CreateRenderTarget failed.");
             return false;
         }
 
-        // 7) ±íÀÌ/½ºÅÙ½Ç ¹öÆÛ »ı¼º
+        // 7) ê¹Šì´/ìŠ¤í…ì‹¤ ë²„í¼ ìƒì„±
         if (!CreateDepthStencil(m_width, m_height))
         {
             ALICE_LOG_ERRORF("D3D11RenderDevice::Initialize: CreateDepthStencil failed.");
             return false;
         }
 
-        // 8) ±íÀÌ ½ºÅÙ½Ç »óÅÂ °´Ã¼ »ı¼º (ÇÑ ¹ø¸¸ »ı¼º)
+        // 8) ê¹Šì´ ìŠ¤í…ì‹¤ ìƒíƒœ ê°ì²´ ìƒì„± (í•œ ë²ˆë§Œ ìƒì„±)
         D3D11_DEPTH_STENCIL_DESC dsDesc = {};
         dsDesc.DepthEnable = TRUE;
         dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -110,13 +110,13 @@ namespace Alice
             return false;
         }
 
-        // 8) ·¡½ºÅÍ¶óÀÌÀú »óÅÂ »ı¼º
-        //    - CCW¸¦ ¾Õ¸éÀ¸·Î °£ÁÖ (¿ì¸® Å¥ºê Á¤Á¡ µ¥ÀÌÅÍ°¡ CCW ±âÁØÀÌ±â ¶§¹®)
-        //    - µŞ¸éÀ» ÄÃ¸µ(CULL_BACK) ÇÏ¿©, ¾Õ¸é¸¸ º¸ÀÌµµ·Ï ÇÕ´Ï´Ù.
+        // 8) ë˜ìŠ¤í„°ë¼ì´ì € ìƒíƒœ ìƒì„±
+        //    - CCWë¥¼ ì•ë©´ìœ¼ë¡œ ê°„ì£¼ (ìš°ë¦¬ íë¸Œ ì •ì  ë°ì´í„°ê°€ CCW ê¸°ì¤€ì´ê¸° ë•Œë¬¸)
+        //    - ë’·ë©´ì„ ì»¬ë§(CULL_BACK) í•˜ì—¬, ì•ë©´ë§Œ ë³´ì´ë„ë¡ í•©ë‹ˆë‹¤.
         D3D11_RASTERIZER_DESC rsDesc = {};
         rsDesc.FillMode = D3D11_FILL_SOLID;
         rsDesc.CullMode = D3D11_CULL_BACK;
-        rsDesc.FrontCounterClockwise = TRUE; // CCW°¡ Front
+        rsDesc.FrontCounterClockwise = TRUE; // CCWê°€ Front
         rsDesc.DepthClipEnable = TRUE;
 
         hr = m_device->CreateRasterizerState(&rsDesc, m_rasterizerState.ReleaseAndGetAddressOf());
@@ -126,7 +126,7 @@ namespace Alice
             return false;
         }
 
-        // 8) ºäÆ÷Æ® ¼³Á¤
+        // 8) ë·°í¬íŠ¸ ì„¤ì •
         SetupViewport();
 
         return true;
@@ -134,29 +134,29 @@ namespace Alice
 
     void D3D11RenderDevice::Resize(std::uint32_t width, std::uint32_t height)
     {
-        // 1) 0 Å©±â´Â ¹«½Ã (ÃÖ¼ÒÈ­ µî)
+        // 1) 0 í¬ê¸°ëŠ” ë¬´ì‹œ (ìµœì†Œí™” ë“±)
         if (width == 0 || height == 0)
             return;
 
         m_width  = width;
         m_height = height;
 
-        // 2) ±âÁ¸ ·»´õ Å¸±ê / ±íÀÌ ºä ÇØÁ¦
+        // 2) ê¸°ì¡´ ë Œë” íƒ€ê¹ƒ / ê¹Šì´ ë·° í•´ì œ
         m_renderTargetView.Reset();
         m_depthStencilView.Reset();
         m_depthStencil.Reset();
 
-        // 3) ¹é¹öÆÛ Å©±â ÀçÁ¶Á¤
+        // 3) ë°±ë²„í¼ í¬ê¸° ì¬ì¡°ì •
         HRESULT hr = m_swapChain->ResizeBuffers(
-            0,                          // 0ÀÌ¸é ±âÁ¸ ¹öÆÛ °³¼ö À¯Áö
+            0,                          // 0ì´ë©´ ê¸°ì¡´ ë²„í¼ ê°œìˆ˜ ìœ ì§€
             m_width,
             m_height,
-            DXGI_FORMAT_UNKNOWN,        // ±âÁ¸ Æ÷¸Ë À¯Áö
+            DXGI_FORMAT_UNKNOWN,        // ê¸°ì¡´ í¬ë§· ìœ ì§€
             0
         );
         if (FAILED(hr)) return;
 
-        // 4) »õ ·»´õ Å¸±ê, ±íÀÌ ¹öÆÛ »ı¼º ¹× ºäÆ÷Æ® Àç¼³Á¤
+        // 4) ìƒˆ ë Œë” íƒ€ê¹ƒ, ê¹Šì´ ë²„í¼ ìƒì„± ë° ë·°í¬íŠ¸ ì¬ì„¤ì •
         if (CreateRenderTarget() && CreateDepthStencil(m_width, m_height))
             SetupViewport();
     }
@@ -165,17 +165,17 @@ namespace Alice
     {
         if (!m_renderTargetView) return;
 
-        // 1) ÇöÀç ·»´õ Å¸±ê°ú ±íÀÌ ½ºÅÙ½ÇÀ» ÆÄÀÌÇÁ¶óÀÎ¿¡ ¹ÙÀÎµù
+        // 1) í˜„ì¬ ë Œë” íƒ€ê¹ƒê³¼ ê¹Šì´ ìŠ¤í…ì‹¤ì„ íŒŒì´í”„ë¼ì¸ì— ë°”ì¸ë”©
         ID3D11RenderTargetView* views[] = { m_renderTargetView.Get() };
         m_immediateContext->OMSetRenderTargets(1, views, m_depthStencilView.Get());
 
-        // ±íÀÌ ½ºÅÙ½Ç / ·¡½ºÅÍ¶óÀÌÀú »óÅÂ ¼³Á¤ (ÇÑ ¹ø »ı¼ºÇÑ °ÍÀ» Àç»ç¿ë)
+        // ê¹Šì´ ìŠ¤í…ì‹¤ / ë˜ìŠ¤í„°ë¼ì´ì € ìƒíƒœ ì„¤ì • (í•œ ë²ˆ ìƒì„±í•œ ê²ƒì„ ì¬ì‚¬ìš©)
         if (m_depthStencilState)
             m_immediateContext->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
         if (m_rasterizerState)
             m_immediateContext->RSSetState(m_rasterizerState.Get());
 
-        // 2) È­¸éÀ» ÁöÁ¤ÇÑ »öÀ¸·Î Áö¿ì°í, ±íÀÌ ¹öÆÛµµ ÃÊ±âÈ­ÇÕ´Ï´Ù.
+        // 2) í™”ë©´ì„ ì§€ì •í•œ ìƒ‰ìœ¼ë¡œ ì§€ìš°ê³ , ê¹Šì´ ë²„í¼ë„ ì´ˆê¸°í™”í•©ë‹ˆë‹¤.
         m_immediateContext->ClearRenderTargetView(m_renderTargetView.Get(), clearColor);
         if (m_depthStencilView)
             m_immediateContext->ClearDepthStencilView(m_depthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
@@ -183,13 +183,13 @@ namespace Alice
 
     void D3D11RenderDevice::EndFrame()
     {
-        // vsync¸¦ 1·Î µÎ¾î È­¸é ÁÖ»çÀ²¿¡ ¸ÂÃç Ç¥½ÃÇÕ´Ï´Ù.
+        // vsyncë¥¼ 1ë¡œ ë‘ì–´ í™”ë©´ ì£¼ì‚¬ìœ¨ì— ë§ì¶° í‘œì‹œí•©ë‹ˆë‹¤.
         if (m_swapChain) m_swapChain->Present(1, 0);
     }
 
     bool D3D11RenderDevice::CreateRenderTarget()
     {
-        // 1) ½º¿Ò Ã¼ÀÎÀÇ ¹é¹öÆÛ¸¦ ¾ò¾î¿É´Ï´Ù.
+        // 1) ìŠ¤ì™‘ ì²´ì¸ì˜ ë°±ë²„í¼ë¥¼ ì–»ì–´ì˜µë‹ˆë‹¤.
         Microsoft::WRL::ComPtr<ID3D11Texture2D> backBuffer;
         HRESULT hr = m_swapChain->GetBuffer(
             0,
@@ -199,7 +199,7 @@ namespace Alice
 
         if (FAILED(hr)) return false;
 
-        // 2) ¹é¹öÆÛ·ÎºÎÅÍ ·»´õ Å¸±ê ºä¸¦ »ı¼ºÇÕ´Ï´Ù.
+        // 2) ë°±ë²„í¼ë¡œë¶€í„° ë Œë” íƒ€ê¹ƒ ë·°ë¥¼ ìƒì„±í•©ë‹ˆë‹¤.
         hr = m_device->CreateRenderTargetView(
             backBuffer.Get(),
             nullptr,
@@ -213,7 +213,7 @@ namespace Alice
 
     bool D3D11RenderDevice::CreateDepthStencil(std::uint32_t width, std::uint32_t height)
     {
-        // ±íÀÌ ½ºÅÙ½Ç ÅØ½ºÃ³ ±â¼ú¼­
+        // ê¹Šì´ ìŠ¤í…ì‹¤ í…ìŠ¤ì²˜ ê¸°ìˆ ì„œ
         D3D11_TEXTURE2D_DESC depthDesc = {};
         depthDesc.Width = width;
         depthDesc.Height = height;
@@ -230,7 +230,7 @@ namespace Alice
         HRESULT hr = m_device->CreateTexture2D(&depthDesc, nullptr, m_depthStencil.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return false;
 
-        // ±íÀÌ ½ºÅÙ½Ç ºä ±â¼ú¼­
+        // ê¹Šì´ ìŠ¤í…ì‹¤ ë·° ê¸°ìˆ ì„œ
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
         dsvDesc.Format = depthDesc.Format;
         dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
@@ -276,16 +276,16 @@ namespace Alice
 	bool D3D11RenderDevice::IsHDRSupported(float& outMaxNits) const
 	{
 		using Microsoft::WRL::ComPtr;
-		outMaxNits = 100.0f; // ±âº»°ª(SDR) ¼³Á¤. ½ÇÆĞ ½Ã ÀÌ °ªÀÌ À¯ÁöµÊ.
+		outMaxNits = 100.0f; // ê¸°ë³¸ê°’(SDR) ì„¤ì •. ì‹¤íŒ¨ ì‹œ ì´ ê°’ì´ ìœ ì§€ë¨.
 
 		ComPtr<IDXGIFactory4> factory;
 		if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
 		{
-			ALICE_LOG_ERRORF("IsHDRSupported: Factory »ı¼º ½ÇÆĞ");
+			ALICE_LOG_ERRORF("IsHDRSupported: Factory ìƒì„± ì‹¤íŒ¨");
 			return false;
 		}
 
-		// ÇÏµå¿ş¾î ¾î´ğÅÍ Å½»ö (¼ÒÇÁÆ®¿ş¾î ·»´õ·¯ Á¦¿Ü)
+		// í•˜ë“œì›¨ì–´ ì–´ëŒ‘í„° íƒìƒ‰ (ì†Œí”„íŠ¸ì›¨ì–´ ë Œë”ëŸ¬ ì œì™¸)
 		ComPtr<IDXGIAdapter1> adapter;
 		DXGI_ADAPTER_DESC1 adpDesc;
 		for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
@@ -296,18 +296,18 @@ namespace Alice
 
 		if (!adapter) return false;
 
-		// ÁÖ ¸ğ´ÏÅÍ(0) ¹× HDR ÀÎÅÍÆäÀÌ½º(Output6) Äõ¸®
+		// ì£¼ ëª¨ë‹ˆí„°(0) ë° HDR ì¸í„°í˜ì´ìŠ¤(Output6) ì¿¼ë¦¬
 		ComPtr<IDXGIOutput> output;
 		ComPtr<IDXGIOutput6> output6;
 		if (FAILED(adapter->EnumOutputs(0, &output)) || FAILED(output.As(&output6)))
 		{
-			return false; // ¸ğ´ÏÅÍ°¡ ¾ø°Å³ª OS/µå¶óÀÌ¹ö°¡ ±¸Çü
+			return false; // ëª¨ë‹ˆí„°ê°€ ì—†ê±°ë‚˜ OS/ë“œë¼ì´ë²„ê°€ êµ¬í˜•
 		}
 
 		DXGI_OUTPUT_DESC1 desc1{}; // C++20 zero initialization
 		if (FAILED(output6->GetDesc1(&desc1))) return false;
 
-		// HDR È°¼º Á¶°Ç: »ö°ø°£ ÀÏÄ¡ ¹× ¹à±â > 100.0f
+		// HDR í™œì„± ì¡°ê±´: ìƒ‰ê³µê°„ ì¼ì¹˜ ë° ë°ê¸° > 100.0f
 		const bool bIsHDR = (desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) &&
 			(desc1.MaxLuminance > 100.0f);
 

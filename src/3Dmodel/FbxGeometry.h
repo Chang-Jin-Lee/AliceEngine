@@ -1,9 +1,9 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include <string>
 
-// - UINT / D3D11 Å¸ÀÔÀ» »ç¿ëÇÏ±â À§ÇØ <d3d11.h> °¡ ÇÊ¿äÇÕ´Ï´Ù.
+// - UINT / D3D11 íƒ€ì…ì„ ì‚¬ìš©í•˜ê¸° ìœ„í•´ <d3d11.h> ê°€ í•„ìš”í•©ë‹ˆë‹¤.
 #include <d3d11.h>
 
 #include "../Core/Vertex.h"
