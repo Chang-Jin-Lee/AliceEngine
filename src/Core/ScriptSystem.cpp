@@ -239,11 +239,19 @@ namespace Alice
     void ScriptSystem::SwitchTo(const char* sceneName)
     {
         m_pendingSwitch = GetResolvedPath(sceneName);
+
+        std::filesystem::path p = m_pendingSwitch;
+        if (p.extension() != ".scene") p += ".scene";
+        m_pendingSwitch = p.string().c_str();
     }
 
     void ScriptSystem::LoadSceneFile(const char* scenePathUtf8)
     {
         m_pendingSceneFile = GetResolvedPath(scenePathUtf8);
+
+        std::filesystem::path p = m_pendingSceneFile;
+        if (p.extension() != ".scene") p += ".scene";
+        m_pendingSceneFile = p.string().c_str();
     }
 
     void ScriptSystem::EnsureServicesBound(World& world)
