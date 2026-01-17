@@ -1,4 +1,4 @@
-﻿#include "Core/World.h"
+#include "Core/World.h"
 #include "Core/GameObject.h"
 #include "Core/ScriptFactory.h"
 
@@ -7,21 +7,21 @@ namespace Alice {
 	{
 		// 1. 스크립트 컴포넌트들의 정리(Cleanup) 함수 호출
 		RemoveAllScript();
+		// 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
 
 		// 1.5 �������� ���� ����
 		m_physicsWorld.reset();
 
 		// 2. ��� ������Ʈ �����̳� ���� (�޸� ����)
 		m_names.clear();
-		m_transforms.Clear();
+		
+		// 모든 엔진 컴포넌트 저장소 클리어
+		for (auto& [typeIndex, storage] : m_engineStorages)
+		{
+			storage->Clear();
+		}
+		
 		m_scripts.clear();
-		m_materials.Clear();
-		m_skinnedMeshes.Clear();
-		m_skinnedAnimations.Clear();
-		m_cameras.Clear();
-		m_physicsSettings.Clear();
-		m_rigidBodies.Clear();
-		m_colliders.Clear();
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
@@ -54,7 +54,14 @@ namespace Alice {
 		}
 
 		m_names.erase(id);
-		m_transforms.Remove(id);
+		
+		// 모든 엔진 컴포넌트 저장소에서 해당 엔티티 제거
+		for (auto& [typeIndex, storage] : m_engineStorages)
+		{
+			storage->Remove(id);
+		}
+		
+		// 스크립트 제거
 		auto it = m_scripts.find(id);
 		if (it != m_scripts.end()) {
 			for (auto& sc : it->second)
@@ -282,6 +289,32 @@ namespace Alice {
 		return e;
 	}
 
+	EntityId World::CreatePointLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<PointLightComponent>(e);
+		SetEntityName(e, "Point Light");
+		return e;
+	}
+
+	EntityId World::CreateSpotLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<SpotLightComponent>(e);
+		SetEntityName(e, "Spot Light");
+		return e;
+	}
+
+	EntityId World::CreateRectLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<RectLightComponent>(e);
+		SetEntityName(e, "Rect Light");
+		return e;
+	}
 
 
 	//========================================================

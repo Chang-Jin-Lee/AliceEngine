@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <type_traits>
 #include <algorithm>
+#include <typeindex>
 
 #include "Core/Entity.h"
 
@@ -26,6 +27,32 @@ namespace Alice
         static ComponentHandle<T> Invalid() { return { NULL_INDEX, 0 }; }
     };
 
+    // ==== 저장소 추상화 인터페이스 ====
+    // 컴포넌트 타입에 관계없이 저장소를 통일된 방식으로 관리하기 위한 베이스 클래스
+    class IStorageBase
+    {
+    public:
+        virtual ~IStorageBase() = default;
+        
+        // 특정 엔티티의 컴포넌트 제거
+        virtual bool Remove(EntityId id) = 0;
+        
+        // 모든 컴포넌트가 제거되었는지 확인
+        virtual bool Empty() const = 0;
+        
+        // 컴포넌트 개수
+        virtual std::size_t Size() const = 0;
+        
+        // 모든 데이터 클리어
+        virtual void Clear() = 0;
+        
+        // 타입 정보 가져오기
+        virtual std::type_index GetTypeIndex() const = 0;
+        
+        // 컴포넌트 존재 여부 확인
+        virtual bool Has(EntityId id) const = 0;
+    };
+
     /// Sparse Set 기반 컴포넌트 저장소
     /// - Dense array: 실제 컴포넌트들이 연속적으로 저장
     /// - Sparse array: EntityId를 인덱스로 사용하는 벡터 (값: Dense 인덱스)
@@ -35,7 +62,7 @@ namespace Alice
     /// - 해싱 없이 배열 인덱스로 즉시 접근 (O(1))
     /// - 연속 메모리로 캐시 효율 극대화
     template <typename T>
-    class ComponentStorage
+    class ComponentStorage : public IStorageBase
     {
     public:
         // ==== 1. 데이터 관리 (Sparse Set) ====
@@ -88,7 +115,8 @@ namespace Alice
         }
 
         /// 컴포넌트 제거 (Swap-and-Pop 방식으로 O(1))
-        bool Remove(EntityId id)
+        // IStorageBase 인터페이스 구현
+        bool Remove(EntityId id) override
         {
             if (id >= m_sparse.size() || m_sparse[id] == NULL_INDEX)
                 return false;
@@ -119,10 +147,12 @@ namespace Alice
         }
 
         /// 모든 컴포넌트가 제거되었는지 확인
-        bool Empty() const { return m_dense.empty(); }
+        // IStorageBase 인터페이스 구현
+        bool Empty() const override { return m_dense.empty(); }
 
         /// 컴포넌트 개수
-        std::size_t Size() const { return m_dense.size(); }
+        // IStorageBase 인터페이스 구현
+        std::size_t Size() const override { return m_dense.size(); }
 
         // ==== 2. View 통합 (템플릿으로 Const/Non-Const 통합) ====
         
@@ -179,13 +209,26 @@ namespace Alice
         auto GetView() const { return View<true>{ this }; }
 
         /// 모든 데이터 클리어
-        void Clear()
+        // IStorageBase 인터페이스 구현
+        void Clear() override
         {
             m_dense.clear();
             m_entityIds.clear();
             m_generations.clear();
             // Sparse는 clear 대신 fill로 초기화 (메모리 재할당 방지)
             std::fill(m_sparse.begin(), m_sparse.end(), NULL_INDEX);
+        }
+
+        // IStorageBase 인터페이스 구현 - 타입 정보 반환
+        std::type_index GetTypeIndex() const override
+        {
+            return std::type_index(typeid(T));
+        }
+
+        // IStorageBase 인터페이스 구현 - 컴포넌트 존재 여부 확인
+        bool Has(EntityId id) const override
+        {
+            return (id < m_sparse.size() && m_sparse[id] != NULL_INDEX);
         }
 
         /// 메모리 최적화용임 사용하지 않는 Sparse 배열 공간 제거

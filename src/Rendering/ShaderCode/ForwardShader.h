@@ -209,6 +209,53 @@ cbuffer CBLighting : register(b1)
     int    gShadowEnabled;
 };
 
+#define MAX_POINT_LIGHTS 16
+#define MAX_SPOT_LIGHTS 16
+#define MAX_RECT_LIGHTS 16
+
+struct PointLight
+{
+    float3 position;
+    float  range;
+    float3 color;
+    float  intensity;
+};
+
+struct SpotLight
+{
+    float3 position;
+    float  range;
+    float3 direction;
+    float  innerCos;
+    float3 color;
+    float  outerCos;
+    float  intensity;
+    float  pad0;
+};
+
+struct RectLight
+{
+    float3 position;
+    float  range;
+    float3 direction;
+    float  width;
+    float3 color;
+    float  height;
+    float  intensity;
+    float  pad0;
+};
+
+cbuffer ExtraLightsBuffer : register(b5)
+{
+    int g_PointLightCount;
+    int g_SpotLightCount;
+    int g_RectLightCount;
+    int g_ExtraPad0;
+    PointLight g_PointLights[MAX_POINT_LIGHTS];
+    SpotLight  g_SpotLights[MAX_SPOT_LIGHTS];
+    RectLight  g_RectLights[MAX_RECT_LIGHTS];
+};
+
 struct PSInput
 {
     float4 Position : SV_POSITION;
@@ -218,6 +265,83 @@ struct PSInput
     float3 TangentW : TEXCOORD3;
     float3 BitanW   : TEXCOORD4;
 };
+
+float ComputeAttenuation(float dist, float range)
+{
+    float r = max(range, 0.001f);
+    float att = saturate(1.0f - dist / r);
+    return att * att;
+}
+
+float ComputeSpotFactor(float3 L, float3 lightDir, float innerCos, float outerCos)
+{
+    float cosTheta = dot(-L, normalize(lightDir));
+    float denom = max(innerCos - outerCos, 1e-4f);
+    return saturate((cosTheta - outerCos) / denom);
+}
+
+float ComputeRectFactor(float3 L, float3 lightDir)
+{
+    return saturate(dot(-L, normalize(lightDir)));
+}
+
+void AccumulateBlinnPhong(float3 N, float3 V, float3 L, float3 lightColor, float atten,
+                          inout float3 outDiffuse, inout float3 outSpecular)
+{
+    float NdotL = max(dot(N, L), 0.0f);
+    outDiffuse += NdotL * lightColor * atten;
+
+    if (gShadingMode != 0 && NdotL > 0.0f)
+    {
+        float specularTerm = 0.0f;
+        if (gShadingMode == 2) // Blinn-Phong
+        {
+            float3 H = normalize(L + V);
+            float NdotH = max(dot(N, H), 0.0f);
+            specularTerm = pow(NdotH, gMaterialSpecular.a);
+        }
+        else // Phong
+        {
+            float3 R = reflect(-L, N);
+            float RdotV = max(dot(R, V), 0.0f);
+            specularTerm = pow(RdotV, gMaterialSpecular.a);
+        }
+
+        outSpecular += specularTerm * lightColor * atten;
+    }
+}
+
+float3 EvaluatePBRLight(float3 N, float3 V, float3 L, float3 albedo, float metalness, float roughness, float3 lightColor)
+{
+    float3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0f);
+    float NdotV = max(dot(N, V), 0.0f);
+    float NdotH = max(dot(N, H), 0.0f);
+    float VdotH = max(dot(V, H), 0.0f);
+
+    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metalness);
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float denomD = (NdotH * NdotH) * (a2 - 1.0f) + 1.0f;
+    float D = a2 / max(3.14159f * denomD * denomD, 1e-4f);
+
+    float k = (roughness + 1.0f);
+    k = (k * k) / 8.0f;
+    float Gv = NdotV / (NdotV * (1.0f - k) + k);
+    float Gl = NdotL / (NdotL * (1.0f - k) + k);
+    float G = Gv * Gl;
+
+    float3 F = F0 + (1.0f - F0) * pow(1.0f - VdotH, 5.0f);
+
+    float3 numerator = D * G * F;
+    float denomSpec = max(4.0f * NdotV * NdotL, 1e-4f);
+    float3 specularTerm = numerator / denomSpec;
+
+    float3 kd = (1.0f - F) * (1.0f - metalness);
+    float3 diffuseTerm = kd * albedo / 3.14159f;
+
+    return (diffuseTerm + specularTerm) * lightColor * NdotL;
+}
 
 float4 main(PSInput input) : SV_TARGET
 {
@@ -245,6 +369,8 @@ float4 main(PSInput input) : SV_TARGET
 
     float3 totalDiffuse  = float3(0.0f, 0.0f, 0.0f);
     float3 totalSpecular = float3(0.0f, 0.0f, 0.0f);
+    float3 extraDiffuse  = float3(0.0f, 0.0f, 0.0f);
+    float3 extraSpecular = float3(0.0f, 0.0f, 0.0f);
 
     // Key Light
     {
@@ -302,6 +428,45 @@ float4 main(PSInput input) : SV_TARGET
         }
     }
 
+    // Point Lights
+    [loop] for (int i = 0; i < g_PointLightCount; ++i)
+    {
+        PointLight pl = g_PointLights[i];
+        float3 toLight = pl.position - input.WorldPos;
+        float dist = length(toLight);
+        float3 L = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, pl.range);
+        float3 lightColor = pl.color * pl.intensity;
+        AccumulateBlinnPhong(N, V, L, lightColor, atten, extraDiffuse, extraSpecular);
+    }
+
+    // Spot Lights
+    [loop] for (int i = 0; i < g_SpotLightCount; ++i)
+    {
+        SpotLight sl = g_SpotLights[i];
+        float3 toLight = sl.position - input.WorldPos;
+        float dist = length(toLight);
+        float3 L = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, sl.range);
+        float spot = ComputeSpotFactor(L, sl.direction, sl.innerCos, sl.outerCos);
+        float3 lightColor = sl.color * sl.intensity;
+        AccumulateBlinnPhong(N, V, L, lightColor, atten * spot, extraDiffuse, extraSpecular);
+    }
+
+    // Rect Lights (simple approximation)
+    [loop] for (int i = 0; i < g_RectLightCount; ++i)
+    {
+        RectLight rl = g_RectLights[i];
+        float3 toLight = rl.position - input.WorldPos;
+        float dist = length(toLight);
+        float3 L = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, rl.range);
+        float facing = ComputeRectFactor(L, rl.direction);
+        float areaScale = max(rl.width * rl.height, 0.01f);
+        float3 lightColor = rl.color * rl.intensity * areaScale;
+        AccumulateBlinnPhong(N, V, L, lightColor, atten * facing, extraDiffuse, extraSpecular);
+    }
+
     // 섀도우 팩터 (PCF)
     float shadow = 1.0f;
     {
@@ -341,6 +506,8 @@ float4 main(PSInput input) : SV_TARGET
 
     totalDiffuse  *= shadow;
     totalSpecular *= shadow;
+    totalDiffuse  += extraDiffuse;
+    totalSpecular += extraSpecular;
 
     // 머티리얼 베이스 컬러
     float3 albedo = gMaterialColor.rgb;
@@ -379,40 +546,51 @@ float4 main(PSInput input) : SV_TARGET
         float3 Np = N;
         float3 Vp = V;
         float3 Lp = normalize(-gKeyLightDir);
-        float3 Hp = normalize(Vp + Lp);
-
-        float NdotL = max(dot(Np, Lp), 0.0f);
-        float NdotV = max(dot(Np, Vp), 0.0f);
-        float NdotH = max(dot(Np, Hp), 0.0f);
-        float VdotH = max(dot(Vp, Hp), 0.0f);
+        float3 Lo = 0.0f;
 
         float3 lightColor = gKeyLightColor * gKeyLightIntensity;
+        Lo += EvaluatePBRLight(Np, Vp, Lp, albedo, metalness, roughness, lightColor) * shadow;
+
+        [loop] for (int i = 0; i < g_PointLightCount; ++i)
+        {
+            PointLight pl = g_PointLights[i];
+            float3 toLight = pl.position - input.WorldPos;
+            float dist = length(toLight);
+            float3 L = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+            float atten = ComputeAttenuation(dist, pl.range);
+            float3 lc = pl.color * pl.intensity * atten;
+            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+        }
+
+        [loop] for (int i = 0; i < g_SpotLightCount; ++i)
+        {
+            SpotLight sl = g_SpotLights[i];
+            float3 toLight = sl.position - input.WorldPos;
+            float dist = length(toLight);
+            float3 L = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+            float atten = ComputeAttenuation(dist, sl.range);
+            float spot = ComputeSpotFactor(L, sl.direction, sl.innerCos, sl.outerCos);
+            float3 lc = sl.color * sl.intensity * atten * spot;
+            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+        }
+
+        [loop] for (int i = 0; i < g_RectLightCount; ++i)
+        {
+            RectLight rl = g_RectLights[i];
+            float3 toLight = rl.position - input.WorldPos;
+            float dist = length(toLight);
+            float3 L = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+            float atten = ComputeAttenuation(dist, rl.range);
+            float facing = ComputeRectFactor(L, rl.direction);
+            float areaScale = max(rl.width * rl.height, 0.01f);
+            float3 lc = rl.color * rl.intensity * atten * facing * areaScale;
+            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+        }
 
         float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metalness);
-
-        float  a      = roughness * roughness;
-        float  a2     = a * a;
-        float  denomD = (NdotH * NdotH) * (a2 - 1.0f) + 1.0f;
-        float  D      = a2 / max(3.14159f * denomD * denomD, 1e-4f);
-
-        float  k      = (roughness + 1.0f);
-        k             = (k * k) / 8.0f;
-        float  Gv     = NdotV / (NdotV * (1.0f - k) + k);
-        float  Gl     = NdotL / (NdotL * (1.0f - k) + k);
-        float  G      = Gv * Gl;
-
-        float3 F      = F0 + (1.0f - F0) * pow(1.0f - VdotH, 5.0f);
-
-        float3 numerator    = D * G * F;
-        float  denomSpec    = max(4.0f * NdotV * NdotL, 1e-4f);
-        float3 specularTerm = numerator / denomSpec;
-
+        float NdotV = max(dot(Np, Vp), 0.0f);
+        float3 F = F0 + (1.0f - F0) * pow(1.0f - NdotV, 5.0f);
         float3 kd = (1.0f - F) * (1.0f - metalness);
-        float3 diffuseTerm = kd * albedo / 3.14159f;
-
-        float3 radiance = lightColor * NdotL;
-
-        float3 Lo = (diffuseTerm + specularTerm) * radiance * shadow;
 
         // === IBL (Image-Based Lighting) 계산 ===
         float3 diffuseIBL = kd * gIBL_Diffuse.Sample(gSampler, Np).rgb * albedo;

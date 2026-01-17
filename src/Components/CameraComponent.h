@@ -1,4 +1,5 @@
-﻿#include <DirectXMath.h>
+#pragma once
+#include <DirectXMath.h>
 
 namespace Alice {
     /// 씬 내 카메라(유니티의 Main Camera 느낌)
@@ -10,5 +11,8 @@ namespace Alice {
         float fovYRad{ DirectX::XM_PIDIV4 };
         float nearPlane{ 0.1f };
         float farPlane{ 5000.0f };
+        // 0 또는 useAspectOverride=false면 엔진의 뷰포트 비율을 사용합니다.
+        bool  useAspectOverride{ false };
+        float aspectOverride{ 0.0f };
     };
 }
