@@ -1,4 +1,4 @@
-﻿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -160,6 +160,42 @@ namespace Alice
                 outEntity["Camera"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* follow = world.GetComponent<CameraFollowComponent>(id); follow)
+            {
+                rttr::instance inst = const_cast<CameraFollowComponent&>(*follow);
+                outEntity["CameraFollow"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* spring = world.GetComponent<CameraSpringArmComponent>(id); spring)
+            {
+                rttr::instance inst = const_cast<CameraSpringArmComponent&>(*spring);
+                outEntity["CameraSpringArm"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* lookAt = world.GetComponent<CameraLookAtComponent>(id); lookAt)
+            {
+                rttr::instance inst = const_cast<CameraLookAtComponent&>(*lookAt);
+                outEntity["CameraLookAt"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* shake = world.GetComponent<CameraShakeComponent>(id); shake)
+            {
+                rttr::instance inst = const_cast<CameraShakeComponent&>(*shake);
+                outEntity["CameraShake"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* blend = world.GetComponent<CameraBlendComponent>(id); blend)
+            {
+                rttr::instance inst = const_cast<CameraBlendComponent&>(*blend);
+                outEntity["CameraBlend"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* input = world.GetComponent<CameraInputComponent>(id); input)
+            {
+                rttr::instance inst = const_cast<CameraInputComponent&>(*input);
+                outEntity["CameraInput"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* point = world.GetComponent<PointLightComponent>(id); point)
             {
                 rttr::instance inst = const_cast<PointLightComponent&>(*point);
@@ -281,6 +317,60 @@ namespace Alice
                 CameraComponent& cc = world.AddComponent<CameraComponent>(id);
                 rttr::instance inst = cc;
                 if (!JsonRttr::FromJsonObject(inst, *itC)) return false;
+            }
+
+            // CameraFollow (선택)
+            auto itCF = e.find("CameraFollow");
+            if (itCF != e.end() && itCF->is_object())
+            {
+                CameraFollowComponent& cf = world.AddComponent<CameraFollowComponent>(id);
+                rttr::instance inst = cf;
+                if (!JsonRttr::FromJsonObject(inst, *itCF)) return false;
+            }
+
+            // CameraSpringArm (선택)
+            auto itSpring = e.find("CameraSpringArm");
+            if (itSpring != e.end() && itSpring->is_object())
+            {
+                CameraSpringArmComponent& sa = world.AddComponent<CameraSpringArmComponent>(id);
+                rttr::instance inst = sa;
+                if (!JsonRttr::FromJsonObject(inst, *itSpring)) return false;
+            }
+
+            // CameraLookAt (선택)
+            auto itLA = e.find("CameraLookAt");
+            if (itLA != e.end() && itLA->is_object())
+            {
+                CameraLookAtComponent& la = world.AddComponent<CameraLookAtComponent>(id);
+                rttr::instance inst = la;
+                if (!JsonRttr::FromJsonObject(inst, *itLA)) return false;
+            }
+
+            // CameraShake (선택)
+            auto itCS = e.find("CameraShake");
+            if (itCS != e.end() && itCS->is_object())
+            {
+                CameraShakeComponent& cs = world.AddComponent<CameraShakeComponent>(id);
+                rttr::instance inst = cs;
+                if (!JsonRttr::FromJsonObject(inst, *itCS)) return false;
+            }
+
+            // CameraBlend (선택)
+            auto itCB = e.find("CameraBlend");
+            if (itCB != e.end() && itCB->is_object())
+            {
+                CameraBlendComponent& cb = world.AddComponent<CameraBlendComponent>(id);
+                rttr::instance inst = cb;
+                if (!JsonRttr::FromJsonObject(inst, *itCB)) return false;
+            }
+
+            // CameraInput (선택)
+            auto itCI = e.find("CameraInput");
+            if (itCI != e.end() && itCI->is_object())
+            {
+                CameraInputComponent& ci = world.AddComponent<CameraInputComponent>(id);
+                rttr::instance inst = ci;
+                if (!JsonRttr::FromJsonObject(inst, *itCI)) return false;
             }
 
             // Point Light 선택
