@@ -43,6 +43,10 @@ struct RigidBodyComponent
     float sleepThreshold = -1.0f;
     float stabilizationThreshold = -1.0f;
 
+    // Dynamic 바디의 Transform 강제 동기화 (teleport)
+    bool teleport = false;
+    bool resetVelocityOnTeleport = true;
+
     // 내부 사용: 물리 액터 핸들 (PhysicsSystem이 관리)
     void* physicsActorHandle = nullptr; // IRigidBody*를 void*로 저장
 };

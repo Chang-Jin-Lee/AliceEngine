@@ -63,6 +63,26 @@ void PhysicsSystem::Update(float deltaTime)
 {
     if (!m_physicsWorld) return;
 
+    // 
+    // (A) 이전 시뮬 결과 반영: ActiveTransform → TransformComponent
+    {
+        std::vector<ActiveTransform> ats;
+        m_physicsWorld->DrainActiveTransforms(ats);
+        for (const auto& at : ats)
+            SyncPhysicsToGame(at);
+    }
+
+    // (B) 이벤트 라우팅: Trigger/Contact/JointBreak
+    {
+        std::vector<PhysicsEvent> events;
+        m_physicsWorld->DrainEvents(events);
+        if (m_eventCallback)
+        {
+            for (const auto& e : events)
+                m_eventCallback(e, m_eventCallbackUserData);
+        }
+    }
+
     // 1. 컴포넌트 변경 감지 및 물리 액터 생성/삭제
     {
         // RigidBodyComponent가 있는 엔티티 확인
@@ -84,12 +104,22 @@ void PhysicsSystem::Update(float deltaTime)
         auto colliders = m_world.GetComponents<ColliderComponent>();
         for (const auto& [entityId, collider] : colliders)
         {
-            // RigidBodyComponent가 없고, Collider만 있는 경우
-            if (entitiesWithRigidBody.find(entityId) == entitiesWithRigidBody.end())
+            const bool hasRB = (entitiesWithRigidBody.find(entityId) != entitiesWithRigidBody.end());
+
+            if (!hasRB)
             {
                 if (collider.physicsActorHandle == nullptr)
-                {
                     CreatePhysicsActor(entityId);
+            }
+            else
+            {
+                // RB가 이미 있는데 Collider가 새로 붙은 경우:
+                // collider.physicsActorHandle이 null이면 기존 RB 액터에 연결하고 shape 빌드
+                auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
+                if (rb && rb->physicsActorHandle && collider.physicsActorHandle == nullptr)
+                {
+                    collider.physicsActorHandle = rb->physicsActorHandle;
+                    RebuildShapes(entityId); // 초기 shape 생성
                 }
             }
         }
@@ -277,7 +307,105 @@ void PhysicsSystem::Update(float deltaTime)
         }
         for (EntityId entityId : collidersToRemove)
         {
+            // Collider 제거 시: RB는 남아도 shape는 제거되어야 함
+            auto itActor = m_entityToActor.find(entityId);
+            if (itActor != m_entityToActor.end())
+            {
+                ActorHandle& handle = itActor->second;
+                if (handle.IsValid())
+                {
+                    IPhysicsActor* actor = handle.GetActor();
+                    if (actor && actor->IsValid())
+                    {
+                        actor->ClearShapes();
+
+                        // dynamic이면 질량 다시 계산
+                        IRigidBody* body = handle.GetRigidBody();
+                        if (body && body->IsValid())
+                            body->RecomputeMass();
+                    }
+                }
+            }
+
             m_lastColliders.erase(entityId);
+        }
+    }
+
+    //  4. RigidBodyComponent "런타임 변경 감지 → PhysX 적용"
+    {
+        auto rigidBodies = m_world.GetComponents<RigidBodyComponent>();
+        for (const auto& [entityId, rb] : rigidBodies)
+        {
+            // 핸들이 없으면 생성 파트에서 만들어질 거라 여기선 패스 가능
+            IRigidBody* body = nullptr;
+            auto it = m_entityToActor.find(entityId);
+            if (it != m_entityToActor.end())
+                body = it->second.GetRigidBody();
+            if (!body || !body->IsValid())
+                continue;
+
+            RigidBodyState cur{};
+            cur.density = rb.density;
+            cur.massOverride = rb.massOverride;
+            cur.isKinematic = rb.isKinematic;
+            cur.gravityEnabled = rb.gravityEnabled;
+            cur.startAwake = rb.startAwake;
+            cur.enableCCD = rb.enableCCD;
+            cur.enableSpeculativeCCD = rb.enableSpeculativeCCD;
+            cur.lockFlags = rb.lockFlags;
+            cur.linearDamping = rb.linearDamping;
+            cur.angularDamping = rb.angularDamping;
+            cur.maxLinearVelocity = rb.maxLinearVelocity;
+            cur.maxAngularVelocity = rb.maxAngularVelocity;
+            cur.solverPositionIterations = rb.solverPositionIterations;
+            cur.solverVelocityIterations = rb.solverVelocityIterations;
+            cur.sleepThreshold = rb.sleepThreshold;
+            cur.stabilizationThreshold = rb.stabilizationThreshold;
+
+            auto lastIt = m_lastRigidBodies.find(entityId);
+            if (lastIt == m_lastRigidBodies.end())
+            {
+                m_lastRigidBodies[entityId] = cur;
+                continue;
+            }
+
+            const RigidBodyState& prev = lastIt->second;
+
+            if (cur.isKinematic != prev.isKinematic) body->SetKinematic(cur.isKinematic);
+            if (cur.gravityEnabled != prev.gravityEnabled) body->SetGravityEnabled(cur.gravityEnabled);
+
+            if (cur.enableCCD != prev.enableCCD || cur.enableSpeculativeCCD != prev.enableSpeculativeCCD)
+                body->SetCCDEnabled(cur.enableCCD, cur.enableSpeculativeCCD);
+
+            if (cur.lockFlags != prev.lockFlags) body->SetLockFlags(cur.lockFlags);
+
+            if (cur.linearDamping != prev.linearDamping || cur.angularDamping != prev.angularDamping)
+                body->SetDamping(cur.linearDamping, cur.angularDamping);
+
+            if (cur.maxLinearVelocity != prev.maxLinearVelocity || cur.maxAngularVelocity != prev.maxAngularVelocity)
+                body->SetMaxVelocities(cur.maxLinearVelocity, cur.maxAngularVelocity);
+
+            if (cur.density != prev.density || cur.massOverride != prev.massOverride)
+                body->SetMassProperties(cur.density, cur.massOverride);
+
+            if (cur.solverPositionIterations != prev.solverPositionIterations ||
+                cur.solverVelocityIterations != prev.solverVelocityIterations)
+                body->SetSolverIterations(cur.solverPositionIterations, cur.solverVelocityIterations);
+
+            if (cur.sleepThreshold != prev.sleepThreshold)
+                body->SetSleepThreshold(cur.sleepThreshold);
+
+            if (cur.stabilizationThreshold != prev.stabilizationThreshold)
+                body->SetStabilizationThreshold(cur.stabilizationThreshold);
+
+            // startAwake 변화는 "생성 시" 의미가 크지만, 런타임 토글도 대응 가능
+            if (cur.startAwake != prev.startAwake)
+            {
+                if (cur.startAwake) body->WakeUp();
+                else body->PutToSleep();
+            }
+
+            m_lastRigidBodies[entityId] = cur;
         }
     }
 }
@@ -579,6 +707,7 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     m_entityToActor.erase(it);
     m_lastTransforms.erase(entityId);
     m_lastColliders.erase(entityId);
+    m_lastRigidBodies.erase(entityId); 
 }
 
 void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
@@ -626,6 +755,7 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
     hfDesc.collideMask = terrain->collideMask;
     hfDesc.queryMask = terrain->queryMask;
     hfDesc.isTrigger = false; // HeightField는 절대 트리거 불가 (PhysX 제약)
+    hfDesc.doubleSidedQueries = terrain->doubleSidedQueries; 
     hfDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
 
     // 피벗 보정: centerPivot이 true면 지형 중앙으로 localPos 조정
@@ -774,30 +904,55 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
 
     ActorHandle& handle = it->second;
     if (!handle.IsValid()) return;
-    
+
     IPhysicsActor* actor = handle.GetActor();
+    IRigidBody* body = handle.GetRigidBody();
 
     Vec3 pos = ToVec3(position);
     Quat rot = ToQuat(rotation);
 
     auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-    if (rb && rb->isKinematic)
+
+    if (rb && body && body->IsValid())
     {
-        // Kinematic 바디는 SetKinematicTarget 사용
-        IRigidBody* body = handle.GetRigidBody();
-        if (body && body->IsValid())
+        if (rb->isKinematic)
         {
             body->SetKinematicTarget(pos, rot);
+            return;
         }
-    }
-    else
-    {
-        // Static Actor 또는 Dynamic 바디는 SetTransform 사용
-        if (actor && actor->IsValid())
+
+        //  Dynamic: teleport일 때만 transform을 물리에 밀어 넣는다
+        if (rb->teleport)
         {
             actor->SetTransform(pos, rot);
+
+            if (rb->resetVelocityOnTeleport)
+            {
+                body->SetLinearVelocity(Vec3::Zero);
+                body->SetAngularVelocity(Vec3::Zero);
+            }
+
+            rb->teleport = false;
+            return;
         }
+
+        //  teleport 아니면 "게임이 건드린 Transform을 되돌림"
+        if (actor && actor->IsValid())
+        {
+            auto* t = m_world.GetComponent<TransformComponent>(entityId);
+            if (t)
+            {
+                t->position = ToXMFLOAT3(actor->GetPosition());
+                t->rotation = ToEulerRadians(actor->GetRotation());
+                m_lastTransforms[entityId] = { t->position, t->rotation, t->scale };
+            }
+        }
+        return;
     }
+
+    // Static actor(또는 RB 없는 static collider): 기존대로
+    if (actor && actor->IsValid())
+        actor->SetTransform(pos, rot);
 }
 
 void PhysicsSystem::SyncPhysicsToGame(const ActiveTransform& transform)

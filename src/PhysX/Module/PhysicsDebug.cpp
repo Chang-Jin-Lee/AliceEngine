@@ -15,35 +15,17 @@ namespace Alice
         namespace
         {
             // 오일러 각도를 쿼터니언으로 변환
+            // PhysicsSystem::ToQuat와 동일한 축 매핑을 쓰려면:
+            // CreateFromYawPitchRoll(yaw=z, pitch=y, roll=x) ↔ DX: (Pitch, Yaw, Roll) = (y, z, x)
             XMVECTOR EulerToQuaternion(const XMFLOAT3& euler)
             {
-                float halfX = euler.x * 0.5f;
-                float halfY = euler.y * 0.5f;
-                float halfZ = euler.z * 0.5f;
-
-                float cx = std::cos(halfX);
-                float sx = std::sin(halfX);
-                float cy = std::cos(halfY);
-                float sy = std::sin(halfY);
-                float cz = std::cos(halfZ);
-                float sz = std::sin(halfZ);
-
-                XMVECTOR q;
-                q.m128_f32[0] = cx * cy * cz + sx * sy * sz; // w
-                q.m128_f32[1] = sx * cy * cz - cx * sy * sz; // x
-                q.m128_f32[2] = cx * sy * cz + sx * cy * sz; // y
-                q.m128_f32[3] = cx * cy * sz - sx * sy * cz; // z
-                return q;
+                return XMQuaternionRotationRollPitchYaw(euler.y, euler.z, euler.x);
             }
 
             // 쿼터니언으로 벡터 회전
             XMVECTOR RotateVector(const XMVECTOR& v, const XMVECTOR& q)
             {
-                // q * v * q^-1
-                XMVECTOR qConj = XMVectorSet(-XMVectorGetX(q), -XMVectorGetY(q), -XMVectorGetZ(q), XMVectorGetW(q));
-                XMVECTOR vQuat = XMVectorSetW(v, 0.0f);
-                XMVECTOR temp = XMQuaternionMultiply(q, vQuat);
-                return XMQuaternionMultiply(temp, qConj);
+                return XMVector3Rotate(v, q);
             }
 
             // 박스 8개 코너 계산

@@ -126,6 +126,28 @@ private:
     };
     std::unordered_map<Alice::EntityId, ColliderState> m_lastColliders;
 
+    // RigidBody 파라미터 변경 감지용
+    struct RigidBodyState
+    {
+        float density{};
+        float massOverride{};
+        bool isKinematic{};
+        bool gravityEnabled{};
+        bool startAwake{};
+        bool enableCCD{};
+        bool enableSpeculativeCCD{};
+        RigidBodyLockFlags lockFlags{};
+        float linearDamping{};
+        float angularDamping{};
+        float maxLinearVelocity{};
+        float maxAngularVelocity{};
+        uint32_t solverPositionIterations{};
+        uint32_t solverVelocityIterations{};
+        float sleepThreshold{};
+        float stabilizationThreshold{};
+    };
+    std::unordered_map<Alice::EntityId, RigidBodyState> m_lastRigidBodies;
+
     // Collider/Scale 변경 시 Shape 재구성
     void RebuildShapes(Alice::EntityId entityId);
 
