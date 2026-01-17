@@ -227,6 +227,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/ColliderComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/RigidBodyComponent.h	
+	${ALICE_SRC_DIR}/PhysX/Components/TerrainHeightFieldComponent.h
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp

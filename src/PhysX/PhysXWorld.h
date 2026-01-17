@@ -112,6 +112,11 @@ public:
 		const Quat& rot,
 		const ConvexMeshColliderDesc& mesh) override;
 
+	std::unique_ptr<IPhysicsActor> CreateStaticHeightField(
+		const Vec3& pos,
+		const Quat& rot,
+		const HeightFieldColliderDesc& heightField) override;
+
 	std::unique_ptr<IRigidBody> CreateDynamicConvexMesh(
 		const Vec3& pos,
 		const Quat& rot,

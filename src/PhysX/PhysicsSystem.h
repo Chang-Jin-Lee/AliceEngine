@@ -3,6 +3,7 @@
 #include "IPhysicsWorld.h"
 #include "Components/RigidBodyComponent.h"
 #include "Components/ColliderComponent.h"
+#include "Components/TerrainHeightFieldComponent.h"
 #include <Core/World.h>
 #include <DirectXMath.h>
 #include <unordered_map>
@@ -39,6 +40,9 @@ private:
     // 컴포넌트 → 물리 액터 생성
     void CreatePhysicsActor(Alice::EntityId entityId);
     void DestroyPhysicsActor(Alice::EntityId entityId);
+    
+    // HeightField 전용 생성 (TerrainHeightFieldComponent)
+    void CreateTerrainHeightField(Alice::EntityId entityId);
 
     // Game → Physics 동기화
     void SyncGameToPhysics(Alice::EntityId entityId, const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation);

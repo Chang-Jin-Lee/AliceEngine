@@ -94,14 +94,26 @@ void PhysicsSystem::Update(float deltaTime)
             }
         }
 
+        // TerrainHeightFieldComponent가 있는 엔티티 확인
+        auto terrains = m_world.GetComponents<TerrainHeightFieldComponent>();
+        for (const auto& [entityId, terrain] : terrains)
+        {
+            // 새로 추가된 경우 또는 핸들이 없는 경우
+            if (terrain.physicsActorHandle == nullptr)
+            {
+                CreateTerrainHeightField(entityId);
+            }
+        }
+
         // 제거된 컴포넌트 확인 (m_entityToActor에 있지만 컴포넌트가 없는 경우)
         std::vector<EntityId> toRemove;
         for (const auto& [entityId, handle] : m_entityToActor)
         {
             auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
             auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+            auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
             
-            if (!rb && !collider)
+            if (!rb && !collider && !terrain)
             {
                 toRemove.push_back(entityId);
             }
@@ -315,7 +327,13 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             case ColliderType::Box:
             {
                 BoxColliderDesc boxDesc{};
-                boxDesc.halfExtents = ToVec3(collider->halfExtents);
+                // Scale 반영
+                Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+                Vec3 he = ToVec3(collider->halfExtents);
+                he.x *= scale.x;
+                he.y *= scale.y;
+                he.z *= scale.z;
+                boxDesc.halfExtents = he;
                 boxDesc.staticFriction = collider->staticFriction;
                 boxDesc.dynamicFriction = collider->dynamicFriction;
                 boxDesc.restitution = collider->restitution;
@@ -555,9 +573,91 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
     if (collider) collider->physicsActorHandle = nullptr;
 
+    auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
+    if (terrain) terrain->physicsActorHandle = nullptr;
+
     m_entityToActor.erase(it);
     m_lastTransforms.erase(entityId);
     m_lastColliders.erase(entityId);
+}
+
+void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
+{
+    if (!m_physicsWorld) return;
+
+    auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+    if (!transform) return; // Transform이 없으면 생성 불가
+
+    auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
+    if (!terrain) return;
+
+    // HeightField 데이터 검증
+    if (terrain->heightSamples.empty() || terrain->numRows < 2 || terrain->numCols < 2)
+    {
+        return; // 유효하지 않은 데이터
+    }
+
+    if (terrain->heightScale <= 0.0f || terrain->rowScale <= 0.0f || terrain->colScale <= 0.0f)
+    {
+        return; // 유효하지 않은 스케일
+    }
+
+    // 기존 액터가 있으면 제거
+    if (terrain->physicsActorHandle != nullptr)
+    {
+        DestroyPhysicsActor(entityId);
+    }
+
+    Vec3 pos = ToVec3(transform->position);
+    Quat rot = ToQuat(transform->rotation);
+
+    // HeightFieldColliderDesc 구성
+    HeightFieldColliderDesc hfDesc{};
+    hfDesc.heightSamples = terrain->heightSamples.data();
+    hfDesc.numRows = terrain->numRows;
+    hfDesc.numCols = terrain->numCols;
+    hfDesc.heightScale = terrain->heightScale;
+    hfDesc.rowScale = terrain->rowScale;
+    hfDesc.colScale = terrain->colScale;
+    hfDesc.staticFriction = terrain->staticFriction;
+    hfDesc.dynamicFriction = terrain->dynamicFriction;
+    hfDesc.restitution = terrain->restitution;
+    hfDesc.layerBits = terrain->layerBits;
+    hfDesc.collideMask = terrain->collideMask;
+    hfDesc.queryMask = terrain->queryMask;
+    hfDesc.isTrigger = false; // HeightField는 절대 트리거 불가 (PhysX 제약)
+    hfDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+
+    // 피벗 보정: centerPivot이 true면 지형 중앙으로 localPos 조정
+    Vec3 localPos = Vec3::Zero;
+    Quat localRot = Quat::Identity;
+
+    if (terrain->centerPivot)
+    {
+        const float halfW = 0.5f * static_cast<float>(terrain->numCols - 1) * terrain->colScale;
+        const float halfD = 0.5f * static_cast<float>(terrain->numRows - 1) * terrain->rowScale;
+        localPos = Vec3(-halfW, 0.0f, -halfD);
+    }
+
+    // RigidStatic + HeightField 생성
+    // localPos/localRot를 적용하기 위해 빈 액터를 만들고 shape를 직접 추가
+    auto actorPtr = m_physicsWorld->CreateStaticEmpty(pos, rot, hfDesc.userData);
+    if (actorPtr)
+    {
+        ActorHandle handle(std::move(actorPtr));
+        IPhysicsActor* actor = handle.GetActor();
+        
+        // HeightField shape를 localPos/localRot로 추가
+        if (!actor->AddHeightFieldShape(hfDesc, localPos, localRot))
+        {
+            // 실패 시 액터 정리
+            handle.Destroy();
+            return;
+        }
+        
+        terrain->physicsActorHandle = actor;
+        m_entityToActor[entityId] = std::move(handle);
+    }
 }
 
 void PhysicsSystem::RebuildShapes(EntityId entityId)
