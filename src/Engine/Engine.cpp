@@ -1,4 +1,4 @@
-﻿#include "Engine/Engine.h"
+#include "Engine/Engine.h"
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
@@ -48,6 +48,7 @@
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
 #include "Core/SceneFile.h"
+#include "Core/CameraSystem.h"
 #include "Core/Logger.h"
 #include "Game/FbxImporter.h"
 #include "Game/FbxAsset.h"
@@ -529,6 +530,20 @@ namespace Alice
 
 		if (updateFromScene)
 		{
+			// 2-1. 로직 업데이트 (씬/스크립트) - 카메라 로직은 LateUpdate에서 수행됨
+			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
+			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
+
+			// 2-2. 물리 업데이트를 여기서 해도되나라는 생각임
+			//TickPhysics(dt);
+
+			// 2-3. 카메라 시스템 (컴포넌트 기반)
+			{
+				CameraSystem cameraSystem;
+				cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
+			}
+
+			// 2-4. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
 			// 우선순위: Primary 카메라 -> 없으면 첫 번째 발견된 카메라
 			EntityId camId = InvalidEntityId;
 			for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
@@ -545,8 +560,14 @@ namespace Alice
 				pImpl->m_cameraPitchRadians = t->rotation.x;
 
 				// 투영 행렬 갱신 (게임 중 FOV 변경 대응)
-				const float aspect = static_cast<float>(pImpl->m_width) / pImpl->m_height;
-				pImpl->m_camera.SetPerspective(c->fovYRad, aspect, c->nearPlane, c->farPlane);
+				const float defaultAspect = static_cast<float>(pImpl->m_width) / pImpl->m_height;
+				const float aspect = (c && c->useAspectOverride && c->aspectOverride > 0.0f)
+					? c->aspectOverride
+					: defaultAspect;
+				pImpl->m_camera.SetPerspective(c ? c->fovYRad : DirectX::XM_PIDIV4,
+					aspect,
+					c ? c->nearPlane : 0.1f,
+					c ? c->farPlane : 5000.0f);
 			}
 		}
 		else if (pImpl->m_inputSystem.IsRightButtonDown()) // 에디터 프리캠 조작
@@ -592,37 +613,7 @@ namespace Alice
 		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
 
 		// 4. 로직 업데이트 (씬/스크립트)
-		if (updateFromScene)
-		{
-			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
-			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
-
-			// PhysicsSceneSettingsComponent가 있는데 물리 월드가 없으면 생성 시도
-			// (Awake()에서 추가된 경우 대응)
-			if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
-			{
-				const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
-				if (!settingsMap.empty())
-				{
-					const auto& settings = settingsMap.begin()->second;
-					if (settings.enablePhysics)
-					{
-						RefreshPhysicsForCurrentWorld();
-					}
-				}
-			}
-
-			// PhysicsSystem 업데이트 (Game → Physics 동기화)
-			if (pImpl->m_physicsSystem)
-			{
-				pImpl->m_physicsSystem->Update(dt);
-			}
-
-			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
-			
-			// 물리 이벤트 처리 (물리 시뮬레이션 이후, 게임 로직에서 안전하게 처리)
-			ProcessPhysicsEvents();
-		}
+		// - updateFromScene에서는 위에서 처리
 	}
 
 	//=========================================================
@@ -1007,7 +998,8 @@ namespace Alice
 		// Deferred 렌더링
 		pImpl->m_deferredRenderSystem->Render(
 			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
+			pImpl->m_editorMode, pImpl->m_isPlaying
 		);
 	}
 

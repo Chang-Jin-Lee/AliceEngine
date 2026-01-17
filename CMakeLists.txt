@@ -99,6 +99,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Material.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.cpp
+    ${ALICE_SRC_DIR}/Core/CameraSystem.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
     ${ALICE_SRC_DIR}/Core/TimeSystem.cpp
@@ -159,6 +160,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Prefab.h
     ${ALICE_SRC_DIR}/Core/Material.h
     ${ALICE_SRC_DIR}/Core/Logger.h
+    ${ALICE_SRC_DIR}/Core/CameraSystem.h
     ${ALICE_SRC_DIR}/Core/SceneFile.h
     ${ALICE_SRC_DIR}/Core/SceneFileHelper.h
     ${ALICE_SRC_DIR}/Core/ReflectionSerializer.h
@@ -181,11 +183,20 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/InputTypes.h
     
     #컴포넌트들
+    ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h
     ${ALICE_SRC_DIR}/Components/CameraComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraFollowComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraInputComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraLookAtComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraShakeComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
     ${ALICE_SRC_DIR}/Components/MaterialComponent.h
+    ${ALICE_SRC_DIR}/Components/PointLightComponent.h
+    ${ALICE_SRC_DIR}/Components/RectLightComponent.h
     ${ALICE_SRC_DIR}/Components/ScriptComponent.h
     ${ALICE_SRC_DIR}/Components/SkinnedAnimationComponent.h
     ${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
+    ${ALICE_SRC_DIR}/Components/SpotLightComponent.h
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
 
     # FBX/3D 모델 로더 헤더

@@ -68,7 +68,11 @@ namespace Alice
 
         void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
         void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
+        void DrawEngineComponent(const char* label, auto* comp, auto removeFn);
         void DrawInspectorMaterial(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
 
         /// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
         void DrawDirectoryNode(World& world,

@@ -1,4 +1,4 @@
-﻿#include "Rendering/DeferredRenderSystem.h"
+#include "Rendering/DeferredRenderSystem.h"
 
 #include <d3dcompiler.h>
 #include <DirectXTK/WICTextureLoader.h>
@@ -641,6 +641,11 @@ namespace Alice
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbDirectionalLight.ReleaseAndGetAddressOf())))
             return false;
 
+        // Extra Lights CB (Point/Spot/Rect)
+        cbDesc.ByteWidth = (sizeof(ExtraLightsCB) + 15u) & ~15u;
+        if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbExtraLights.ReleaseAndGetAddressOf())))
+            return false;
+
         // Bones CB
         cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX) * 1023 + sizeof(std::uint32_t) * 4;
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbBones.ReleaseAndGetAddressOf())))
@@ -945,7 +950,9 @@ namespace Alice
     DirectX::XMMATRIX DeferredRenderSystem::RenderShadowPass(
         const World& world,
         const std::vector<SkinnedDrawCommand>& skinnedCommands,
-        const std::unordered_set<EntityId>& cameraEntities)
+        const std::unordered_set<EntityId>& cameraEntities,
+        bool editorMode,
+        bool isPlaying)
     {
         using namespace DirectX;
 
@@ -1089,7 +1096,9 @@ namespace Alice
                                       const std::unordered_set<EntityId>& cameraEntities,
                                       int shadingMode,
                                       bool enableFillLight,
-                                      const std::vector<SkinnedDrawCommand>& skinnedCommands)
+                                      const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                                      bool editorMode,
+                                      bool isPlaying)
     {
         if (!m_device || !m_context) return;
 
@@ -1099,16 +1108,16 @@ namespace Alice
         m_context->RSSetViewports(1, &vp);
 
         // Shadow pass 먼저 렌더링 (lightViewProj 계산 + shadow depth 생성)
-        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities);
+        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities, editorMode, isPlaying);
 
         // ShadowPass에서 viewport가 섀도우맵 해상도로 바뀌므로, 씬 뷰포트를 다시 설정
         m_context->RSSetViewports(1, &vp);
 
         // G-Buffer 패스
-        PassGBuffer(world, camera, skinnedCommands, cameraEntities);
+        PassGBuffer(world, camera, skinnedCommands, cameraEntities, editorMode, isPlaying);
 
         // Deferred Light 패스
-        PassDeferredLight(camera, shadingMode, enableFillLight, lightViewProj);
+        PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
 
         // 스카이박스 렌더링
         if (m_skyboxEnabled)
@@ -1136,7 +1145,9 @@ namespace Alice
     void DeferredRenderSystem::PassGBuffer(const World& world,
                                            const Camera& camera,
                                            const std::vector<SkinnedDrawCommand>& skinnedCommands,
-                                           const std::unordered_set<EntityId>& cameraEntities)
+                                           const std::unordered_set<EntityId>& cameraEntities,
+                                           bool editorMode,
+                                           bool isPlaying)
     {
         // ShadowPass 등에서 viewport가 변경될 수 있으므로,
         // GBuffer 패스 시작 시 항상 씬 해상도 뷰포트를 재설정합니다.
@@ -1280,12 +1291,82 @@ namespace Alice
             }
         }
 
+        // ============================== 카메라(큐브) 렌더링 ==================================
+        // 3. 카메라를 큐브로 렌더링 (에디터 모드이고 Play 중이 아닐 때만)
+        if (editorMode && !isPlaying)
+        {
+            // 정적 메시용 셰이더로 복귀
+            m_context->VSSetShader(m_gBufferVS.Get(), nullptr, 0);
+            m_context->PSSetShader(m_gBufferPS.Get(), nullptr, 0);
+            m_context->IASetInputLayout(m_gBufferInputLayout.Get());
+            m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            UINT stride = sizeof(SimpleVertex);
+            UINT offset = 0;
+            ID3D11Buffer* vb = m_cubeVB.Get();
+            m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+            m_context->IASetIndexBuffer(m_cubeIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+            const auto& cameraComponents = world.GetComponents<CameraComponent>();
+            for (const auto& [camId, _] : cameraComponents)
+            {
+                const auto* camTr = world.GetComponent<TransformComponent>(camId);
+                if (!camTr) continue;
+
+                using namespace DirectX;
+
+                // 카메라 위치에 스케일 0.5, 0.5, 0.5인 큐브 렌더링
+                TransformComponent cameraCubeTr = *camTr;
+                cameraCubeTr.scale = { 0.5f, 0.5f, 0.5f };
+                XMMATRIX cameraCubeWorld = BuildWorldMatrix(cameraCubeTr);
+
+                // 카메라 큐브 재질 (흰색)
+                XMFLOAT4 cameraCubeColor(1.0f, 1.0f, 1.0f, 1.0f);
+                UpdatePerObjectCB(cameraCubeWorld, view, proj, cameraCubeColor, 0.5f, 0.0f, false, false);
+
+                ID3D11ShaderResourceView* srvs[] = { nullptr, nullptr };
+                m_context->PSSetShaderResources(0, 2, srvs);
+
+                m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
+
+                // 카메라의 forward 방향을 보여주는 하늘색 큐브
+                // forward 벡터 계산 (rotation에서)
+                XMVECTOR rotVec = XMLoadFloat3(&camTr->rotation);
+                // 행렬 대신 쿼터니언 생성
+                XMVECTOR rotQuat = XMQuaternionRotationRollPitchYawFromVector(rotVec);
+
+                // 쿼터니언으로 회전
+                XMVECTOR forwardVec = XMVector3Rotate(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), rotQuat);
+                XMFLOAT3 forward;
+                XMStoreFloat3(&forward, forwardVec);
+
+                // forward 방향으로 약간 앞에 큐브 배치 (하늘색)
+                const float forwardDistance = 0.75f;
+                TransformComponent directionCubeTr;
+                directionCubeTr.position = {
+                    camTr->position.x + forward.x * forwardDistance,
+                    camTr->position.y + forward.y * forwardDistance,
+                    camTr->position.z + forward.z * forwardDistance
+                };
+                directionCubeTr.rotation = camTr->rotation;
+                directionCubeTr.scale = { 0.3f, 0.3f, 0.2f };
+
+                XMMATRIX directionCubeWorld = BuildWorldMatrix(directionCubeTr);
+
+                // 하늘색 (0.5, 0.8, 1.0)
+                XMFLOAT4 skyBlueColor(0.5f, 0.8f, 1.0f, 1.0f);
+                UpdatePerObjectCB(directionCubeWorld, view, proj, skyBlueColor, 0.5f, 0.0f, false, false);
+
+                m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
+            }
+        }
+
         // RTV 해제
         ID3D11RenderTargetView* nullRTVs[GBufferCount] = { nullptr };
         m_context->OMSetRenderTargets(GBufferCount, nullRTVs, nullptr);
     }
 
-    void DeferredRenderSystem::PassDeferredLight(const Camera& camera, int shadingMode, bool enableFillLight, DirectX::CXMMATRIX lightViewProj)
+    void DeferredRenderSystem::PassDeferredLight(const World& world, const Camera& camera, int shadingMode, bool enableFillLight, DirectX::CXMMATRIX lightViewProj)
     {
         // 뷰포트 설정 (ForwardRenderSystem과 동일)
         D3D11_VIEWPORT vp{};
@@ -1324,6 +1405,7 @@ namespace Alice
 
         // 상수 버퍼 업데이트 (섀도우 파라미터 포함)
         UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
+        UpdateExtraLightsCB(world);
 
          // ShadowCB(b4) 업데이트 (패킹 안전)
         // - Shadow 행렬/파라미터는 ShadowCB에서만 읽도록(셰이더) 변경했습니다.
@@ -1713,6 +1795,88 @@ namespace Alice
         }
 
         m_context->PSSetConstantBuffers(3, 1, m_cbDirectionalLight.GetAddressOf());
+    }
+
+    void DeferredRenderSystem::UpdateExtraLightsCB(const World& world)
+    {
+        if (!m_cbExtraLights) return;
+
+        ExtraLightsCB data = {};
+
+        // Point lights
+        for (const auto& [id, light] : world.GetComponents<PointLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.pointCount >= MaxPointLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            auto& dst = data.pointLights[data.pointCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        // Spot lights
+        for (const auto& [id, light] : world.GetComponents<SpotLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.spotCount >= MaxSpotLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
+            XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
+            XMVECTOR dirW = XMVector3Normalize(XMVector3TransformNormal(forward, rot));
+            XMFLOAT3 dir{};
+            XMStoreFloat3(&dir, dirW);
+
+            float innerRad = DirectX::XMConvertToRadians((std::max)(0.0f, light.innerAngleDeg));
+            float outerRad = DirectX::XMConvertToRadians((std::max)(light.innerAngleDeg, light.outerAngleDeg));
+
+            auto& dst = data.spotLights[data.spotCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.direction = dir;
+            dst.innerCos = std::cosf(innerRad);
+            dst.outerCos = std::cosf(outerRad);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        // Rect lights
+        for (const auto& [id, light] : world.GetComponents<RectLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.rectCount >= MaxRectLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
+            XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
+            XMVECTOR dirW = XMVector3Normalize(XMVector3TransformNormal(forward, rot));
+            XMFLOAT3 dir{};
+            XMStoreFloat3(&dir, dirW);
+
+            auto& dst = data.rectLights[data.rectCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.direction = dir;
+            dst.width = (std::max)(light.width, 0.01f);
+            dst.height = (std::max)(light.height, 0.01f);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (SUCCEEDED(m_context->Map(m_cbExtraLights.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            std::memcpy(mapped.pData, &data, sizeof(ExtraLightsCB));
+            m_context->Unmap(m_cbExtraLights.Get(), 0);
+        }
+
+        m_context->PSSetConstantBuffers(5, 1, m_cbExtraLights.GetAddressOf());
     }
 
     void DeferredRenderSystem::UpdateBonesCB(const DirectX::XMFLOAT4X4* boneMatrices, std::uint32_t boneCount)
