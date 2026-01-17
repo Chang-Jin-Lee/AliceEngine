@@ -1,6 +1,7 @@
 #include "Rendering/Camera.h"
 
 #include <cmath>
+#include <algorithm>
 
 using namespace DirectX;
 
@@ -37,7 +38,7 @@ namespace Alice
 
     XMMATRIX Camera::GetProjectionMatrix() const
     {
-        return XMMatrixPerspectiveFovLH(m_fovYRadians, m_aspectRatio, m_nearPlane, m_farPlane);
+        return XMMatrixPerspectiveFovLH(m_fovYRadians, std::max(0.1f, m_aspectRatio), m_nearPlane, m_farPlane);
     }
 
     float Camera::GetFovXRadians() const
