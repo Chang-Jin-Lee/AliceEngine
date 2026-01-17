@@ -291,16 +291,34 @@ enum class QueryHitMode : uint8_t { Block, Touch };
 class MaskQueryCallback final : public PxQueryFilterCallback
 {
 public:
-	MaskQueryCallback(uint32_t layerMaskBits, uint32_t queryMaskBits, bool hitTriggers, QueryHitMode mode)
-		: layerMask(layerMaskBits), queryMask(queryMaskBits), includeTriggers(hitTriggers), hitMode(mode)
+	MaskQueryCallback(
+		uint32_t layerMaskBits,
+		uint32_t queryMaskBits,
+		bool hitTriggers,
+		QueryHitMode mode,
+		const PxRigidActor* ignoreActor = nullptr,
+		const PxShape* ignoreShape = nullptr,
+		void* ignoreUserData = nullptr)
+		: layerMask(layerMaskBits)
+		, queryMask(queryMaskBits)
+		, includeTriggers(hitTriggers)
+		, hitMode(mode)
+		, ignoreActor(ignoreActor)
+		, ignoreShape(ignoreShape)
+		, ignoreUserData(ignoreUserData)
 	{
 	}
 
 	PxQueryHitType::Enum preFilter(
 		const PxFilterData& /*filterData*/, const PxShape* shape,
-		const PxRigidActor* /*actor*/, PxHitFlags& /*queryFlags*/) override
+		const PxRigidActor* actor, PxHitFlags& /*queryFlags*/) override
 	{
-		if (!shape) return PxQueryHitType::eNONE;
+		if (!shape || !actor) return PxQueryHitType::eNONE;
+
+		//  ignore 먼저
+		if (ignoreShape && shape == ignoreShape) return PxQueryHitType::eNONE;
+		if (ignoreActor && actor == ignoreActor) return PxQueryHitType::eNONE;
+		if (ignoreUserData && actor->userData == ignoreUserData) return PxQueryHitType::eNONE;
 
 		const PxShapeFlags sf = shape->getFlags();
 
@@ -337,6 +355,11 @@ private:
 	uint32_t queryMask = 0xFFFFFFFFu;
 	bool includeTriggers = false;
 	QueryHitMode hitMode = QueryHitMode::Block;
+
+
+	const PxRigidActor* ignoreActor = nullptr;
+	const PxShape* ignoreShape = nullptr;
+	void* ignoreUserData = nullptr;
 };
 
 // ============================================================
@@ -430,7 +453,45 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	{
 		std::weak_ptr<Impl> owner;
 
-		void onConstraintBreak(PxConstraintInfo*, PxU32) override {}
+		void onConstraintBreak(PxConstraintInfo* constraints, PxU32 count) override
+		{
+			auto s = owner.lock();
+			if (!s || !constraints || count == 0) return;
+
+			std::scoped_lock lock(s->eventMtx);
+
+			for (PxU32 i = 0; i < count; ++i)
+			{
+				PxConstraintInfo& ci = constraints[i];
+
+				PxJoint* joint = reinterpret_cast<PxJoint*>(ci.externalReference);
+
+				PhysicsEvent e;
+				e.type = PhysicsEventType::JointBreak;
+
+				if (joint)
+				{
+					e.nativeJoint = joint;
+					e.jointUserData = joint->userData;
+
+					PxRigidActor* a = nullptr;
+					PxRigidActor* b = nullptr;
+					joint->getActors(a, b);
+
+					e.nativeActorA = a;
+					e.nativeActorB = b;
+					e.userDataA = a ? a->userData : nullptr;
+					e.userDataB = b ? b->userData : nullptr;
+				}
+				else
+				{
+					// externalReference가 없는 케이스 대비
+					e.nativeJoint = ci.constraint;
+				}
+
+				s->events.push_back(e);
+			}
+		}
 		void onWake(PxActor**, PxU32) override {}
 		void onSleep(PxActor**, PxU32) override {}
 		void onAdvance(const PxRigidBody* const* bodyBuffer, const PxTransform* poseBuffer, const PxU32 count) override
@@ -1606,7 +1667,10 @@ public:
 
 		// Create PxHeightFieldGeometry
 		// PhysX formula: worldHeight = PxI16(height) * heightScale
+		// Note: HeightField does not support flipNormals (only TriangleMesh supports it during cooking).
+		// HeightField only supports doubleSidedQueries for query operations.
 		PxMeshGeometryFlags gflags;
+		if (hf.doubleSidedQueries) gflags |= PxMeshGeometryFlag::eDOUBLE_SIDED;
 		const PxHeightFieldGeometry geom(heightField, gflags, hf.heightScale, hf.rowScale, hf.colScale);
 		if (!geom.isValid()) return false; // Scale too small or invalid
 
@@ -1878,8 +1942,13 @@ public:
 		auto s = world.lock();
 		if (!s || !s->scene) return;
 		SceneWriteLock wl(s->scene, s->enableSceneLocks);
-		if (maxLinear > 0.0f) body->setMaxLinearVelocity(maxLinear);
-		if (maxAngular > 0.0f) body->setMaxAngularVelocity(maxAngular);
+
+		const float ml = (maxLinear > 0.0f) ? maxLinear : PX_MAX_F32;
+		const float ma = (maxAngular > 0.0f) ? maxAngular : PX_MAX_F32;
+
+		body->setMaxLinearVelocity(ml);
+		body->setMaxAngularVelocity(ma);
+
 		cachedRb.maxLinearVelocity = maxLinear;
 		cachedRb.maxAngularVelocity = maxAngular;
 	}
@@ -1958,6 +2027,50 @@ public:
 	{
 		if (!body) return false;
 		return body->isSleeping();
+	}
+
+	//  density + massOverride 같이 갱신
+	void SetMassProperties(float density, float massOverride) override
+	{
+		cachedRb.density = density;
+		cachedRb.massOverride = massOverride;
+		RecomputeMass(); // cachedRb 기반으로 updateMassAndInertia or setMassAndUpdateInertia
+	}
+
+	// 런타임 튜닝용
+	void SetSolverIterations(uint32_t posIts, uint32_t velIts) override
+	{
+		if (!body) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setSolverIterationCounts(
+			static_cast<PxU32>(std::max(1u, posIts)),
+			static_cast<PxU32>(std::max(1u, velIts)));
+		cachedRb.solverPositionIterations = posIts;
+		cachedRb.solverVelocityIterations = velIts;
+	}
+
+	void SetSleepThreshold(float sleepThreshold) override
+	{
+		if (!body) return;
+		if (sleepThreshold < 0.0f) return; // -1이면 "변경 안 함"으로 처리(기본값 복원은 재생성으로)
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setSleepThreshold(sleepThreshold);
+		cachedRb.sleepThreshold = sleepThreshold;
+	}
+
+	void SetStabilizationThreshold(float stabilizationThreshold) override
+	{
+		if (!body) return;
+		if (stabilizationThreshold < 0.0f) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setStabilizationThreshold(stabilizationThreshold);
+		cachedRb.stabilizationThreshold = stabilizationThreshold;
 	}
 
 private:

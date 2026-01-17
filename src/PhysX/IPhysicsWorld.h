@@ -183,6 +183,9 @@ struct HeightFieldColliderDesc : public FilterDesc, public MaterialDesc
 	// This field is kept for API compatibility but is not used by PhysX.
 	// (Deprecated in PhysX 3.x, removed in PhysX 5.x)
 	float thickness = 0.0f;  // Not used in PhysX 5.x
+
+	// 지형 쿼리를 양면으로 처리할지
+	bool doubleSidedQueries = false;
 };
 
 // ------------------------------
@@ -426,6 +429,19 @@ struct SweepHit
 	void* nativeShape = nullptr;
 };
 
+// SceneQueryFilter (ignore + SweepAll을 위한 필터)
+struct SceneQueryFilter
+{
+	uint32_t layerMask = 0xFFFFFFFFu;
+	uint32_t queryMask = 0xFFFFFFFFu;
+	bool hitTriggers = false;
+
+	// ignore (nullptr이면 무시 안 함)
+	void* ignoreNativeActor = nullptr; // PxRigidActor*
+	void* ignoreNativeShape = nullptr; // PxShape*
+	void* ignoreUserData = nullptr;    // actor->userData 비교용
+};
+
 // ============================================================
 //  Events
 // ============================================================
@@ -435,6 +451,7 @@ enum class PhysicsEventType : uint8_t
 	ContactEnd,
 	TriggerEnter,
 	TriggerExit,
+	JointBreak,
 };
 
 struct PhysicsEvent
@@ -454,6 +471,10 @@ struct PhysicsEvent
 	// Optional contact data (only valid for Contact events if enabled)
 	Vec3 position = Vec3::Zero;
 	Vec3 normal = Vec3::UnitY;
+
+	// JointBreak에 사용
+	void* nativeJoint = nullptr;     // PxJoint* (또는 externalReference)
+	void* jointUserData = nullptr;   // PxJoint::userData (엔진에서 심어둔 값)
 };
 
 // ============================================================
@@ -632,6 +653,14 @@ public:
 	// Recompute mass/inertia from attached shapes using the body's stored density/massOverride.
 	// Useful when you add/remove shapes (compound bodies).
 	virtual void RecomputeMass() = 0;
+
+	//  density + massOverride 같이 갱신
+	virtual void SetMassProperties(float density, float massOverride) = 0;
+
+	//  런타임 튜닝용
+	virtual void SetSolverIterations(uint32_t positionIts, uint32_t velocityIts) = 0;
+	virtual void SetSleepThreshold(float sleepThreshold) = 0;
+	virtual void SetStabilizationThreshold(float stabilizationThreshold) = 0;
 
 	virtual void WakeUp() = 0;
 	virtual void PutToSleep() = 0;
@@ -1132,6 +1161,142 @@ public:
 		uint32_t queryMask = 0xFFFFFFFFu,
 		bool hitTriggers = false,
 		bool alignYAxis = true) const = 0;
+
+	// ------------------------------
+	// Queries (Extended)
+	// - ignore/self-filter 지원
+	// - sweep multi-hit 지원
+	// ------------------------------
+	virtual bool RaycastQ(
+		const Vec3& origin,
+		const Vec3& dir,
+		float maxDist,
+		RaycastHit& outHit,
+		const SceneQueryFilter& filter) const = 0;
+
+	virtual uint32_t RaycastAllQ(
+		const Vec3& origin,
+		const Vec3& dir,
+		float maxDist,
+		std::vector<RaycastHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const = 0;
+
+	virtual uint32_t OverlapBoxQ(
+		const Vec3& center,
+		const Quat& rot,
+		const Vec3& halfExtents,
+		std::vector<OverlapHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const = 0;
+
+	virtual uint32_t OverlapSphereQ(
+		const Vec3& center,
+		float radius,
+		std::vector<OverlapHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const = 0;
+
+	virtual uint32_t OverlapCapsuleQ(
+		const Vec3& center,
+		const Quat& rot,
+		float radius,
+		float halfHeight,
+		std::vector<OverlapHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64,
+		bool alignYAxis = true) const = 0;
+
+	virtual bool SweepBoxQ(
+		const Vec3& origin,
+		const Quat& rot,
+		const Vec3& halfExtents,
+		const Vec3& dir,
+		float maxDist,
+		SweepHit& outHit,
+		const SceneQueryFilter& filter) const = 0;
+
+	virtual bool SweepSphereQ(
+		const Vec3& origin,
+		float radius,
+		const Vec3& dir,
+		float maxDist,
+		SweepHit& outHit,
+		const SceneQueryFilter& filter) const = 0;
+
+	virtual bool SweepCapsuleQ(
+		const Vec3& origin,
+		const Quat& rot,
+		float radius,
+		float halfHeight,
+		const Vec3& dir,
+		float maxDist,
+		SweepHit& outHit,
+		const SceneQueryFilter& filter,
+		bool alignYAxis = true) const = 0;
+
+	// Sweep All
+	virtual uint32_t SweepBoxAllQ(
+		const Vec3& origin,
+		const Quat& rot,
+		const Vec3& halfExtents,
+		const Vec3& dir,
+		float maxDist,
+		std::vector<SweepHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const = 0;
+
+	virtual uint32_t SweepSphereAllQ(
+		const Vec3& origin,
+		float radius,
+		const Vec3& dir,
+		float maxDist,
+		std::vector<SweepHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const = 0;
+
+	virtual uint32_t SweepCapsuleAllQ(
+		const Vec3& origin,
+		const Quat& rot,
+		float radius,
+		float halfHeight,
+		const Vec3& dir,
+		float maxDist,
+		std::vector<SweepHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64,
+		bool alignYAxis = true) const = 0;
+
+	// ------------------------------
+	// Penetration (MTD) 헬퍼
+	// ------------------------------
+	virtual bool ComputePenetrationBoxVsShape(
+		const Vec3& center,
+		const Quat& rot,
+		const Vec3& halfExtents,
+		void* otherNativeActor,
+		void* otherNativeShape,
+		Vec3& outDirection,
+		float& outDepth) const = 0;
+
+	virtual bool ComputePenetrationSphereVsShape(
+		const Vec3& center,
+		float radius,
+		void* otherNativeActor,
+		void* otherNativeShape,
+		Vec3& outDirection,
+		float& outDepth) const = 0;
+
+	virtual bool ComputePenetrationCapsuleVsShape(
+		const Vec3& center,
+		const Quat& rot,
+		float radius,
+		float halfHeight,
+		bool alignYAxis,
+		void* otherNativeActor,
+		void* otherNativeShape,
+		Vec3& outDirection,
+		float& outDepth) const = 0;
 
 	// ------------------------------
 	// Events
