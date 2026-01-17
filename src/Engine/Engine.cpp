@@ -781,7 +781,8 @@ namespace Alice
 		// Deferred 렌더링
 		pImpl->m_deferredRenderSystem->Render(
 			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
+			pImpl->m_editorMode, pImpl->m_isPlaying
 		);
 	}
 

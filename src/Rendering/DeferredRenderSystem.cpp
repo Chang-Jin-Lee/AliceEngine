@@ -950,7 +950,9 @@ namespace Alice
     DirectX::XMMATRIX DeferredRenderSystem::RenderShadowPass(
         const World& world,
         const std::vector<SkinnedDrawCommand>& skinnedCommands,
-        const std::unordered_set<EntityId>& cameraEntities)
+        const std::unordered_set<EntityId>& cameraEntities,
+        bool editorMode,
+        bool isPlaying)
     {
         using namespace DirectX;
 
@@ -1094,7 +1096,9 @@ namespace Alice
                                       const std::unordered_set<EntityId>& cameraEntities,
                                       int shadingMode,
                                       bool enableFillLight,
-                                      const std::vector<SkinnedDrawCommand>& skinnedCommands)
+                                      const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                                      bool editorMode,
+                                      bool isPlaying)
     {
         if (!m_device || !m_context) return;
 
@@ -1104,13 +1108,13 @@ namespace Alice
         m_context->RSSetViewports(1, &vp);
 
         // Shadow pass 먼저 렌더링 (lightViewProj 계산 + shadow depth 생성)
-        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities);
+        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities, editorMode, isPlaying);
 
         // ShadowPass에서 viewport가 섀도우맵 해상도로 바뀌므로, 씬 뷰포트를 다시 설정
         m_context->RSSetViewports(1, &vp);
 
         // G-Buffer 패스
-        PassGBuffer(world, camera, skinnedCommands, cameraEntities);
+        PassGBuffer(world, camera, skinnedCommands, cameraEntities, editorMode, isPlaying);
 
         // Deferred Light 패스
         PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
@@ -1141,7 +1145,9 @@ namespace Alice
     void DeferredRenderSystem::PassGBuffer(const World& world,
                                            const Camera& camera,
                                            const std::vector<SkinnedDrawCommand>& skinnedCommands,
-                                           const std::unordered_set<EntityId>& cameraEntities)
+                                           const std::unordered_set<EntityId>& cameraEntities,
+                                           bool editorMode,
+                                           bool isPlaying)
     {
         // ShadowPass 등에서 viewport가 변경될 수 있으므로,
         // GBuffer 패스 시작 시 항상 씬 해상도 뷰포트를 재설정합니다.
@@ -1282,6 +1288,76 @@ namespace Alice
 
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 }
+            }
+        }
+
+        // ============================== 카메라(큐브) 렌더링 ==================================
+        // 3. 카메라를 큐브로 렌더링 (에디터 모드이고 Play 중이 아닐 때만)
+        if (editorMode && !isPlaying)
+        {
+            // 정적 메시용 셰이더로 복귀
+            m_context->VSSetShader(m_gBufferVS.Get(), nullptr, 0);
+            m_context->PSSetShader(m_gBufferPS.Get(), nullptr, 0);
+            m_context->IASetInputLayout(m_gBufferInputLayout.Get());
+            m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            UINT stride = sizeof(SimpleVertex);
+            UINT offset = 0;
+            ID3D11Buffer* vb = m_cubeVB.Get();
+            m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+            m_context->IASetIndexBuffer(m_cubeIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+            const auto& cameraComponents = world.GetComponents<CameraComponent>();
+            for (const auto& [camId, _] : cameraComponents)
+            {
+                const auto* camTr = world.GetComponent<TransformComponent>(camId);
+                if (!camTr) continue;
+
+                using namespace DirectX;
+
+                // 카메라 위치에 스케일 0.5, 0.5, 0.5인 큐브 렌더링
+                TransformComponent cameraCubeTr = *camTr;
+                cameraCubeTr.scale = { 0.5f, 0.5f, 0.5f };
+                XMMATRIX cameraCubeWorld = BuildWorldMatrix(cameraCubeTr);
+
+                // 카메라 큐브 재질 (흰색)
+                XMFLOAT4 cameraCubeColor(1.0f, 1.0f, 1.0f, 1.0f);
+                UpdatePerObjectCB(cameraCubeWorld, view, proj, cameraCubeColor, 0.5f, 0.0f, false, false);
+
+                ID3D11ShaderResourceView* srvs[] = { nullptr, nullptr };
+                m_context->PSSetShaderResources(0, 2, srvs);
+
+                m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
+
+                // 카메라의 forward 방향을 보여주는 하늘색 큐브
+                // forward 벡터 계산 (rotation에서)
+                XMVECTOR rotVec = XMLoadFloat3(&camTr->rotation);
+                // 행렬 대신 쿼터니언 생성
+                XMVECTOR rotQuat = XMQuaternionRotationRollPitchYawFromVector(rotVec);
+
+                // 쿼터니언으로 회전
+                XMVECTOR forwardVec = XMVector3Rotate(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), rotQuat);
+                XMFLOAT3 forward;
+                XMStoreFloat3(&forward, forwardVec);
+
+                // forward 방향으로 약간 앞에 큐브 배치 (하늘색)
+                const float forwardDistance = 0.75f;
+                TransformComponent directionCubeTr;
+                directionCubeTr.position = {
+                    camTr->position.x + forward.x * forwardDistance,
+                    camTr->position.y + forward.y * forwardDistance,
+                    camTr->position.z + forward.z * forwardDistance
+                };
+                directionCubeTr.rotation = camTr->rotation;
+                directionCubeTr.scale = { 0.3f, 0.3f, 0.2f };
+
+                XMMATRIX directionCubeWorld = BuildWorldMatrix(directionCubeTr);
+
+                // 하늘색 (0.5, 0.8, 1.0)
+                XMFLOAT4 skyBlueColor(0.5f, 0.8f, 1.0f, 1.0f);
+                UpdatePerObjectCB(directionCubeWorld, view, proj, skyBlueColor, 0.5f, 0.0f, false, false);
+
+                m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
             }
         }
 
