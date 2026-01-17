@@ -183,7 +183,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/InputTypes.h
     
     #컴포넌트들
-    ${ALICE_SRC_DIR}/Components/ComponentStorage.h.h
+    ${ALICE_SRC_DIR}/Components/ComponentStorage.h
     ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h
     ${ALICE_SRC_DIR}/Components/CameraComponent.h
     ${ALICE_SRC_DIR}/Components/CameraFollowComponent.h
