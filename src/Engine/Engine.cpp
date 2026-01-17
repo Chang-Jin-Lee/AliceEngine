@@ -1,4 +1,4 @@
-﻿#include "Engine/Engine.h"
+#include "Engine/Engine.h"
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
@@ -29,6 +29,7 @@
 #include "Core/Scene.h"
 #include "Core/ScriptSystem.h"
 #include "Core/Delegate.h"
+#include "Core/UIWorldManager.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
@@ -77,6 +78,7 @@ namespace Alice
 		EntityId m_selectedEntity{ InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
 
 		World          m_world;
+		UIWorldManager m_uiWorld;
 		Camera         m_camera;
 		InputSystem    m_inputSystem;
 		GameTimer      m_timer;
@@ -269,6 +271,18 @@ namespace Alice
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
 		pImpl->m_scriptSystem.onTrimVideoMemory.BindObject(this, &Engine::TrimVideoMemory);
 
+		// ============================================= UI 시스템 =============================================
+		// UIWorldManager 초기화 (World와 동일한 패턴)
+		{
+			auto* device = pImpl->m_renderDevice->GetDevice();
+			auto* context = pImpl->m_renderDevice->GetImmediateContext();
+			if (device && context)
+			{
+				pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
+				ALICE_LOG_INFO("Engine::Initialize: UIWorldManager initialized.");
+			}
+		}
+
 		ALICE_LOG_INFO("Engine::Initialize: Success (Entities: %zu)", pImpl->m_world.GetComponents<TransformComponent>().size());
 		return true;
 	}
@@ -392,6 +406,9 @@ namespace Alice
 			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
 			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
 		}
+
+		// 5. UI 업데이트
+		pImpl->m_uiWorld.Update(pImpl->m_width, pImpl->m_height);
 	}
 
 	void Engine::Render()
@@ -600,6 +617,9 @@ namespace Alice
             }
         }
 
+		// ============================================= UI 렌더링 =============================================
+		// 톤매핑 이후 UI 렌더링 (게임 UI는 톤매핑된 화면 위에 그려짐)
+		pImpl->m_uiWorld.Render();
 
 		// ============================================= 오버레이 =============================================
 		// 디버그 드로우 및 ImGui(에디터 전용)
@@ -749,6 +769,9 @@ namespace Alice
 		{
 			pImpl->m_deferredRenderSystem->Resize(width, height);
 		}
+
+		// UI 시스템 리사이즈 (텍스처 재생성)
+		pImpl->m_uiWorld.Create2DTex(width, height);
 	}
 
 	LRESULT Engine::HandleMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
