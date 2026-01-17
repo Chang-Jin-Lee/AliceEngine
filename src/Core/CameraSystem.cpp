@@ -18,7 +18,6 @@
 #include "Components/CameraLookAtComponent.h"
 #include "Components/CameraShakeComponent.h"
 #include "Components/CameraBlendComponent.h"
-#include "Components/CameraInputComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "PhysX/IPhysicsWorld.h"
 
@@ -183,6 +182,8 @@ namespace Alice
 
     void CameraSystem::Update(World& world, InputSystem& input, float deltaTime)
     {
+        (void)input; // 입력은 Script(CameraController)가 처리
+
         const EntityId outputId = FindPrimaryCamera(world);
         if (outputId == InvalidEntityId)
             return;
@@ -192,112 +193,11 @@ namespace Alice
         if (!outputTr || !outputCam)
             return;
 
-        auto* inputComp = world.GetComponent<CameraInputComponent>(outputId);
         auto* blendComp = world.GetComponent<CameraBlendComponent>(outputId);
         auto* shakeComp = world.GetComponent<CameraShakeComponent>(outputId);
         auto* followComp = world.GetComponent<CameraFollowComponent>(outputId);
         auto* springComp = world.GetComponent<CameraSpringArmComponent>(outputId);
         auto* lookAtComp = world.GetComponent<CameraLookAtComponent>(outputId);
-
-        // === 입력 처리 ===
-        if (inputComp && inputComp->enabled)
-        {
-            const auto cameraList = ResolveCameraList(world, inputComp->cameraListCsv);
-
-            auto TriggerCut = [&](std::size_t idx)
-            {
-                if (idx >= cameraList.size()) return;
-                DirectX::XMFLOAT3 pos{}, rot{};
-                float fovY{}, nearP{}, farP{};
-                if (!GetCameraSnapshot(world, cameraList[idx], pos, rot, fovY, nearP, farP))
-                    return;
-                ApplyCameraSnapshot(world, outputId, pos, rot, fovY, nearP, farP);
-                if (blendComp) blendComp->active = false;
-            };
-
-            auto EnsureBlendComponent = [&]()
-            {
-                if (!blendComp)
-                    blendComp = &world.AddComponent<CameraBlendComponent>(outputId);
-                return blendComp != nullptr;
-            };
-
-            auto TriggerBlend = [&](std::size_t idx, float duration)
-            {
-                if (idx >= cameraList.size()) return;
-                if (!EnsureBlendComponent()) return;
-                DirectX::XMFLOAT3 pos{}, rot{};
-                float fovY{}, nearP{}, farP{};
-                if (!GetCameraSnapshot(world, outputId, pos, rot, fovY, nearP, farP))
-                    return;
-                blendComp->sourcePosition = pos;
-                blendComp->sourceRotation = rot;
-                blendComp->sourceFovY = fovY;
-                blendComp->sourceNear = nearP;
-                blendComp->sourceFar = farP;
-                blendComp->targetId = cameraList[idx];
-                blendComp->targetName.clear();
-                blendComp->duration = duration;
-                blendComp->elapsed = 0.0f;
-                blendComp->slowTriggered = false;
-                blendComp->slowElapsed = 0.0f;
-                blendComp->active = true;
-            };
-
-            if (input.IsKeyPressed(DirectX::Keyboard::D1)) TriggerCut(0);
-            if (input.IsKeyPressed(DirectX::Keyboard::D2)) TriggerCut(1);
-            if (input.IsKeyPressed(DirectX::Keyboard::D3)) TriggerBlend(2, inputComp->blendTimeKey3);
-            if (input.IsKeyPressed(DirectX::Keyboard::D4))
-            {
-                TriggerBlend(3, inputComp->blendTimeKey4);
-                if (!shakeComp)
-                    shakeComp = &world.AddComponent<CameraShakeComponent>(outputId);
-                if (shakeComp)
-                {
-                    shakeComp->amplitude = inputComp->shakeAmplitudeKey4;
-                    shakeComp->frequency = inputComp->shakeFrequencyKey4;
-                    shakeComp->duration = inputComp->shakeDurationKey4;
-                    shakeComp->decay = inputComp->shakeDecayKey4;
-                    shakeComp->elapsed = 0.0f;
-                }
-            }
-            if (input.IsKeyPressed(DirectX::Keyboard::D5))
-            {
-                TriggerBlend(4, inputComp->blendTimeKey5);
-                if (blendComp)
-                {
-                    blendComp->slowTriggerT = inputComp->slowTriggerTKey5;
-                    blendComp->slowDuration = inputComp->slowDurationKey5;
-                    blendComp->slowTimeScale = inputComp->slowTimeScaleKey5;
-                }
-            }
-
-            if (input.IsKeyPressed(DirectX::Keyboard::L))
-            {
-                if (!lookAtComp)
-                    lookAtComp = &world.AddComponent<CameraLookAtComponent>(outputId);
-                if (lookAtComp)
-                {
-                    lookAtComp->enabled = !lookAtComp->enabled;
-                    lookAtComp->targetName = inputComp->lookAtTargetName;
-                }
-            }
-
-            if (!springComp)
-                springComp = &world.AddComponent<CameraSpringArmComponent>(outputId);
-
-            if (springComp && springComp->enabled && springComp->enableZoom)
-            {
-                const float wheel = input.GetMouseScrollDelta();
-                if (wheel != 0.0f)
-                {
-                    springComp->desiredDistance = std::clamp(
-                        springComp->desiredDistance - wheel * springComp->zoomSpeed,
-                        springComp->minDistance,
-                        springComp->maxDistance);
-                }
-            }
-        }
 
         // === 블렌드 처리 ===
         if (blendComp && blendComp->active)
@@ -362,20 +262,7 @@ namespace Alice
         {
             float dt = deltaTime * std::max(0.0f, followComp->cameraTimeScale);
 
-            if (followComp->enableInput)
-            {
-                if (!followComp->lockOnActive || followComp->allowManualOrbitInLockOn)
-                {
-                    if (input.IsLeftButtonDown())
-                    {
-                        followComp->yawDeg -= input.GetMouseDelta().x * followComp->sensitivity;
-                        followComp->pitchDeg -= input.GetMouseDelta().y * followComp->sensitivity;
-                        followComp->pitchDeg = std::clamp(followComp->pitchDeg,
-                                                          followComp->pitchMinDeg,
-                                                          followComp->pitchMaxDeg);
-                    }
-                }
-            }
+            // 입력 처리는 Script(CameraController)가 담당
 
             // 타깃 찾기
             EntityId targetId = InvalidEntityId;
@@ -584,27 +471,48 @@ namespace Alice
         }
 
         // === 쉐이크 처리 ===
-        if (shakeComp && shakeComp->enabled && shakeComp->duration > 0.0f && shakeComp->amplitude > 0.0f)
+        // 이전 프레임 오프셋을 먼저 빼고, 이번 오프셋을 더한다(누적/드리프트 방지) 
+        // 그 흔들리면서 트랜스폼 자체가 변해버려서 뒤로 밀리는 현상을 제거하기 위함
+        if (shakeComp && shakeComp->enabled)
         {
-            shakeComp->elapsed += deltaTime;
-            const float t01 = std::clamp(shakeComp->elapsed / shakeComp->duration, 0.0f, 1.0f);
-            const float amp = shakeComp->amplitude * std::exp(-shakeComp->decay * t01);
-            const float freq = shakeComp->frequency;
+            // 1) 항상 이전 프레임 오프셋 제거
+            outputTr->position.x -= shakeComp->prevOffset.x;
+            outputTr->position.y -= shakeComp->prevOffset.y;
+            outputTr->position.z -= shakeComp->prevOffset.z;
+            shakeComp->prevOffset = {};
 
-            DirectX::XMFLOAT3 offset{};
-            offset.x = std::sin(shakeComp->elapsed * freq * 1.1f) * amp;
-            offset.y = std::sin(shakeComp->elapsed * freq * 1.7f + 1.5f) * amp * 0.6f;
-            offset.z = std::cos(shakeComp->elapsed * freq * 1.3f + 0.7f) * amp;
-
-            outputTr->position.x += offset.x;
-            outputTr->position.y += offset.y;
-            outputTr->position.z += offset.z;
-
-            if (t01 >= 1.0f)
+            // 2) 이번 프레임 오프셋 계산/적용
+            if (shakeComp->amplitude > 0.0f && shakeComp->duration > 0.0f)
             {
-                shakeComp->duration = 0.0f;
-                shakeComp->amplitude = 0.0f;
-                shakeComp->elapsed = 0.0f;
+                shakeComp->elapsed += deltaTime;
+
+                const float t01 = std::clamp(shakeComp->elapsed / shakeComp->duration, 0.0f, 1.0f);
+                const float amp = shakeComp->amplitude * std::exp(-shakeComp->decay * t01);
+                const float freq = shakeComp->frequency;
+
+                DirectX::XMFLOAT3 offset{};
+                offset.x = std::sin(shakeComp->elapsed * freq * 1.1f) * amp;
+                offset.y = std::sin(shakeComp->elapsed * freq * 1.7f + 1.5f) * amp * 0.6f;
+                offset.z = std::cos(shakeComp->elapsed * freq * 1.3f + 0.7f) * amp;
+
+                outputTr->position.x += offset.x;
+                outputTr->position.y += offset.y;
+                outputTr->position.z += offset.z;
+
+                shakeComp->prevOffset = offset;
+
+                // 3) 종료 시 이번 프레임 오프셋도 즉시 제거(다음 프레임에 남지 않게)
+                if (t01 >= 1.0f)
+                {
+                    outputTr->position.x -= shakeComp->prevOffset.x;
+                    outputTr->position.y -= shakeComp->prevOffset.y;
+                    outputTr->position.z -= shakeComp->prevOffset.z;
+                    shakeComp->prevOffset = {};
+
+                    shakeComp->duration = 0.0f;
+                    shakeComp->amplitude = 0.0f;
+                    shakeComp->elapsed = 0.0f;
+                }
             }
         }
     }
