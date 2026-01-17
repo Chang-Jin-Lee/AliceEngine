@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -33,6 +33,8 @@ namespace Alice
 
         /// 현재 FOV (라디안)를 반환합니다.
         float GetFovYRadians() const { return m_fovYRadians; }
+        /// 현재 수평 FOV (라디안)를 반환합니다.
+        float GetFovXRadians() const;
         /// 현재 종횡비를 반환합니다.
         float GetAspectRatio() const { return m_aspectRatio; }
         /// 현재 near/far 평면을 반환합니다.
@@ -44,6 +46,26 @@ namespace Alice
 
         /// 투영 행렬을 반환합니다.
         DirectX::XMMATRIX GetProjectionMatrix() const;
+
+        /// 뷰-프로젝션 행렬을 반환합니다.
+        DirectX::XMMATRIX GetViewProjectionMatrix() const;
+
+        /// 프러스텀 평면을 추출합니다. (좌,우,하,상,근,원)
+        void GetFrustumPlanes(DirectX::XMFLOAT4 outPlanes[6]) const;
+
+        /// 월드 좌표를 스크린 좌표로 변환합니다. (픽셀 기준)
+        DirectX::XMFLOAT2 WorldToScreen(const DirectX::XMFLOAT3& worldPos,
+                                        float viewportWidth,
+                                        float viewportHeight) const;
+
+        /// 스크린 좌표를 월드 레이로 변환합니다.
+        /// 성공 시 true 반환, outOrigin/outDir에 결과가 저장됩니다.
+        bool ScreenToWorldRay(float screenX,
+                              float screenY,
+                              float viewportWidth,
+                              float viewportHeight,
+                              DirectX::XMFLOAT3& outOrigin,
+                              DirectX::XMFLOAT3& outDir) const;
 
     private:
         DirectX::XMFLOAT3 m_position { 0.0f, 0.0f, -5.0f };

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <memory>
 #include <string>
@@ -9,6 +9,7 @@
 
 #include "Core/Entity.h"
 #include "Core/ScriptAPI.h"
+#include "Components/TransformComponent.h"
 
 namespace Alice
 {

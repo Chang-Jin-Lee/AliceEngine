@@ -1,4 +1,4 @@
-﻿#include "Core/World.h"
+#include "Core/World.h"
 #include "Core/GameObject.h"
 #include "Core/ScriptFactory.h"
 
@@ -14,15 +14,14 @@ namespace Alice {
 
 		// 2. ��� ������Ʈ �����̳� ���� (�޸� ����)
 		m_names.clear();
-		m_transforms.Clear();
+		
+		// 모든 엔진 컴포넌트 저장소 클리어
+		for (auto& [typeIndex, storage] : m_engineStorages)
+		{
+			storage->Clear();
+		}
+		
 		m_scripts.clear();
-		m_materials.Clear();
-		m_skinnedMeshes.Clear();
-		m_skinnedAnimations.Clear();
-		m_cameras.Clear();
-		m_pointLights.Clear();
-		m_spotLights.Clear();
-		m_rectLights.Clear();
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
@@ -55,7 +54,14 @@ namespace Alice {
 		}
 
 		m_names.erase(id);
-		m_transforms.Remove(id);
+		
+		// 모든 엔진 컴포넌트 저장소에서 해당 엔티티 제거
+		for (auto& [typeIndex, storage] : m_engineStorages)
+		{
+			storage->Remove(id);
+		}
+		
+		// 스크립트 제거
 		auto it = m_scripts.find(id);
 		if (it != m_scripts.end()) {
 			for (auto& sc : it->second)
@@ -67,13 +73,6 @@ namespace Alice {
 			}
 			m_scripts.erase(it);
 		}
-		m_materials.Remove(id);
-		m_skinnedMeshes.Remove(id);
-		m_skinnedAnimations.Remove(id);
-		m_cameras.Remove(id);
-		m_pointLights.Remove(id);
-		m_spotLights.Remove(id);
-		m_rectLights.Remove(id);
 	}
 
 	GameObject World::FindGameObject(const std::string& name)
