@@ -8,6 +8,7 @@
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/RigidBodyComponent.h"
 #include "PhysX/Components/ColliderComponent.h"
+#include "PhysX/Components/TerrainHeightFieldComponent.h"
 #include "PhysX/IPhysicsWorld.h"
 
 using namespace DirectX;
@@ -153,6 +154,23 @@ namespace Alice
             .property("collideMask", &ColliderComponent::collideMask)
             .property("queryMask", &ColliderComponent::queryMask)
             .property("isTrigger", &ColliderComponent::isTrigger);
+
+        // === TerrainHeightFieldComponent 등록 (physicsActorHandle, heightSamples는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<TerrainHeightFieldComponent>("TerrainHeightFieldComponent")
+            .constructor<>()
+            .property("numRows", &TerrainHeightFieldComponent::numRows)
+            .property("numCols", &TerrainHeightFieldComponent::numCols)
+            .property("rowScale", &TerrainHeightFieldComponent::rowScale)
+            .property("colScale", &TerrainHeightFieldComponent::colScale)
+            .property("heightScale", &TerrainHeightFieldComponent::heightScale)
+            .property("centerPivot", &TerrainHeightFieldComponent::centerPivot)
+            .property("doubleSidedQueries", &TerrainHeightFieldComponent::doubleSidedQueries)
+            .property("staticFriction", &TerrainHeightFieldComponent::staticFriction)
+            .property("dynamicFriction", &TerrainHeightFieldComponent::dynamicFriction)
+            .property("restitution", &TerrainHeightFieldComponent::restitution)
+            .property("layerBits", &TerrainHeightFieldComponent::layerBits)
+            .property("collideMask", &TerrainHeightFieldComponent::collideMask)
+            .property("queryMask", &TerrainHeightFieldComponent::queryMask);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

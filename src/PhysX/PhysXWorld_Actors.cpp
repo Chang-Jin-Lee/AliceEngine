@@ -139,6 +139,15 @@ std::unique_ptr<IPhysicsActor> PhysXWorld::CreateStaticConvexMesh(const Vec3& po
 	return a;
 }
 
+std::unique_ptr<IPhysicsActor> PhysXWorld::CreateStaticHeightField(const Vec3& pos, const Quat& rot, const HeightFieldColliderDesc& heightField)
+{
+	auto a = CreateStaticEmpty(pos, rot, heightField.userData);
+	if (!a) return {};
+	if (!a->AddHeightFieldShape(heightField))
+		return {};
+	return a;
+}
+
 std::unique_ptr<IRigidBody> PhysXWorld::CreateDynamicConvexMesh(const Vec3& pos, const Quat& rot, const RigidBodyDesc& rb, const ConvexMeshColliderDesc& mesh)
 {
 	auto body = CreateDynamicEmpty(pos, rot, rb);

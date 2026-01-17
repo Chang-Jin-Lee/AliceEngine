@@ -61,7 +61,10 @@ namespace Alice
                           EntityId& selectedEntity,
                           ViewportPicker& picker,
                           float& cameraMoveSpeed,
-                          bool& useForwardRendering);
+                          bool& useForwardRendering,
+                          bool& pvdEnabled,
+                          std::string& pvdHost,
+                          int& pvdPort);
 
         void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
         void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);

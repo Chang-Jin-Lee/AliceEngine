@@ -151,6 +151,39 @@ struct CapsuleColliderDesc : public FilterDesc, public MaterialDesc
 	bool alignYAxis = true;
 };
 
+// ------------------------------
+// HeightField (Terrain)
+// ------------------------------
+// PhysX HeightField for terrain collision.
+// HeightField is a grid of height samples, efficient for large terrains.
+struct HeightFieldColliderDesc : public FilterDesc, public MaterialDesc
+{
+	// Height samples (row-major: samples[i * numCols + j])
+	// Each sample is a height value in world units (meters).
+	// PhysX internally quantizes these to int16 using heightScale.
+	const float* heightSamples = nullptr;
+	uint32_t numRows = 0;  // Grid rows (typically Y-axis in PhysX), must be >= 2
+	uint32_t numCols = 0;  // Grid columns (typically X-axis in PhysX), must be >= 2
+
+	// Height quantization scale: "world height per int16 step"
+	// PhysX formula: worldHeight = PxI16(height) * heightScale
+	// Example: heightScale = 0.01f means 1 int16 unit = 1cm in world space
+	// Must be > 0.0f
+	float heightScale = 0.01f;
+
+	// Horizontal scale (size of each grid cell in world units)
+	// This determines the physical size of the terrain.
+	// If rowScale/colScale are equal, terrain cells are square.
+	// Both must be > 0.0f
+	float rowScale = 1.0f;  // Size along rows (Y-axis spacing) in world units
+	float colScale = 1.0f;  // Size along columns (X-axis spacing) in world units
+
+	// Thickness for collision detection below the surface
+	// NOTE: PhysX 5.x PxHeightFieldDesc does not support thickness member.
+	// This field is kept for API compatibility but is not used by PhysX.
+	// (Deprecated in PhysX 3.x, removed in PhysX 5.x)
+	float thickness = 0.0f;  // Not used in PhysX 5.x
+};
 
 // ------------------------------
 // Mesh cooking inputs
@@ -547,6 +580,11 @@ public:
 		const Vec3& localPos = Vec3::Zero,
 		const Quat& localRot = Quat::Identity) = 0;
 
+	// Height field shape (terrain)
+	virtual bool AddHeightFieldShape(const HeightFieldColliderDesc& heightField,
+		const Vec3& localPos = Vec3::Zero,
+		const Quat& localRot = Quat::Identity) = 0;
+
 	virtual bool ClearShapes() = 0;
 	virtual uint32_t GetShapeCount() const = 0;
 
@@ -935,6 +973,12 @@ public:
 		const Quat& rot,
 		const RigidBodyDesc& rb,
 		const ConvexMeshColliderDesc& mesh) = 0;
+
+	// Static height field (terrain collision, efficient for large terrains)
+	virtual std::unique_ptr<IPhysicsActor> CreateStaticHeightField(
+		const Vec3& pos,
+		const Quat& rot,
+		const HeightFieldColliderDesc& heightField) = 0;
 
 	// ------------------------------
 	// Character Controller (CCT)

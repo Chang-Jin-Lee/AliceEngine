@@ -764,6 +764,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	std::mutex materialCacheMtx;
 	std::unordered_map<uint64_t, PxMaterial*> materialCache;
 
+	// HeightField cache (does not require cooking)
+	std::mutex heightFieldCacheMtx;
+	std::unordered_map<uint64_t, PxHeightField*> heightFieldCache;
+
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
 	std::mutex meshCacheMtx;
 	std::unordered_map<uint64_t, PxTriangleMesh*> triMeshCache;
@@ -1041,6 +1045,78 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	}
 #endif
 
+	// HeightField creation (requires cooking path in PhysX 5.x)
+	PxHeightField* GetOrCreateHeightField(const HeightFieldColliderDesc& hf)
+	{
+		if (!physics) return nullptr;
+		if (!hf.heightSamples) return nullptr;
+		if (hf.numRows < 2 || hf.numCols < 2) return nullptr;
+
+		// PhysX constraints: all scales must be > 0
+		if (hf.heightScale <= 0.0f) return nullptr;
+		if (hf.rowScale <= 0.0f) return nullptr;
+		if (hf.colScale <= 0.0f) return nullptr;
+
+		// Compute hash from height field data
+		// Cache key: heightScale affects quantization result, but thickness is not used in PhysX 5.x
+		const uint64_t seed = 14695981039346656037ull;
+		uint64_t h = seed;
+		h = HashU32(h, hf.numRows);
+		h = HashU32(h, hf.numCols);
+		h = HashU32(h, FloatBits(hf.heightScale));
+		h = HashFNV1a64(h, hf.heightSamples, sizeof(float) * hf.numRows * hf.numCols);
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			auto it = heightFieldCache.find(h);
+			if (it != heightFieldCache.end()) return it->second;
+		}
+
+		// Convert float height samples to PxHeightFieldSample (S16 format)
+		// Use quantization: worldHeight / heightScale -> int16
+		std::vector<PxHeightFieldSample> samples(hf.numRows * hf.numCols);
+		
+		for (uint32_t i = 0; i < hf.numRows * hf.numCols; ++i)
+		{
+			PxHeightFieldSample s{};
+			const float hWorld = hf.heightSamples[i];
+
+			// Quantize: float(world height) -> int16(sample height)
+			// PhysX formula: worldHeight = PxI16(height) * heightScale
+			const float q = hWorld / hf.heightScale;
+			long qi = std::lround(q);
+			qi = std::clamp<long>(qi, -32768, 32767);
+
+			s.height = static_cast<PxI16>(qi);
+			s.materialIndex0 = 0;
+			s.materialIndex1 = 0;
+			// tessFlag is a getter/setter, not a member variable
+			s.clearTessFlag(); // Can use s.setTessFlag() for tessellation control if needed
+
+			samples[i] = s;
+		}
+
+		// Create PxHeightFieldDesc
+		PxHeightFieldDesc desc{};
+		desc.format = PxHeightFieldFormat::eS16_TM;
+		desc.nbRows = static_cast<PxU32>(hf.numRows);
+		desc.nbColumns = static_cast<PxU32>(hf.numCols);
+		desc.samples.data = samples.data();
+		desc.samples.stride = sizeof(PxHeightFieldSample);
+		// Note: thickness is not a member of PxHeightFieldDesc in PhysX 5.x
+
+		// PhysX 5.x: Use cooking path (PxCreateHeightField) instead of physics->createHeightField
+		PxHeightField* heightField = PxCreateHeightField(desc, physics->getPhysicsInsertionCallback());
+		if (!heightField) return nullptr;
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			heightFieldCache.emplace(h, heightField);
+		}
+
+		return heightField;
+	}
+
 	void ClearMeshCachesInternal()
 	{
 		{
@@ -1048,6 +1124,13 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			for (auto& kv : materialCache)
 				if (kv.second) kv.second->release();
 			materialCache.clear();
+		}
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			for (auto& kv : heightFieldCache)
+				if (kv.second) kv.second->release();
+			heightFieldCache.clear();
 		}
 
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
@@ -1502,6 +1585,34 @@ public:
 #endif
 	}
 
+	bool AddHeightFieldShape(const HeightFieldColliderDesc& hf, const Vec3& localPos, const Quat& localRot) override
+	{
+		if (!actor) return false;
+		auto s = world.lock();
+		if (!s || !s->scene) return false;
+
+		// PhysX constraints: HeightField cannot be a trigger
+		if (hf.isTrigger) return false;
+
+		// PhysX constraints: HeightField cannot be attached to non-kinematic dynamic bodies
+		if (PxRigidDynamic* dyn = actor->is<PxRigidDynamic>())
+		{
+			if (!HasRigidBodyFlag(dyn->getRigidBodyFlags(), PxRigidBodyFlag::eKINEMATIC))
+				return false; // Non-kinematic dynamic bodies cannot have HeightField simulation shapes
+		}
+
+		PxHeightField* heightField = s->GetOrCreateHeightField(hf);
+		if (!heightField) return false;
+
+		// Create PxHeightFieldGeometry
+		// PhysX formula: worldHeight = PxI16(height) * heightScale
+		PxMeshGeometryFlags gflags;
+		const PxHeightFieldGeometry geom(heightField, gflags, hf.heightScale, hf.rowScale, hf.colScale);
+		if (!geom.isValid()) return false; // Scale too small or invalid
+
+		return AddShapeCommon(geom, hf, localPos, localRot);
+	}
+
 	bool ClearShapes() override
 	{
 		if (!actor) return false;
@@ -1625,6 +1736,11 @@ public:
 	bool AddConvexMeshShape(const ConvexMeshColliderDesc& mesh, const Vec3& localPos, const Quat& localRot) override
 	{
 		return base.AddConvexMeshShape(mesh, localPos, localRot);
+	}
+
+	bool AddHeightFieldShape(const HeightFieldColliderDesc& hf, const Vec3& localPos, const Quat& localRot) override
+	{
+		return base.AddHeightFieldShape(hf, localPos, localRot);
 	}
 
 	bool ClearShapes() override { return base.ClearShapes(); }

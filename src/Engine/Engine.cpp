@@ -90,10 +90,6 @@ namespace Alice
 		//===============================		
 		PhysicsModule m_physics; // 물리 모듈
 		std::unique_ptr<PhysicsSystem> m_physicsSystem; // 물리 시스템 (ECS 브릿지)
-		//테스트용
-		std::unique_ptr<IRigidBody>    m_testBox;
-		std::unique_ptr<IPhysicsActor> m_testGround; // 옵션
-		EntityId                       m_testEntity = InvalidEntityId;
 
 		float m_physAccum = 0.0f;
 		float m_physFixedDt = 1.0f / 60.0f;
@@ -101,6 +97,11 @@ namespace Alice
 		
 		// 물리 이벤트 큐 (한 프레임 안전하게 처리하기 위함)
 		std::vector<PhysicsEvent> m_physicsEventQueue;
+		
+		// PVD (PhysX Visual Debugger) 설정
+		bool m_pvdEnabled = false;
+		std::string m_pvdHost = "127.0.0.1";
+		int m_pvdPort = 5425;
 		//===============================
 
 		ScriptSystem   m_scriptSystem;
@@ -141,6 +142,103 @@ namespace Alice
 	{
 		// 윈도우 클래스 이름은 전역 상수로 관리합니다.
 		constexpr wchar_t kWindowClassName[] = L"AliceRendererWindowClass";
+
+		// PVD 설정 저장/로드 함수
+		std::filesystem::path GetEngineSettingsPath(const std::filesystem::path& exeDir)
+		{
+			namespace fs = std::filesystem;
+			// 에디터 모드: 프로젝트 루트 / EngineSettings.json
+			// 게임 모드: 실행 파일 위치 / EngineSettings.json
+			fs::path cfg = exeDir / "EngineSettings.json";
+			if (!fs::exists(cfg))
+			{
+				// 빌드 경로에도 확인
+				cfg = exeDir.parent_path().parent_path().parent_path() / "EngineSettings.json";
+			}
+			return cfg;
+		}
+
+		void LoadPvdSettings(const std::filesystem::path& exeDir, bool& enabled, std::string& host, int& port)
+		{
+			namespace fs = std::filesystem;
+			fs::path cfg = GetEngineSettingsPath(exeDir);
+
+			if (!fs::exists(cfg))
+			{
+				// 파일이 없으면 기본값 유지
+				return;
+			}
+
+			std::ifstream ifs(cfg);
+			if (!ifs.is_open()) return;
+
+			nlohmann::json j;
+			try
+			{
+				ifs >> j;
+			}
+			catch (...)
+			{
+				ALICE_LOG_WARN("EngineSettings.json parse error. Using defaults.");
+				return;
+			}
+
+			if (j.contains("pvd"))
+			{
+				const auto& pvd = j["pvd"];
+				if (pvd.contains("enabled") && pvd["enabled"].is_boolean())
+					enabled = pvd["enabled"].get<bool>();
+				if (pvd.contains("host") && pvd["host"].is_string())
+					host = pvd["host"].get<std::string>();
+				if (pvd.contains("port") && pvd["port"].is_number_integer())
+					port = pvd["port"].get<int>();
+			}
+		}
+
+		void SavePvdSettings(const std::filesystem::path& exeDir, bool enabled, const std::string& host, int port)
+		{
+			namespace fs = std::filesystem;
+			fs::path cfg = GetEngineSettingsPath(exeDir);
+
+			// 디렉토리 생성 (없으면)
+			fs::create_directories(cfg.parent_path());
+
+			nlohmann::json j;
+			
+			// 기존 파일이 있으면 읽어서 병합
+			if (fs::exists(cfg))
+			{
+				std::ifstream ifs(cfg);
+				if (ifs.is_open())
+				{
+					try
+					{
+						ifs >> j;
+					}
+					catch (...)
+					{
+						// 파싱 실패해도 계속 진행 (새 파일로 덮어쓰기)
+					}
+				}
+			}
+
+			// PVD 설정 업데이트
+			j["pvd"] = nlohmann::json::object();
+			j["pvd"]["enabled"] = enabled;
+			j["pvd"]["host"] = host;
+			j["pvd"]["port"] = port;
+
+			// 저장
+			std::ofstream ofs(cfg);
+			if (!ofs.is_open())
+			{
+				ALICE_LOG_ERRORF("Failed to save EngineSettings.json");
+				return;
+			}
+
+			ofs << j.dump(4); // 들여쓰기 4칸으로 포맷
+			ALICE_LOG_INFO("PVD settings saved to EngineSettings.json");
+		}
 
 		// BuildSettings.txt 에서 시작 씬(.scene 파일)을 읽어와 World 에 로드합니다.
 		// - scenes 섹션은 "index: path" 형식으로 저장되어 있다고 가정합니다.
@@ -232,6 +330,12 @@ namespace Alice
 
 	Engine::~Engine()
 	{
+		// PVD 설정 저장 (엔진 종료 시)
+		wchar_t pathBuf[MAX_PATH] = {};
+		GetModuleFileNameW(nullptr, pathBuf, MAX_PATH);
+		const std::filesystem::path exeDir = std::filesystem::path(pathBuf).parent_path();
+		SavePvdSettings(exeDir, pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort);
+
 		pImpl->m_physics.ShutdownContext();
 		pImpl->m_editorCore.Shutdown();
 	}
@@ -253,9 +357,38 @@ namespace Alice
 		pImpl->m_resourceManager.Configure(!pImpl->m_editorMode, exeDir);
 
 		//===============================================================
+		// PVD 설정 로드 (물리 초기화 전에 실행)
+		LoadPvdSettings(exeDir, pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort);
+		if (pImpl->m_pvdEnabled)
+		{
+			ALICE_LOG_INFO("PVD settings loaded from EngineSettings.json: %s:%d", pImpl->m_pvdHost.c_str(), pImpl->m_pvdPort);
+		}
+
+		//===============================================================
 		// 물리 초기화(씬 초기화보다 선행되어야함 - 중요함)
 		PhysicsModule::ContextInitDesc ctx{};
-		if (!pImpl->m_physics.InitializeContext(ctx)) return false;
+		ctx.enablePvd = pImpl->m_pvdEnabled;
+		ctx.pvdHost = pImpl->m_pvdHost.c_str();
+		ctx.pvdPort = pImpl->m_pvdPort;
+		ctx.pvdTimeoutMs = 1000;  // 1초 타임아웃 (PVD 서버 연결에 충분한 시간)
+		
+		if (!pImpl->m_physics.InitializeContext(ctx))
+		{
+			// PhysX 초기화 실패는 치명적 오류 (PVD 연결 실패는 여기까지 오지 않음)
+			const std::string& error = pImpl->m_physics.GetLastError();
+			ALICE_LOG_ERRORF("PhysicsModule::InitializeContext failed: %s", error.c_str());
+			return false;
+		}
+		
+		// PVD 연결 상태 확인 및 로깅
+		if (pImpl->m_pvdEnabled)
+		{
+			// PhysXContext가 성공적으로 생성되었지만, 실제 PVD 연결 여부는
+			// GetPvd()로 확인 가능 (하지만 여기서는 PhysicsModule을 통해 접근 불가)
+			// 연결 실패 시 PVD 없이 계속 진행됨을 로그에 표시
+			ALICE_LOG_INFO("PVD enabled: %s:%d (connection may fail silently if PVD server is not running)", 
+				pImpl->m_pvdHost.c_str(), pImpl->m_pvdPort);
+		}
 
 		// ============================================= 시스템 초기화 =============================================
 		// 윈도우, 입력, 렌더 디바이스 생성
@@ -464,6 +597,21 @@ namespace Alice
 			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
 			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
 
+			// PhysicsSceneSettingsComponent가 있는데 물리 월드가 없으면 생성 시도
+			// (Awake()에서 추가된 경우 대응)
+			if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
+			{
+				const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
+				if (!settingsMap.empty())
+				{
+					const auto& settings = settingsMap.begin()->second;
+					if (settings.enablePhysics)
+					{
+						RefreshPhysicsForCurrentWorld();
+					}
+				}
+			}
+
 			// PhysicsSystem 업데이트 (Game → Physics 동기화)
 			if (pImpl->m_physicsSystem)
 			{
@@ -483,21 +631,6 @@ namespace Alice
 	{
 		// 현재 씬의 물리 월드 설정을 갱신
 		// PhysicsSceneSettingsComponent를 기반으로 물리 월드를 생성/재사용
-		// 기존 테스트 바디 정리 (씬 전환 시 안전하게 정리)
-		if (pImpl->m_testBox)
-		{
-			pImpl->m_testBox.reset();
-		}
-		if (pImpl->m_testGround)
-		{
-			pImpl->m_testGround.reset();
-		}
-		if (pImpl->m_testEntity != InvalidEntityId)
-		{
-			pImpl->m_world.DestroyEntity(pImpl->m_testEntity);
-			pImpl->m_testEntity = InvalidEntityId;
-		}
-
 		// settings가 없으면, 물리월드 제거(비물리 씬)
 		const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
 
@@ -578,38 +711,6 @@ namespace Alice
 		pImpl->m_physFixedDt = settings.fixedDt;
 		pImpl->m_physMaxSubsteps = settings.maxSubsteps;
 		pImpl->m_physAccum = 0.0f;
-
-		// ---- Smoke test (딱 한번만) ----
-		IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
-		if (pw)
-		{
-			// 바닥
-			pImpl->m_testGround = pw->CreateStaticPlaneActor();
-
-			// 테스트 엔티티 하나 만들고 Transform 추가
-			pImpl->m_testEntity = pImpl->m_world.CreateEntity();
-			auto& tr = pImpl->m_world.AddComponent<TransformComponent>(pImpl->m_testEntity);
-			tr.position = { 0.f, 5.f, 0.f };
-			tr.rotation = { 0.f, 0.f, 0.f };
-
-			// 동적 박스
-			RigidBodyDesc rb{};
-			rb.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(pImpl->m_testEntity));
-
-			BoxColliderDesc box{};
-			box.halfExtents = { 0.5f, 0.5f, 0.5f };
-			box.userData = rb.userData;
-
-			pImpl->m_testBox = pw->CreateDynamicBox(
-				Vec3(0.f, 5.f, 0.f),
-				Quat::Identity,
-				rb,
-				box
-			);
-
-			ALICE_LOG_INFO("SmokeTest box created. entity=%llu", (unsigned long long)pImpl->m_testEntity);
-		}
-		//----------여기까지 테스트용
 	}
 
 	void Engine::TickPhysics(float dt)
@@ -680,19 +781,6 @@ namespace Alice
 			pImpl->m_physAccum = 0.0f;
 
 		// 로그로 떨어지는지 확인 (1초에 1번만)
-		// 주의: 월드가 유효할 때만 호출 (Use-after-free 방지)
-		static float logAccum = 0.f;
-		logAccum += dt;
-		if (logAccum > 1.f && pImpl->m_testBox && pw)
-		{
-			logAccum = 0.f;
-			// 월드가 유효한지 확인 후 호출
-			if (pImpl->m_world.GetPhysicsWorld() == pw)
-			{
-				auto p = pImpl->m_testBox->GetPosition();
-				ALICE_LOG_INFO("TestBox Y = %.3f", p.y);
-			}
-		}
 	}
 
 	void Engine::ProcessPhysicsEvents()
@@ -800,7 +888,8 @@ namespace Alice
 				pImpl->m_timer.DeltaTime(), (pImpl->m_timer.DeltaTime() > 0) ? (1.0f / pImpl->m_timer.DeltaTime()) : 0.0f,
 				pImpl->m_isPlaying, shadingMode, pImpl->m_useFillLight,
 				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
-				pImpl->m_useForwardRendering
+				pImpl->m_useForwardRendering,
+				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort
 			);
 			pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
 
