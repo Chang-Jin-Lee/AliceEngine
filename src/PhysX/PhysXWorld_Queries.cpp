@@ -48,7 +48,8 @@ bool PhysXWorld::RaycastEx(const Vec3& origin, const Vec3& dir, float maxDist, R
 {
 	if (!impl || !impl->scene) return false;
 
-	const Vec3 nd = dir; // assume normalized by caller; PhysX will normalize internally for rays.
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
 
 	PxRaycastBuffer buf;
 	PxQueryFilterData qfd;
@@ -58,7 +59,7 @@ bool PhysXWorld::RaycastEx(const Vec3& origin, const Vec3& dir, float maxDist, R
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
 	const PxHitFlags hitFlags = PxHitFlag::ePOSITION | PxHitFlag::eNORMAL | PxHitFlag::eFACE_INDEX | PxHitFlag::eUV;
-	const bool hit = impl->scene->raycast(ToPx(origin), ToPx(nd), maxDist, buf, hitFlags, qfd, &cb);
+	const bool hit = impl->scene->raycast(ToPx(origin), unitDir, maxDist, buf, hitFlags, qfd, &cb);
 	if (!hit || !buf.hasBlock) return false;
 
 	FillRaycastHit(buf.block, outHit);
@@ -70,6 +71,9 @@ uint32_t PhysXWorld::RaycastAll(const Vec3& origin, const Vec3& dir, float maxDi
 	outHits.clear();
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return 0;
+
 	std::vector<PxRaycastHit> hits(maxHits);
 	PxRaycastBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
 
@@ -80,9 +84,7 @@ uint32_t PhysXWorld::RaycastAll(const Vec3& origin, const Vec3& dir, float maxDi
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
 	const PxHitFlags hitFlags = PxHitFlag::ePOSITION | PxHitFlag::eNORMAL | PxHitFlag::eFACE_INDEX | PxHitFlag::eUV;
-	const bool ok = impl->scene->raycast(ToPx(origin), ToPx(dir), maxDist, buf,
-		hitFlags,
-		qfd, &cb);
+	const bool ok = impl->scene->raycast(ToPx(origin), unitDir, maxDist, buf, hitFlags, qfd, &cb);
 
 	if (!ok) return 0;
 
@@ -94,7 +96,6 @@ uint32_t PhysXWorld::RaycastAll(const Vec3& origin, const Vec3& dir, float maxDi
 		FillRaycastHit(buf.getTouch(i), rh);
 		outHits.push_back(rh);
 	}
-
 	return static_cast<uint32_t>(outHits.size());
 }
 
@@ -223,6 +224,9 @@ bool PhysXWorld::SweepBox(const Vec3& origin, const Quat& rot, const Vec3& halfE
 {
 	if (!impl || !impl->scene) return false;
 
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
+
 	PxQueryFilterData qfd;
 	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
 
@@ -234,7 +238,7 @@ bool PhysXWorld::SweepBox(const Vec3& origin, const Quat& rot, const Vec3& halfE
 	PxSweepBuffer buf;
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
-	const bool ok = impl->scene->sweep(geom, pose, ToPx(dir), maxDist, buf,
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
 		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
 		qfd, &cb);
 
@@ -248,6 +252,9 @@ bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, 
 {
 	if (!impl || !impl->scene) return false;
 
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
+
 	PxQueryFilterData qfd;
 	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
 
@@ -259,7 +266,7 @@ bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, 
 	PxSweepBuffer buf;
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
-	const bool ok = impl->scene->sweep(geom, pose, ToPx(dir), maxDist, buf,
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
 		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
 		qfd, &cb);
 
@@ -272,6 +279,9 @@ bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, 
 bool PhysXWorld::SweepCapsule(const Vec3& origin, const Quat& rot, float radius, float halfHeight, const Vec3& dir, float maxDist, SweepHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, bool alignYAxis) const
 {
 	if (!impl || !impl->scene) return false;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
 
 	PxQueryFilterData qfd;
 	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
@@ -286,13 +296,12 @@ bool PhysXWorld::SweepCapsule(const Vec3& origin, const Quat& rot, float radius,
 		Quat align = FromPx(CapsuleAlignQuatPx());
 		q = q * align;
 	}
-
 	const PxTransform pose = ToPxTransform(origin, q);
 
 	PxSweepBuffer buf;
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
-	const bool ok = impl->scene->sweep(geom, pose, ToPx(dir), maxDist, buf,
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
 		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
 		qfd, &cb);
 

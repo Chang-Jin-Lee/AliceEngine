@@ -24,6 +24,7 @@
 #include "PhysX/Components/ColliderComponent.h"
 #include "PhysX/Components/PhysicsSceneSettingsComponent.h"
 #include "PhysX/Components/TerrainHeightFieldComponent.h"
+#include "PhysX/Components/CharacterControllerComponent.h"
 
 class IPhysicsWorld; // 물리 인터페이스 전방선언
 
@@ -361,6 +362,7 @@ namespace Alice
             else if constexpr (std::is_same_v<T, RigidBodyComponent>) return m_rigidBodies;
             else if constexpr (std::is_same_v<T, ColliderComponent>) return m_colliders;
             else if constexpr (std::is_same_v<T, TerrainHeightFieldComponent>) return m_terrainHeightFields;
+            else if constexpr (std::is_same_v<T, CharacterControllerComponent>) return m_characterControllers;
             else static_assert(std::is_same_v<T, void>, "컴포넌트 타입이 아닙니다."); // 한글 깨져서 임의로 채워놨어용
         }
 
@@ -377,6 +379,7 @@ namespace Alice
             else if constexpr (std::is_same_v<T, RigidBodyComponent>) return m_rigidBodies;
             else if constexpr (std::is_same_v<T, ColliderComponent>) return m_colliders;
             else if constexpr (std::is_same_v<T, TerrainHeightFieldComponent>) return m_terrainHeightFields;
+            else if constexpr (std::is_same_v<T, CharacterControllerComponent>) return m_characterControllers;
             else static_assert(std::is_same_v<T, void>, "컴포넌트 타입이 아닙니다.");
         }
 
@@ -397,6 +400,7 @@ namespace Alice
         ComponentStorage<ColliderComponent> m_colliders;
         ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
         ComponentStorage<TerrainHeightFieldComponent> m_terrainHeightFields;
+        ComponentStorage<CharacterControllerComponent> m_characterControllers;
         
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
 

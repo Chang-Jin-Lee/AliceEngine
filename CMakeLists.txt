@@ -231,6 +231,7 @@ set(ENGINE_HEADERS
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
+	${ALICE_SRC_DIR}/PhysX/Components/CharacterControllerComponent.h
 )
 
 # [변경] AliceEngine -> Engine

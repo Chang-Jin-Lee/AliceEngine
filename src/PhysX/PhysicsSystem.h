@@ -4,6 +4,7 @@
 #include "Components/RigidBodyComponent.h"
 #include "Components/ColliderComponent.h"
 #include "Components/TerrainHeightFieldComponent.h"
+#include "Components/CharacterControllerComponent.h"
 #include <Core/World.h>
 #include <DirectXMath.h>
 #include <unordered_map>
@@ -147,6 +148,49 @@ private:
         float stabilizationThreshold{};
     };
     std::unordered_map<Alice::EntityId, RigidBodyState> m_lastRigidBodies;
+
+    // Terrain 파라미터 변경 감지용
+    struct TerrainState
+    {
+        uint32_t numRows{};
+        uint32_t numCols{};
+        float rowScale{};
+        float colScale{};
+        float heightScale{};
+        bool centerPivot{};
+        bool doubleSidedQueries{};
+        float staticFriction{};
+        float dynamicFriction{};
+        float restitution{};
+        uint32_t layerBits{};
+        uint32_t collideMask{};
+        uint32_t queryMask{};
+        DirectX::XMFLOAT3 scale{};
+    };
+    std::unordered_map<Alice::EntityId, TerrainState> m_lastTerrains;
+
+    // Character Controller 핸들
+    struct CCTHandle
+    {
+        std::unique_ptr<ICharacterController> owned;
+        ICharacterController* cct = nullptr;
+
+        CCTHandle() = default;
+        explicit CCTHandle(std::unique_ptr<ICharacterController> in)
+            : owned(std::move(in)), cct(owned.get()) {}
+
+        bool IsValid() const { return owned && owned->IsValid(); }
+        void Destroy()
+        {
+            if (owned) { owned->Destroy(); owned.reset(); }
+            cct = nullptr;
+        }
+    };
+    std::unordered_map<Alice::EntityId, CCTHandle> m_entityToCCT;
+
+    // Character Controller 생성/삭제
+    void CreateCharacterController(Alice::EntityId entityId);
+    void DestroyCharacterController(Alice::EntityId entityId);
 
     // Collider/Scale 변경 시 Shape 재구성
     void RebuildShapes(Alice::EntityId entityId);
