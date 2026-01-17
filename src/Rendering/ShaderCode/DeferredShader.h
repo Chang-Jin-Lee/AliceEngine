@@ -761,5 +761,73 @@ VSOutput main(VSInput input)
     return o;
 }
 )";
+
+        // UI Render Vertex Shader
+        inline static const char* UIRenderVS = R"(
+cbuffer UICompositeCB : register(b0)
+{
+    uint isUseMetalness;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+};
+
+struct PS_INPUT
+{
+    float4 Pos : SV_POSITION;
+    float2 Tex : TEXCOORD0;
+};
+
+PS_INPUT main(uint vid : SV_VertexID) 
+{
+    PS_INPUT o;
+    uint tmp = isUseMetalness;
+    
+    //사각형 4점
+    float2 p0 = float2(-1.0, -1.0); 
+    float2 p1 = float2(-1.0, 1.0); 
+    float2 p2 = float2(1.0, 1.0); 
+    float2 p3 = float2(1.0, -1.0); 
+
+    // UV좌표 4점
+    float2 t0 = float2(0.0, 1.0);
+    float2 t1 = float2(0.0, 0.0);
+    float2 t2 = float2(1.0, 0.0);
+    float2 t3 = float2(1.0, 1.0);
+
+    // 삼각형 2개 = 6정점 (0,1,2) + (0,2,3)
+    float2 pos[6] = { p0, p1, p2, p0, p2, p3 };
+    float2 uv[6] = { t0, t1, t2, t0, t2, t3 };
+
+    o.Pos = float4(pos[vid][0], pos[vid][1], 0.0, 1.0);
+    o.Tex = uv[vid];
+    return o;
+}
+)";
+
+        // UI Render Pixel Shader
+        inline static const char* UIRenderPS = R"(
+    struct PS_INPUT
+    {
+        float4 Pos : SV_POSITION;
+        float2 Tex : TEXCOORD0;
+    };
+
+    Texture2D UITexture : register(t101);
+    SamplerState SamLinear : register(s0);
+
+    float4 main(PS_INPUT input) : SV_Target
+    {
+        float4 UITex = UITexture.Sample(SamLinear, input.Tex);
+    
+        // UI 텍스처 알파값으로 UI, 화면 구분
+        if (UITex.a <= 0.0f)
+        {
+            discard;
+        }
+        
+        return UITex;
+    }
+)";
     };
 }
