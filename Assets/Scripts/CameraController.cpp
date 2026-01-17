@@ -47,6 +47,11 @@ namespace Alice
             lookAt->enabled = false;
     }
 
+    void CameraController::Start()
+    {
+        SetPreview(false);
+    }
+
     std::string CameraController::GetCameraNameFromCsv(const std::string& csv, int idx) const
     {
         std::stringstream ss(csv);
@@ -208,16 +213,37 @@ namespace Alice
     void CameraController::ToggleLookAt()
     {
         auto go = gameObject();
-        if (!go.IsValid()) return;
+        auto* world = GetWorld();
+        if (!go.IsValid() || !world) return;
 
         auto* lookAt = go.GetComponent<CameraLookAtComponent>();
         if (!lookAt) lookAt = &go.AddComponent<CameraLookAtComponent>();
+
+        auto* follow = go.GetComponent<CameraFollowComponent>();
+        if (!follow) follow = &go.AddComponent<CameraFollowComponent>();
 
         lookAt->enabled = !lookAt->enabled;
 
         // 타깃 이름은 CameraInputComponent(=RigPreset이 채워줌)에서 가져온다
         if (auto* cfg = go.GetComponent<CameraInputComponent>())
             lookAt->targetName = cfg->lookAtTargetName;
+
+        // Follow의 lockOn 상태도 동기화
+        follow->lockOnActive = lookAt->enabled;
+        follow->lockOnTargetId = InvalidEntityId;
+
+        if (lookAt->enabled)
+        {
+            auto t = world->FindGameObject(lookAt->targetName);
+            if (t.IsValid()) follow->lockOnTargetId = t.id();
+            follow->mode = 2; // lock-on 거리/FOV 모드
+            follow->shoulderOffset = m_sholderOffset;
+        }
+        else
+        {
+            follow->mode = 0; // 기본 모드로 복귀
+            follow->shoulderOffset = 0.3f;
+        }
     }
 
     void CameraController::UpdateOrbit()
@@ -278,7 +304,9 @@ namespace Alice
 
         // ---- LookAt 토글(프리뷰 중에는 꺼둠) ----
         if (!m_preview && input->GetKeyDown(KeyCode::L))
+        {
             ToggleLookAt();
+        }
 
         // ---- 1~5: 해당 카메라로 전환 후 프리뷰 고정 ----
         if (input->GetKeyDown(KeyCode::Alpha1))
