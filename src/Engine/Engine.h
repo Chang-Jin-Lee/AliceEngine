@@ -58,7 +58,7 @@ namespace Alice
         void SetUseForwardRendering(bool useForward);
         bool GetUseForwardRendering() const;
         //===========================================
-        //¹°¸®
+        //ï¿½ï¿½ï¿½ï¿½
         void RefreshPhysicsForCurrentWorld();
         void TickPhysics(float dt);
         //===========================================

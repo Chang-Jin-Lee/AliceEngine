@@ -1,22 +1,34 @@
-﻿#pragma once
+#pragma once
 
 #include <unordered_map>
 #include <vector>
 #include <string>
 #include <type_traits> // for std::is_same_v
 #include <cstdint>
+#include <memory>
+#include <utility>
+#include <typeindex>
 
 #include "Core/Entity.h"
 #include "Core/IScript.h"
 #include "Components/ScriptComponent.h"
+#include "Components/ComponentStorage.h"
 
 // 컴포넌트 헤더들
-#include "Components/ComponentStorage.h"
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/CameraComponent.h"
+#include "Components/CameraFollowComponent.h"
+#include "Components/CameraSpringArmComponent.h"
+#include "Components/CameraLookAtComponent.h"
+#include "Components/CameraShakeComponent.h"
+#include "Components/CameraBlendComponent.h"
+#include "Components/CameraInputComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/SpotLightComponent.h"
+#include "Components/RectLightComponent.h"
 
 // ���� ������Ʈ
 #include "PhysX/Components/PhysicsSceneSettingsComponent.h"
@@ -50,6 +62,15 @@ namespace Alice
         
         /// 카메라 게임 오브젝트를 생성합니다 (Transform + Camera)
         EntityId CreateCamera();
+
+        /// 포인트 라이트 게임 오브젝트를 생성합니다 (Transform + PointLight)
+        EntityId CreatePointLight();
+
+        /// 스폿 라이트 게임 오브젝트를 생성합니다 (Transform + SpotLight)
+        EntityId CreateSpotLight();
+
+        /// 사각형 라이트 게임 오브젝트를 생성합니다 (Transform + RectLight)
+        EntityId CreateRectLight();
 
         // ==== 제네릭 컴포넌트 관리 시스템 ====
         // 컴포넌트 타입 T에 따라 올바른 Map을 자동으로 찾아줍니다.
@@ -344,30 +365,46 @@ namespace Alice
         //==============================================================
 
     private:
-        // if constexpr을 사용하여 타입에 맞는 저장소를 반환
+        // 동적 저장소 관리 - 타입 인덱스로 저장소를 찾거나 생성
         template <typename T>
-        auto& GetStorage()
+        ComponentStorage<T>& GetStorage()
         {
-            if constexpr (std::is_same_v<T, TransformComponent>) return m_transforms;
-            else if constexpr (std::is_same_v<T, MaterialComponent>) return m_materials;
-            else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
-            else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
-            else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
-            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
-            else static_assert(std::is_same_v<T, void>, "�������� �ʴ� ������Ʈ Ÿ���Դϴ�.");
+            static_assert(!std::is_base_of_v<IScript, T>, "스크립트는 GetStorage를 사용할 수 없습니다.");
+            
+            std::type_index key(typeid(T));
+            auto it = m_engineStorages.find(key);
+            
+            // 저장소가 없으면 생성
+            if (it == m_engineStorages.end())
+            {
+                auto storage = std::make_unique<ComponentStorage<T>>();
+                ComponentStorage<T>* ptr = storage.get();
+                m_engineStorages[key] = std::move(storage);
+                return *ptr;
+            }
+            
+            // 기존 저장소 반환
+            return *static_cast<ComponentStorage<T>*>(it->second.get());
         }
 
         // const 버전 저장소 반환
         template <typename T>
-        const auto& GetStorageConst() const
+        const ComponentStorage<T>& GetStorageConst() const
         {
-            if constexpr (std::is_same_v<T, TransformComponent>) return m_transforms;
-            else if constexpr (std::is_same_v<T, MaterialComponent>) return m_materials;
-            else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
-            else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
-            else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
-            else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
-            else static_assert(std::is_same_v<T, void>, "�������� �ʴ� ������Ʈ Ÿ���Դϴ�.");
+            static_assert(!std::is_base_of_v<IScript, T>, "스크립트는 GetStorage를 사용할 수 없습니다.");
+            
+            std::type_index key(typeid(T));
+            auto it = m_engineStorages.find(key);
+            
+            // 저장소가 없으면 빈 저장소 반환 (이론상 발생하지 않아야 함)
+            if (it == m_engineStorages.end())
+            {
+                static ComponentStorage<T> emptyStorage;
+                return emptyStorage;
+            }
+            
+            // 기존 저장소 반환
+            return *static_cast<ComponentStorage<T>*>(it->second.get());
         }
 
     private:
@@ -375,14 +412,10 @@ namespace Alice
 
         std::unordered_map<EntityId, std::string> m_names;
 
-        // Sparse Set 기반 컴포넌트 저장소들 (메모리 연속성 확보)
-        ComponentStorage<TransformComponent> m_transforms;
-        ComponentStorage<MaterialComponent> m_materials;
-        ComponentStorage<SkinnedMeshComponent> m_skinnedMeshes;
-        ComponentStorage<SkinnedAnimationComponent> m_skinnedAnimations;
-        ComponentStorage<CameraComponent> m_cameras;
-
-        ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
+        // 엔진 컴포넌트 저장소 관리 (Type Erasure 적용)
+        // 컴포넌트 타입별로 동적으로 저장소를 관리합니다.
+        // 새로운 컴포넌트 추가 시 World.h 수정 없이 자동으로 지원됩니다.
+        std::unordered_map<std::type_index, std::unique_ptr<IStorageBase>> m_engineStorages;
 
         // ��ũ��Ʈ�� vector�� ������ �����Ƿ� �Ϲ� T�� ������ �޶� ���� ��
         std::unordered_map<EntityId, std::vector<ScriptComponent>> m_scripts;
