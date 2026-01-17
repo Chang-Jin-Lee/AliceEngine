@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "CameraMovement.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
