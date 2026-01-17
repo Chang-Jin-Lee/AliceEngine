@@ -105,6 +105,14 @@ namespace Alice
             };
         }
 
+        static float AngleDeltaRad(float a, float b)
+        {
+            float d = a - b;
+            while (d > DirectX::XM_PI) d -= DirectX::XM_2PI;
+            while (d < -DirectX::XM_PI) d += DirectX::XM_2PI;
+            return d;
+        }
+
         static std::string Trim(const std::string& s)
         {
             std::size_t start = 0;
@@ -256,6 +264,7 @@ namespace Alice
         }
 
         const bool blending = (blendComp && blendComp->active);
+        const bool externalLook = (!blending && lookAtComp && lookAtComp->enabled);
 
         // === 팔로우 처리 (블렌드 중이 아닐 때) ===
         if (!blending && followComp && followComp->enabled)
@@ -417,25 +426,30 @@ namespace Alice
 
             const float posAlpha = ExpSmooth(followComp->positionDamping, dt);
             float rotDamping = followComp->rotationDamping;
-            const float deltaYaw = std::abs(RadToDeg(desiredRot.y - followComp->smoothedRotation.y));
+            const float deltaYaw = std::abs(RadToDeg(AngleDeltaRad(desiredRot.y, followComp->smoothedRotation.y)));
             if (deltaYaw > followComp->fastTurnYawThresholdDeg)
                 rotDamping *= followComp->fastTurnMultiplier;
             const float rotAlpha = ExpSmooth(rotDamping, dt);
 
             followComp->smoothedPosition = LerpVec(followComp->smoothedPosition, desiredPos, posAlpha);
 
-            const DirectX::XMFLOAT4 qFrom = EulerToQuaternion(followComp->smoothedRotation);
-            const DirectX::XMFLOAT4 qTo = EulerToQuaternion(desiredRot);
-            DirectX::XMFLOAT4 qOut{};
-            DirectX::XMStoreFloat4(&qOut, DirectX::XMQuaternionSlerp(DirectX::XMLoadFloat4(&qFrom),
-                                                                     DirectX::XMLoadFloat4(&qTo),
-                                                                     rotAlpha));
-            followComp->smoothedRotation = QuaternionToEuler(qOut);
-
             outputTr->position = followComp->smoothedPosition;
-            outputTr->rotation = followComp->smoothedRotation;
-            followComp->pitchDeg = RadToDeg(followComp->smoothedRotation.x);
-            followComp->yawDeg = RadToDeg(followComp->smoothedRotation.y);
+
+            // LookAt이 활성화되어 있으면 회전은 LookAt이 담당하므로 Follow는 회전을 업데이트하지 않음
+            if (!externalLook)
+            {
+                const DirectX::XMFLOAT4 qFrom = EulerToQuaternion(followComp->smoothedRotation);
+                const DirectX::XMFLOAT4 qTo = EulerToQuaternion(desiredRot);
+                DirectX::XMFLOAT4 qOut{};
+                DirectX::XMStoreFloat4(&qOut, DirectX::XMQuaternionSlerp(DirectX::XMLoadFloat4(&qFrom),
+                                                                         DirectX::XMLoadFloat4(&qTo),
+                                                                         rotAlpha));
+                followComp->smoothedRotation = QuaternionToEuler(qOut);
+
+                outputTr->rotation = followComp->smoothedRotation;
+                followComp->pitchDeg = RadToDeg(followComp->smoothedRotation.x);
+                followComp->yawDeg = RadToDeg(followComp->smoothedRotation.y);
+            }
 
             const float fovAlpha = ExpSmooth(followComp->fovDamping, dt);
             const float targetFovRad = DegToRad(modeFovDeg);
@@ -468,6 +482,14 @@ namespace Alice
                     outputTr->rotation = QuaternionToEuler(qOut);
                 }
             }
+        }
+
+        // LookAt이 최종 회전을 결정했으니 Follow 내부 상태도 그걸로 맞춤. 다음 프레임에서 걸리는거 방지함
+        if (!blending && followComp && followComp->enabled && lookAtComp && lookAtComp->enabled)
+        {
+            followComp->smoothedRotation = outputTr->rotation;
+            followComp->yawDeg = RadToDeg(outputTr->rotation.y);
+            followComp->pitchDeg = RadToDeg(outputTr->rotation.x);
         }
 
         // === 쉐이크 처리 ===
