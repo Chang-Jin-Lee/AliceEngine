@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Core/IScript.h"
+#include "Core/ScriptReflection.h"
 
 namespace Alice
 {
@@ -9,9 +10,13 @@ namespace Alice
     /// - F2: .scene 파일 "Assets/Scens/fbxScene.scene" (프로젝트에 존재하는 경로로 바꿔도 됨)
     class SceneSwitchExample : public IScript
     {
+        ALICE_BODY(SceneSwitchExample);
     public:
         const char* GetName() const override { return "SceneSwitchExample"; }
         void Update(float deltaTime) override;
+
+        ALICE_PROPERTY(std::string, m_targetName1, "");
+        ALICE_PROPERTY(std::string, m_targetName2, "");
     };
 }
 
