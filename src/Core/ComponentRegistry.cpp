@@ -9,6 +9,8 @@
 #include "PhysX/Components/RigidBodyComponent.h"
 #include "PhysX/Components/ColliderComponent.h"
 #include "PhysX/Components/TerrainHeightFieldComponent.h"
+#include "PhysX/Components/CharacterControllerComponent.h"
+#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
 #include "PhysX/IPhysicsWorld.h"
 
 using namespace DirectX;
@@ -261,7 +263,9 @@ namespace Alice
             .property("solverPositionIterations", &RigidBodyComponent::solverPositionIterations)
             .property("solverVelocityIterations", &RigidBodyComponent::solverVelocityIterations)
             .property("sleepThreshold", &RigidBodyComponent::sleepThreshold)
-            .property("stabilizationThreshold", &RigidBodyComponent::stabilizationThreshold);
+            .property("stabilizationThreshold", &RigidBodyComponent::stabilizationThreshold)
+            .property("teleport", &RigidBodyComponent::teleport)
+            .property("resetVelocityOnTeleport", &RigidBodyComponent::resetVelocityOnTeleport);
 
         // === ColliderComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
         rttr::registration::class_<ColliderComponent>("ColliderComponent")
@@ -297,6 +301,51 @@ namespace Alice
             .property("collideMask", &TerrainHeightFieldComponent::collideMask)
             .property("queryMask", &TerrainHeightFieldComponent::queryMask);
 
+        // === CCTNonWalkableMode enum 등록 ===
+        rttr::registration::enumeration<CCTNonWalkableMode>("CCTNonWalkableMode")
+            (
+                rttr::value("PreventClimbing", CCTNonWalkableMode::PreventClimbing),
+                rttr::value("PreventClimbingAndForceSliding", CCTNonWalkableMode::PreventClimbingAndForceSliding)
+            );
+
+        // === CCTCapsuleClimbingMode enum 등록 ===
+        rttr::registration::enumeration<CCTCapsuleClimbingMode>("CCTCapsuleClimbingMode")
+            (
+                rttr::value("Easy", CCTCapsuleClimbingMode::Easy),
+                rttr::value("Constrained", CCTCapsuleClimbingMode::Constrained)
+            );
+
+        // === CharacterControllerComponent 등록 (내부 핸들과 출력 값들은 제외) ===
+        rttr::registration::class_<CharacterControllerComponent>("CharacterControllerComponent")
+            .constructor<>()
+            .property("radius", &CharacterControllerComponent::radius)
+            .property("halfHeight", &CharacterControllerComponent::halfHeight)
+            .property("stepOffset", &CharacterControllerComponent::stepOffset)
+            .property("contactOffset", &CharacterControllerComponent::contactOffset)
+            .property("slopeLimitRadians", &CharacterControllerComponent::slopeLimitRadians)
+            .property("nonWalkableMode", &CharacterControllerComponent::nonWalkableMode)
+            .property("climbingMode", &CharacterControllerComponent::climbingMode)
+            .property("density", &CharacterControllerComponent::density)
+            .property("enableQueries", &CharacterControllerComponent::enableQueries)
+            .property("layerBits", &CharacterControllerComponent::layerBits)
+            .property("collideMask", &CharacterControllerComponent::collideMask)
+            .property("queryMask", &CharacterControllerComponent::queryMask)
+            .property("hitTriggers", &CharacterControllerComponent::hitTriggers)
+            .property("desiredVelocity", &CharacterControllerComponent::desiredVelocity)
+            .property("applyGravity", &CharacterControllerComponent::applyGravity)
+            .property("gravity", &CharacterControllerComponent::gravity)
+            .property("verticalVelocity", &CharacterControllerComponent::verticalVelocity)
+            .property("jumpRequested", &CharacterControllerComponent::jumpRequested)
+            .property("jumpSpeed", &CharacterControllerComponent::jumpSpeed)
+            .property("teleport", &CharacterControllerComponent::teleport);
+
+        // === PhysicsSceneSettingsComponent 등록 ===
+        rttr::registration::class_<PhysicsSceneSettingsComponent>("PhysicsSceneSettingsComponent")
+            .constructor<>()
+            .property("enablePhysics", &PhysicsSceneSettingsComponent::enablePhysics)
+            .property("gravity", &PhysicsSceneSettingsComponent::gravity)
+            .property("fixedDt", &PhysicsSceneSettingsComponent::fixedDt)
+            .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

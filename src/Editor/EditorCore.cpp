@@ -2524,6 +2524,21 @@ namespace Alice
                     } else if (typeName == "RectLightComponent") {
                         world.AddComponent<RectLightComponent>(_selectedEntity);
                         added = true;
+                    } else if (typeName == "RigidBodyComponent") {
+                        world.AddComponent<RigidBodyComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "ColliderComponent") {
+                        world.AddComponent<ColliderComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "CharacterControllerComponent") {
+                        world.AddComponent<CharacterControllerComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "TerrainHeightFieldComponent") {
+                        world.AddComponent<TerrainHeightFieldComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "PhysicsSceneSettingsComponent") {
+                        world.AddComponent<PhysicsSceneSettingsComponent>(_selectedEntity);
+                        added = true;
                     }
                     
                     if (added) {
@@ -2603,6 +2618,26 @@ namespace Alice
                 DrawEngineComponent("RectLightComponent",
                     world.GetComponent<RectLightComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
+            } else if (typeName == "RigidBodyComponent") {
+                DrawEngineComponent("RigidBodyComponent",
+                    world.GetComponent<RigidBodyComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<RigidBodyComponent>(_selectedEntity); });
+            } else if (typeName == "ColliderComponent") {
+                DrawEngineComponent("ColliderComponent",
+                    world.GetComponent<ColliderComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<ColliderComponent>(_selectedEntity); });
+            } else if (typeName == "CharacterControllerComponent") {
+                DrawEngineComponent("CharacterControllerComponent",
+                    world.GetComponent<CharacterControllerComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<CharacterControllerComponent>(_selectedEntity); });
+            } else if (typeName == "TerrainHeightFieldComponent") {
+                DrawEngineComponent("TerrainHeightFieldComponent",
+                    world.GetComponent<TerrainHeightFieldComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<TerrainHeightFieldComponent>(_selectedEntity); });
+            } else if (typeName == "PhysicsSceneSettingsComponent") {
+                DrawEngineComponent("PhysicsSceneSettingsComponent",
+                    world.GetComponent<PhysicsSceneSettingsComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<PhysicsSceneSettingsComponent>(_selectedEntity); });
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }
