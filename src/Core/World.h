@@ -1,22 +1,30 @@
-﻿#pragma once
+#pragma once
 
 #include <unordered_map>
 #include <vector>
 #include <string>
 #include <type_traits> // for std::is_same_v
 #include <cstdint>
+#include <memory>
+#include <utility>
 
 #include "Core/Entity.h"
 #include "Core/IScript.h"
 #include "Components/ScriptComponent.h"
+#include "Components/ComponentStorage.h"
 
 // 컴포넌트 헤더들
-#include "Components/ComponentStorage.h"
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/CameraComponent.h"
+#include "Components/CameraFollowComponent.h"
+#include "Components/CameraSpringArmComponent.h"
+#include "Components/CameraLookAtComponent.h"
+#include "Components/CameraShakeComponent.h"
+#include "Components/CameraBlendComponent.h"
+#include "Components/CameraInputComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
@@ -365,6 +373,12 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else if constexpr (std::is_same_v<T, CameraFollowComponent>) return m_cameraFollows;
+            else if constexpr (std::is_same_v<T, CameraSpringArmComponent>) return m_cameraSpringArms;
+            else if constexpr (std::is_same_v<T, CameraLookAtComponent>) return m_cameraLookAts;
+            else if constexpr (std::is_same_v<T, CameraShakeComponent>) return m_cameraShakes;
+            else if constexpr (std::is_same_v<T, CameraBlendComponent>) return m_cameraBlends;
+            else if constexpr (std::is_same_v<T, CameraInputComponent>) return m_cameraInputs;
             else if constexpr (std::is_same_v<T, PointLightComponent>) return m_pointLights;
             else if constexpr (std::is_same_v<T, SpotLightComponent>) return m_spotLights;
             else if constexpr (std::is_same_v<T, RectLightComponent>) return m_rectLights;
@@ -381,6 +395,12 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else if constexpr (std::is_same_v<T, CameraFollowComponent>) return m_cameraFollows;
+            else if constexpr (std::is_same_v<T, CameraSpringArmComponent>) return m_cameraSpringArms;
+            else if constexpr (std::is_same_v<T, CameraLookAtComponent>) return m_cameraLookAts;
+            else if constexpr (std::is_same_v<T, CameraShakeComponent>) return m_cameraShakes;
+            else if constexpr (std::is_same_v<T, CameraBlendComponent>) return m_cameraBlends;
+            else if constexpr (std::is_same_v<T, CameraInputComponent>) return m_cameraInputs;
             else if constexpr (std::is_same_v<T, PointLightComponent>) return m_pointLights;
             else if constexpr (std::is_same_v<T, SpotLightComponent>) return m_spotLights;
             else if constexpr (std::is_same_v<T, RectLightComponent>) return m_rectLights;
@@ -400,6 +420,12 @@ namespace Alice
         ComponentStorage<SkinnedMeshComponent> m_skinnedMeshes;
         ComponentStorage<SkinnedAnimationComponent> m_skinnedAnimations;
         ComponentStorage<CameraComponent> m_cameras;
+        ComponentStorage<CameraFollowComponent> m_cameraFollows;
+        ComponentStorage<CameraSpringArmComponent> m_cameraSpringArms;
+        ComponentStorage<CameraLookAtComponent> m_cameraLookAts;
+        ComponentStorage<CameraShakeComponent> m_cameraShakes;
+        ComponentStorage<CameraBlendComponent> m_cameraBlends;
+        ComponentStorage<CameraInputComponent> m_cameraInputs;
         ComponentStorage<PointLightComponent> m_pointLights;
         ComponentStorage<SpotLightComponent> m_spotLights;
         ComponentStorage<RectLightComponent> m_rectLights;

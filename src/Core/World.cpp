@@ -1,4 +1,4 @@
-﻿#include "Core/World.h"
+#include "Core/World.h"
 #include "Core/GameObject.h"
 #include "Core/ScriptFactory.h"
 
@@ -20,6 +20,12 @@ namespace Alice {
 		m_skinnedMeshes.Clear();
 		m_skinnedAnimations.Clear();
 		m_cameras.Clear();
+		m_cameraFollows.Clear();
+		m_cameraSpringArms.Clear();
+		m_cameraLookAts.Clear();
+		m_cameraShakes.Clear();
+		m_cameraBlends.Clear();
+		m_cameraInputs.Clear();
 		m_pointLights.Clear();
 		m_spotLights.Clear();
 		m_rectLights.Clear();
@@ -71,6 +77,12 @@ namespace Alice {
 		m_skinnedMeshes.Remove(id);
 		m_skinnedAnimations.Remove(id);
 		m_cameras.Remove(id);
+		m_cameraFollows.Remove(id);
+		m_cameraSpringArms.Remove(id);
+		m_cameraLookAts.Remove(id);
+		m_cameraShakes.Remove(id);
+		m_cameraBlends.Remove(id);
+		m_cameraInputs.Remove(id);
 		m_pointLights.Remove(id);
 		m_spotLights.Remove(id);
 		m_rectLights.Remove(id);

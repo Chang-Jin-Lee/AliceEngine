@@ -1,4 +1,4 @@
-﻿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -17,6 +17,13 @@
 #include "Core/ReflectionUI.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/JsonRttr.h"
+#include "Components/CameraComponent.h"
+#include "Components/CameraFollowComponent.h"
+#include "Components/CameraSpringArmComponent.h"
+#include "Components/CameraLookAtComponent.h"
+#include "Components/CameraShakeComponent.h"
+#include "Components/CameraBlendComponent.h"
+#include "Components/CameraInputComponent.h"
 
 // ImGui
 #include "imgui.h"
@@ -2344,6 +2351,70 @@ namespace Alice
             ImGui::EndCombo();
         }
 
+        if (ImGui::BeginCombo("Add Engine Component", "Select Component...")) {
+            struct Entry {
+                const char* name;
+                bool (*has)(World&, EntityId);
+                void (*add)(World&, EntityId);
+            };
+            static const Entry entries[] = {
+                { "CameraComponent",
+                  [](World& w, EntityId id) { return w.GetComponent<CameraComponent>(id) != nullptr; },
+                  [](World& w, EntityId id) { w.AddComponent<CameraComponent>(id); } },
+                { "CameraFollowComponent",
+                  [](World& w, EntityId id) { return w.GetComponent<CameraFollowComponent>(id) != nullptr; },
+                  [](World& w, EntityId id) { w.AddComponent<CameraFollowComponent>(id); } },
+                { "CameraSpringArmComponent",
+                  [](World& w, EntityId id) { return w.GetComponent<CameraSpringArmComponent>(id) != nullptr; },
+                  [](World& w, EntityId id) { w.AddComponent<CameraSpringArmComponent>(id); } },
+                { "CameraLookAtComponent",
+                  [](World& w, EntityId id) { return w.GetComponent<CameraLookAtComponent>(id) != nullptr; },
+                  [](World& w, EntityId id) { w.AddComponent<CameraLookAtComponent>(id); } },
+                { "CameraShakeComponent",
+                  [](World& w, EntityId id) { return w.GetComponent<CameraShakeComponent>(id) != nullptr; },
+                  [](World& w, EntityId id) { w.AddComponent<CameraShakeComponent>(id); } },
+                { "CameraBlendComponent",
+                  [](World& w, EntityId id) { return w.GetComponent<CameraBlendComponent>(id) != nullptr; },
+                  [](World& w, EntityId id) { w.AddComponent<CameraBlendComponent>(id); } },
+                { "CameraInputComponent",
+                  [](World& w, EntityId id) { return w.GetComponent<CameraInputComponent>(id) != nullptr; },
+                  [](World& w, EntityId id) { w.AddComponent<CameraInputComponent>(id); } },
+            };
+
+            for (const auto& e : entries) {
+                const bool exists = e.has(world, _selectedEntity);
+                if (exists) continue;
+                if (ImGui::Selectable(e.name)) {
+                    e.add(world, _selectedEntity);
+                    g_SceneDirty = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+
+        DrawEngineComponent("CameraComponent",
+                            world.GetComponent<CameraComponent>(_selectedEntity),
+                            [&]() { world.RemoveComponent<CameraComponent>(_selectedEntity); });
+        DrawEngineComponent("CameraFollowComponent",
+                            world.GetComponent<CameraFollowComponent>(_selectedEntity),
+                            [&]() { world.RemoveComponent<CameraFollowComponent>(_selectedEntity); });
+        DrawEngineComponent("CameraSpringArmComponent",
+                            world.GetComponent<CameraSpringArmComponent>(_selectedEntity),
+                            [&]() { world.RemoveComponent<CameraSpringArmComponent>(_selectedEntity); });
+        DrawEngineComponent("CameraLookAtComponent",
+                            world.GetComponent<CameraLookAtComponent>(_selectedEntity),
+                            [&]() { world.RemoveComponent<CameraLookAtComponent>(_selectedEntity); });
+        DrawEngineComponent("CameraShakeComponent",
+                            world.GetComponent<CameraShakeComponent>(_selectedEntity),
+                            [&]() { world.RemoveComponent<CameraShakeComponent>(_selectedEntity); });
+        DrawEngineComponent("CameraBlendComponent",
+                            world.GetComponent<CameraBlendComponent>(_selectedEntity),
+                            [&]() { world.RemoveComponent<CameraBlendComponent>(_selectedEntity); });
+        DrawEngineComponent("CameraInputComponent",
+                            world.GetComponent<CameraInputComponent>(_selectedEntity),
+                            [&]() { world.RemoveComponent<CameraInputComponent>(_selectedEntity); });
+
         // List Scripts
         if (auto* scripts = world.GetScripts(_selectedEntity);
             scripts && !scripts->empty()) {
@@ -2458,6 +2529,22 @@ namespace Alice
                     i++;
             }
         }
+    }
+
+    // Engine Components
+    void EditorCore::DrawEngineComponent(const char* label, auto* comp, auto removeFn)
+    {
+		if (!comp) return;
+		if (ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) {
+			bool changed = false;
+			if (ImGui::Button("Remove")) {
+				removeFn();
+				g_SceneDirty = true;
+				return;
+			}
+			changed |= ReflectionUI::RenderInspector(*comp);
+			if (changed) g_SceneDirty = true;
+		}
     }
 
     void EditorCore::DrawInspectorMaterial(World& world, const EntityId& _selectedEntity)

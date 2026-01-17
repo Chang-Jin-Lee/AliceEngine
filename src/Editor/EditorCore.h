@@ -65,6 +65,7 @@ namespace Alice
 
         void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
         void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
+        void DrawEngineComponent(const char* label, auto* comp, auto removeFn);
         void DrawInspectorMaterial(World& world, const EntityId& _selectedEntity);
         void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
