@@ -214,6 +214,37 @@ namespace Alice
                 outEntity["RectLight"] = JsonRttr::ToJsonObject(inst);
             }
 
+            // PhysX Components
+            if (const auto* rigidBody = world.GetComponent<RigidBodyComponent>(id); rigidBody)
+            {
+                rttr::instance inst = const_cast<RigidBodyComponent&>(*rigidBody);
+                outEntity["RigidBody"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* collider = world.GetComponent<ColliderComponent>(id); collider)
+            {
+                rttr::instance inst = const_cast<ColliderComponent&>(*collider);
+                outEntity["Collider"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* cct = world.GetComponent<CharacterControllerComponent>(id); cct)
+            {
+                rttr::instance inst = const_cast<CharacterControllerComponent&>(*cct);
+                outEntity["CharacterController"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* terrain = world.GetComponent<TerrainHeightFieldComponent>(id); terrain)
+            {
+                rttr::instance inst = const_cast<TerrainHeightFieldComponent&>(*terrain);
+                outEntity["TerrainHeightField"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* physicsSettings = world.GetComponent<PhysicsSceneSettingsComponent>(id); physicsSettings)
+            {
+                rttr::instance inst = const_cast<PhysicsSceneSettingsComponent&>(*physicsSettings);
+                outEntity["PhysicsSceneSettings"] = JsonRttr::ToJsonObject(inst);
+            }
+
             return true;
         }
 
@@ -398,6 +429,47 @@ namespace Alice
                 RectLightComponent& rl = world.AddComponent<RectLightComponent>(id);
                 rttr::instance inst = rl;
                 if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
+            }
+
+            // PhysX Components
+            auto itRB = e.find("RigidBody");
+            if (itRB != e.end() && itRB->is_object())
+            {
+                RigidBodyComponent& rb = world.AddComponent<RigidBodyComponent>(id);
+                rttr::instance inst = rb;
+                if (!JsonRttr::FromJsonObject(inst, *itRB)) return false;
+            }
+
+            auto itCollider = e.find("Collider");
+            if (itCollider != e.end() && itCollider->is_object())
+            {
+                ColliderComponent& col = world.AddComponent<ColliderComponent>(id);
+                rttr::instance inst = col;
+                if (!JsonRttr::FromJsonObject(inst, *itCollider)) return false;
+            }
+
+            auto itCCT = e.find("CharacterController");
+            if (itCCT != e.end() && itCCT->is_object())
+            {
+                CharacterControllerComponent& cct = world.AddComponent<CharacterControllerComponent>(id);
+                rttr::instance inst = cct;
+                if (!JsonRttr::FromJsonObject(inst, *itCCT)) return false;
+            }
+
+            auto itTerrain = e.find("TerrainHeightField");
+            if (itTerrain != e.end() && itTerrain->is_object())
+            {
+                TerrainHeightFieldComponent& terrain = world.AddComponent<TerrainHeightFieldComponent>(id);
+                rttr::instance inst = terrain;
+                if (!JsonRttr::FromJsonObject(inst, *itTerrain)) return false;
+            }
+
+            auto itPhysicsSettings = e.find("PhysicsSceneSettings");
+            if (itPhysicsSettings != e.end() && itPhysicsSettings->is_object())
+            {
+                PhysicsSceneSettingsComponent& ps = world.AddComponent<PhysicsSceneSettingsComponent>(id);
+                rttr::instance inst = ps;
+                if (!JsonRttr::FromJsonObject(inst, *itPhysicsSettings)) return false;
             }
 
             return true;
