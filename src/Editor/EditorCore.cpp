@@ -1020,6 +1020,27 @@ namespace Alice
                     g_SceneDirty = true;
                     ImGui::CloseCurrentPopup();
                 }
+                if (ImGui::MenuItem("Point Light"))
+                {
+                    EntityId e = world.CreatePointLight();
+                    selectedEntity = e;
+                    g_SceneDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Spot Light"))
+                {
+                    EntityId e = world.CreateSpotLight();
+                    selectedEntity = e;
+                    g_SceneDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Rect Light"))
+                {
+                    EntityId e = world.CreateRectLight();
+                    selectedEntity = e;
+                    g_SceneDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
                 ImGui::EndPopup();
             }
 
@@ -1475,6 +1496,12 @@ namespace Alice
 
                 // 3. Material
                 DrawInspectorMaterial(world, selectedEntity);
+                ImGui::Separator();
+
+                // 3-2. Lights
+                DrawInspectorPointLight(world, selectedEntity);
+                DrawInspectorSpotLight(world, selectedEntity);
+                DrawInspectorRectLight(world, selectedEntity);
                 ImGui::Separator();
 
                 // 4. Skinned Mesh (Condensed)
@@ -2468,6 +2495,76 @@ namespace Alice
             if (ImGui::Button("Remove Material")) {
                 world.RemoveComponent<MaterialComponent>(_selectedEntity);
                 g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorPointLight(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* light = world.GetComponent<PointLightComponent>(_selectedEntity)) {
+            if (ImGui::CollapsingHeader("Point Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+                bool changed = false;
+                changed |= ImGui::Checkbox("Enabled##PointLight", &light->enabled);
+                changed |= ImGui::ColorEdit3("Color##PointLight", &light->color.x);
+                changed |= ImGui::SliderFloat("Intensity##PointLight", &light->intensity, 0.0f, 50.0f);
+                changed |= ImGui::SliderFloat("Range##PointLight", &light->range, 0.1f, 200.0f);
+
+                if (ImGui::Button("Remove Point Light")) {
+                    world.RemoveComponent<PointLightComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* light = world.GetComponent<SpotLightComponent>(_selectedEntity)) {
+            if (ImGui::CollapsingHeader("Spot Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+                bool changed = false;
+                changed |= ImGui::Checkbox("Enabled##SpotLight", &light->enabled);
+                changed |= ImGui::ColorEdit3("Color##SpotLight", &light->color.x);
+                changed |= ImGui::SliderFloat("Intensity##SpotLight", &light->intensity, 0.0f, 50.0f);
+                changed |= ImGui::SliderFloat("Range##SpotLight", &light->range, 0.1f, 200.0f);
+                changed |= ImGui::SliderFloat("Inner Angle (deg)##SpotLight", &light->innerAngleDeg, 0.0f, 89.0f);
+                changed |= ImGui::SliderFloat("Outer Angle (deg)##SpotLight", &light->outerAngleDeg, 0.0f, 89.0f);
+
+                if (light->innerAngleDeg > light->outerAngleDeg)
+                    light->innerAngleDeg = light->outerAngleDeg;
+
+                if (ImGui::Button("Remove Spot Light")) {
+                    world.RemoveComponent<SpotLightComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorRectLight(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* light = world.GetComponent<RectLightComponent>(_selectedEntity)) {
+            if (ImGui::CollapsingHeader("Rect Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+                bool changed = false;
+                changed |= ImGui::Checkbox("Enabled##RectLight", &light->enabled);
+                changed |= ImGui::ColorEdit3("Color##RectLight", &light->color.x);
+                changed |= ImGui::SliderFloat("Intensity##RectLight", &light->intensity, 0.0f, 50.0f);
+                changed |= ImGui::SliderFloat("Width##RectLight", &light->width, 0.1f, 50.0f);
+                changed |= ImGui::SliderFloat("Height##RectLight", &light->height, 0.1f, 50.0f);
+                changed |= ImGui::SliderFloat("Range##RectLight", &light->range, 0.1f, 200.0f);
+
+                if (ImGui::Button("Remove Rect Light")) {
+                    world.RemoveComponent<RectLightComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                if (changed) g_SceneDirty = true;
             }
         }
     }

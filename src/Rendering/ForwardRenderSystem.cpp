@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cfloat>
 #include <algorithm>
+#include <cstring>
 
 #include <Core/ResourceManager.h>
 #include <Core/Logger.h>
@@ -334,6 +335,12 @@ namespace Alice
         desc.ByteWidth = sizeof(CBLighting);
         if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbLighting.ReleaseAndGetAddressOf()))) return false;
 
+        // Extra lights buffer (Point/Spot/Rect)
+        desc.ByteWidth = (sizeof(ExtraLightsCB) + 15) / 16 * 16;
+        desc.Usage = D3D11_USAGE_DYNAMIC;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbExtraLights.ReleaseAndGetAddressOf()))) return false;
+
         // 3. 스카이박스용 동적 버퍼 설정 변경 및 생성
         desc.ByteWidth = sizeof(XMMATRIX);
         desc.Usage = D3D11_USAGE_DYNAMIC;
@@ -601,6 +608,88 @@ namespace Alice
         m_context->UpdateSubresource(m_cbLighting.Get(), 0, nullptr, &data, 0, 0);
         m_context->VSSetConstantBuffers(1, 1, m_cbLighting.GetAddressOf());
         m_context->PSSetConstantBuffers(1, 1, m_cbLighting.GetAddressOf());
+    }
+
+    void ForwardRenderSystem::UpdateExtraLightsCB(const World& world)
+    {
+        if (!m_cbExtraLights) return;
+
+        ExtraLightsCB data = {};
+
+        // Point lights
+        for (const auto& [id, light] : world.GetComponents<PointLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.pointCount >= MaxPointLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            auto& dst = data.pointLights[data.pointCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        // Spot lights
+        for (const auto& [id, light] : world.GetComponents<SpotLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.spotCount >= MaxSpotLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
+            XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
+            XMVECTOR dirW = XMVector3Normalize(XMVector3TransformNormal(forward, rot));
+            XMFLOAT3 dir{};
+            XMStoreFloat3(&dir, dirW);
+
+            float innerRad = DirectX::XMConvertToRadians((std::max)(0.0f, light.innerAngleDeg));
+            float outerRad = DirectX::XMConvertToRadians((std::max)(light.innerAngleDeg, light.outerAngleDeg));
+
+            auto& dst = data.spotLights[data.spotCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.direction = dir;
+            dst.innerCos = std::cosf(innerRad);
+            dst.outerCos = std::cosf(outerRad);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        // Rect lights
+        for (const auto& [id, light] : world.GetComponents<RectLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.rectCount >= MaxRectLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
+            XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
+            XMVECTOR dirW = XMVector3Normalize(XMVector3TransformNormal(forward, rot));
+            XMFLOAT3 dir{};
+            XMStoreFloat3(&dir, dirW);
+
+            auto& dst = data.rectLights[data.rectCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.direction = dir;
+            dst.width = (std::max)(light.width, 0.01f);
+            dst.height = (std::max)(light.height, 0.01f);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (SUCCEEDED(m_context->Map(m_cbExtraLights.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            std::memcpy(mapped.pData, &data, sizeof(ExtraLightsCB));
+            m_context->Unmap(m_cbExtraLights.Get(), 0);
+        }
+
+        m_context->PSSetConstantBuffers(5, 1, m_cbExtraLights.GetAddressOf());
     }
 
     void ForwardRenderSystem::RenderSkybox(const Camera& camera)
@@ -947,6 +1036,7 @@ namespace Alice
         XMMATRIX viewM = camera.GetViewMatrix();
         XMMATRIX projM = camera.GetProjectionMatrix();
         UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
+        UpdateExtraLightsCB(world);
 
         // IA & Shaders
         UINT stride = sizeof(SimpleVertex), offset = 0;

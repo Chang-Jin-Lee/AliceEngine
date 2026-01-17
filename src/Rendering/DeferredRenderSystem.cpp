@@ -1,4 +1,4 @@
-﻿#include "Rendering/DeferredRenderSystem.h"
+#include "Rendering/DeferredRenderSystem.h"
 
 #include <d3dcompiler.h>
 #include <DirectXTK/WICTextureLoader.h>
@@ -641,6 +641,11 @@ namespace Alice
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbDirectionalLight.ReleaseAndGetAddressOf())))
             return false;
 
+        // Extra Lights CB (Point/Spot/Rect)
+        cbDesc.ByteWidth = (sizeof(ExtraLightsCB) + 15u) & ~15u;
+        if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbExtraLights.ReleaseAndGetAddressOf())))
+            return false;
+
         // Bones CB
         cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX) * 1023 + sizeof(std::uint32_t) * 4;
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbBones.ReleaseAndGetAddressOf())))
@@ -1108,7 +1113,7 @@ namespace Alice
         PassGBuffer(world, camera, skinnedCommands, cameraEntities);
 
         // Deferred Light 패스
-        PassDeferredLight(camera, shadingMode, enableFillLight, lightViewProj);
+        PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
 
         // 스카이박스 렌더링
         if (m_skyboxEnabled)
@@ -1285,7 +1290,7 @@ namespace Alice
         m_context->OMSetRenderTargets(GBufferCount, nullRTVs, nullptr);
     }
 
-    void DeferredRenderSystem::PassDeferredLight(const Camera& camera, int shadingMode, bool enableFillLight, DirectX::CXMMATRIX lightViewProj)
+    void DeferredRenderSystem::PassDeferredLight(const World& world, const Camera& camera, int shadingMode, bool enableFillLight, DirectX::CXMMATRIX lightViewProj)
     {
         // 뷰포트 설정 (ForwardRenderSystem과 동일)
         D3D11_VIEWPORT vp{};
@@ -1324,6 +1329,7 @@ namespace Alice
 
         // 상수 버퍼 업데이트 (섀도우 파라미터 포함)
         UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
+        UpdateExtraLightsCB(world);
 
          // ShadowCB(b4) 업데이트 (패킹 안전)
         // - Shadow 행렬/파라미터는 ShadowCB에서만 읽도록(셰이더) 변경했습니다.
@@ -1713,6 +1719,88 @@ namespace Alice
         }
 
         m_context->PSSetConstantBuffers(3, 1, m_cbDirectionalLight.GetAddressOf());
+    }
+
+    void DeferredRenderSystem::UpdateExtraLightsCB(const World& world)
+    {
+        if (!m_cbExtraLights) return;
+
+        ExtraLightsCB data = {};
+
+        // Point lights
+        for (const auto& [id, light] : world.GetComponents<PointLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.pointCount >= MaxPointLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            auto& dst = data.pointLights[data.pointCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        // Spot lights
+        for (const auto& [id, light] : world.GetComponents<SpotLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.spotCount >= MaxSpotLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
+            XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
+            XMVECTOR dirW = XMVector3Normalize(XMVector3TransformNormal(forward, rot));
+            XMFLOAT3 dir{};
+            XMStoreFloat3(&dir, dirW);
+
+            float innerRad = DirectX::XMConvertToRadians((std::max)(0.0f, light.innerAngleDeg));
+            float outerRad = DirectX::XMConvertToRadians((std::max)(light.innerAngleDeg, light.outerAngleDeg));
+
+            auto& dst = data.spotLights[data.spotCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.direction = dir;
+            dst.innerCos = std::cosf(innerRad);
+            dst.outerCos = std::cosf(outerRad);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        // Rect lights
+        for (const auto& [id, light] : world.GetComponents<RectLightComponent>())
+        {
+            if (!light.enabled) continue;
+            if (data.rectCount >= MaxRectLights) break;
+            const auto* tr = world.GetComponent<TransformComponent>(id);
+            if (!tr) continue;
+
+            XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
+            XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
+            XMVECTOR dirW = XMVector3Normalize(XMVector3TransformNormal(forward, rot));
+            XMFLOAT3 dir{};
+            XMStoreFloat3(&dir, dirW);
+
+            auto& dst = data.rectLights[data.rectCount++];
+            dst.position = tr->position;
+            dst.range = (std::max)(light.range, 0.01f);
+            dst.direction = dir;
+            dst.width = (std::max)(light.width, 0.01f);
+            dst.height = (std::max)(light.height, 0.01f);
+            dst.color = light.color;
+            dst.intensity = light.intensity;
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (SUCCEEDED(m_context->Map(m_cbExtraLights.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            std::memcpy(mapped.pData, &data, sizeof(ExtraLightsCB));
+            m_context->Unmap(m_cbExtraLights.Get(), 0);
+        }
+
+        m_context->PSSetConstantBuffers(5, 1, m_cbExtraLights.GetAddressOf());
     }
 
     void DeferredRenderSystem::UpdateBonesCB(const DirectX::XMFLOAT4X4* boneMatrices, std::uint32_t boneCount)
