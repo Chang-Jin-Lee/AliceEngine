@@ -4,8 +4,7 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "SceneSwitchExample",
-                    "props": {}
+                    "name": "SceneSwitchExample"
                 }
             ],
             "Transform": {
@@ -16,7 +15,7 @@
                 },
                 "rotation": {
                     "x": -0.0,
-                    "y": 151.0603485107422,
+                    "y": 181.69383239746094,
                     "z": 0.0
                 },
                 "scale": {
@@ -42,19 +41,14 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "CharacterMovement",
-                    "props": {
-                        "m_gravity": 18.0,
-                        "m_jumpSpeed": 6.5,
-                        "m_moveSpeed": 10.0
-                    }
+                    "name": "CharacterMovement"
                 }
             ],
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 48.84870447963476
+                "timeSec": 95.9162438075291
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -194,38 +188,18 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "CameraRigPreset",
-                    "props": {
-                        "m_applyEveryFrame": false,
-                        "m_blendTimeKey3": 0.6000000238418579,
-                        "m_blendTimeKey4": 0.6000000238418579,
-                        "m_blendTimeKey5": 0.800000011920929,
-                        "m_cameraListCsv": "Camera1,Camera2,Camera3,Camera4,Camera5",
-                        "m_followTargetName": "Rapi",
-                        "m_lookAtTargetName": "Enemy",
-                        "m_shakeAmplitudeKey4": 0.30000001192092896,
-                        "m_shakeDecayKey4": 2.0,
-                        "m_shakeDurationKey4": 0.4000000059604645,
-                        "m_shakeFrequencyKey4": 20.0,
-                        "m_slowDurationKey5": 0.30000001192092896,
-                        "m_slowTimeScaleKey5": 0.20000000298023224,
-                        "m_slowTriggerTKey5": 0.5,
-                        "m_springArmDistance": 35.0,
-                        "m_springArmMaxDistance": 60.0,
-                        "m_springArmMinDistance": 8.0,
-                        "m_springArmZoomSpeed": 0.009999999776482582
-                    }
+                    "name": "CameraRigPreset"
                 }
             ],
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 4.98646354675293,
-                    "z": 10.030303955078125
+                    "x": 12.074000358581543,
+                    "y": 5.486000061035156,
+                    "z": 12.930000305175781
                 },
                 "rotation": {
                     "x": -0.0,
-                    "y": 0.0,
+                    "y": -2.181661605834961,
                     "z": 0.0
                 },
                 "scale": {
@@ -284,12 +258,7 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "RotateAndScale",
-                    "props": {
-                        "m_pulseAmplitude": 0.25,
-                        "m_pulseSpeed": 2.0,
-                        "m_spinSpeed": 1.0
-                    }
+                    "name": "RotateAndScale"
                 }
             ],
             "Transform": {
@@ -328,7 +297,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1327.7448878653813
+                "timeSec": 1374.8124271932757
             },
             "SkinnedMesh": {
                 "boneCount": 67,
@@ -432,7 +401,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1232.5385390704032
+                "timeSec": 1279.6060783982975
             },
             "SkinnedMesh": {
                 "boneCount": 16,
@@ -498,13 +467,13 @@
             },
             "Transform": {
                 "position": {
-                    "x": 17.174041748046875,
-                    "y": 4.98646354675293,
-                    "z": 10.030303955078125
+                    "x": 12.074000358581543,
+                    "y": 5.486000061035156,
+                    "z": 12.930000305175781
                 },
                 "rotation": {
                     "x": -0.0,
-                    "y": -0.24434609711170197,
+                    "y": -2.181661605834961,
                     "z": 0.0
                 },
                 "scale": {
