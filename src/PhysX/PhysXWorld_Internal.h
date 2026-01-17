@@ -404,7 +404,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		// Use PCM by default (better contact generation in most cases)
 		sdesc.flags |= PxSceneFlag::eENABLE_PCM;
 
-		
+		// Require RW locks for thread safety (will assert if accessed without locks)
+		// This helps catch bugs in multi-threaded scenarios and editor/tooling code.
+		if (desc.enableSceneLocks)
+			sdesc.flags |= PxSceneFlag::eREQUIRE_RW_LOCK;
 
 		scene = physics->createScene(sdesc);
 		if (!scene) throw std::runtime_error("createScene failed");
