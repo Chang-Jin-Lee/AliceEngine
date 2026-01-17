@@ -62,35 +62,46 @@ namespace Alice
 
         static DirectX::XMFLOAT3 QuaternionToEuler(const DirectX::XMFLOAT4& quat)
         {
-            const float x = quat.x;
-            const float y = quat.y;
-            const float z = quat.z;
-            const float w = quat.w;
+            // DirectXMath 컨벤션에 맞게 수정: (pitch=X, yaw=Y, roll=Z)
+            using namespace DirectX;
 
-            const float sinr_cosp = 2.0f * (w * x + y * z);
-            const float cosr_cosp = 1.0f - 2.0f * (x * x + y * y);
-            const float roll = std::atan2(sinr_cosp, cosr_cosp);
+            const XMVECTOR q = XMLoadFloat4(&quat);
 
-            const float sinp = 2.0f * (w * y - z * x);
-            float pitch;
-            if (std::abs(sinp) >= 1.0f)
-                pitch = std::copysign(DirectX::XM_PIDIV2, sinp);
-            else
-                pitch = std::asin(sinp);
+            // DirectX 기본: +Z forward, +Y up
+            const XMVECTOR f = XMVector3Rotate(XMVectorSet(0, 0, 1, 0), q);
+            const XMVECTOR u = XMVector3Rotate(XMVectorSet(0, 1, 0, 0), q);
 
-            const float siny_cosp = 2.0f * (w * z + x * y);
-            const float cosy_cosp = 1.0f - 2.0f * (y * y + z * z);
-            const float yaw = std::atan2(siny_cosp, cosy_cosp);
+            XMFLOAT3 f3{};
+            XMStoreFloat3(&f3, f);
 
-            return DirectX::XMFLOAT3(pitch, yaw, roll);
+            const float yaw   = std::atan2(f3.x, f3.z);
+            const float pitch = -std::atan2(f3.y, std::sqrt(f3.x * f3.x + f3.z * f3.z));
+
+            // roll: (yaw,pitch)만으로 만든 기준 up(u0)과 실제 up(u)의 차이를 forward축 기준으로 측정
+            XMVECTOR worldUp = XMVectorSet(0, 1, 0, 0);
+            XMVECTOR r0 = XMVector3Cross(worldUp, f);
+            if (XMVectorGetX(XMVector3LengthSq(r0)) < 1e-6f)
+                r0 = XMVector3Cross(XMVectorSet(1, 0, 0, 0), f);
+
+            r0 = XMVector3Normalize(r0);
+            const XMVECTOR u0 = XMVector3Cross(f, r0);
+
+            const float roll = std::atan2(
+                XMVectorGetX(XMVector3Dot(r0, u)),
+                XMVectorGetX(XMVector3Dot(u0, u))
+            );
+
+            return { pitch, yaw, roll };
         }
 
         static DirectX::XMFLOAT3 GetForward(float yawRad, float pitchRad)
         {
+            // DirectionToEuler()와 부호 규칙을 맞춤:
+            // - pitch가 +면 아래를 보는 상태(카메라는 위), pitch가 -면 위를 보는 상태(카메라는 아래)
             const float cosPitch = std::cos(pitchRad);
             return {
                 std::sin(yawRad) * cosPitch,
-                std::sin(pitchRad),
+                -std::sin(pitchRad),  // DirectionToEuler()와 부호 일치
                 std::cos(yawRad) * cosPitch
             };
         }

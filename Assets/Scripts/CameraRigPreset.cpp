@@ -40,6 +40,8 @@ namespace Alice
         if (!follow) follow = &go.AddComponent<CameraFollowComponent>();
         auto* lookAt = go.GetComponent<CameraLookAtComponent>();
         if (!lookAt) lookAt = &go.AddComponent<CameraLookAtComponent>();
+        // LookAt은 기본 OFF (L키로만 켜지게)
+        if (lookAt) lookAt->enabled = false;
 
         // 입력 프리셋
         input->cameraListCsv = Get_m_cameraListCsv();
