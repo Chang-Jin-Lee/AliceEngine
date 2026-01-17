@@ -1,74 +1,74 @@
-REM -----------------------------------------------------------
-REM [5] ½ºÄ«ÀÌ¹Ú½º ¸®¼Ò½º ´Ù¿î·Îµå (GitHub Direct Link)
+ï»¿REM -----------------------------------------------------------
+REM [5] ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¦¬ì†ŒìŠ¤ ë‹¤ìš´ë¡œë“œ (GitHub Direct Link)
 REM -----------------------------------------------------------
 echo.
-echo [4/5] ½ºÄ«ÀÌ¹Ú½º ¸®¼Ò½º È®ÀÎ ¹× ´Ù¿î·Îµå...
+echo [4/5] ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¦¬ì†ŒìŠ¤ í™•ì¸ ë° ë‹¤ìš´ë¡œë“œ...
 
-REM GitHub Releases ¸µÅ©
+REM GitHub Releases ë§í¬
 set "DOWNLOAD_URL=https://github.com/Chang-Jin-Lee/D3D11-AliceTutorial/releases/download/Skybox/Skybox.7z"
 
-REM ÇöÀç ¹èÄ¡ ÆÄÀÏÀÌ ÀÖ´Â À§Ä¡ ±âÁØÀ¸·Î Resource Æú´õ °æ·Î ¼³Á¤
+REM í˜„ìž¬ ë°°ì¹˜ íŒŒì¼ì´ ìžˆëŠ” ìœ„ì¹˜ ê¸°ì¤€ìœ¼ë¡œ Resource í´ë” ê²½ë¡œ ì„¤ì •
 set "RES_ROOT=%~dp0Resource\Skybox"
 set "TEMP_ARC=skybox_temp.7z"
 
-REM °Ë»çÇÒ ÇÏÀ§ Æú´õµé
+REM ê²€ì‚¬í•  í•˜ìœ„ í´ë”ë“¤
 set "CHECK_DIR_1=%RES_ROOT%\Bridge"
 set "CHECK_DIR_2=%RES_ROOT%\Sample"
 set "CHECK_DIR_3=%RES_ROOT%\Indoor"
 
-REM ¼¼ Æú´õ°¡ ¸ðµÎ Á¸ÀçÇÏ´ÂÁö È®ÀÎ
+REM ì„¸ í´ë”ê°€ ëª¨ë‘ ì¡´ìž¬í•˜ëŠ”ì§€ í™•ì¸
 if exist "%CHECK_DIR_1%" (
     if exist "%CHECK_DIR_2%" (
         if exist "%CHECK_DIR_3%" (
-            echo  - ÀÌ¹Ì ½ºÄ«ÀÌ¹Ú½º ¸®¼Ò½º°¡ Á¸ÀçÇÕ´Ï´Ù. ´Ù¿î·Îµå¸¦ °Ç³Ê¶Ý´Ï´Ù.
+            echo  - ì´ë¯¸ ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¦¬ì†ŒìŠ¤ê°€ ì¡´ìž¬í•©ë‹ˆë‹¤. ë‹¤ìš´ë¡œë“œë¥¼ ê±´ë„ˆëœë‹ˆë‹¤.
             goto SKIP_RESOURCE_DOWNLOAD
         )
     )
 )
 
-echo  - ¸®¼Ò½º°¡ ´©¶ôµÇ¾ú½À´Ï´Ù. ´Ù¿î·Îµå¸¦ ½ÃÀÛÇÕ´Ï´Ù.
+echo  - ë¦¬ì†ŒìŠ¤ê°€ ëˆ„ë½ë˜ì—ˆìŠµë‹ˆë‹¤. ë‹¤ìš´ë¡œë“œë¥¼ ì‹œìž‘í•©ë‹ˆë‹¤.
 if not exist "%RES_ROOT%" mkdir "%RES_ROOT%"
 
-REM 1. 7zip ¾ÐÃà ÇØÁ¦¿ë Åø(Standalone Console Version) ÀÓ½Ã ´Ù¿î·Îµå
-echo  - ¾ÐÃà ÇØÁ¦ µµ±¸(7zr.exe) ´Ù¿î·Îµå Áß...
+REM 1. 7zip ì••ì¶• í•´ì œìš© íˆ´(Standalone Console Version) ìž„ì‹œ ë‹¤ìš´ë¡œë“œ
+echo  - ì••ì¶• í•´ì œ ë„êµ¬(7zr.exe) ë‹¤ìš´ë¡œë“œ ì¤‘...
 curl -L -o 7zr.exe https://www.7-zip.org/a/7zr.exe >nul 2>&1
 if not exist "7zr.exe" (
-    echo [¿À·ù] 7zr.exe ´Ù¿î·Îµå ½ÇÆÐ. ÀÎÅÍ³Ý ¿¬°áÀ» È®ÀÎÇÏ¼¼¿ä.
+    echo [ì˜¤ë¥˜] 7zr.exe ë‹¤ìš´ë¡œë“œ ì‹¤íŒ¨. ì¸í„°ë„· ì—°ê²°ì„ í™•ì¸í•˜ì„¸ìš”.
     goto SKIP_RESOURCE_DOWNLOAD
 )
 
-REM 2. ÆÄÀÏ ´Ù¿î·Îµå (curl -L ¿É¼ÇÀ¸·Î ¸®´ÙÀÌ·ºÆ® ÀÚµ¿ Ã³¸®)
-echo  - ¸®¼Ò½º ÆÄÀÏ ´Ù¿î·Îµå Áß... 
+REM 2. íŒŒì¼ ë‹¤ìš´ë¡œë“œ (curl -L ì˜µì…˜ìœ¼ë¡œ ë¦¬ë‹¤ì´ë ‰íŠ¸ ìžë™ ì²˜ë¦¬)
+echo  - ë¦¬ì†ŒìŠ¤ íŒŒì¼ ë‹¤ìš´ë¡œë“œ ì¤‘... 
 echo    URL: %DOWNLOAD_URL%
 curl -L -o "%TEMP_ARC%" "%DOWNLOAD_URL%"
 
-REM ÆÄÀÏ À¯È¿¼º °Ë»ç (´Ù¿î·Îµå ½ÇÆÐ Ã¼Å©)
+REM íŒŒì¼ ìœ íš¨ì„± ê²€ì‚¬ (ë‹¤ìš´ë¡œë“œ ì‹¤íŒ¨ ì²´í¬)
 if not exist "%TEMP_ARC%" (
-    echo [¿À·ù] ´Ù¿î·Îµå ÆÄÀÏÀÌ »ý¼ºµÇÁö ¾Ê¾Ò½À´Ï´Ù.
+    echo [ì˜¤ë¥˜] ë‹¤ìš´ë¡œë“œ íŒŒì¼ì´ ìƒì„±ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.
     goto CLEANUP_AND_SKIP
 )
 
-REM ÆÄÀÏ Å©±â°¡ ³Ê¹« ÀÛÀ¸¸é(10KB ¹Ì¸¸) ¿¡·¯·Î °£ÁÖ (GitHub 404 µî)
+REM íŒŒì¼ í¬ê¸°ê°€ ë„ˆë¬´ ìž‘ìœ¼ë©´(10KB ë¯¸ë§Œ) ì—ëŸ¬ë¡œ ê°„ì£¼ (GitHub 404 ë“±)
 for %%I in ("%TEMP_ARC%") do if %%~zI LSS 10000 (
     echo.
-    echo [¿À·ù] ´Ù¿î·ÎµåµÈ ÆÄÀÏ Å©±â°¡ ºñÁ¤»óÀûÀ¸·Î ÀÛ½À´Ï´Ù (%%~zI bytes).
-    echo GitHub ¸µÅ©°¡ Àß¸øµÇ¾ú°Å³ª ÆÄÀÏÀ» Ã£À» ¼ö ¾ø½À´Ï´Ù.
+    echo [ì˜¤ë¥˜] ë‹¤ìš´ë¡œë“œëœ íŒŒì¼ í¬ê¸°ê°€ ë¹„ì •ìƒì ìœ¼ë¡œ ìž‘ìŠµë‹ˆë‹¤ (%%~zI bytes).
+    echo GitHub ë§í¬ê°€ ìž˜ëª»ë˜ì—ˆê±°ë‚˜ íŒŒì¼ì„ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.
     goto CLEANUP_AND_SKIP
 )
 
-REM 3. ¾ÐÃà ÇØÁ¦
-echo  - ¾ÐÃà ÇØÁ¦ Áß...
+REM 3. ì••ì¶• í•´ì œ
+echo  - ì••ì¶• í•´ì œ ì¤‘...
 7zr.exe x "%TEMP_ARC%" -o"%RES_ROOT%" -y >nul
 if %errorlevel% neq 0 (
-    echo [¿À·ù] ¾ÐÃà ÇØÁ¦ Áß ¿¡·¯°¡ ¹ß»ýÇß½À´Ï´Ù.
+    echo [ì˜¤ë¥˜] ì••ì¶• í•´ì œ ì¤‘ ì—ëŸ¬ê°€ ë°œìƒí–ˆìŠµë‹ˆë‹¤.
     goto CLEANUP_AND_SKIP
 )
 
-echo  - ¸®¼Ò½º ¼³Ä¡ ¿Ï·á!
+echo  - ë¦¬ì†ŒìŠ¤ ì„¤ì¹˜ ì™„ë£Œ!
 
 :CLEANUP_AND_SKIP
-REM 4. ÀÓ½Ã ÆÄÀÏ Á¤¸®
-echo  - ÀÓ½Ã ÆÄÀÏ Á¤¸® Áß...
+REM 4. ìž„ì‹œ íŒŒì¼ ì •ë¦¬
+echo  - ìž„ì‹œ íŒŒì¼ ì •ë¦¬ ì¤‘...
 if exist 7zr.exe del 7zr.exe
 if exist "%TEMP_ARC%" del "%TEMP_ARC%"
 
