@@ -30,6 +30,13 @@ PhysicsSystem::~PhysicsSystem()
     }
     
     m_entityToActor.clear();
+
+    // 모든 CCT 정리
+    for (auto& [entityId, handle] : m_entityToCCT)
+    {
+        handle.Destroy();
+    }
+    m_entityToCCT.clear();
 }
 
 void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
@@ -49,6 +56,16 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
     
     m_entityToActor.clear();
     m_lastTransforms.clear();
+    m_lastColliders.clear();
+    m_lastRigidBodies.clear();
+    m_lastTerrains.clear();
+
+    // CCT 정리
+    for (auto& [entityId, handle] : m_entityToCCT)
+    {
+        handle.Destroy();
+    }
+    m_entityToCCT.clear();
 
     m_physicsWorld = physicsWorld;
 }
@@ -135,6 +152,16 @@ void PhysicsSystem::Update(float deltaTime)
             }
         }
 
+        // CCT 생성
+        {
+            auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+            for (const auto& [entityId, cct] : ccts)
+            {
+                if (cct.controllerHandle == nullptr)
+                    CreateCharacterController(entityId);
+            }
+        }
+
         // 제거된 컴포넌트 확인 (m_entityToActor에 있지만 컴포넌트가 없는 경우)
         std::vector<EntityId> toRemove;
         for (const auto& [entityId, handle] : m_entityToActor)
@@ -152,6 +179,18 @@ void PhysicsSystem::Update(float deltaTime)
         for (EntityId entityId : toRemove)
         {
             DestroyPhysicsActor(entityId);
+        }
+
+        // CCT 제거 (컴포넌트 사라진 엔티티 정리)
+        {
+            std::vector<EntityId> cctToRemove;
+            for (const auto& [entityId, h] : m_entityToCCT)
+            {
+                if (!m_world.GetComponent<CharacterControllerComponent>(entityId))
+                    cctToRemove.push_back(entityId);
+            }
+            for (auto eid : cctToRemove)
+                DestroyCharacterController(eid);
         }
     }
 
@@ -406,6 +445,129 @@ void PhysicsSystem::Update(float deltaTime)
             }
 
             m_lastRigidBodies[entityId] = cur;
+        }
+    }
+
+    // 5. Terrain 변경 감지 및 재생성
+    {
+        auto terrains = m_world.GetComponents<TerrainHeightFieldComponent>();
+        for (const auto& [entityId, terrain] : terrains)
+        {
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform) continue;
+
+            TerrainState cur{};
+            cur.numRows = terrain.numRows;
+            cur.numCols = terrain.numCols;
+            cur.rowScale = terrain.rowScale;
+            cur.colScale = terrain.colScale;
+            cur.heightScale = terrain.heightScale;
+            cur.centerPivot = terrain.centerPivot;
+            cur.doubleSidedQueries = terrain.doubleSidedQueries;
+            cur.staticFriction = terrain.staticFriction;
+            cur.dynamicFriction = terrain.dynamicFriction;
+            cur.restitution = terrain.restitution;
+            cur.layerBits = terrain.layerBits;
+            cur.collideMask = terrain.collideMask;
+            cur.queryMask = terrain.queryMask;
+            cur.scale = transform->scale;
+
+            auto it = m_lastTerrains.find(entityId);
+            if (it == m_lastTerrains.end())
+            {
+                m_lastTerrains[entityId] = cur;
+                continue;
+            }
+
+            const TerrainState& prev = it->second;
+            const bool changed =
+                cur.numRows != prev.numRows || cur.numCols != prev.numCols ||
+                cur.rowScale != prev.rowScale || cur.colScale != prev.colScale || cur.heightScale != prev.heightScale ||
+                cur.centerPivot != prev.centerPivot || cur.doubleSidedQueries != prev.doubleSidedQueries ||
+                cur.staticFriction != prev.staticFriction || cur.dynamicFriction != prev.dynamicFriction || cur.restitution != prev.restitution ||
+                cur.layerBits != prev.layerBits || cur.collideMask != prev.collideMask || cur.queryMask != prev.queryMask ||
+                cur.scale.x != prev.scale.x || cur.scale.y != prev.scale.y || cur.scale.z != prev.scale.z;
+
+            if (changed)
+            {
+                m_lastTerrains[entityId] = cur;
+                CreateTerrainHeightField(entityId); // 내부에서 기존 actor 정리 후 재생성
+            }
+        }
+
+        // 제거된 terrain 상태 정리
+        std::vector<EntityId> toErase;
+        for (auto& [eid, st] : m_lastTerrains)
+        {
+            if (!m_world.GetComponent<TerrainHeightFieldComponent>(eid))
+                toErase.push_back(eid);
+        }
+        for (auto eid : toErase) m_lastTerrains.erase(eid);
+    }
+
+    // 6. CCT 이동 + 중력/점프 처리 + Transform 갱신
+    {        
+        auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+
+        for (const auto& [entityId, ccc] : ccts)
+        {
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform) continue;
+
+            auto it = m_entityToCCT.find(entityId);
+            if (it == m_entityToCCT.end() || !it->second.IsValid()) continue;
+
+            ICharacterController* ctrl = it->second.cct;
+            if (!ctrl) continue;
+
+            // teleport: 발 위치를 Transform.position으로 강제
+            if (ccc.teleport)
+            {
+                ctrl->SetFootPosition(ToVec3(transform->position));
+                ccc.verticalVelocity = 0.0f;
+                ccc.teleport = false;
+            }
+
+            // 현재 지면 상태(점프/중력에 필요)
+            CharacterControllerState st0 = ctrl->GetState(ccc.collideMask, ccc.queryMask, 0.2f, ccc.hitTriggers);
+            const bool wasGrounded = st0.onGround;
+
+            // 점프
+            if (ccc.jumpRequested && wasGrounded)
+                ccc.verticalVelocity = ccc.jumpSpeed;
+            ccc.jumpRequested = false;
+
+            // 중력
+            if (ccc.applyGravity)
+            {
+                if (wasGrounded && ccc.verticalVelocity < 0.0f)
+                    ccc.verticalVelocity = 0.0f;
+                else
+                    ccc.verticalVelocity += ccc.gravity * deltaTime;
+            }
+
+            // 이동량 계산 (m/s * dt)
+            Vec3 disp;
+            disp.x = ccc.desiredVelocity.x * deltaTime;
+            disp.z = ccc.desiredVelocity.z * deltaTime;
+            disp.y = ccc.verticalVelocity * deltaTime;
+
+            CCTCollisionFlags cf = ctrl->Move(
+                disp,
+                deltaTime,
+                ccc.collideMask,
+                ccc.queryMask,
+                ccc.hitTriggers);
+
+            // 최종 상태 저장
+            CharacterControllerState st = ctrl->GetState(ccc.collideMask, ccc.queryMask, 0.2f, ccc.hitTriggers);
+            ccc.onGround = st.onGround;
+            ccc.groundNormal = ToXMFLOAT3(st.groundNormal);
+            ccc.groundDistance = st.groundDistance;
+            ccc.collisionFlags = static_cast<uint8_t>(cf);
+
+            // Transform 반영: foot 위치로 동기화
+            transform->position = ToXMFLOAT3(ctrl->GetFootPosition());
         }
     }
 }
@@ -707,7 +869,8 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     m_entityToActor.erase(it);
     m_lastTransforms.erase(entityId);
     m_lastColliders.erase(entityId);
-    m_lastRigidBodies.erase(entityId); 
+    m_lastRigidBodies.erase(entityId);
+    m_lastTerrains.erase(entityId);
 }
 
 void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
@@ -740,14 +903,21 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
     Vec3 pos = ToVec3(transform->position);
     Quat rot = ToQuat(transform->rotation);
 
+    auto AbsScale = [](const DirectX::XMFLOAT3& s) -> Vec3 {
+        return Vec3(std::abs(s.x), std::abs(s.y), std::abs(s.z));
+    };
+    const Vec3 s = AbsScale(transform->scale);
+
     // HeightFieldColliderDesc 구성
     HeightFieldColliderDesc hfDesc{};
     hfDesc.heightSamples = terrain->heightSamples.data();
     hfDesc.numRows = terrain->numRows;
     hfDesc.numCols = terrain->numCols;
-    hfDesc.heightScale = terrain->heightScale;
-    hfDesc.rowScale = terrain->rowScale;
-    hfDesc.colScale = terrain->colScale;
+
+    // Transform scale 반영: X=col, Z=row, Y=height
+    hfDesc.colScale    = terrain->colScale    * s.x;
+    hfDesc.rowScale    = terrain->rowScale    * s.z;
+    hfDesc.heightScale = terrain->heightScale * s.y;
     hfDesc.staticFriction = terrain->staticFriction;
     hfDesc.dynamicFriction = terrain->dynamicFriction;
     hfDesc.restitution = terrain->restitution;
@@ -764,8 +934,8 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
 
     if (terrain->centerPivot)
     {
-        const float halfW = 0.5f * static_cast<float>(terrain->numCols - 1) * terrain->colScale;
-        const float halfD = 0.5f * static_cast<float>(terrain->numRows - 1) * terrain->rowScale;
+        const float halfW = 0.5f * static_cast<float>(terrain->numCols - 1) * hfDesc.colScale;
+        const float halfD = 0.5f * static_cast<float>(terrain->numRows - 1) * hfDesc.rowScale;
         localPos = Vec3(-halfW, 0.0f, -halfD);
     }
 
@@ -1021,4 +1191,66 @@ DirectX::XMFLOAT3 PhysicsSystem::ToEulerRadians(const Quat& q)
     float yaw = std::atan2(siny_cosp, cosy_cosp);
     
     return DirectX::XMFLOAT3(roll, pitch, yaw);
+}
+
+void PhysicsSystem::CreateCharacterController(EntityId entityId)
+{
+    if (!m_physicsWorld) return;
+    if (!m_physicsWorld->SupportsCharacterControllers()) return;
+
+    auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+    auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+    if (!transform || !ccc) return;
+
+    // ⚠️ 같은 엔티티에 RB/Collider 같이 두지 마라. 충돌/동기화 싸움 난다.
+    if (m_world.GetComponent<RigidBodyComponent>(entityId) || m_world.GetComponent<ColliderComponent>(entityId))
+        return;
+
+    auto AbsScale = [](const DirectX::XMFLOAT3& s) -> Vec3 {
+        return Vec3(std::abs(s.x), std::abs(s.y), std::abs(s.z));
+    };
+    const Vec3 s = AbsScale(transform->scale);
+
+    CharacterControllerDesc desc{};
+    desc.type = CCTType::Capsule;
+
+    // Capsule 스케일 규칙: Y는 높이, X/Z는 반경(비균일이면 큰 축 선택)
+    const float radial = std::max(s.x, s.z);
+    desc.radius = ccc->radius * radial;
+    desc.halfHeight = ccc->halfHeight * s.y;
+
+    desc.stepOffset = ccc->stepOffset;
+    desc.contactOffset = ccc->contactOffset;
+    desc.slopeLimitRadians = ccc->slopeLimitRadians;
+    desc.nonWalkableMode = ccc->nonWalkableMode;
+    desc.climbingMode = ccc->climbingMode;
+    desc.density = ccc->density;
+    desc.enableQueries = ccc->enableQueries;
+
+    desc.layerBits = ccc->layerBits;
+    desc.collideMask = ccc->collideMask;
+    desc.queryMask = ccc->queryMask;
+    desc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+
+    // foot 기준: Transform.position을 발 위치로 사용
+    desc.footPosition = ToVec3(transform->position);
+    desc.upDirection = Vec3::UnitY;
+
+    auto ctrl = m_physicsWorld->CreateCharacterController(desc);
+    if (!ctrl) return;
+
+    CCTHandle handle(std::move(ctrl));
+    ccc->controllerHandle = handle.cct;
+    m_entityToCCT[entityId] = std::move(handle);
+}
+
+void PhysicsSystem::DestroyCharacterController(EntityId entityId)
+{
+    auto it = m_entityToCCT.find(entityId);
+    if (it == m_entityToCCT.end()) return;
+    it->second.Destroy();
+    m_entityToCCT.erase(it);
+
+    auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+    if (ccc) ccc->controllerHandle = nullptr;
 }
