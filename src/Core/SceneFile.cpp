@@ -160,6 +160,24 @@ namespace Alice
                 outEntity["Camera"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* point = world.GetComponent<PointLightComponent>(id); point)
+            {
+                rttr::instance inst = const_cast<PointLightComponent&>(*point);
+                outEntity["PointLight"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* spot = world.GetComponent<SpotLightComponent>(id); spot)
+            {
+                rttr::instance inst = const_cast<SpotLightComponent&>(*spot);
+                outEntity["SpotLight"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* rect = world.GetComponent<RectLightComponent>(id); rect)
+            {
+                rttr::instance inst = const_cast<RectLightComponent&>(*rect);
+                outEntity["RectLight"] = JsonRttr::ToJsonObject(inst);
+            }
+
             return true;
         }
 
@@ -263,6 +281,33 @@ namespace Alice
                 CameraComponent& cc = world.AddComponent<CameraComponent>(id);
                 rttr::instance inst = cc;
                 if (!JsonRttr::FromJsonObject(inst, *itC)) return false;
+            }
+
+            // Point Light 선택
+            auto itPL = e.find("PointLight");
+            if (itPL != e.end() && itPL->is_object())
+            {
+                PointLightComponent& pl = world.AddComponent<PointLightComponent>(id);
+                rttr::instance inst = pl;
+                if (!JsonRttr::FromJsonObject(inst, *itPL)) return false;
+            }
+
+            // Spot Light 선택
+            auto itSL = e.find("SpotLight");
+            if (itSL != e.end() && itSL->is_object())
+            {
+                SpotLightComponent& sl = world.AddComponent<SpotLightComponent>(id);
+                rttr::instance inst = sl;
+                if (!JsonRttr::FromJsonObject(inst, *itSL)) return false;
+            }
+
+            // Rect Light 선택
+            auto itRL = e.find("RectLight");
+            if (itRL != e.end() && itRL->is_object())
+            {
+                RectLightComponent& rl = world.AddComponent<RectLightComponent>(id);
+                rttr::instance inst = rl;
+                if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
             }
 
             return true;

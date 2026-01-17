@@ -85,13 +85,33 @@ namespace Alice
             .property("nearPlane", &CameraComponent::nearPlane)
             .property("farPlane", &CameraComponent::farPlane);
 
-        rttr::registration::class_<PhysicsSceneSettingsComponent>("PhysicsSceneSettingsComponent")
+        // === PointLightComponent 등록 ===
+        rttr::registration::class_<PointLightComponent>("PointLightComponent")
             .constructor<>()
-            .property("enablePhysics", &PhysicsSceneSettingsComponent::enablePhysics)
-            .property("gravity", &PhysicsSceneSettingsComponent::gravity)
-            .property("fixedDt", &PhysicsSceneSettingsComponent::fixedDt)
-            .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps);
+            .property("color", &PointLightComponent::color)
+            .property("intensity", &PointLightComponent::intensity)
+            .property("range", &PointLightComponent::range)
+            .property("enabled", &PointLightComponent::enabled);
 
+        // === SpotLightComponent 등록 ===
+        rttr::registration::class_<SpotLightComponent>("SpotLightComponent")
+            .constructor<>()
+            .property("color", &SpotLightComponent::color)
+            .property("intensity", &SpotLightComponent::intensity)
+            .property("range", &SpotLightComponent::range)
+            .property("innerAngleDeg", &SpotLightComponent::innerAngleDeg)
+            .property("outerAngleDeg", &SpotLightComponent::outerAngleDeg)
+            .property("enabled", &SpotLightComponent::enabled);
+
+        // === RectLightComponent 등록 ===
+        rttr::registration::class_<RectLightComponent>("RectLightComponent")
+            .constructor<>()
+            .property("color", &RectLightComponent::color)
+            .property("intensity", &RectLightComponent::intensity)
+            .property("width", &RectLightComponent::width)
+            .property("height", &RectLightComponent::height)
+            .property("range", &RectLightComponent::range)
+            .property("enabled", &RectLightComponent::enabled);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

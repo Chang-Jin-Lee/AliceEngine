@@ -7,6 +7,7 @@ namespace Alice {
 	{
 		// 1. 스크립트 컴포넌트들의 정리(Cleanup) 함수 호출
 		RemoveAllScript();
+		// 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
 
 		// 1.5 �������� ���� ����
 		m_physicsWorld.reset();
@@ -19,6 +20,9 @@ namespace Alice {
 		m_skinnedMeshes.Clear();
 		m_skinnedAnimations.Clear();
 		m_cameras.Clear();
+		m_pointLights.Clear();
+		m_spotLights.Clear();
+		m_rectLights.Clear();
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
@@ -67,6 +71,9 @@ namespace Alice {
 		m_skinnedMeshes.Remove(id);
 		m_skinnedAnimations.Remove(id);
 		m_cameras.Remove(id);
+		m_pointLights.Remove(id);
+		m_spotLights.Remove(id);
+		m_rectLights.Remove(id);
 	}
 
 	GameObject World::FindGameObject(const std::string& name)
@@ -276,6 +283,32 @@ namespace Alice {
 		return e;
 	}
 
+	EntityId World::CreatePointLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<PointLightComponent>(e);
+		SetEntityName(e, "Point Light");
+		return e;
+	}
+
+	EntityId World::CreateSpotLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<SpotLightComponent>(e);
+		SetEntityName(e, "Spot Light");
+		return e;
+	}
+
+	EntityId World::CreateRectLight()
+	{
+		EntityId e = CreateEntity();
+		AddComponent<TransformComponent>(e);
+		AddComponent<RectLightComponent>(e);
+		SetEntityName(e, "Rect Light");
+		return e;
+	}
 
 
 	//========================================================

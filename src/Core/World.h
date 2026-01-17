@@ -17,6 +17,9 @@
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/CameraComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/SpotLightComponent.h"
+#include "Components/RectLightComponent.h"
 
 // ���� ������Ʈ
 #include "PhysX/Components/PhysicsSceneSettingsComponent.h"
@@ -50,6 +53,15 @@ namespace Alice
         
         /// 카메라 게임 오브젝트를 생성합니다 (Transform + Camera)
         EntityId CreateCamera();
+
+        /// 포인트 라이트 게임 오브젝트를 생성합니다 (Transform + PointLight)
+        EntityId CreatePointLight();
+
+        /// 스폿 라이트 게임 오브젝트를 생성합니다 (Transform + SpotLight)
+        EntityId CreateSpotLight();
+
+        /// 사각형 라이트 게임 오브젝트를 생성합니다 (Transform + RectLight)
+        EntityId CreateRectLight();
 
         // ==== 제네릭 컴포넌트 관리 시스템 ====
         // 컴포넌트 타입 T에 따라 올바른 Map을 자동으로 찾아줍니다.
@@ -353,8 +365,11 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else if constexpr (std::is_same_v<T, PointLightComponent>) return m_pointLights;
+            else if constexpr (std::is_same_v<T, SpotLightComponent>) return m_spotLights;
+            else if constexpr (std::is_same_v<T, RectLightComponent>) return m_rectLights;
             else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
-            else static_assert(std::is_same_v<T, void>, "�������� �ʴ� ������Ʈ Ÿ���Դϴ�.");
+            else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
         }
 
         // const 버전 저장소 반환
@@ -366,8 +381,12 @@ namespace Alice
             else if constexpr (std::is_same_v<T, SkinnedMeshComponent>) return m_skinnedMeshes;
             else if constexpr (std::is_same_v<T, SkinnedAnimationComponent>) return m_skinnedAnimations;
             else if constexpr (std::is_same_v<T, CameraComponent>) return m_cameras;
+            else if constexpr (std::is_same_v<T, PointLightComponent>) return m_pointLights;
+            else if constexpr (std::is_same_v<T, SpotLightComponent>) return m_spotLights;
+            else if constexpr (std::is_same_v<T, RectLightComponent>) return m_rectLights;
             else if constexpr (std::is_same_v<T, PhysicsSceneSettingsComponent>) return m_physicsSettings;
-            else static_assert(std::is_same_v<T, void>, "�������� �ʴ� ������Ʈ Ÿ���Դϴ�.");
+            else static_assert(std::is_same_v<T, void>, "지원하지 않는 컴포넌트 타입입니다.");
+            
         }
 
     private:
@@ -381,7 +400,11 @@ namespace Alice
         ComponentStorage<SkinnedMeshComponent> m_skinnedMeshes;
         ComponentStorage<SkinnedAnimationComponent> m_skinnedAnimations;
         ComponentStorage<CameraComponent> m_cameras;
+        ComponentStorage<PointLightComponent> m_pointLights;
+        ComponentStorage<SpotLightComponent> m_spotLights;
+        ComponentStorage<RectLightComponent> m_rectLights;
 
+        // 스크립트는 vector를 값으로 가지므로 일반 T와 구조가 달라 따로 둠
         ComponentStorage<PhysicsSceneSettingsComponent> m_physicsSettings;
 
         // ��ũ��Ʈ�� vector�� ������ �����Ƿ� �Ϲ� T�� ������ �޶� ���� ��
