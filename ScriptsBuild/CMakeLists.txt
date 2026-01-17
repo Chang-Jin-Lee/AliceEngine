@@ -50,6 +50,10 @@ if(MSVC)
     set(VCPKG_TRIPLET_DYNAMIC "x64-windows"          CACHE STRING "vcpkg dynamic triplet")
 endif()
 
+
+# window, std 둘의 min, max 충돌삭제
+add_compile_definitions(NOMINMAX)
+
 # ==========================================
 # RTTR 라이브러리 설정
 # ==========================================
@@ -139,4 +143,7 @@ set_target_properties(AliceScripts PROPERTIES
 # 핫리로드시 PDB 잠금 방지 (/DEBUG:NONE)
 if(MSVC)
     target_link_options(AliceScripts PRIVATE "/DEBUG:NONE")
+
+    # 소스 파일 UTF-8 인코딩 명시 (C4819 경고 방지)
+    target_compile_options(AliceScripts PRIVATE "/utf-8")
 endif()
