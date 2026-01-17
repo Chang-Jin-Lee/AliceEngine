@@ -99,6 +99,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Material.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.cpp
+    ${ALICE_SRC_DIR}/Core/CameraSystem.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
     ${ALICE_SRC_DIR}/Core/TimeSystem.cpp
@@ -124,6 +125,18 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
     
+    #PhysX
+    ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Actors.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Core.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Joints.cpp
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Queries.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/
+    #Physx Module
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.cpp
+
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
@@ -148,6 +161,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Prefab.h
     ${ALICE_SRC_DIR}/Core/Material.h
     ${ALICE_SRC_DIR}/Core/Logger.h
+    ${ALICE_SRC_DIR}/Core/CameraSystem.h
     ${ALICE_SRC_DIR}/Core/SceneFile.h
     ${ALICE_SRC_DIR}/Core/SceneFileHelper.h
     ${ALICE_SRC_DIR}/Core/ReflectionSerializer.h
@@ -170,11 +184,20 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/InputTypes.h
     
     #컴포넌트들
+    ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h
     ${ALICE_SRC_DIR}/Components/CameraComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraFollowComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraInputComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraLookAtComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraShakeComponent.h
+    ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
     ${ALICE_SRC_DIR}/Components/MaterialComponent.h
+    ${ALICE_SRC_DIR}/Components/PointLightComponent.h
+    ${ALICE_SRC_DIR}/Components/RectLightComponent.h
     ${ALICE_SRC_DIR}/Components/ScriptComponent.h
     ${ALICE_SRC_DIR}/Components/SkinnedAnimationComponent.h
     ${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
+    ${ALICE_SRC_DIR}/Components/SpotLightComponent.h
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
 
     # FBX/3D 모델 로더 헤더
@@ -200,6 +223,20 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
+
+    #PhysX 물리
+    ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
+    ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
+    ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
+    #Module
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
+    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.h
+    #Components
+    ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
 
     # json
     ${ALICE_SRC_DIR}/json/json.hpp

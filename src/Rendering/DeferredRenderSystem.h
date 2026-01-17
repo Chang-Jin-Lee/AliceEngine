@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -53,13 +53,17 @@ namespace Alice
         /// @param shadingMode 셰이딩 모드
         /// @param enableFillLight 보조광 사용 여부
         /// @param skinnedCommands 스키닝 메시 드로우 커맨드 목록
+        /// @param editorMode 에디터 모드 여부
+        /// @param isPlaying 재생 중 여부
         void Render(const World& world,
                     const Camera& camera,
                     EntityId entity,
                     const std::unordered_set<EntityId>& cameraEntities,
                     int shadingMode,
                     bool enableFillLight,
-                    const std::vector<SkinnedDrawCommand>& skinnedCommands);
+                    const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                    bool editorMode = false,
+                    bool isPlaying = false);
 
         /// 씬 컬러 텍스처 SRV를 반환합니다 (에디터에서 사용).
         ID3D11ShaderResourceView* GetSceneColorSRV() const { return m_sceneColorSRV.Get(); }
@@ -119,12 +123,17 @@ namespace Alice
         // 렌더링 패스
         DirectX::XMMATRIX RenderShadowPass(const World& world,
                                            const std::vector<SkinnedDrawCommand>& skinnedCommands,
-                                           const std::unordered_set<EntityId>& cameraEntities);
+                                           const std::unordered_set<EntityId>& cameraEntities,
+                                           bool editorMode = false,
+                                           bool isPlaying = false);
         void PassGBuffer(const World& world, 
                         const Camera& camera,
                         const std::vector<SkinnedDrawCommand>& skinnedCommands,
-                        const std::unordered_set<EntityId>& cameraEntities);
-        void PassDeferredLight(const Camera& camera,
+                        const std::unordered_set<EntityId>& cameraEntities,
+                        bool editorMode = false,
+                        bool isPlaying = false);
+        void PassDeferredLight(const World& world,
+                               const Camera& camera,
                                int shadingMode,
                                bool enableFillLight,
                                DirectX::CXMMATRIX lightViewProj);
@@ -150,6 +159,7 @@ namespace Alice
                               int shadingMode,
                               bool enableFillLight,
                               DirectX::CXMMATRIX lightViewProj);
+        void UpdateExtraLightsCB(const World& world);
         void UpdateBonesCB(const DirectX::XMFLOAT4X4* boneMatrices, std::uint32_t boneCount);
         
         // 월드 행렬 구성
@@ -217,6 +227,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbLighting;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbDirectionalLight;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbExtraLights;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbBones;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPostProcess;
         // Transparent Forward-Style 패스용 최소 조명 CB

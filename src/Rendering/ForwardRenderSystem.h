@@ -92,6 +92,8 @@ namespace Alice
                               bool enableFillLight,
                               const DirectX::XMMATRIX& lightViewProj);
 
+        void UpdateExtraLightsCB(const World& world);
+
         void UpdateBonesCB(const DirectX::XMFLOAT4X4* boneMatrices,
                            std::uint32_t boneCount);
 
@@ -126,6 +128,7 @@ namespace Alice
 
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPerObject;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbLighting;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbExtraLights;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbSkybox; // 스카이박스 전용 CB (DYNAMIC)
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPostProcess; // 톤매핑용 PostProcess CB
 

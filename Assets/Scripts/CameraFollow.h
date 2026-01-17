@@ -1,4 +1,4 @@
-﻿//#pragma once
+//#pragma once
 //
 //#include "Core/IScript.h"
 //#include "Core/ScriptReflection.h"

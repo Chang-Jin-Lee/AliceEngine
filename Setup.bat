@@ -105,12 +105,14 @@ echo [3/4] 필수 라이브러리 설치 (시간이 걸립니다)...
 "%VCPKG_EXE%" install assimp:x64-windows
 "%VCPKG_EXE%" install physx:x64-windows
 
+
 REM -----------------------------------------------------------
-REM [5] Visual Studio 통합
+REM [5] Visual Studio 통합(삭제)
 REM -----------------------------------------------------------
 echo.
 echo [4/4] Visual Studio 통합 설정 (User-wide)
-"%VCPKG_EXE%" integrate install
+REM "%VCPKG_EXE%" integrate install
+"%VCPKG_EXE%" integrate remove
 
 echo.
 echo ========================================================

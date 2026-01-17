@@ -365,6 +365,96 @@ cbuffer DirectionalLightBuffer : register(b3)
     float g_pad[3];
 };
 
+#define MAX_POINT_LIGHTS 16
+#define MAX_SPOT_LIGHTS 16
+#define MAX_RECT_LIGHTS 16
+
+struct PointLight
+{
+    float3 position;
+    float  range;
+    float3 color;
+    float  intensity;
+};
+
+struct SpotLight
+{
+    float3 position;
+    float  range;
+    float3 direction;
+    float  innerCos;
+    float3 color;
+    float  outerCos;
+    float  intensity;
+    float  pad0;
+};
+
+struct RectLight
+{
+    float3 position;
+    float  range;
+    float3 direction;
+    float  width;
+    float3 color;
+    float  height;
+    float  intensity;
+    float  pad0;
+};
+
+cbuffer ExtraLightsBuffer : register(b5)
+{
+    int g_PointLightCount;
+    int g_SpotLightCount;
+    int g_RectLightCount;
+    int g_ExtraPad0;
+    PointLight g_PointLights[MAX_POINT_LIGHTS];
+    SpotLight  g_SpotLights[MAX_SPOT_LIGHTS];
+    RectLight  g_RectLights[MAX_RECT_LIGHTS];
+};
+
+float ComputeAttenuation(float dist, float range)
+{
+    float r = max(range, 0.001f);
+    float att = saturate(1.0f - dist / r);
+    return att * att;
+}
+
+float ComputeSpotFactor(float3 L, float3 lightDir, float innerCos, float outerCos)
+{
+    float cosTheta = dot(-L, normalize(lightDir));
+    float denom = max(innerCos - outerCos, 1e-4f);
+    return saturate((cosTheta - outerCos) / denom);
+}
+
+float ComputeRectFactor(float3 L, float3 lightDir)
+{
+    return saturate(dot(-L, normalize(lightDir)));
+}
+
+float3 EvaluatePBRLight(float3 N, float3 V, float3 L, float3 albedoPBR, float metalness, float roughness, float3 lightColor)
+{
+    float3 H = normalize(L + V);
+    float NdotL = saturate(dot(N, L));
+    float NdotV = saturate(dot(N, V));
+    float NdotH = saturate(dot(N, H));
+    float VdotH = saturate(dot(V, H));
+
+    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoPBR, metalness);
+    float D = DistributionGGX(NdotH, roughness);
+    float G = GeometrySmith(NdotV, NdotL, roughness);
+    float3 F = FresnelSchlick(F0, VdotH);
+
+    float3 numerator = D * G * F;
+    float denomSpec = max(4.0f * NdotV * NdotL, 1e-4f);
+    float3 specular = numerator / denomSpec;
+
+    float3 kS = F;
+    float3 kD = (1.0f - kS) * (1.0f - metalness);
+    float3 diffuse = kD * albedoPBR * INV_PI;
+
+    return (diffuse + specular) * lightColor * NdotL;
+}
+
 float4 main(PS_INPUT_QUAD pIn) : SV_Target
 {
     // G-Buffer 가져오기
@@ -400,24 +490,55 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 albedoPBR = albedoLinear;
     roughness = max(roughness, 0.04f);
     float ao = saturate(g_PBRAmbientOcclusion);
-    
-    // Direct Light
+
+    // IBL 계산을 위해 필요한 F0와 kD를 여기서 미리 계산해야 합니다.
+    // --------------------------------------------------------------------------
     float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedoPBR, metalness);
-    float D = DistributionGGX(NdotH, roughness);
-    float G = GeometrySmith(NdotV, theta, roughness);
-    float3 F = FresnelSchlick(F0, VdotH);
+    float3 kS_IBL = FresnelSchlick(F0, NdotV);
+    float3 kD = (1.0f - kS_IBL) * (1.0f - metalness);
     
-    float3 numerator = D * G * F;
-    float denomSpec = max(4.0f * NdotV * theta, 1e-4f);
-    float3 specular = numerator / denomSpec;
-    
-    float3 kS = F;
-    float3 kD = (1.0f - kS) * (1.0f - metalness);
-    float3 diffuse = kD * albedoPBR * INV_PI;
-    
+    // Direct Light (Directional + Extra Lights)
     float shadowVis = CalcShadowFactorDeferred(posW, g_ShadowMap, g_ShadowSampler);
-    float3 radiance = g_LightColor.rgb * PI;
-    float3 directLighting = (diffuse + specular) * radiance * theta * ao * shadowVis * g_intensity;
+    float3 lightColorDir = g_LightColor.rgb * g_intensity * PI;
+    float3 directLighting = EvaluatePBRLight(N, V, L, albedoPBR, metalness, roughness, lightColorDir) * shadowVis * ao;
+
+    float3 extraLighting = float3(0.0f, 0.0f, 0.0f);
+
+    [loop] for (int i = 0; i < g_PointLightCount; ++i)
+    {
+        PointLight pl = g_PointLights[i];
+        float3 toLight = pl.position - posW;
+        float dist = length(toLight);
+        float3 Lp = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, pl.range);
+        float3 lc = pl.color * pl.intensity * atten * PI;
+        extraLighting += EvaluatePBRLight(N, V, Lp, albedoPBR, metalness, roughness, lc) * ao;
+    }
+
+    [loop] for (int i = 0; i < g_SpotLightCount; ++i)
+    {
+        SpotLight sl = g_SpotLights[i];
+        float3 toLight = sl.position - posW;
+        float dist = length(toLight);
+        float3 Ls = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, sl.range);
+        float spot = ComputeSpotFactor(Ls, sl.direction, sl.innerCos, sl.outerCos);
+        float3 lc = sl.color * sl.intensity * atten * spot * PI;
+        extraLighting += EvaluatePBRLight(N, V, Ls, albedoPBR, metalness, roughness, lc) * ao;
+    }
+
+    [loop] for (int i = 0; i < g_RectLightCount; ++i)
+    {
+        RectLight rl = g_RectLights[i];
+        float3 toLight = rl.position - posW;
+        float dist = length(toLight);
+        float3 Lr = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+        float atten = ComputeAttenuation(dist, rl.range);
+        float facing = ComputeRectFactor(Lr, rl.direction);
+        float areaScale = max(rl.width * rl.height, 0.01f);
+        float3 lc = rl.color * rl.intensity * atten * facing * areaScale * PI;
+        extraLighting += EvaluatePBRLight(N, V, Lr, albedoPBR, metalness, roughness, lc) * ao;
+    }
     
     // Indirect Light (IBL)
     float3 diffuseIBL = kD * g_IBL_Diffuse.Sample(g_Sam, N).rgb * albedoPBR;
@@ -429,9 +550,9 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 specularIBL = prefilteredColor * (F0 * specBRDF.x + specBRDF.y);
     
     float3 iblColor = (diffuseIBL + specularIBL) * ao;
-    
-    // 최종 색상
-    float3 color = directLighting + iblColor;
+
+    // 최종 색상 계산
+    float3 color = directLighting + extraLighting + iblColor;
     
     return float4(color, 1.0f);
 }
