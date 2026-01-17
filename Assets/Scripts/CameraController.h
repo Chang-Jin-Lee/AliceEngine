@@ -15,6 +15,7 @@ namespace Alice
 
     public:
         void Awake() override;
+        void Start() override;
         void Update(float deltaTime) override;
 
     private:
@@ -39,5 +40,6 @@ namespace Alice
         ALICE_PROPERTY(float, m_shakeFrequency, 20.0f)  // 흔들림 빈도
         ALICE_PROPERTY(float, m_shakeDuration, 2.2f)   // 흔들림 지속 시간
         ALICE_PROPERTY(float, m_shakeDecay, 2.0f)      // 흔들림 감쇠 계수
+        ALICE_PROPERTY(float, m_sholderOffset, 4.0f)      // 흔들림 감쇠 계수
     };
 }
