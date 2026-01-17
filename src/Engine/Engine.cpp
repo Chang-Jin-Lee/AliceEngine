@@ -535,8 +535,34 @@ namespace Alice
 			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
 
 			// 2-2. 물리 업데이트를 여기서 해도되나라는 생각임
-			//TickPhysics(dt);
+			// ===================================================================
+			// PhysicsSceneSettingsComponent가 있는데 물리 월드가 없으면 생성 시도
+			// (Awake()에서 추가된 경우 대응)
+			if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
+			{
+				const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
+				if (!settingsMap.empty())
+				{
+					const auto& settings = settingsMap.begin()->second;
+					if (settings.enablePhysics)
+					{
+						RefreshPhysicsForCurrentWorld();
+					}
+				}
+			}
 
+			// PhysicsSystem 업데이트 (Game → Physics 동기화)
+			if (pImpl->m_physicsSystem)
+			{
+				pImpl->m_physicsSystem->Update(dt);
+			}
+
+			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
+
+			// 물리 이벤트 처리 (물리 시뮬레이션 이후, 게임 로직에서 안전하게 처리)
+			ProcessPhysicsEvents();
+			// ===================================================================
+			
 			// 2-3. 카메라 시스템 (컴포넌트 기반)
 			{
 				CameraSystem cameraSystem;

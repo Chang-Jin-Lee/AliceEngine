@@ -79,8 +79,8 @@ namespace Alice
         }
 
         // 파라미터 검증
-        uint32_t rows = max(2u, Get_m_numRows());
-        uint32_t cols = max(2u, Get_m_numCols());
+        uint32_t rows = std::max(2u, Get_m_numRows());
+        uint32_t cols = std::max(2u, Get_m_numCols());
         
         if (rows < 2 || cols < 2)
         {
@@ -132,7 +132,7 @@ namespace Alice
 
                 // 1. 기본 그라디언트 (중앙이 높음)
                 float centerDist = std::sqrt((x - 0.5f) * (x - 0.5f) + (z - 0.5f) * (z - 0.5f));
-                float gradient = 1.0f - min(1.0f, centerDist * 2.0f);
+                float gradient = 1.0f - std::min(1.0f, centerDist * 2.0f);
 
                 // 2. 간단한 노이즈 (여러 옥타브)
                 float noise = 0.0f;
@@ -167,7 +167,7 @@ namespace Alice
 
                 // 3. 그라디언트와 노이즈 결합
                 float height = (gradient * 0.3f + noise * 0.7f) * maxHeight;
-                height = max(0.0f, height); // 최소 높이는 0
+                height = std::max(0.0f, height); // 최소 높이는 0
 
                 heights[i * cols + j] = height;
             }

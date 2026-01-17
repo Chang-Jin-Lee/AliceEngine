@@ -9,10 +9,10 @@ namespace Alice {
 		RemoveAllScript();
 		// 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
 
-		// 1.5 �������� ���� ����
+		// 1.5 물리 비우기
 		m_physicsWorld.reset();
 
-		// 2. ��� ������Ʈ �����̳� ���� (�޸� ����)
+		// 2. 엔티티 이름 비우기
 		m_names.clear();
 		
 		// 모든 엔진 컴포넌트 저장소 클리어
@@ -73,13 +73,6 @@ namespace Alice {
 			}
 			m_scripts.erase(it);
 		}
-		m_materials.Remove(id);
-		m_skinnedMeshes.Remove(id);
-		m_skinnedAnimations.Remove(id);
-		m_cameras.Remove(id);
-		m_physicsSettings.Remove(id);
-		m_rigidBodies.Remove(id);
-		m_colliders.Remove(id);
 	}
 
 	GameObject World::FindGameObject(const std::string& name)
