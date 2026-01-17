@@ -1,4 +1,4 @@
-﻿#include "CameraManager.h"
+#include "CameraManager.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 #include "Core/GameObject.h"
