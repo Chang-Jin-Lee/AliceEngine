@@ -53,13 +53,17 @@ namespace Alice
         /// @param shadingMode 셰이딩 모드
         /// @param enableFillLight 보조광 사용 여부
         /// @param skinnedCommands 스키닝 메시 드로우 커맨드 목록
+        /// @param editorMode 에디터 모드 여부
+        /// @param isPlaying 재생 중 여부
         void Render(const World& world,
                     const Camera& camera,
                     EntityId entity,
                     const std::unordered_set<EntityId>& cameraEntities,
                     int shadingMode,
                     bool enableFillLight,
-                    const std::vector<SkinnedDrawCommand>& skinnedCommands);
+                    const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                    bool editorMode = false,
+                    bool isPlaying = false);
 
         /// 씬 컬러 텍스처 SRV를 반환합니다 (에디터에서 사용).
         ID3D11ShaderResourceView* GetSceneColorSRV() const { return m_sceneColorSRV.Get(); }
@@ -119,11 +123,15 @@ namespace Alice
         // 렌더링 패스
         DirectX::XMMATRIX RenderShadowPass(const World& world,
                                            const std::vector<SkinnedDrawCommand>& skinnedCommands,
-                                           const std::unordered_set<EntityId>& cameraEntities);
+                                           const std::unordered_set<EntityId>& cameraEntities,
+                                           bool editorMode = false,
+                                           bool isPlaying = false);
         void PassGBuffer(const World& world, 
                         const Camera& camera,
                         const std::vector<SkinnedDrawCommand>& skinnedCommands,
-                        const std::unordered_set<EntityId>& cameraEntities);
+                        const std::unordered_set<EntityId>& cameraEntities,
+                        bool editorMode = false,
+                        bool isPlaying = false);
         void PassDeferredLight(const World& world,
                                const Camera& camera,
                                int shadingMode,
