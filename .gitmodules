@@ -11,3 +11,7 @@
 [submodule "ThirdParty/imoguizmo"]
 	path = ThirdParty/imoguizmo
 	url = https://github.com/Chang-Jin-Lee/imoguizmo.git
+[submodule "ThirdParty/imgui-node-editor"]
+	path = ThirdParty/imgui-node-editor
+	url = https://github.com/Chang-Jin-Lee/imgui-node-editor.git
+	branch = docking
