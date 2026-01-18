@@ -1,125 +1,75 @@
-@echo off
-setlocal ENABLEDELAYEDEXPANSION
-
-REM =========================================================================
-REM [¼³Á¤] ¼³Ä¡ °æ·Î ÁöÁ¤ (ÀÌ ºÎºÐ¸¸ ¼öÁ¤ÇÏ¸é µË´Ï´Ù)
-REM 1. "AUTO" ·Î ¼³Á¤ ½Ã: Dµå¶óÀÌºê°¡ ÀÖÀ¸¸é D:\vcpkg, ¾øÀ¸¸é C:\vcpkg ÀÚµ¿ ¼±ÅÃ
-REM 2. Æ¯Á¤ °æ·Î ÁöÁ¤ ½Ã: ¿¹) set "USER_DEFINED_PATH=E:\MyLibs\vcpkg"
-REM =========================================================================
-set "USER_DEFINED_PATH=AUTO"
-
-REM ===============================================
-REM AliceRenderer vcpkg ¼Â¾÷ ½ºÅ©¸³Æ® (ÃÖÁ¾ ¼öÁ¤ÆÇ)
-REM ===============================================
-
-echo [AliceRenderer] vcpkg ¼Â¾÷À» ½ÃÀÛÇÕ´Ï´Ù.
-
+ï»¿REM -----------------------------------------------------------
+REM [5] ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¦¬ì†ŒìŠ¤ ë‹¤ìš´ë¡œë“œ (GitHub Direct Link)
 REM -----------------------------------------------------------
-REM [1] Git ¼³Ä¡ ¿©ºÎ È®ÀÎ
-REM -----------------------------------------------------------
-where git >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [¿À·ù] GitÀÌ ¼³Ä¡µÇ¾î ÀÖÁö ¾Ê°Å³ª PATH¿¡ ¾ø½À´Ï´Ù.
-    echo GitÀ» ¸ÕÀú ¼³Ä¡ÇØÁÖ¼¼¿ä: https://git-scm.com/
-    pause
-    exit /b 1
-)
+echo.
+echo [4/5] ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¦¬ì†ŒìŠ¤ í™•ì¸ ë° ë‹¤ìš´ë¡œë“œ...
 
-REM -----------------------------------------------------------
-REM [2] ¼³Ä¡ °æ·Î °áÁ¤ (¿ì¼±¼øÀ§: »ç¿ëÀÚÁöÁ¤ > È¯°æº¯¼ö > ÀÚµ¿°¨Áö)
-REM -----------------------------------------------------------
+REM GitHub Releases ë§í¬
+set "DOWNLOAD_URL=https://github.com/Chang-Jin-Lee/D3D11-AliceTutorial/releases/download/Skybox/Skybox.7z"
 
-REM 1. ½ºÅ©¸³Æ® »ó´Ü »ç¿ëÀÚ ÁöÁ¤ °æ·Î È®ÀÎ
-if /i "%USER_DEFINED_PATH%" neq "AUTO" (
-    set "TARGET_ROOT=%USER_DEFINED_PATH%"
-    echo  - ½ºÅ©¸³Æ® »ó´Ü¿¡ ÁöÁ¤µÈ °æ·Î¸¦ »ç¿ëÇÕ´Ï´Ù: !TARGET_ROOT!
-) else (
-    REM 2. ½Ã½ºÅÛ È¯°æº¯¼ö È®ÀÎ
-    if defined VCPKG_ROOT (
-        set "TARGET_ROOT=%VCPKG_ROOT%"
-        echo  - ½Ã½ºÅÛ È¯°æº¯¼ö VCPKG_ROOT¸¦ »ç¿ëÇÕ´Ï´Ù: !TARGET_ROOT!
-    ) else (
-        REM 3. ÀÚµ¿ °¨Áö (Dµå¶óÀÌºê À¯¹«)
-        if exist "D:\" (
-            set "TARGET_ROOT=D:\vcpkg"
-            echo  - Dµå¶óÀÌºê°¡ °¨ÁöµÇ¾ú½À´Ï´Ù. ¼³Ä¡ °æ·Î: !TARGET_ROOT!
-        ) else (
-            set "TARGET_ROOT=C:\vcpkg"
-            echo  - Dµå¶óÀÌºê°¡ ¾ø½À´Ï´Ù. Cµå¶óÀÌºê¿¡ ¼³Ä¡ÇÕ´Ï´Ù: !TARGET_ROOT!
+REM í˜„ìž¬ ë°°ì¹˜ íŒŒì¼ì´ ìžˆëŠ” ìœ„ì¹˜ ê¸°ì¤€ìœ¼ë¡œ Resource í´ë” ê²½ë¡œ ì„¤ì •
+set "RES_ROOT=%~dp0Resource\Skybox"
+set "TEMP_ARC=skybox_temp.7z"
+
+REM ê²€ì‚¬í•  í•˜ìœ„ í´ë”ë“¤
+set "CHECK_DIR_1=%RES_ROOT%\Bridge"
+set "CHECK_DIR_2=%RES_ROOT%\Sample"
+set "CHECK_DIR_3=%RES_ROOT%\Indoor"
+
+REM ì„¸ í´ë”ê°€ ëª¨ë‘ ì¡´ìž¬í•˜ëŠ”ì§€ í™•ì¸
+if exist "%CHECK_DIR_1%" (
+    if exist "%CHECK_DIR_2%" (
+        if exist "%CHECK_DIR_3%" (
+            echo  - ì´ë¯¸ ìŠ¤ì¹´ì´ë°•ìŠ¤ ë¦¬ì†ŒìŠ¤ê°€ ì¡´ìž¬í•©ë‹ˆë‹¤. ë‹¤ìš´ë¡œë“œë¥¼ ê±´ë„ˆëœë‹ˆë‹¤.
+            goto SKIP_RESOURCE_DOWNLOAD
         )
     )
 )
 
-set "VCPKG_EXE=%TARGET_ROOT%\vcpkg.exe"
+echo  - ë¦¬ì†ŒìŠ¤ê°€ ëˆ„ë½ë˜ì—ˆìŠµë‹ˆë‹¤. ë‹¤ìš´ë¡œë“œë¥¼ ì‹œìž‘í•©ë‹ˆë‹¤.
+if not exist "%RES_ROOT%" mkdir "%RES_ROOT%"
 
-REM -----------------------------------------------------------
-REM [3] vcpkg Å¬·Ð ¹× ºÎÆ®½ºÆ®·¦
-REM -----------------------------------------------------------
-
-REM Æú´õ ÀÚÃ¼°¡ ¾øÀ¸¸é Å¬·Ð
-if not exist "%TARGET_ROOT%\.git" (
-    echo.
-    echo [1/4] vcpkg ÀúÀå¼Ò¸¦ Å¬·ÐÇÕ´Ï´Ù...
-    
-    REM Æú´õ°¡ ¾øÀ¸¸é »ý¼º
-    if not exist "%TARGET_ROOT%" mkdir "%TARGET_ROOT%"
-    
-    git clone https://github.com/microsoft/vcpkg.git "%TARGET_ROOT%"
-    if !errorlevel! neq 0 (
-        echo [¿À·ù] git clone ½ÇÆÐ. ÇØ´ç Æú´õ°¡ ÀÌ¹Ì Á¸ÀçÇÏ°í ºñ¾îÀÖÁö ¾ÊÀºÁö È®ÀÎÇÏ¼¼¿ä.
-        pause
-        exit /b 1
-    )
-) else (
-    echo  - vcpkg ÀúÀå¼Ò°¡ ÀÌ¹Ì Á¸ÀçÇÕ´Ï´Ù. git pull·Î ¾÷µ¥ÀÌÆ®¸¦ ½ÃµµÇÕ´Ï´Ù.
-    pushd "%TARGET_ROOT%"
-    git pull
-    popd
+REM 1. 7zip ì••ì¶• í•´ì œìš© íˆ´(Standalone Console Version) ìž„ì‹œ ë‹¤ìš´ë¡œë“œ
+echo  - ì••ì¶• í•´ì œ ë„êµ¬(7zr.exe) ë‹¤ìš´ë¡œë“œ ì¤‘...
+curl -L -o 7zr.exe https://www.7-zip.org/a/7zr.exe >nul 2>&1
+if not exist "7zr.exe" (
+    echo [ì˜¤ë¥˜] 7zr.exe ë‹¤ìš´ë¡œë“œ ì‹¤íŒ¨. ì¸í„°ë„· ì—°ê²°ì„ í™•ì¸í•˜ì„¸ìš”.
+    goto SKIP_RESOURCE_DOWNLOAD
 )
 
-REM vcpkg.exe°¡ ¾øÀ¸¸é ºôµå(bootstrap)
-if not exist "%VCPKG_EXE%" (
-    echo.
-    echo [2/4] bootstrap-vcpkg.bat ½ÇÇà Áß...
-    pushd "%TARGET_ROOT%"
-    call bootstrap-vcpkg.bat
-    if !errorlevel! neq 0 (
-        echo [¿À·ù] bootstrap ½ÇÆÐ.
-        popd
-        pause
-        exit /b 1
-    )
-    popd
+REM 2. íŒŒì¼ ë‹¤ìš´ë¡œë“œ (curl -L ì˜µì…˜ìœ¼ë¡œ ë¦¬ë‹¤ì´ë ‰íŠ¸ ìžë™ ì²˜ë¦¬)
+echo  - ë¦¬ì†ŒìŠ¤ íŒŒì¼ ë‹¤ìš´ë¡œë“œ ì¤‘... 
+echo    URL: %DOWNLOAD_URL%
+curl -L -o "%TEMP_ARC%" "%DOWNLOAD_URL%"
+
+REM íŒŒì¼ ìœ íš¨ì„± ê²€ì‚¬ (ë‹¤ìš´ë¡œë“œ ì‹¤íŒ¨ ì²´í¬)
+if not exist "%TEMP_ARC%" (
+    echo [ì˜¤ë¥˜] ë‹¤ìš´ë¡œë“œ íŒŒì¼ì´ ìƒì„±ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.
+    goto CLEANUP_AND_SKIP
 )
 
-REM -----------------------------------------------------------
-REM [4] ¶óÀÌºê·¯¸® ¼³Ä¡
-REM -----------------------------------------------------------
-echo.
-echo [3/4] ÇÊ¼ö ¶óÀÌºê·¯¸® ¼³Ä¡ (½Ã°£ÀÌ °É¸³´Ï´Ù)...
+REM íŒŒì¼ í¬ê¸°ê°€ ë„ˆë¬´ ìž‘ìœ¼ë©´(10KB ë¯¸ë§Œ) ì—ëŸ¬ë¡œ ê°„ì£¼ (GitHub 404 ë“±)
+for %%I in ("%TEMP_ARC%") do if %%~zI LSS 10000 (
+    echo.
+    echo [ì˜¤ë¥˜] ë‹¤ìš´ë¡œë“œëœ íŒŒì¼ í¬ê¸°ê°€ ë¹„ì •ìƒì ìœ¼ë¡œ ìž‘ìŠµë‹ˆë‹¤ (%%~zI bytes).
+    echo GitHub ë§í¬ê°€ ìž˜ëª»ë˜ì—ˆê±°ë‚˜ íŒŒì¼ì„ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.
+    goto CLEANUP_AND_SKIP
+)
 
-"%VCPKG_EXE%" install directxtk:x64-windows-static-md
-"%VCPKG_EXE%" install directxtex[dx11]:x64-windows-static-md
-"%VCPKG_EXE%" install imgui[dx11-binding]:x64-windows-static-md
-"%VCPKG_EXE%" install imgui[win32-binding]:x64-windows-static-md --recurse
-"%VCPKG_EXE%" install assimp:x64-windows
-"%VCPKG_EXE%" install physx:x64-windows
+REM 3. ì••ì¶• í•´ì œ
+echo  - ì••ì¶• í•´ì œ ì¤‘...
+7zr.exe x "%TEMP_ARC%" -o"%RES_ROOT%" -y >nul
+if %errorlevel% neq 0 (
+    echo [ì˜¤ë¥˜] ì••ì¶• í•´ì œ ì¤‘ ì—ëŸ¬ê°€ ë°œìƒí–ˆìŠµë‹ˆë‹¤.
+    goto CLEANUP_AND_SKIP
+)
 
+echo  - ë¦¬ì†ŒìŠ¤ ì„¤ì¹˜ ì™„ë£Œ!
 
-REM -----------------------------------------------------------
-REM [5] Visual Studio ÅëÇÕ(»èÁ¦)
-REM -----------------------------------------------------------
-echo.
-echo [4/4] Visual Studio ÅëÇÕ ¼³Á¤ (User-wide)
-REM "%VCPKG_EXE%" integrate install
-"%VCPKG_EXE%" integrate remove
+:CLEANUP_AND_SKIP
+REM 4. ìž„ì‹œ íŒŒì¼ ì •ë¦¬
+echo  - ìž„ì‹œ íŒŒì¼ ì •ë¦¬ ì¤‘...
+if exist 7zr.exe del 7zr.exe
+if exist "%TEMP_ARC%" del "%TEMP_ARC%"
 
-echo.
-echo ========================================================
-echo [¿Ï·á] ¸ðµç ¼Â¾÷ÀÌ ³¡³µ½À´Ï´Ù.
-echo Visual Studio¸¦ Àç½ÃÀÛÇÏ¸é ¶óÀÌºê·¯¸®¸¦ »ç¿ëÇÒ ¼ö ÀÖ½À´Ï´Ù.
-echo ¼³Ä¡ À§Ä¡: %TARGET_ROOT%
-echo ========================================================
-echo.
-pause
-exit /b 0
+:SKIP_RESOURCE_DOWNLOAD
