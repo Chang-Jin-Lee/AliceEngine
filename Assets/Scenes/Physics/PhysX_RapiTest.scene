@@ -84,7 +84,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1111.5375826344825
+                "timeSec": 1189.5650432074908
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -292,6 +292,7 @@
             },
             "PhysicsSceneSettings": {
                 "enablePhysics": true,
+                "filterRevision": 5,
                 "fixedDt": 0.01666666753590107,
                 "gravity": {
                     "x": 0.0,

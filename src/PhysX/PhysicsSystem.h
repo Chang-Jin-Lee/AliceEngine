@@ -5,10 +5,12 @@
 #include "Components/ColliderComponent.h"
 #include "Components/TerrainHeightFieldComponent.h"
 #include "Components/CharacterControllerComponent.h"
+#include "Components/PhysicsSceneSettingsComponent.h"
 #include <Core/World.h>
 #include <DirectXMath.h>
 #include <unordered_map>
 #include <memory>
+#include <array>
 
 // PhysicsSystem: ECS 컴포넌트와 PhysX를 연결하는 브릿지
 // - 컴포넌트 추가/제거 시 물리 액터 자동 생성/삭제
@@ -39,6 +41,18 @@ public:
 
     // 유틸리티: Quat → Euler 변환
     static DirectX::XMFLOAT3 ToEulerRadians(const Quat& q);
+
+    // 레이어 마스크 유틸리티
+    static constexpr uint32_t kMaxLayers = MAX_PHYSICS_LAYERS;
+    using LayerMaskArray = std::array<uint32_t, kMaxLayers>;
+    
+    static constexpr uint32_t AllLayersMask() noexcept
+    {
+        if constexpr (kMaxLayers >= 32) return 0xFFFFFFFFu;
+        else return (1u << kMaxLayers) - 1u;
+    }
+    
+    static LayerMaskArray MakeAllMaskArray() noexcept;
 
 private:
     // 컴포넌트 → 물리 액터 생성
@@ -125,6 +139,7 @@ private:
         uint32_t layerBits{};
         uint32_t collideMask{};
         uint32_t queryMask{};
+        uint32_t ignoreLayers{}; // ignoreLayers 변경 감지 추가
         bool isTrigger{};
         DirectX::XMFLOAT3 scale{}; // Transform scale 포함
     };
@@ -155,21 +170,13 @@ private:
     // Terrain 파라미터 변경 감지용
     struct TerrainState
     {
-        uint32_t numRows{};
-        uint32_t numCols{};
-        float rowScale{};
-        float colScale{};
-        float heightScale{};
-        bool centerPivot{};
-        bool doubleSidedQueries{};
-        float staticFriction{};
-        float dynamicFriction{};
-        float restitution{};
         uint32_t layerBits{};
+        uint32_t ignoreLayers{};
         uint32_t collideMask{};
         uint32_t queryMask{};
-        DirectX::XMFLOAT3 scale{};
-        size_t heightSamplesSize{}; // heightSamples 벡터 크기 변경 감지용
+        
+        // 지형 형상이 바뀌었는지 감지용
+        uint64_t lastGeomKey = 0;
     };
     std::unordered_map<Alice::EntityId, TerrainState> m_lastTerrains;
 
@@ -188,6 +195,7 @@ private:
         uint32_t layerBits{};
         uint32_t collideMask{};
         uint32_t queryMask{};
+        uint32_t ignoreLayers{}; // ignoreLayers 변경 감지 추가
         bool hitTriggers{};
         DirectX::XMFLOAT3 scale{}; // Transform scale 포함
         // 참고: applyGravity, gravity, jumpSpeed는 매 프레임 직접 사용되므로 변경 감지 불필요

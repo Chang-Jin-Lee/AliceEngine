@@ -17,6 +17,9 @@ namespace Alice
         /// \param editorMode true 이면 에디터(도킹 UI) 모드, false 이면 게임 전용 모드
         Engine(bool editorMode = true);
         ~Engine();
+        
+        /// 엔진 종료 (명시적 종료 호출)
+        void Shutdown();
 
         /// 엔진과 윈도우, 렌더 디바이스를 초기화합니다.
         bool Initialize(HINSTANCE hInstance, int nCmdShow);
