@@ -281,16 +281,16 @@ namespace Alice
         // ==== 전체 컴포넌트 순회 (시스템/에디터용) ====
         // 
         // 사용 예시 (읽기 전용):
-        //   for (const auto& [entityId, transform] : world.GetComponents<TransformComponent>())
+        //   for (auto&& [entityId, transform] : world.GetComponents<TransformComponent>())
         //   {
-        //       // transform은 const TransformComponent&
+        //       // transform은 TransformComponent& (auto&& 사용으로 참조 보장)
         //       // 연속 메모리에서 효율적으로 순회됨 (캐시 친화적)
         //   }
         //
         // 사용 예시 (수정 가능):
-        //   for (auto& [entityId, transform] : world.GetComponents<TransformComponent>())
+        //   for (auto&& [entityId, transform] : world.GetComponents<TransformComponent>())
         //   {
-        //       // transform은 TransformComponent&
+        //       // transform은 TransformComponent& (auto&& 사용으로 참조 보장)
         //       transform.position.x += 1.0f; // 수정 가능
         //   }
         //

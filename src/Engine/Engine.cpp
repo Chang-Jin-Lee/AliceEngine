@@ -331,14 +331,36 @@ namespace Alice
 
 	Engine::~Engine()
 	{
+		Shutdown();
+	}
+
+	void Engine::Shutdown()
+	{
+		static bool s_isShutdown = false;
+		if (s_isShutdown) return;
+		s_isShutdown = true;
+
 		// PVD 설정 저장 (엔진 종료 시)
 		wchar_t pathBuf[MAX_PATH] = {};
 		GetModuleFileNameW(nullptr, pathBuf, MAX_PATH);
 		const std::filesystem::path exeDir = std::filesystem::path(pathBuf).parent_path();
 		SavePvdSettings(exeDir, pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort);
 
-		pImpl->m_physics.ShutdownContext();
+		// 1) 게임 루프/시스템이 물리 월드 참조 못 하게 먼저 끊기
+		if (pImpl->m_physicsSystem)
+		{
+			pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+			pImpl->m_physicsSystem.reset();
+		}
+
+		// 2) World가 잡고 있는 physics world(shared_ptr) 해제
+		pImpl->m_world.SetPhysicsWorld(nullptr);
+
+		// 3) Editor/기타가 물리를 참조하면 여기서 먼저 정리
 		pImpl->m_editorCore.Shutdown();
+
+		// 4) 마지막에 PhysX 컨텍스트 종료
+		pImpl->m_physics.ShutdownContext();
 	}
 
 	bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
