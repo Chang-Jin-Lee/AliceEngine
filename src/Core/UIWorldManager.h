@@ -34,8 +34,7 @@ struct IWICImagingFactory;
 struct UIRenderStruct;
 class UISceneManager;
 
-namespace Alice
-{
+
     class UIWorldManager
     {
     public:
@@ -81,11 +80,11 @@ namespace Alice
         UISceneManager* m_nowManager{ nullptr };
 
         //inputSystem
-        InputSystem* m_inputSystem{ nullptr };
+        Alice::InputSystem* m_inputSystem{ nullptr };
 
     public:
         ID3D11Device* m_d3dDev{ nullptr };
-        void Initalize(ID3D11Device* pDev, ID3D11DeviceContext* pDevCon, UINT w, UINT h, InputSystem& tmpInput);
+        void Initalize(ID3D11Device* pDev, ID3D11DeviceContext* pDevCon, UINT w, UINT h, Alice::InputSystem& tmpInput);
         void Update(UINT w, UINT h);
         void Render();
 
@@ -108,4 +107,3 @@ namespace Alice
         UINT GetWidth() const { return m_curWidth; }
         UINT GetHeight() const { return m_curHeight; }
     };
-} 

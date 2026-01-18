@@ -28,9 +28,6 @@
 // #include "UISceneManager.h"
 
 
-namespace Alice
-{
-
 
 //UIWorldManager::~UIWorldManager()
 //{
@@ -69,8 +66,8 @@ namespace Alice
 //    
 //}
 
-    // inputSystem은 추후에 싱글톤인 경우 SceneManager에서 변경하기
-    void UIWorldManager::Initalize(ID3D11Device* pDev, ID3D11DeviceContext* pDevCon, UINT w, UINT h, InputSystem& tmpInput)
+// inputSystem은 추후에 싱글톤인 경우 SceneManager에서 변경하기
+void UIWorldManager::Initalize(ID3D11Device* pDev, ID3D11DeviceContext* pDevCon, UINT w, UINT h, Alice::InputSystem& tmpInput)
 {
     m_d3dDev = pDev;
     m_devCon = pDevCon;
@@ -96,8 +93,6 @@ namespace Alice
     // D2D 디바이스
     m_d2DFactory->CreateDevice((dxgiDevice.Get()), m_d2DDevice.GetAddressOf());
     m_d2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, m_d2DdevCon.GetAddressOf());
-
-   
 
 
     // DWrite
@@ -131,8 +126,9 @@ namespace Alice
     //일단 임시로 로우 포인터로 받음
     m_inputSystem = &tmpInput;
 
-    // 
-  /*  m_RenderStruct.m_d2DFactory = m_d2DFactory;
+ 
+    // 하위 Manager나 Object들에게 변수를 넘겨주기 위해 struct 구조로 넘겨줄 예정
+  /* m_RenderStruct.m_d2DFactory = m_d2DFactory;
     m_RenderStruct.m_d2DDevice = m_d2DDevice;
     m_RenderStruct.m_d2DdevCon = m_d2DdevCon;
     m_RenderStruct.m_D3DWFactory = m_D3DWFactory;
@@ -144,22 +140,23 @@ namespace Alice
 }
 
 
-    void UIWorldManager::Update(UINT w, UINT h)
+void UIWorldManager::Update(UINT w, UINT h)
 {
     m_curWidth = w;
     m_curHeight = h;
 
     // 현재 매니저 포인터 저장
-//    if (sceneStorages.size() == 0) { return; }
-//    m_nowManager = sceneStorages[m_nowSceneID].get();
-//    m_nowManager->Update();
+    //if (sceneStorages.size() == 0) { return; }
+    //m_nowManager = sceneStorages[m_nowSceneID].get();
+    //m_nowManager->Update();
 }
-//
-    void UIWorldManager::Render()
+
+
+void UIWorldManager::Render()
 {
-//    if (sceneStorages.size() == 0) { return; }
-//	// D2D 렌더링 시작 + 2D 텍스처에 렌더링 + 바인딩
-//    m_nowManager->Render();
+    // if (sceneStorages.size() == 0) { return; }
+    // D2D 렌더링 시작 + 2D 텍스처에 렌더링 + 바인딩
+    //    m_nowManager->Render();
 
     // RTV 해제 
     ID3D11RenderTargetView* nullRTV[1] = { nullptr };
@@ -172,10 +169,8 @@ namespace Alice
 
 
 
-
-
-    //3D에 합성할 2D Tex 생성
-    void UIWorldManager::Create2DTex(UINT w, UINT h)
+ //3D에 합성할 2D Tex 생성
+void UIWorldManager::Create2DTex(UINT w, UINT h)
 {
     m_curWidth = w; m_curHeight = h;
 
@@ -197,7 +192,8 @@ namespace Alice
 }
 
 
-    void UIWorldManager::ChangeScene(UINT nowSceneID) {
+void UIWorldManager::ChangeScene(UINT nowSceneID) {
+    // 추후에 SceneManager 추가시 주셕 변경ㄴ
     //if (m_nowSceneID < nowSceneID && sceneStorages.size() == 0)
     //{
     //    auto CreateUI = [&](UINT ID) -> UISceneManager* {
@@ -219,5 +215,4 @@ namespace Alice
     //}
 
     m_nowSceneID = nowSceneID;
-    }
 }
