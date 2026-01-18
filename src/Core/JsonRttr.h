@@ -354,6 +354,80 @@ namespace Alice
             return true;
         }
 
+        inline bool SetSequentialItem(rttr::variant_sequential_view& view, size_t index, const json& jitem)
+        {
+            if (index >= view.get_size()) return false;
+
+            rttr::variant item = view.get_value(index);
+            if (!item.is_valid()) return false;
+
+            rttr::type itemType = item.get_type();
+
+            // 중첩 배열 처리 (예: std::array<std::array<bool, 32>, 32>)
+            if (itemType.is_sequential_container() && jitem.is_array())
+            {
+                rttr::variant_sequential_view nestedView = item.create_sequential_view();
+                if (nestedView.is_valid())
+                {
+                    size_t nestedIndex = 0;
+                    for (const auto& nestedItem : jitem)
+                    {
+                        if (nestedIndex >= nestedView.get_size()) break;
+                        SetSequentialItem(nestedView, nestedIndex, nestedItem);
+                        ++nestedIndex;
+                    }
+                    view.set_value(index, item);
+                    return true;
+                }
+            }
+
+            // 기본 타입 처리
+            if (itemType == rttr::type::get<bool>() && jitem.is_boolean())
+            {
+                view.set_value(index, jitem.get<bool>());
+                return true;
+            }
+            if (itemType == rttr::type::get<int>() && jitem.is_number_integer())
+            {
+                view.set_value(index, jitem.get<int>());
+                return true;
+            }
+            if (itemType == rttr::type::get<float>() && jitem.is_number())
+            {
+                view.set_value(index, static_cast<float>(jitem.get<double>()));
+                return true;
+            }
+            if (itemType == rttr::type::get<std::string>() && jitem.is_string())
+            {
+                view.set_value(index, jitem.get<std::string>());
+                return true;
+            }
+
+            return false;
+        }
+
+        inline bool SetSequential(rttr::instance obj, const rttr::property& prop, const json& jval)
+        {
+            if (!jval.is_array()) return false;
+
+            rttr::variant var = prop.get_value(obj);
+            if (!var.is_valid()) return false;
+
+            rttr::variant_sequential_view view = var.create_sequential_view();
+            if (!view.is_valid()) return false;
+
+            // JSON 배열의 각 요소를 컨테이너에 설정
+            size_t index = 0;
+            for (const auto& jitem : jval)
+            {
+                SetSequentialItem(view, index, jitem);
+                ++index;
+            }
+
+            prop.set_value(obj, var);
+            return true;
+        }
+
         inline bool FromJsonToProperty(rttr::instance obj, const rttr::property& prop, const json& jval)
         {
             if (!prop.is_valid()) return false;
@@ -369,10 +443,12 @@ namespace Alice
             if (t == rttr::type::get<std::string>())
                 return SetString(obj, prop, jval);
 
+            if (t.is_sequential_container())
+                return SetSequential(obj, prop, jval);
+
             if (t.is_class())
                 return SetClass(obj, prop, jval);
 
-            // 컨테이너는 현재 "읽기"는 최소 구현(필요하면 확장)
             return true;
         }
     }
