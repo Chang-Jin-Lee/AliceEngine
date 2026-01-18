@@ -5,6 +5,16 @@
 //  Queries
 // ============================================================
 
+// 방향 벡터 정규화(안전장치)
+static bool NormalizeDir(const Vec3& in, PxVec3& out)
+{
+	out = ToPx(in);
+	const PxReal lenSq = out.magnitudeSquared();
+	if (lenSq < 1e-12f) return false;
+	out *= PxRecipSqrt(lenSq);
+	return true;
+}
+
 static inline void FillRaycastHit(const PxRaycastHit& h, RaycastHit& out)
 {
 	out.position = FromPx(h.position);
@@ -38,7 +48,8 @@ bool PhysXWorld::RaycastEx(const Vec3& origin, const Vec3& dir, float maxDist, R
 {
 	if (!impl || !impl->scene) return false;
 
-	const Vec3 nd = dir; // assume normalized by caller; PhysX will normalize internally for rays.
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
 
 	PxRaycastBuffer buf;
 	PxQueryFilterData qfd;
@@ -48,7 +59,7 @@ bool PhysXWorld::RaycastEx(const Vec3& origin, const Vec3& dir, float maxDist, R
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
 	const PxHitFlags hitFlags = PxHitFlag::ePOSITION | PxHitFlag::eNORMAL | PxHitFlag::eFACE_INDEX | PxHitFlag::eUV;
-	const bool hit = impl->scene->raycast(ToPx(origin), ToPx(nd), maxDist, buf, hitFlags, qfd, &cb);
+	const bool hit = impl->scene->raycast(ToPx(origin), unitDir, maxDist, buf, hitFlags, qfd, &cb);
 	if (!hit || !buf.hasBlock) return false;
 
 	FillRaycastHit(buf.block, outHit);
@@ -60,6 +71,9 @@ uint32_t PhysXWorld::RaycastAll(const Vec3& origin, const Vec3& dir, float maxDi
 	outHits.clear();
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return 0;
+
 	std::vector<PxRaycastHit> hits(maxHits);
 	PxRaycastBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
 
@@ -70,9 +84,7 @@ uint32_t PhysXWorld::RaycastAll(const Vec3& origin, const Vec3& dir, float maxDi
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
 	const PxHitFlags hitFlags = PxHitFlag::ePOSITION | PxHitFlag::eNORMAL | PxHitFlag::eFACE_INDEX | PxHitFlag::eUV;
-	const bool ok = impl->scene->raycast(ToPx(origin), ToPx(dir), maxDist, buf,
-		hitFlags,
-		qfd, &cb);
+	const bool ok = impl->scene->raycast(ToPx(origin), unitDir, maxDist, buf, hitFlags, qfd, &cb);
 
 	if (!ok) return 0;
 
@@ -84,7 +96,6 @@ uint32_t PhysXWorld::RaycastAll(const Vec3& origin, const Vec3& dir, float maxDi
 		FillRaycastHit(buf.getTouch(i), rh);
 		outHits.push_back(rh);
 	}
-
 	return static_cast<uint32_t>(outHits.size());
 }
 
@@ -213,6 +224,9 @@ bool PhysXWorld::SweepBox(const Vec3& origin, const Quat& rot, const Vec3& halfE
 {
 	if (!impl || !impl->scene) return false;
 
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
+
 	PxQueryFilterData qfd;
 	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
 
@@ -224,7 +238,7 @@ bool PhysXWorld::SweepBox(const Vec3& origin, const Quat& rot, const Vec3& halfE
 	PxSweepBuffer buf;
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
-	const bool ok = impl->scene->sweep(geom, pose, ToPx(dir), maxDist, buf,
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
 		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
 		qfd, &cb);
 
@@ -238,6 +252,9 @@ bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, 
 {
 	if (!impl || !impl->scene) return false;
 
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
+
 	PxQueryFilterData qfd;
 	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
 
@@ -249,7 +266,7 @@ bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, 
 	PxSweepBuffer buf;
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
-	const bool ok = impl->scene->sweep(geom, pose, ToPx(dir), maxDist, buf,
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
 		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
 		qfd, &cb);
 
@@ -262,6 +279,9 @@ bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, 
 bool PhysXWorld::SweepCapsule(const Vec3& origin, const Quat& rot, float radius, float halfHeight, const Vec3& dir, float maxDist, SweepHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, bool alignYAxis) const
 {
 	if (!impl || !impl->scene) return false;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
 
 	PxQueryFilterData qfd;
 	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
@@ -276,13 +296,12 @@ bool PhysXWorld::SweepCapsule(const Vec3& origin, const Quat& rot, float radius,
 		Quat align = FromPx(CapsuleAlignQuatPx());
 		q = q * align;
 	}
-
 	const PxTransform pose = ToPxTransform(origin, q);
 
 	PxSweepBuffer buf;
 
 	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
-	const bool ok = impl->scene->sweep(geom, pose, ToPx(dir), maxDist, buf,
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
 		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
 		qfd, &cb);
 
@@ -292,3 +311,573 @@ bool PhysXWorld::SweepCapsule(const Vec3& origin, const Quat& rot, float radius,
 	return true;
 }
 
+// ============================================================
+//  Extended Queries (Q) - ignore + multi-hit support
+// ============================================================
+
+bool PhysXWorld::RaycastQ(
+	const Vec3& origin, const Vec3& dir, float maxDist,
+	RaycastHit& outHit, const SceneQueryFilter& f) const
+{
+	if (!impl || !impl->scene) return false;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Block,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	PxRaycastBuffer buf;
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->raycast(ToPx(origin), unitDir, maxDist, buf,
+		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL | PxHitFlag::eFACE_INDEX | PxHitFlag::eUV,
+		qfd, &cb);
+
+	if (!ok || !buf.hasBlock) return false;
+
+	FillRaycastHit(buf.block, outHit);
+	return true;
+}
+
+uint32_t PhysXWorld::RaycastAllQ(
+	const Vec3& origin, const Vec3& dir, float maxDist,
+	std::vector<RaycastHit>& outHits, const SceneQueryFilter& f, uint32_t maxHits) const
+{
+	outHits.clear();
+	if (!impl || !impl->scene || maxHits == 0) return 0;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return 0;
+
+	std::vector<PxRaycastHit> hits(maxHits);
+	PxRaycastBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Touch,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->raycast(ToPx(origin), unitDir, maxDist, buf,
+		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL | PxHitFlag::eFACE_INDEX | PxHitFlag::eUV,
+		qfd, &cb);
+
+	if (!ok) return 0;
+
+	const PxU32 n = buf.getNbTouches();
+	outHits.reserve(n);
+	for (PxU32 i = 0; i < n; ++i)
+	{
+		RaycastHit rh;
+		FillRaycastHit(buf.getTouch(i), rh);
+		outHits.push_back(rh);
+	}
+
+	// 거리순 정렬(무기/락온에서 안정적)
+	std::sort(outHits.begin(), outHits.end(),
+		[](const RaycastHit& a, const RaycastHit& b) { return a.distance < b.distance; });
+
+	return static_cast<uint32_t>(outHits.size());
+}
+
+uint32_t PhysXWorld::OverlapBoxQ(
+	const Vec3& center, const Quat& rot, const Vec3& halfExtents,
+	std::vector<OverlapHit>& outHits, const SceneQueryFilter& f, uint32_t maxHits) const
+{
+	outHits.clear();
+	if (!impl || !impl->scene || maxHits == 0) return 0;
+
+	std::vector<PxOverlapHit> hits(maxHits);
+	PxOverlapBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Touch,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxBoxGeometry geom(ToPx(halfExtents));
+	const PxTransform pose = ToPxTransform(center, rot);
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->overlap(geom, pose, buf, qfd, &cb);
+	if (!ok) return 0;
+
+	const PxU32 n = buf.getNbTouches();
+	outHits.reserve(n);
+	for (PxU32 i = 0; i < n; ++i)
+	{
+		OverlapHit oh;
+		FillOverlapHit(buf.getTouch(i), oh);
+		outHits.push_back(oh);
+	}
+
+	return static_cast<uint32_t>(outHits.size());
+}
+
+uint32_t PhysXWorld::OverlapSphereQ(
+	const Vec3& center, float radius,
+	std::vector<OverlapHit>& outHits, const SceneQueryFilter& f, uint32_t maxHits) const
+{
+	outHits.clear();
+	if (!impl || !impl->scene || maxHits == 0) return 0;
+
+	std::vector<PxOverlapHit> hits(maxHits);
+	PxOverlapBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Touch,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxSphereGeometry geom(radius);
+	const PxTransform pose(ToPx(center));
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->overlap(geom, pose, buf, qfd, &cb);
+	if (!ok) return 0;
+
+	const PxU32 n = buf.getNbTouches();
+	outHits.reserve(n);
+	for (PxU32 i = 0; i < n; ++i)
+	{
+		OverlapHit oh;
+		FillOverlapHit(buf.getTouch(i), oh);
+		outHits.push_back(oh);
+	}
+
+	return static_cast<uint32_t>(outHits.size());
+}
+
+uint32_t PhysXWorld::OverlapCapsuleQ(
+	const Vec3& center, const Quat& rot, float radius, float halfHeight,
+	std::vector<OverlapHit>& outHits, const SceneQueryFilter& f, uint32_t maxHits, bool alignYAxis) const
+{
+	outHits.clear();
+	if (!impl || !impl->scene || maxHits == 0) return 0;
+
+	std::vector<PxOverlapHit> hits(maxHits);
+	PxOverlapBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Touch,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxCapsuleGeometry geom(radius, halfHeight);
+
+	Quat q = rot;
+	if (alignYAxis)
+	{
+		Quat align = FromPx(CapsuleAlignQuatPx());
+		q = q * align;
+	}
+	const PxTransform pose = ToPxTransform(center, q);
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->overlap(geom, pose, buf, qfd, &cb);
+	if (!ok) return 0;
+
+	const PxU32 n = buf.getNbTouches();
+	outHits.reserve(n);
+	for (PxU32 i = 0; i < n; ++i)
+	{
+		OverlapHit oh;
+		FillOverlapHit(buf.getTouch(i), oh);
+		outHits.push_back(oh);
+	}
+
+	return static_cast<uint32_t>(outHits.size());
+}
+
+bool PhysXWorld::SweepBoxQ(
+	const Vec3& origin, const Quat& rot, const Vec3& halfExtents,
+	const Vec3& dir, float maxDist, SweepHit& outHit, const SceneQueryFilter& f) const
+{
+	if (!impl || !impl->scene) return false;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Block,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxBoxGeometry geom(ToPx(halfExtents));
+	const PxTransform pose = ToPxTransform(origin, rot);
+
+	PxSweepBuffer buf;
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
+		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
+		qfd, &cb);
+
+	if (!ok || !buf.hasBlock) return false;
+
+	FillSweepHit(buf.block, outHit);
+	return true;
+}
+
+bool PhysXWorld::SweepSphereQ(
+	const Vec3& origin, float radius,
+	const Vec3& dir, float maxDist, SweepHit& outHit, const SceneQueryFilter& f) const
+{
+	if (!impl || !impl->scene) return false;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Block,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxSphereGeometry geom(radius);
+	const PxTransform pose(ToPx(origin));
+
+	PxSweepBuffer buf;
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
+		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
+		qfd, &cb);
+
+	if (!ok || !buf.hasBlock) return false;
+
+	FillSweepHit(buf.block, outHit);
+	return true;
+}
+
+bool PhysXWorld::SweepCapsuleQ(
+	const Vec3& origin, const Quat& rot, float radius, float halfHeight,
+	const Vec3& dir, float maxDist, SweepHit& outHit, const SceneQueryFilter& f, bool alignYAxis) const
+{
+	if (!impl || !impl->scene) return false;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return false;
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Block,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxCapsuleGeometry geom(radius, halfHeight);
+
+	Quat q = rot;
+	if (alignYAxis)
+	{
+		Quat align = FromPx(CapsuleAlignQuatPx());
+		q = q * align;
+	}
+	const PxTransform pose = ToPxTransform(origin, q);
+
+	PxSweepBuffer buf;
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
+		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
+		qfd, &cb);
+
+	if (!ok || !buf.hasBlock) return false;
+
+	FillSweepHit(buf.block, outHit);
+	return true;
+}
+
+uint32_t PhysXWorld::SweepBoxAllQ(
+	const Vec3& origin, const Quat& rot, const Vec3& halfExtents,
+	const Vec3& dir, float maxDist,
+	std::vector<SweepHit>& outHits, const SceneQueryFilter& f, uint32_t maxHits) const
+{
+	outHits.clear();
+	if (!impl || !impl->scene || maxHits == 0) return 0;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return 0;
+
+	std::vector<PxSweepHit> hits(maxHits);
+	PxSweepBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Touch,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxBoxGeometry geom(ToPx(halfExtents));
+	const PxTransform pose = ToPxTransform(origin, rot);
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
+		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
+		qfd, &cb);
+
+	if (!ok) return 0;
+
+	const PxU32 n = buf.getNbTouches();
+	outHits.reserve(n);
+	for (PxU32 i = 0; i < n; ++i)
+	{
+		SweepHit sh;
+		FillSweepHit(buf.getTouch(i), sh);
+		outHits.push_back(sh);
+	}
+
+	std::sort(outHits.begin(), outHits.end(),
+		[](const SweepHit& a, const SweepHit& b) { return a.distance < b.distance; });
+
+	return static_cast<uint32_t>(outHits.size());
+}
+
+uint32_t PhysXWorld::SweepSphereAllQ(
+	const Vec3& origin, float radius,
+	const Vec3& dir, float maxDist,
+	std::vector<SweepHit>& outHits, const SceneQueryFilter& f, uint32_t maxHits) const
+{
+	outHits.clear();
+	if (!impl || !impl->scene || maxHits == 0) return 0;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return 0;
+
+	std::vector<PxSweepHit> hits(maxHits);
+	PxSweepBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Touch,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxSphereGeometry geom(radius);
+	const PxTransform pose(ToPx(origin));
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
+		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
+		qfd, &cb);
+
+	if (!ok) return 0;
+
+	const PxU32 n = buf.getNbTouches();
+	outHits.reserve(n);
+	for (PxU32 i = 0; i < n; ++i)
+	{
+		SweepHit sh;
+		FillSweepHit(buf.getTouch(i), sh);
+		outHits.push_back(sh);
+	}
+
+	std::sort(outHits.begin(), outHits.end(),
+		[](const SweepHit& a, const SweepHit& b) { return a.distance < b.distance; });
+
+	return static_cast<uint32_t>(outHits.size());
+}
+
+uint32_t PhysXWorld::SweepCapsuleAllQ(
+	const Vec3& origin, const Quat& rot, float radius, float halfHeight,
+	const Vec3& dir, float maxDist,
+	std::vector<SweepHit>& outHits, const SceneQueryFilter& f, uint32_t maxHits, bool alignYAxis) const
+{
+	outHits.clear();
+	if (!impl || !impl->scene || maxHits == 0) return 0;
+
+	PxVec3 unitDir;
+	if (!NormalizeDir(dir, unitDir)) return 0;
+
+	std::vector<PxSweepHit> hits(maxHits);
+	PxSweepBuffer buf(hits.data(), static_cast<PxU32>(hits.size()));
+
+	PxQueryFilterData qfd;
+	qfd.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+
+	MaskQueryCallback cb(
+		f.layerMask, f.queryMask, f.hitTriggers, QueryHitMode::Touch,
+		reinterpret_cast<PxRigidActor*>(f.ignoreNativeActor),
+		reinterpret_cast<PxShape*>(f.ignoreNativeShape),
+		f.ignoreUserData);
+
+	const PxCapsuleGeometry geom(radius, halfHeight);
+
+	Quat q = rot;
+	if (alignYAxis)
+	{
+		Quat align = FromPx(CapsuleAlignQuatPx());
+		q = q * align;
+	}
+	const PxTransform pose = ToPxTransform(origin, q);
+
+	SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+	const bool ok = impl->scene->sweep(geom, pose, unitDir, maxDist, buf,
+		PxHitFlag::ePOSITION | PxHitFlag::eNORMAL,
+		qfd, &cb);
+
+	if (!ok) return 0;
+
+	const PxU32 n = buf.getNbTouches();
+	outHits.reserve(n);
+	for (PxU32 i = 0; i < n; ++i)
+	{
+		SweepHit sh;
+		FillSweepHit(buf.getTouch(i), sh);
+		outHits.push_back(sh);
+	}
+
+	std::sort(outHits.begin(), outHits.end(),
+		[](const SweepHit& a, const SweepHit& b) { return a.distance < b.distance; });
+
+	return static_cast<uint32_t>(outHits.size());
+}
+
+// ============================================================
+//  Penetration (MTD) 헬퍼
+// ============================================================
+
+bool PhysXWorld::ComputePenetrationBoxVsShape(
+	const Vec3& center, const Quat& rot, const Vec3& halfExtents,
+	void* otherNativeActor, void* otherNativeShape,
+	Vec3& outDir, float& outDepth) const
+{
+	if (!otherNativeActor || !otherNativeShape) return false;
+
+	PxRigidActor* actor = reinterpret_cast<PxRigidActor*>(otherNativeActor);
+	PxShape* shape = reinterpret_cast<PxShape*>(otherNativeShape);
+	if (!actor || !shape) return false;
+
+	const PxBoxGeometry geom0(ToPx(halfExtents));
+	const PxTransform pose0 = ToPxTransform(center, rot);
+
+	// shape global pose = actor global * shape local
+	const PxTransform pose1 = actor->getGlobalPose() * shape->getLocalPose();
+	const PxGeometryHolder gh = shape->getGeometry();
+
+	PxVec3 dir;
+	PxF32 depth = 0.0f;
+
+	const bool ok = PxGeometryQuery::computePenetration(
+		dir, depth,
+		geom0, pose0,
+		gh.any(), pose1);
+
+	if (!ok) return false;
+
+	outDir = FromPx(dir);
+	outDepth = depth;
+	return true;
+}
+
+bool PhysXWorld::ComputePenetrationSphereVsShape(
+	const Vec3& center, float radius,
+	void* otherNativeActor, void* otherNativeShape,
+	Vec3& outDir, float& outDepth) const
+{
+	if (!otherNativeActor || !otherNativeShape) return false;
+
+	PxRigidActor* actor = reinterpret_cast<PxRigidActor*>(otherNativeActor);
+	PxShape* shape = reinterpret_cast<PxShape*>(otherNativeShape);
+	if (!actor || !shape) return false;
+
+	const PxSphereGeometry geom0(radius);
+	const PxTransform pose0(ToPx(center));
+
+	// shape global pose = actor global * shape local
+	const PxTransform pose1 = actor->getGlobalPose() * shape->getLocalPose();
+	const PxGeometryHolder gh = shape->getGeometry();
+
+	PxVec3 dir;
+	PxF32 depth = 0.0f;
+
+	const bool ok = PxGeometryQuery::computePenetration(
+		dir, depth,
+		geom0, pose0,
+		gh.any(), pose1);
+
+	if (!ok) return false;
+
+	outDir = FromPx(dir);
+	outDepth = depth;
+	return true;
+}
+
+bool PhysXWorld::ComputePenetrationCapsuleVsShape(
+	const Vec3& center, const Quat& rot,
+	float radius, float halfHeight, bool alignYAxis,
+	void* otherNativeActor, void* otherNativeShape,
+	Vec3& outDir, float& outDepth) const
+{
+	if (!otherNativeActor || !otherNativeShape) return false;
+
+	PxRigidActor* actor = reinterpret_cast<PxRigidActor*>(otherNativeActor);
+	PxShape* shape = reinterpret_cast<PxShape*>(otherNativeShape);
+	if (!actor || !shape) return false;
+
+	const PxCapsuleGeometry geom0(radius, halfHeight);
+
+	Quat q = rot;
+	if (alignYAxis)
+	{
+		Quat align = FromPx(CapsuleAlignQuatPx());
+		q = q * align;
+	}
+	const PxTransform pose0 = ToPxTransform(center, q);
+
+	// shape global pose = actor global * shape local
+	const PxTransform pose1 = actor->getGlobalPose() * shape->getLocalPose();
+	const PxGeometryHolder gh = shape->getGeometry();
+
+	PxVec3 dir;
+	PxF32 depth = 0.0f;
+
+	const bool ok = PxGeometryQuery::computePenetration(
+		dir, depth,
+		geom0, pose0,
+		gh.any(), pose1);
+
+	if (!ok) return false;
+
+	outDir = FromPx(dir);
+	outDepth = depth;
+	return true;
+}

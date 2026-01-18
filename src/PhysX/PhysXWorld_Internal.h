@@ -4,7 +4,7 @@
 #include "PhysXWorld.h"
 #include "PhysicsMath.h"
 
-#include <Physx/PxPhysicsAPI.h>
+#include <PhysX/PxPhysicsAPI.h>
 
 // ------------------------------------------------------------
 // PhysX Character Controller (CCT) header detection
@@ -207,6 +207,7 @@ struct FilterShaderData
 	PxU32 enableContactEvents = 1;
 	PxU32 enableContactPoints = 0;
 	PxU32 enableContactModify = 0;
+	PxU32 enableCCD = 0;  // Scene-level CCD 활성화 여부
 };
 
 static PxFilterFlags LayerFilterShader(
@@ -251,6 +252,13 @@ static PxFilterFlags LayerFilterShader(
 		pairFlags |= PxPairFlag::eMODIFY_CONTACTS;
 	}
 
+	// PhysX 5.5: Scene이 CCD를 활성화했으면 contact pair에도 eDETECT_CCD_CONTACT 플래그 필요
+	// 개별 body의 eENABLE_CCD 플래그와는 별개로, collision filtering에서도 명시해야 함
+	if (fsd && fsd->enableCCD)
+	{
+		pairFlags |= PxPairFlag::eDETECT_CCD_CONTACT;
+	}
+
 	return PxFilterFlag::eDEFAULT;
 }
 
@@ -283,16 +291,34 @@ enum class QueryHitMode : uint8_t { Block, Touch };
 class MaskQueryCallback final : public PxQueryFilterCallback
 {
 public:
-	MaskQueryCallback(uint32_t layerMaskBits, uint32_t queryMaskBits, bool hitTriggers, QueryHitMode mode)
-		: layerMask(layerMaskBits), queryMask(queryMaskBits), includeTriggers(hitTriggers), hitMode(mode)
+	MaskQueryCallback(
+		uint32_t layerMaskBits,
+		uint32_t queryMaskBits,
+		bool hitTriggers,
+		QueryHitMode mode,
+		const PxRigidActor* ignoreActor = nullptr,
+		const PxShape* ignoreShape = nullptr,
+		void* ignoreUserData = nullptr)
+		: layerMask(layerMaskBits)
+		, queryMask(queryMaskBits)
+		, includeTriggers(hitTriggers)
+		, hitMode(mode)
+		, ignoreActor(ignoreActor)
+		, ignoreShape(ignoreShape)
+		, ignoreUserData(ignoreUserData)
 	{
 	}
 
 	PxQueryHitType::Enum preFilter(
 		const PxFilterData& /*filterData*/, const PxShape* shape,
-		const PxRigidActor* /*actor*/, PxHitFlags& /*queryFlags*/) override
+		const PxRigidActor* actor, PxHitFlags& /*queryFlags*/) override
 	{
-		if (!shape) return PxQueryHitType::eNONE;
+		if (!shape || !actor) return PxQueryHitType::eNONE;
+
+		//  ignore 먼저
+		if (ignoreShape && shape == ignoreShape) return PxQueryHitType::eNONE;
+		if (ignoreActor && actor == ignoreActor) return PxQueryHitType::eNONE;
+		if (ignoreUserData && actor->userData == ignoreUserData) return PxQueryHitType::eNONE;
 
 		const PxShapeFlags sf = shape->getFlags();
 
@@ -329,6 +355,11 @@ private:
 	uint32_t queryMask = 0xFFFFFFFFu;
 	bool includeTriggers = false;
 	QueryHitMode hitMode = QueryHitMode::Block;
+
+
+	const PxRigidActor* ignoreActor = nullptr;
+	const PxShape* ignoreShape = nullptr;
+	void* ignoreUserData = nullptr;
 };
 
 // ============================================================
@@ -359,6 +390,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		shaderData.enableContactEvents = desc.enableContactEvents ? 1u : 0u;
 		shaderData.enableContactPoints = desc.enableContactPoints ? 1u : 0u;
 		shaderData.enableContactModify = desc.enableContactModify ? 1u : 0u;
+		shaderData.enableCCD = desc.enableCCD ? 1u : 0u;  // Scene-level CCD를 필터 셰이더에 전달
 		sdesc.filterShaderData = &shaderData;
 		sdesc.filterShaderDataSize = sizeof(FilterShaderData);
 
@@ -371,6 +403,8 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 
 		// Use PCM by default (better contact generation in most cases)
 		sdesc.flags |= PxSceneFlag::eENABLE_PCM;
+
+		
 
 		scene = physics->createScene(sdesc);
 		if (!scene) throw std::runtime_error("createScene failed");
@@ -419,7 +453,45 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	{
 		std::weak_ptr<Impl> owner;
 
-		void onConstraintBreak(PxConstraintInfo*, PxU32) override {}
+		void onConstraintBreak(PxConstraintInfo* constraints, PxU32 count) override
+		{
+			auto s = owner.lock();
+			if (!s || !constraints || count == 0) return;
+
+			std::scoped_lock lock(s->eventMtx);
+
+			for (PxU32 i = 0; i < count; ++i)
+			{
+				PxConstraintInfo& ci = constraints[i];
+
+				PxJoint* joint = reinterpret_cast<PxJoint*>(ci.externalReference);
+
+				PhysicsEvent e;
+				e.type = PhysicsEventType::JointBreak;
+
+				if (joint)
+				{
+					e.nativeJoint = joint;
+					e.jointUserData = joint->userData;
+
+					PxRigidActor* a = nullptr;
+					PxRigidActor* b = nullptr;
+					joint->getActors(a, b);
+
+					e.nativeActorA = a;
+					e.nativeActorB = b;
+					e.userDataA = a ? a->userData : nullptr;
+					e.userDataB = b ? b->userData : nullptr;
+				}
+				else
+				{
+					// externalReference가 없는 케이스 대비
+					e.nativeJoint = ci.constraint;
+				}
+
+				s->events.push_back(e);
+			}
+		}
 		void onWake(PxActor**, PxU32) override {}
 		void onSleep(PxActor**, PxU32) override {}
 		void onAdvance(const PxRigidBody* const* bodyBuffer, const PxTransform* poseBuffer, const PxU32 count) override
@@ -753,6 +825,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	std::mutex materialCacheMtx;
 	std::unordered_map<uint64_t, PxMaterial*> materialCache;
 
+	// HeightField cache (does not require cooking)
+	std::mutex heightFieldCacheMtx;
+	std::unordered_map<uint64_t, PxHeightField*> heightFieldCache;
+
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
 	std::mutex meshCacheMtx;
 	std::unordered_map<uint64_t, PxTriangleMesh*> triMeshCache;
@@ -1030,6 +1106,78 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	}
 #endif
 
+	// HeightField creation (requires cooking path in PhysX 5.x)
+	PxHeightField* GetOrCreateHeightField(const HeightFieldColliderDesc& hf)
+	{
+		if (!physics) return nullptr;
+		if (!hf.heightSamples) return nullptr;
+		if (hf.numRows < 2 || hf.numCols < 2) return nullptr;
+
+		// PhysX constraints: all scales must be > 0
+		if (hf.heightScale <= 0.0f) return nullptr;
+		if (hf.rowScale <= 0.0f) return nullptr;
+		if (hf.colScale <= 0.0f) return nullptr;
+
+		// Compute hash from height field data
+		// Cache key: heightScale affects quantization result, but thickness is not used in PhysX 5.x
+		const uint64_t seed = 14695981039346656037ull;
+		uint64_t h = seed;
+		h = HashU32(h, hf.numRows);
+		h = HashU32(h, hf.numCols);
+		h = HashU32(h, FloatBits(hf.heightScale));
+		h = HashFNV1a64(h, hf.heightSamples, sizeof(float) * hf.numRows * hf.numCols);
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			auto it = heightFieldCache.find(h);
+			if (it != heightFieldCache.end()) return it->second;
+		}
+
+		// Convert float height samples to PxHeightFieldSample (S16 format)
+		// Use quantization: worldHeight / heightScale -> int16
+		std::vector<PxHeightFieldSample> samples(hf.numRows * hf.numCols);
+		
+		for (uint32_t i = 0; i < hf.numRows * hf.numCols; ++i)
+		{
+			PxHeightFieldSample s{};
+			const float hWorld = hf.heightSamples[i];
+
+			// Quantize: float(world height) -> int16(sample height)
+			// PhysX formula: worldHeight = PxI16(height) * heightScale
+			const float q = hWorld / hf.heightScale;
+			long qi = std::lround(q);
+			qi = std::clamp<long>(qi, -32768, 32767);
+
+			s.height = static_cast<PxI16>(qi);
+			s.materialIndex0 = 0;
+			s.materialIndex1 = 0;
+			// tessFlag is a getter/setter, not a member variable
+			s.clearTessFlag(); // Can use s.setTessFlag() for tessellation control if needed
+
+			samples[i] = s;
+		}
+
+		// Create PxHeightFieldDesc
+		PxHeightFieldDesc desc{};
+		desc.format = PxHeightFieldFormat::eS16_TM;
+		desc.nbRows = static_cast<PxU32>(hf.numRows);
+		desc.nbColumns = static_cast<PxU32>(hf.numCols);
+		desc.samples.data = samples.data();
+		desc.samples.stride = sizeof(PxHeightFieldSample);
+		// Note: thickness is not a member of PxHeightFieldDesc in PhysX 5.x
+
+		// PhysX 5.x: Use cooking path (PxCreateHeightField) instead of physics->createHeightField
+		PxHeightField* heightField = PxCreateHeightField(desc, physics->getPhysicsInsertionCallback());
+		if (!heightField) return nullptr;
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			heightFieldCache.emplace(h, heightField);
+		}
+
+		return heightField;
+	}
+
 	void ClearMeshCachesInternal()
 	{
 		{
@@ -1037,6 +1185,13 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			for (auto& kv : materialCache)
 				if (kv.second) kv.second->release();
 			materialCache.clear();
+		}
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			for (auto& kv : heightFieldCache)
+				if (kv.second) kv.second->release();
+			heightFieldCache.clear();
 		}
 
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
@@ -1491,6 +1646,37 @@ public:
 #endif
 	}
 
+	bool AddHeightFieldShape(const HeightFieldColliderDesc& hf, const Vec3& localPos, const Quat& localRot) override
+	{
+		if (!actor) return false;
+		auto s = world.lock();
+		if (!s || !s->scene) return false;
+
+		// PhysX constraints: HeightField cannot be a trigger
+		if (hf.isTrigger) return false;
+
+		// PhysX constraints: HeightField cannot be attached to non-kinematic dynamic bodies
+		if (PxRigidDynamic* dyn = actor->is<PxRigidDynamic>())
+		{
+			if (!HasRigidBodyFlag(dyn->getRigidBodyFlags(), PxRigidBodyFlag::eKINEMATIC))
+				return false; // Non-kinematic dynamic bodies cannot have HeightField simulation shapes
+		}
+
+		PxHeightField* heightField = s->GetOrCreateHeightField(hf);
+		if (!heightField) return false;
+
+		// Create PxHeightFieldGeometry
+		// PhysX formula: worldHeight = PxI16(height) * heightScale
+		// Note: HeightField does not support flipNormals (only TriangleMesh supports it during cooking).
+		// HeightField only supports doubleSidedQueries for query operations.
+		PxMeshGeometryFlags gflags;
+		if (hf.doubleSidedQueries) gflags |= PxMeshGeometryFlag::eDOUBLE_SIDED;
+		const PxHeightFieldGeometry geom(heightField, gflags, hf.heightScale, hf.rowScale, hf.colScale);
+		if (!geom.isValid()) return false; // Scale too small or invalid
+
+		return AddShapeCommon(geom, hf, localPos, localRot);
+	}
+
 	bool ClearShapes() override
 	{
 		if (!actor) return false;
@@ -1614,6 +1800,11 @@ public:
 	bool AddConvexMeshShape(const ConvexMeshColliderDesc& mesh, const Vec3& localPos, const Quat& localRot) override
 	{
 		return base.AddConvexMeshShape(mesh, localPos, localRot);
+	}
+
+	bool AddHeightFieldShape(const HeightFieldColliderDesc& hf, const Vec3& localPos, const Quat& localRot) override
+	{
+		return base.AddHeightFieldShape(hf, localPos, localRot);
 	}
 
 	bool ClearShapes() override { return base.ClearShapes(); }
@@ -1751,8 +1942,13 @@ public:
 		auto s = world.lock();
 		if (!s || !s->scene) return;
 		SceneWriteLock wl(s->scene, s->enableSceneLocks);
-		if (maxLinear > 0.0f) body->setMaxLinearVelocity(maxLinear);
-		if (maxAngular > 0.0f) body->setMaxAngularVelocity(maxAngular);
+
+		const float ml = (maxLinear > 0.0f) ? maxLinear : PX_MAX_F32;
+		const float ma = (maxAngular > 0.0f) ? maxAngular : PX_MAX_F32;
+
+		body->setMaxLinearVelocity(ml);
+		body->setMaxAngularVelocity(ma);
+
 		cachedRb.maxLinearVelocity = maxLinear;
 		cachedRb.maxAngularVelocity = maxAngular;
 	}
@@ -1831,6 +2027,50 @@ public:
 	{
 		if (!body) return false;
 		return body->isSleeping();
+	}
+
+	//  density + massOverride 같이 갱신
+	void SetMassProperties(float density, float massOverride) override
+	{
+		cachedRb.density = density;
+		cachedRb.massOverride = massOverride;
+		RecomputeMass(); // cachedRb 기반으로 updateMassAndInertia or setMassAndUpdateInertia
+	}
+
+	// 런타임 튜닝용
+	void SetSolverIterations(uint32_t posIts, uint32_t velIts) override
+	{
+		if (!body) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setSolverIterationCounts(
+			static_cast<PxU32>(std::max(1u, posIts)),
+			static_cast<PxU32>(std::max(1u, velIts)));
+		cachedRb.solverPositionIterations = posIts;
+		cachedRb.solverVelocityIterations = velIts;
+	}
+
+	void SetSleepThreshold(float sleepThreshold) override
+	{
+		if (!body) return;
+		if (sleepThreshold < 0.0f) return; // -1이면 "변경 안 함"으로 처리(기본값 복원은 재생성으로)
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setSleepThreshold(sleepThreshold);
+		cachedRb.sleepThreshold = sleepThreshold;
+	}
+
+	void SetStabilizationThreshold(float stabilizationThreshold) override
+	{
+		if (!body) return;
+		if (stabilizationThreshold < 0.0f) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setStabilizationThreshold(stabilizationThreshold);
+		cachedRb.stabilizationThreshold = stabilizationThreshold;
 	}
 
 private:

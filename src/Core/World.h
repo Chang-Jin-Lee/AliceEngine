@@ -30,10 +30,15 @@
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
 
-// ���� ������Ʈ
-#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
 
-class IPhysicsWorld; // ���� �������̽� ���漱��
+// 물리 컴포넌트들
+#include "PhysX/Components/RigidBodyComponent.h"
+#include "PhysX/Components/ColliderComponent.h"
+#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
+#include "PhysX/Components/TerrainHeightFieldComponent.h"
+#include "PhysX/Components/CharacterControllerComponent.h"
+
+class IPhysicsWorld; // 물리 인터페이스 전방선언
 
 namespace Alice
 {
@@ -356,7 +361,7 @@ namespace Alice
 
 
         //==============================================================
-        // ���� �� �Լ�
+        // 물리
         void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
         IPhysicsWorld* GetPhysicsWorld();
         const IPhysicsWorld* GetPhysicsWorld() const;

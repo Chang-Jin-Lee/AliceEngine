@@ -61,16 +61,31 @@ struct PhysXContext::Impl
 static PxPvd* CreatePvd(PxFoundation& foundation, PxPvdTransport*& outTransport,
 	const char* host, int port, uint32_t timeoutMs)
 {
+	// Transport 생성 실패는 예외 던지지 않고 nullptr 반환
+	// (PVD는 선택적 기능이므로 연결 실패해도 계속 진행)
 	outTransport = PxDefaultPvdSocketTransportCreate(host, port, timeoutMs);
 	if (!outTransport)
-		throw std::runtime_error("PxDefaultPvdSocketTransportCreate failed");
+		return nullptr;
 
 	PxPvd* pvd = PxCreatePvd(foundation);
 	if (!pvd)
-		throw std::runtime_error("PxCreatePvd failed");
+	{
+		// Transport는 생성되었지만 PVD 생성 실패
+		outTransport->release();
+		outTransport = nullptr;
+		return nullptr;
+	}
 
+	// 연결 실패는 치명적 오류가 아님 (PVD 없이 계속 진행)
 	if (!pvd->connect(*outTransport, PxPvdInstrumentationFlag::eALL))
-		throw std::runtime_error("PxPvd::connect failed");
+	{
+		// 연결 실패 시 리소스 정리
+		pvd->release();
+		pvd = nullptr;
+		outTransport->release();
+		outTransport = nullptr;
+		return nullptr;
+	}
 
 	return pvd;
 }
@@ -87,8 +102,14 @@ PhysXContext::PhysXContext(const PhysXContextDesc& desc)
 	if (!impl->foundation)
 		throw std::runtime_error("PxCreateFoundation failed");
 
+	// PVD 연결 시도 (실패해도 계속 진행)
+	// PVD는 디버깅 도구일 뿐이므로 연결 실패해도 PhysX는 정상 작동 가능
 	if (desc.enablePvd)
+	{
 		impl->pvd = CreatePvd(*impl->foundation, impl->pvdTransport, desc.pvdHost, desc.pvdPort, desc.pvdTimeoutMs);
+		// CreatePvd 실패 시 nullptr 반환 (예외 없음)
+		// PhysX는 pvd가 nullptr이어도 정상 작동
+	}
 
 	impl->physics = PxCreatePhysics(PX_PHYSICS_VERSION, *impl->foundation, impl->scale, true, impl->pvd);
 	if (!impl->physics)
