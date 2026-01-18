@@ -1104,6 +1104,7 @@ namespace Alice
                                       int shadingMode,
                                       bool enableFillLight,
                                       const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                                      UIWorldManager& uiWorld,
                                       bool editorMode,
                                       bool isPlaying)
     {
@@ -1143,6 +1144,10 @@ namespace Alice
             viewport.Height = static_cast<float>(m_sceneHeight);
             viewport.MaxDepth = 1.0f;
             RenderToneMapping(m_viewportRTV.Get(), viewport);
+
+            // UI 렌더링 (톤매핑 후 뷰포트 텍스처에 합성)
+            uiWorld.Render();  // D2D → UI 텍스처 렌더링
+            RenderUI(uiWorld, m_viewportRTV.Get(), viewport);
         }
 
         // 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)

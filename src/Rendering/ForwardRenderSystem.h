@@ -53,13 +53,15 @@ namespace Alice
         /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong
         /// \param enableFillLight 보조광 사용 여부
         /// \param skinnedCommands 스키닝 메시 드로우 커맨드 목록
+        /// \param uiWorld      UI 월드 매니저 (2D UI 렌더링용)
         void Render(const World& world,
                     const Camera& camera,
                     EntityId entity,
                     const std::unordered_set<EntityId>& cameraEntities,
                     int shadingMode,
                     bool enableFillLight,
-                    const std::vector<SkinnedDrawCommand>& skinnedCommands);
+                    const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                    UIWorldManager& uiWorld);
     private:
 
 

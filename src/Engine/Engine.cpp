@@ -790,7 +790,8 @@ namespace Alice
 		// Forward 렌더링
 		pImpl->m_forwardRenderSystem->Render(
 			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
+			pImpl->m_uiWorld
 		);
 	}
 	else
@@ -799,11 +800,12 @@ namespace Alice
 		pImpl->m_deferredRenderSystem->Render(
 			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
 			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
-			pImpl->m_editorMode, pImpl->m_isPlaying
+			pImpl->m_uiWorld, pImpl->m_editorMode, pImpl->m_isPlaying
 		);
 	}
 
-        // 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
+        // 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑 + UI 렌더링까지 수행
+        // (렌더 시스템 내부에서 뷰포트 텍스처에 UI가 이미 합성되어 있으므로, 백버퍼 톤매핑만 수행)
         if (!pImpl->m_editorMode)
         {
             ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
@@ -817,29 +819,13 @@ namespace Alice
                 if (pImpl->m_useForwardRendering)
                 {
                     pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+                    pImpl->m_forwardRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
                 }
                 else
                 {
                     pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+                    pImpl->m_deferredRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
                 }
-
-
-
-				// ============================================= UI 렌더링 =============================================
-				// 톤매핑 이후 UI 렌더링 (게임 UI는 톤매핑된 화면 위에 그려짐)
-				// UIWorldManager가 D2D로 렌더링한 텍스처를 백버퍼에 알파 블렌딩으로 합성
-				pImpl->m_uiWorld.Render();  // D2D → UI 텍스처 렌더링
-
-				if (pImpl->m_useForwardRendering)
-				{
-					pImpl->m_forwardRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
-				}
-				else
-				{
-					pImpl->m_deferredRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
-				}
-
-
             }
         }
 
