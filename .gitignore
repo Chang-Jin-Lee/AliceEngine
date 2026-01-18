@@ -418,3 +418,5 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+*.mat
+*.alice
