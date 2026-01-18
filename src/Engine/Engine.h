@@ -58,15 +58,15 @@ namespace Alice
         void SetUseForwardRendering(bool useForward);
         bool GetUseForwardRendering() const;
         //===========================================
-        //����
+        //물리
         void RefreshPhysicsForCurrentWorld();
         void TickPhysics(float dt);
+        void ProcessPhysicsEvents();
         //===========================================
 
     private:
         struct Impl;
-		std::unique_ptr<Impl> pImpl;
+        std::unique_ptr<Impl> pImpl;
     };
 }
-
 
