@@ -10,6 +10,9 @@ namespace Alice {
 		// 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
 
 		// 1.5 물리 비우기
+		// SetPhysicsWorld(nullptr)를 사용하면 Engine이 이를 감지하고 PhysicsSystem도 정리하지만,
+		// Clear()는 Engine 외부에서도 호출될 수 있으므로 직접 reset.
+		// 주의: Engine에서 World::Clear() 호출 후 반드시 RefreshPhysicsForCurrentWorld()를 호출해야 함.
 		m_physicsWorld.reset();
 
 		// 2. 엔티티 이름 비우기

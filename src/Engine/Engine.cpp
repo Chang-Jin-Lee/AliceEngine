@@ -95,10 +95,10 @@ namespace Alice
 		float m_physAccum = 0.0f;
 		float m_physFixedDt = 1.0f / 60.0f;
 		int   m_physMaxSubsteps = 4;
-		
+
 		// 물리 이벤트 큐 (한 프레임 안전하게 처리하기 위함)
 		std::vector<PhysicsEvent> m_physicsEventQueue;
-		
+
 		// PVD (PhysX Visual Debugger) 설정
 		bool m_pvdEnabled = false;
 		std::string m_pvdHost = "127.0.0.1";
@@ -128,7 +128,7 @@ namespace Alice
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
 		bool m_useForwardRendering = false;
-		
+
 		// 렌더링 시스템 전환 지연 처리 (안전한 전환을 위해)
 		bool m_pendingRenderSystemChange = false;
 		bool m_pendingUseForwardRendering = true;
@@ -205,7 +205,7 @@ namespace Alice
 			fs::create_directories(cfg.parent_path());
 
 			nlohmann::json j;
-			
+
 			// 기존 파일이 있으면 읽어서 병합
 			if (fs::exists(cfg))
 			{
@@ -372,7 +372,7 @@ namespace Alice
 		ctx.pvdHost = pImpl->m_pvdHost.c_str();
 		ctx.pvdPort = pImpl->m_pvdPort;
 		ctx.pvdTimeoutMs = 1000;  // 1초 타임아웃 (PVD 서버 연결에 충분한 시간)
-		
+
 		if (!pImpl->m_physics.InitializeContext(ctx))
 		{
 			// PhysX 초기화 실패는 치명적 오류 (PVD 연결 실패는 여기까지 오지 않음)
@@ -380,14 +380,14 @@ namespace Alice
 			ALICE_LOG_ERRORF("PhysicsModule::InitializeContext failed: %s", error.c_str());
 			return false;
 		}
-		
+
 		// PVD 연결 상태 확인 및 로깅
 		if (pImpl->m_pvdEnabled)
 		{
 			// PhysXContext가 성공적으로 생성되었지만, 실제 PVD 연결 여부는
 			// GetPvd()로 확인 가능 (하지만 여기서는 PhysicsModule을 통해 접근 불가)
 			// 연결 실패 시 PVD 없이 계속 진행됨을 로그에 표시
-			ALICE_LOG_INFO("PVD enabled: %s:%d (connection may fail silently if PVD server is not running)", 
+			ALICE_LOG_INFO("PVD enabled: %s:%d (connection may fail silently if PVD server is not running)",
 				pImpl->m_pvdHost.c_str(), pImpl->m_pvdPort);
 		}
 
@@ -562,7 +562,7 @@ namespace Alice
 			// 물리 이벤트 처리 (물리 시뮬레이션 이후, 게임 로직에서 안전하게 처리)
 			ProcessPhysicsEvents();
 			// ===================================================================
-			
+
 			// 2-3. 카메라 시스템 (컴포넌트 기반)
 			{
 				CameraSystem cameraSystem;
@@ -653,11 +653,17 @@ namespace Alice
 
 		if (settingsMap.empty())
 		{
-			// 안전한 파괴 순서: PhysicsSystem 먼저 정리 (액터 Destroy) → 월드 해제
-			if (pImpl->m_physicsSystem)
+			// 물리월드 끄기 직전
+			if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
 			{
-				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+				pwShared->Flush();            // pending add/remove/release 처리
 			}
+
+			pImpl->m_physAccum = 0.0f;
+			pImpl->m_physicsEventQueue.clear();
+
+			// 안전한 파괴 순서: PhysicsSystem 먼저 정리 (액터 Destroy) → 월드 해제
+			if (pImpl->m_physicsSystem) { pImpl->m_physicsSystem->SetPhysicsWorld(nullptr); }
 			pImpl->m_world.SetPhysicsWorld(nullptr);
 			return;
 		}
@@ -666,11 +672,17 @@ namespace Alice
 		const auto& settings = settingsMap.begin()->second;
 		if (!settings.enablePhysics)
 		{
-			// 안전한 파괴 순서: PhysicsSystem 먼저 정리 (액터 Destroy) → 월드 해제
-			if (pImpl->m_physicsSystem)
+			// 물리월드 끄기 직전
+			if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
 			{
-				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+				pwShared->Flush();            // pending add/remove/release 처리
 			}
+
+			pImpl->m_physAccum = 0.0f;
+			pImpl->m_physicsEventQueue.clear();
+
+			// 안전한 파괴 순서: PhysicsSystem 먼저 정리 (액터 Destroy) → 월드 해제
+			if (pImpl->m_physicsSystem) { pImpl->m_physicsSystem->SetPhysicsWorld(nullptr); }
 			pImpl->m_world.SetPhysicsWorld(nullptr);
 			return;
 		}
@@ -717,7 +729,7 @@ namespace Alice
 
 		ALICE_LOG_INFO("PhysicsWorld created: %p", world.get());
 		pImpl->m_world.SetPhysicsWorld(world);
-		
+
 		// PhysicsSystem에 물리 월드 설정
 		if (pImpl->m_physicsSystem)
 		{
@@ -734,8 +746,13 @@ namespace Alice
 	{
 		// 물리 시뮬레이션 수행 (고정 시간 스텝)
 		// Physics → Game 동기화 및 이벤트 수집
-		IPhysicsWorld* pw = pImpl->m_world.GetPhysicsWorld();
-		if (!pw) return;
+		auto pwShared = pImpl->m_world.GetPhysicsWorldShared(); // 로컬로 수명을 고정시킴
+		IPhysicsWorld* pw = pwShared.get();
+		if (!pw) {
+			if (pImpl->m_physicsSystem && pImpl->m_physicsSystem->GetPhysicsWorld() != nullptr)
+				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+			return;
+		}
 
 		dt = std::min(dt, 0.25f);
 
@@ -782,7 +799,7 @@ namespace Alice
 			// 이벤트 드레인 및 큐에 누적 (한 프레임 안전하게 처리)
 			events.clear();
 			pw->DrainEvents(events);
-			
+
 			// 이벤트를 큐에 추가 (다음 프레임 게임 로직에서 처리)
 			pImpl->m_physicsEventQueue.insert(
 				pImpl->m_physicsEventQueue.end(),
@@ -843,7 +860,7 @@ namespace Alice
 	void Engine::Render()
 	{
 		if (!pImpl->m_renderDevice) return;
-		
+
 		// ============================================= 렌더링 시스템 전환 처리 =============================================
 		// 렌더링 시작 전에 전환 요청이 있으면 안전하게 전환합니다.
 		if (pImpl->m_pendingRenderSystemChange)
@@ -855,17 +872,17 @@ namespace Alice
 				// 모든 렌더 타겟 해제
 				ID3D11RenderTargetView* nullRTVs[8] = { nullptr };
 				context->OMSetRenderTargets(8, nullRTVs, nullptr);
-				
+
 				// 모든 셰이더 리소스 해제
 				ID3D11ShaderResourceView* nullSRVs[16] = { nullptr };
 				context->VSSetShaderResources(0, 16, nullSRVs);
 				context->PSSetShaderResources(0, 16, nullSRVs);
-				
+
 				// 모든 상수 버퍼 해제
 				ID3D11Buffer* nullCBs[16] = { nullptr };
 				context->VSSetConstantBuffers(0, 16, nullCBs);
 				context->PSSetConstantBuffers(0, 16, nullCBs);
-				
+
 				// 모든 셰이더 해제
 				context->VSSetShader(nullptr, nullptr, 0);
 				context->PSSetShader(nullptr, nullptr, 0);
@@ -873,19 +890,19 @@ namespace Alice
 				context->HSSetShader(nullptr, nullptr, 0);
 				context->DSSetShader(nullptr, nullptr, 0);
 				context->CSSetShader(nullptr, nullptr, 0);
-				
+
 				// Flush (모든 명령이 완료될 때까지 대기)
 				context->Flush();
 			}
-			
+
 			// 렌더링 시스템 전환
 			pImpl->m_useForwardRendering = pImpl->m_pendingUseForwardRendering;
 			pImpl->m_pendingRenderSystemChange = false;
-			
-			ALICE_LOG_INFO("Engine::Render: 렌더링 시스템 전환 완료 (Forward: %s)", 
+
+			ALICE_LOG_INFO("Engine::Render: 렌더링 시스템 전환 완료 (Forward: %s)",
 				pImpl->m_useForwardRendering ? "true" : "false");
 		}
-		
+
 		if (pImpl->m_useForwardRendering && !pImpl->m_forwardRenderSystem) return;
 		if (!pImpl->m_useForwardRendering && !pImpl->m_deferredRenderSystem) return;
 
@@ -925,23 +942,23 @@ namespace Alice
 				// - SkinnedMeshRegistry의 sourceModel(FbxModel)에서 로컬 AABB를 얻어,
 				//   엔티티 Transform(S*R*T)을 적용한 OBB(로컬 AABB의 월드 변환)를 라인으로 표시합니다.
 				auto AddBoxLines = [&](const DirectX::XMFLOAT3 corners[8], const DirectX::XMFLOAT4& col)
-				{
-					// bottom
-					dbg->AddLine(corners[0], corners[1], col);
-					dbg->AddLine(corners[1], corners[2], col);
-					dbg->AddLine(corners[2], corners[3], col);
-					dbg->AddLine(corners[3], corners[0], col);
-					// top
-					dbg->AddLine(corners[4], corners[5], col);
-					dbg->AddLine(corners[5], corners[6], col);
-					dbg->AddLine(corners[6], corners[7], col);
-					dbg->AddLine(corners[7], corners[4], col);
-					// sides
-					dbg->AddLine(corners[0], corners[4], col);
-					dbg->AddLine(corners[1], corners[5], col);
-					dbg->AddLine(corners[2], corners[6], col);
-					dbg->AddLine(corners[3], corners[7], col);
-				};
+					{
+						// bottom
+						dbg->AddLine(corners[0], corners[1], col);
+						dbg->AddLine(corners[1], corners[2], col);
+						dbg->AddLine(corners[2], corners[3], col);
+						dbg->AddLine(corners[3], corners[0], col);
+						// top
+						dbg->AddLine(corners[4], corners[5], col);
+						dbg->AddLine(corners[5], corners[6], col);
+						dbg->AddLine(corners[6], corners[7], col);
+						dbg->AddLine(corners[7], corners[4], col);
+						// sides
+						dbg->AddLine(corners[0], corners[4], col);
+						dbg->AddLine(corners[1], corners[5], col);
+						dbg->AddLine(corners[2], corners[6], col);
+						dbg->AddLine(corners[3], corners[7], col);
+					};
 
 				for (const auto& [entityId, skinned] : pImpl->m_world.GetComponents<SkinnedMeshComponent>())
 				{
@@ -1001,55 +1018,55 @@ namespace Alice
 		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
-	// ============================================= 렌더링 =============================================
-	// Forward/Deferred 렌더링 모드에 따라 분기
-	EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
+		// ============================================= 렌더링 =============================================
+		// Forward/Deferred 렌더링 모드에 따라 분기
+		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
 
-	// 카메라 엔티티 ID 집합 구성
-	std::unordered_set<EntityId> cameraIDs;
-	for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
+		// 카메라 엔티티 ID 집합 구성
+		std::unordered_set<EntityId> cameraIDs;
+		for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
 
-	const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
+		const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
 
-	if (pImpl->m_useForwardRendering)
-	{
-		// Forward 렌더링
-		pImpl->m_forwardRenderSystem->Render(
-			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
-		);
-	}
-	else
-	{
-		// Deferred 렌더링
-		pImpl->m_deferredRenderSystem->Render(
-			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
-			pImpl->m_editorMode, pImpl->m_isPlaying
-		);
-	}
+		if (pImpl->m_useForwardRendering)
+		{
+			// Forward 렌더링
+			pImpl->m_forwardRenderSystem->Render(
+				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
+			);
+		}
+		else
+		{
+			// Deferred 렌더링
+			pImpl->m_deferredRenderSystem->Render(
+				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
+				pImpl->m_editorMode, pImpl->m_isPlaying
+			);
+		}
 
-        // 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
-        if (!pImpl->m_editorMode)
-        {
-            ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
-            if (backBufferRTV)
-            {
-                D3D11_VIEWPORT viewport = {};
-                viewport.Width = static_cast<float>(pImpl->m_width);
-                viewport.Height = static_cast<float>(pImpl->m_height);
-                viewport.MaxDepth = 1.0f;
+		// 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
+		if (!pImpl->m_editorMode)
+		{
+			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
+			if (backBufferRTV)
+			{
+				D3D11_VIEWPORT viewport = {};
+				viewport.Width = static_cast<float>(pImpl->m_width);
+				viewport.Height = static_cast<float>(pImpl->m_height);
+				viewport.MaxDepth = 1.0f;
 
-                if (pImpl->m_useForwardRendering)
-                {
-                    pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-                }
-                else
-                {
-                    pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-                }
-            }
-        }
+				if (pImpl->m_useForwardRendering)
+				{
+					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+				}
+				else
+				{
+					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+				}
+			}
+		}
 
 
 		// ============================================= 오버레이 =============================================

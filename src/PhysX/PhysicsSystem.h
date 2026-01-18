@@ -26,6 +26,9 @@ public:
 
     // 물리 월드 설정 (씬 전환 시 호출)
     void SetPhysicsWorld(IPhysicsWorld* physicsWorld);
+    
+    // 현재 물리 월드 가져오기
+    IPhysicsWorld* GetPhysicsWorld() const { return m_physicsWorld; }
 
     // 이벤트 콜백 타입
     using EventCallback = void(*)(const PhysicsEvent& event, void* userData);
