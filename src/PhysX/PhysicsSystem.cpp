@@ -1222,9 +1222,13 @@ Vec3 PhysicsSystem::ToVec3(const DirectX::XMFLOAT3& v)
 Quat PhysicsSystem::ToQuat(const DirectX::XMFLOAT3& eulerRadians)
 {
     // Euler (라디안) → Quaternion
-    // DirectX::SimpleMath::Quaternion 사용
-    // Roll (X), Pitch (Y), Yaw (Z) 순서
-    return Quat::CreateFromYawPitchRoll(eulerRadians.z, eulerRadians.y, eulerRadians.x);
+    // Transform.rotation은 (x, y, z) = (Pitch, Yaw, Roll) 순서
+    // CreateFromYawPitchRoll(yaw, pitch, roll) 순서로 변환
+    return Quat::CreateFromYawPitchRoll(
+        eulerRadians.y, // yaw around Y
+        eulerRadians.x, // pitch around X
+        eulerRadians.z  // roll around Z
+    );
 }
 
 DirectX::XMFLOAT3 PhysicsSystem::ToXMFLOAT3(const Vec3& v)
@@ -1235,25 +1239,19 @@ DirectX::XMFLOAT3 PhysicsSystem::ToXMFLOAT3(const Vec3& v)
 DirectX::XMFLOAT3 PhysicsSystem::ToEulerRadians(const Quat& q)
 {
     // Quaternion → Euler (라디안)
-    // DirectX::SimpleMath::Quaternion에서 직접 계산
-    float x = q.x, y = q.y, z = q.z, w = q.w;
-    
-    // Roll (X-axis rotation)
-    float sinr_cosp = 2.0f * (w * x + y * z);
-    float cosr_cosp = 1.0f - 2.0f * (x * x + y * y);
-    float roll = std::atan2(sinr_cosp, cosr_cosp);
-    
-    // Pitch (Y-axis rotation)
-    float sinp = 2.0f * (w * y - z * x);
-    float pitch;
-    if (std::abs(sinp) >= 1.0f)
-        pitch = std::copysign(3.14159265358979323846f / 2.0f, sinp); // Use 90 degrees if out of range
-    else
-        pitch = std::asin(sinp);
-    
-    // Yaw (Z-axis rotation)
-    float siny_cosp = 2.0f * (w * z + x * y);
-    float cosy_cosp = 1.0f - 2.0f * (y * y + z * z);
+    // CreateFromYawPitchRoll로 변환된 쿼터니언을 다시 Euler로 변환
+    // Transform.rotation 순서: (x, y, z) = (Pitch, Yaw, Roll)
+    const float x = q.x, y = q.y, z = q.z, w = q.w;
+
+    // pitch (X)
+    float sinp = 2.0f * (w * x - y * z);
+    float pitch = (std::abs(sinp) >= 1.0f)
+        ? std::copysign(DirectX::XM_PIDIV2, sinp)
+        : std::asin(sinp);
+
+    // yaw (Y)
+    float siny_cosp = 2.0f * (w * y + x * z);
+    float cosy_cosp = 1.0f - 2.0f * (x * x + y * y);
     float yaw = std::atan2(siny_cosp, cosy_cosp);
     
     return DirectX::XMFLOAT3(roll, pitch, yaw);
