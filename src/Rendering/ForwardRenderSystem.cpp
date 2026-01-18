@@ -1123,7 +1123,8 @@ namespace Alice
                                      const std::unordered_set<EntityId>& cameraEntities,
                                      int shadingMode,
                                      bool enableFillLight,
-                                     const std::vector<SkinnedDrawCommand>& skinnedCommands)
+                                     const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                                     UIWorldManager& uiWorld)
     {
         // 0. 초기화 및 유효성 검사
         if (!IsValidPipeline()) return;
@@ -1148,9 +1149,13 @@ namespace Alice
             viewport.Height = static_cast<float>(m_sceneHeight);
             viewport.MaxDepth = 1.0f;
             RenderToneMapping(m_viewportRTV.Get(), viewport);
+
+            // 6. UI 렌더링 (톤매핑 후 뷰포트 텍스처에 합성)
+            uiWorld.Render();  // D2D → UI 텍스처 렌더링
+            RenderUI(uiWorld, m_viewportRTV.Get(), viewport);
         }
 
-        // 6. 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
+        // 7. 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
         RestoreBackBuffer();
     }
 

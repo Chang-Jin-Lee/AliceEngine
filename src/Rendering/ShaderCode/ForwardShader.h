@@ -706,10 +706,6 @@ VSOutput main(uint vertexId : SV_VertexID)
     VSOutput output;
     
     // 6개의 버텍스로 풀스크린 쿼드 생성 (2개의 삼각형)
-    // 0--1    0,1,2: 첫 번째 삼각형
-    // |\ |    3,4,5: 두 번째 삼각형 (0,2,3과 동일)
-    // | \|
-    // 2--3
     
     float2 positions[6] = {
         float2(-1.0,  1.0),  // 0: 좌상
