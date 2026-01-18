@@ -77,6 +77,15 @@ namespace Alice
         out.resize((size_t)std::max(0, n));
     }
 
+    // 노드안에서 줄바꿈 되는 그거 헬퍼
+    static void NodeHr(float w)
+    {
+        auto* dl = ImGui::GetWindowDrawList();
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        dl->AddLine(p, ImVec2(p.x + w, p.y), ImGui::GetColorU32(ImGuiCol_Separator));
+        ImGui::Dummy(ImVec2(w, 1)); // 아이템 제출 + 줄바꿈
+    }
+
     // =========================================================
     // IDs
     // =========================================================
@@ -590,8 +599,11 @@ namespace Alice
             ed::BeginNode(s.id);
 
             ImGui::TextUnformatted(s.name.c_str());
-            ImGui::Separator();
-            ImGui::Text("Clip: %s", s.clip.c_str());
+            float w = std::max(
+                ImGui::CalcTextSize(s.name.c_str()).x,
+                ImGui::CalcTextSize((std::string("Clip: ") + s.clip).c_str()).x
+            );
+            NodeHr(w);
 
             ed::BeginPin(s.in, ed::PinKind::Input);
             ImGui::TextUnformatted("-> In");
@@ -905,7 +917,12 @@ namespace Alice
         {
             ed::BeginNode(n.id);
             ImGui::TextUnformatted(n.name.c_str());
-            ImGui::Separator();
+            //ImGui::Separator();
+            float w = std::max(
+                ImGui::CalcTextSize(n.name.c_str()).x,
+                ImGui::CalcTextSize((std::string("Clip: ") + n.clip).c_str()).x
+            );
+            NodeHr(w);
 
             if (n.type == BlendNodeType::Clip)
                 ImGui::Text("Clip: %s", n.clip.c_str());
