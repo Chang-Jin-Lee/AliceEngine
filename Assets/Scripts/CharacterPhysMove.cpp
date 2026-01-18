@@ -68,10 +68,10 @@ namespace Alice
         float inputX = 0.0f; // A, D
         float inputZ = 0.0f; // W, S
 
-        if (input->GetKey(KeyCode::W)) inputZ += 1.0f;
-        if (input->GetKey(KeyCode::S)) inputZ -= 1.0f;
-        if (input->GetKey(KeyCode::D)) inputX += 1.0f;
-        if (input->GetKey(KeyCode::A)) inputX -= 1.0f;
+        if (input->GetKey(KeyCode::W)) inputZ += 3.0f;
+        if (input->GetKey(KeyCode::S)) inputZ -= 3.0f;
+        if (input->GetKey(KeyCode::D)) inputX += 3.0f;
+        if (input->GetKey(KeyCode::A)) inputX -= 3.0f;
 
         // 입력이 없으면 이동 계산 건너뛰기
         bool hasInput = (inputX != 0.0f || inputZ != 0.0f);
