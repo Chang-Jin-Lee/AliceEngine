@@ -410,6 +410,17 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			sdesc.flags |= PxSceneFlag::eREQUIRE_RW_LOCK;
 
 		scene = physics->createScene(sdesc);
+		scene->setVisualizationParameter(physx::PxVisualizationParameter::eSCALE, 1.0f);
+		scene->setVisualizationParameter(physx::PxVisualizationParameter::eCOLLISION_SHAPES, 1.0f);
+		scene->setVisualizationParameter(physx::PxVisualizationParameter::eACTOR_AXES, 1.0f);
+
+		if (physx::PxPvdSceneClient* client = scene->getScenePvdClient())
+		{
+ 	   		client->setScenePvdFlag(physx::PxPvdSceneFlag::eTRANSMIT_CONSTRAINTS, true);
+    		client->setScenePvdFlag(physx::PxPvdSceneFlag::eTRANSMIT_CONTACTS, true);
+    		client->setScenePvdFlag(physx::PxPvdSceneFlag::eTRANSMIT_SCENEQUERIES, true);
+		}
+
 		if (!scene) throw std::runtime_error("createScene failed");
 
 		// NOTE: enable_shared_from_this isn't active inside the raw constructor.

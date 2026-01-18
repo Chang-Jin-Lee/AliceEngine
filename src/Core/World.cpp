@@ -5,14 +5,18 @@
 namespace Alice {
 	void World::Clear()
 	{
+		// 0. Clear 전 콜백 호출 (Engine에서 물리 시스템 정리)
+		if (m_onBeforeClear)
+		{
+			m_onBeforeClear();
+		}
+		
 		// 1. 스크립트 컴포넌트들의 정리(Cleanup) 함수 호출
 		RemoveAllScript();
 		// 2. 모든 컴포넌트 컨테이너 비우기 (메모리 해제)
 
-		// 1.5 물리 비우기
-		// SetPhysicsWorld(nullptr)를 사용하면 Engine이 이를 감지하고 PhysicsSystem도 정리하지만,
-		// Clear()는 Engine 외부에서도 호출될 수 있으므로 직접 reset.
-		// 주의: Engine에서 World::Clear() 호출 후 반드시 RefreshPhysicsForCurrentWorld()를 호출해야 함.
+		// 1.5 물리 월드 정리
+		// (Clear 전 콜백에서 PhysicsSystem 정리가 이미 완료되었을 수 있음)
 		m_physicsWorld.reset();
 
 		// 2. 엔티티 이름 비우기

@@ -37,6 +37,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <sstream>
 #include <Core/Prefab.h>
 #include <Core/IScript.h>
 #include <Core/ScriptSystem.h>
@@ -813,6 +814,8 @@ namespace Alice
         // 다른 씬을 로드하기 위해 대기 중인 경로
         bool                     g_RequestSceneLoad     = false;
         std::filesystem::path    g_NextScenePath;
+        bool                     g_ShowSceneLoadError   = false;
+        std::string              g_SceneLoadErrorMsg;
 
         // 단일 머티리얼 에셋 편집기 상태
         bool                     g_MaterialEditorOpen   = false;
@@ -2346,7 +2349,17 @@ namespace Alice
                 {
                     const std::filesystem::path loadAbs =
                         (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
-                    SceneFile::Load(world, loadAbs);
+                    if (!SceneFile::Load(world, loadAbs))
+                    {
+                        // 로드 실패: 에러 로그 및 팝업 표시
+                        const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
+                        ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+                        
+                        g_SceneLoadErrorMsg = errorMsg;
+                        g_ShowSceneLoadError = true;
+                        g_RequestSceneLoad = false; // 실패 시 플래그 해제
+                        return; // 후처리하지 않고 종료
+                    }
                 }
                 EnsureSkinnedMeshesRegistered(world);
                 selectedEntity       = InvalidEntityId;
@@ -2355,6 +2368,35 @@ namespace Alice
                 g_SceneDirty         = false;
             }
             g_RequestSceneLoad = false;
+        }
+
+        // === 씬 로드 에러 모달 ===
+        if (g_ShowSceneLoadError)
+        {
+            ImGui::OpenPopup("SceneLoadError");
+            g_ShowSceneLoadError = false;
+        }
+
+        if (ImGui::BeginPopupModal("SceneLoadError", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "씬 로드 실패");
+            ImGui::Separator();
+            
+            // 에러 메시지 표시 (여러 줄 지원)
+            std::istringstream iss(g_SceneLoadErrorMsg);
+            std::string line;
+            while (std::getline(iss, line))
+            {
+                ImGui::TextWrapped("%s", line.c_str());
+            }
+            
+            ImGui::Separator();
+            if (ImGui::Button("확인"))
+            {
+                g_SceneLoadErrorMsg.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
 
         if (ImGui::BeginPopupModal("SaveSceneBeforeLoad", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -2380,7 +2422,17 @@ namespace Alice
                 {
                     const std::filesystem::path loadAbs =
                         (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
-                    SceneFile::Load(world, loadAbs);
+                    if (!SceneFile::Load(world, loadAbs))
+                    {
+                        // 로드 실패: 에러 로그 및 팝업 표시
+                        const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
+                        ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+                        
+                        g_SceneLoadErrorMsg = errorMsg;
+                        g_ShowSceneLoadError = true;
+                        g_RequestSceneLoad = false; // 실패 시 플래그 해제
+                        return; // 후처리하지 않고 종료
+                    }
                 }
                 EnsureSkinnedMeshesRegistered(world);
                 selectedEntity        = InvalidEntityId;
@@ -4183,10 +4235,23 @@ namespace Alice
     {
         ALICE_LOG_INFO("[Editor] Loading Scene: %s", g_NextScenePath.string().c_str());
 
-        // 로드 실행
-        SceneFile::Load(world, m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+        const std::filesystem::path loadAbs = m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath;
+        
+        // 로드 실행 및 반환값 체크
+        if (!SceneFile::Load(world, loadAbs))
+        {
+            // 로드 실패: 에러 로그 및 팝업 표시
+            const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
+            ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+            
+            g_SceneLoadErrorMsg = errorMsg;
+            g_ShowSceneLoadError = true;
+            
+            // 후처리하지 않고 종료 (부분 로드 방지)
+            return;
+        }
 
-        // 후처리 및 상태 갱신
+        // 로드 성공: 후처리 및 상태 갱신
         EnsureSkinnedMeshesRegistered(world);
         g_CurrentScenePath = g_NextScenePath;
         g_HasCurrentScenePath = true;

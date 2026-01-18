@@ -16,6 +16,7 @@
 
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
+#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
 #include <wrl/client.h>
 #include <dxgi.h>
 #include <dxgi1_3.h>
@@ -83,6 +84,133 @@ namespace Alice
             }
 
             return path;
+        }
+
+        // PhysicsSceneSettingsComponent 수동 직렬화
+        static JsonRttr::json WritePhysicsSceneSettings(const PhysicsSceneSettingsComponent& settings)
+        {
+            JsonRttr::json j = JsonRttr::json::object();
+            
+            // 기본 프로퍼티
+            j["enablePhysics"] = settings.enablePhysics;
+            j["gravity"] = JsonRttr::json::array({ settings.gravity.x, settings.gravity.y, settings.gravity.z });
+            j["fixedDt"] = settings.fixedDt;
+            j["maxSubsteps"] = settings.maxSubsteps;
+            j["filterRevision"] = settings.filterRevision;
+            
+            // layerCollideMatrix: 32x32 bool 배열
+            j["layerCollideMatrix"] = JsonRttr::json::array();
+            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+            {
+                JsonRttr::json row = JsonRttr::json::array();
+                for (int j = 0; j < MAX_PHYSICS_LAYERS; ++j)
+                {
+                    row.push_back(settings.layerCollideMatrix[i][j]);
+                }
+                j["layerCollideMatrix"].push_back(row);
+            }
+            
+            // layerQueryMatrix: 32x32 bool 배열
+            j["layerQueryMatrix"] = JsonRttr::json::array();
+            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+            {
+                JsonRttr::json row = JsonRttr::json::array();
+                for (int j = 0; j < MAX_PHYSICS_LAYERS; ++j)
+                {
+                    row.push_back(settings.layerQueryMatrix[i][j]);
+                }
+                j["layerQueryMatrix"].push_back(row);
+            }
+            
+            // layerNames: 32개 string 배열
+            j["layerNames"] = JsonRttr::json::array();
+            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+            {
+                j["layerNames"].push_back(settings.layerNames[i]);
+            }
+            
+            return j;
+        }
+        
+        // PhysicsSceneSettingsComponent 수동 역직렬화
+        static bool LoadPhysicsSceneSettings(PhysicsSceneSettingsComponent& settings, const JsonRttr::json& j)
+        {
+            if (!j.is_object()) return false;
+            
+            // 기본 프로퍼티
+            if (j.contains("enablePhysics") && j["enablePhysics"].is_boolean())
+                settings.enablePhysics = j["enablePhysics"].get<bool>();
+            
+            if (j.contains("gravity") && j["gravity"].is_array() && j["gravity"].size() == 3)
+            {
+                settings.gravity.x = j["gravity"][0].get<float>();
+                settings.gravity.y = j["gravity"][1].get<float>();
+                settings.gravity.z = j["gravity"][2].get<float>();
+            }
+            
+            if (j.contains("fixedDt") && j["fixedDt"].is_number())
+                settings.fixedDt = j["fixedDt"].get<float>();
+            
+            if (j.contains("maxSubsteps") && j["maxSubsteps"].is_number_integer())
+                settings.maxSubsteps = j["maxSubsteps"].get<int>();
+            
+            if (j.contains("filterRevision") && j["filterRevision"].is_number_unsigned())
+                settings.filterRevision = j["filterRevision"].get<uint32_t>();
+            
+            // layerCollideMatrix: 32x32 bool 배열
+            if (j.contains("layerCollideMatrix") && j["layerCollideMatrix"].is_array())
+            {
+                const auto& matrix = j["layerCollideMatrix"];
+                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(matrix.size()); ++i)
+                {
+                    if (matrix[i].is_array())
+                    {
+                        const auto& row = matrix[i];
+                        for (int j = 0; j < MAX_PHYSICS_LAYERS && j < static_cast<int>(row.size()); ++j)
+                        {
+                            // bool 또는 0/1 정수 모두 처리
+                            if (row[j].is_boolean())
+                                settings.layerCollideMatrix[i][j] = row[j].get<bool>();
+                            else if (row[j].is_number_integer())
+                                settings.layerCollideMatrix[i][j] = (row[j].get<int>() != 0);
+                        }
+                    }
+                }
+            }
+            
+            // layerQueryMatrix: 32x32 bool 배열
+            if (j.contains("layerQueryMatrix") && j["layerQueryMatrix"].is_array())
+            {
+                const auto& matrix = j["layerQueryMatrix"];
+                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(matrix.size()); ++i)
+                {
+                    if (matrix[i].is_array())
+                    {
+                        const auto& row = matrix[i];
+                        for (int j = 0; j < MAX_PHYSICS_LAYERS && j < static_cast<int>(row.size()); ++j)
+                        {
+                            // bool 또는 0/1 정수 모두 처리
+                            if (row[j].is_boolean())
+                                settings.layerQueryMatrix[i][j] = row[j].get<bool>();
+                            else if (row[j].is_number_integer())
+                                settings.layerQueryMatrix[i][j] = (row[j].get<int>() != 0);
+                        }
+                    }
+                }
+            }
+            
+            // layerNames: 32개 string 배열
+            if (j.contains("layerNames") && j["layerNames"].is_array())
+            {
+                const auto& names = j["layerNames"];
+                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(names.size()); ++i)
+                {
+                    if (names[i].is_string())
+                        settings.layerNames[i] = names[i].get<std::string>();
+                }
+            }
+            
+            return true;
         }
 
         static bool WriteEntity(JsonRttr::json& outEntity, const World& world, EntityId id)
@@ -241,8 +369,8 @@ namespace Alice
 
             if (const auto* physicsSettings = world.GetComponent<PhysicsSceneSettingsComponent>(id); physicsSettings)
             {
-                rttr::instance inst = const_cast<PhysicsSceneSettingsComponent&>(*physicsSettings);
-                outEntity["PhysicsSceneSettings"] = JsonRttr::ToJsonObject(inst);
+                // 수동 직렬화 사용 (중첩 배열 보장)
+                outEntity["PhysicsSceneSettings"] = WritePhysicsSceneSettings(*physicsSettings);
             }
 
             return true;
@@ -468,8 +596,8 @@ namespace Alice
             if (itPhysicsSettings != e.end() && itPhysicsSettings->is_object())
             {
                 PhysicsSceneSettingsComponent& ps = world.AddComponent<PhysicsSceneSettingsComponent>(id);
-                rttr::instance inst = ps;
-                if (!JsonRttr::FromJsonObject(inst, *itPhysicsSettings)) return false;
+                // 수동 역직렬화 사용 (중첩 배열 보장)
+                if (!LoadPhysicsSceneSettings(ps, *itPhysicsSettings)) return false;
             }
 
             return true;
