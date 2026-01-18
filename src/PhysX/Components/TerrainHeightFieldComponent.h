@@ -41,6 +41,7 @@ struct TerrainHeightFieldComponent
     uint32_t layerBits = 1u << 0;
     uint32_t collideMask = 0xFFFFFFFFu;
     uint32_t queryMask = 0xFFFFFFFFu;
+    uint32_t ignoreLayers = 0u; // 이그노어 레이어 비트마스크 (충돌/쿼리 모두 무시)
 
     // 내부 사용: 물리 액터 핸들 (PhysicsSystem이 관리)
     // HeightField는 항상 RigidStatic으로 생성됨

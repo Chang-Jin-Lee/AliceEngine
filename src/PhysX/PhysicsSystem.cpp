@@ -1,14 +1,23 @@
 #include "PhysicsSystem.h"
 #include "Core/World.h"
 #include "Components/TransformComponent.h"
+#include "Components/PhysicsSceneSettingsComponent.h"
 #include "Core/Logger.h"
 #include <DirectXMath.h>
 #include <algorithm>
 #include <unordered_set>
 #include <cmath>
+#include <bit>
 
 using namespace DirectX;
 using namespace Alice;
+
+// 레이어 비트에서 첫 번째 레이어 인덱스를 찾는 헬퍼 함수
+static int FirstLayerIndex(uint32_t bits)
+{
+    if (bits == 0) return -1;
+    return (int)std::countr_zero(bits); // C++20
+}
 
 PhysicsSystem::PhysicsSystem(World& world)
     : m_world(world)
@@ -86,6 +95,151 @@ void PhysicsSystem::Update(float deltaTime)
     }
 
     if (!m_physicsWorld) return;
+
+    // (추가) Scene Settings -> 각 컴포넌트 mask로 반영 (전역 매트릭스 기반)
+    {
+        const auto& settingsMap = m_world.GetComponents<PhysicsSceneSettingsComponent>();
+        if (!settingsMap.empty())
+        {
+            auto& s = const_cast<PhysicsSceneSettingsComponent&>(settingsMap.begin()->second);
+
+            // filterRevision 변경 감지: 전역 매트릭스가 변경되었는지 확인
+            bool filterMatrixChanged = (s.filterRevision != m_lastFilterRevision);
+            if (filterMatrixChanged)
+            {
+                m_lastFilterRevision = s.filterRevision;
+            }
+
+            std::array<uint32_t, MAX_PHYSICS_LAYERS> collideByLayer{};
+            std::array<uint32_t, MAX_PHYSICS_LAYERS> queryByLayer{};
+
+            // collide: row 기반 (layerCollideMatrix[i][j] = true면 레이어 i와 j가 충돌)
+            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+            {
+                uint32_t mask = 0;
+                for (int j = 0; j < MAX_PHYSICS_LAYERS; ++j)
+                    if (s.layerCollideMatrix[i][j]) mask |= (1u << j);
+
+                // 원하면 자기 레이어는 자동 off:
+                // mask &= ~(1u << i);
+
+                collideByLayer[i] = mask;
+            }
+
+            // query: column 기반 (layerQueryMatrix[querier][target] = true면 querier가 target을 쿼리 가능)
+            // target 레이어 입장에서 "누가 나를 쿼리할 수 있는가"를 마스크로 저장
+            for (int target = 0; target < MAX_PHYSICS_LAYERS; ++target)
+            {
+                uint32_t mask = 0;
+                for (int querier = 0; querier < MAX_PHYSICS_LAYERS; ++querier)
+                    if (s.layerQueryMatrix[querier][target]) mask |= (1u << querier);
+
+                queryByLayer[target] = mask;
+            }
+
+            // Collider들에 적용 (revision 변경 시 또는 값이 바뀔 때)
+            auto colliders = m_world.GetComponents<ColliderComponent>();
+            for (auto [id, col] : colliders)
+            {
+                int li = FirstLayerIndex(col.layerBits);
+                if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+                uint32_t newCollide = collideByLayer[li];
+                uint32_t newQuery   = queryByLayer[li];
+                
+                // ignoreLayers 반영: 이그노어 레이어는 마스크에서 제외
+                newCollide &= ~col.ignoreLayers;
+                newQuery   &= ~col.ignoreLayers;
+
+                bool maskChanged = false;
+                if (col.collideMask != newCollide)
+                {
+                    col.collideMask = newCollide;
+                    maskChanged = true;
+                }
+                if (col.queryMask != newQuery)
+                {
+                    col.queryMask = newQuery;
+                    maskChanged = true;
+                }
+
+                // 마스크가 변경되면 Shape를 리빌드하여 PhysX에 반영
+                if (maskChanged && m_entityToActor.find(id) != m_entityToActor.end())
+                {
+                    RebuildShapes(id);
+                }
+            }
+
+            // Terrain에 적용
+            auto terrains = m_world.GetComponents<TerrainHeightFieldComponent>();
+            for (auto [id, terrain] : terrains)
+            {
+                int li = FirstLayerIndex(terrain.layerBits);
+                if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+                uint32_t newCollide = collideByLayer[li];
+                uint32_t newQuery   = queryByLayer[li];
+                
+                // ignoreLayers 반영: 이그노어 레이어는 마스크에서 제외
+                newCollide &= ~terrain.ignoreLayers;
+                newQuery   &= ~terrain.ignoreLayers;
+
+                bool maskChanged = false;
+                if (terrain.collideMask != newCollide)
+                {
+                    terrain.collideMask = newCollide;
+                    maskChanged = true;
+                }
+                if (terrain.queryMask != newQuery)
+                {
+                    terrain.queryMask = newQuery;
+                    maskChanged = true;
+                }
+
+                // Terrain은 필터 변경 시 재생성 필요 (HeightField는 필터를 생성 시점에만 설정 가능)
+                if (maskChanged && terrain.physicsActorHandle != nullptr)
+                {
+                    // Terrain은 재생성이 필요 (HeightField 특성상 필터 변경이 어려움)
+                    DestroyPhysicsActor(id);
+                    CreateTerrainHeightField(id);
+                }
+            }
+
+            // CCT에 적용
+            auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+            for (auto [id, cct] : ccts)
+            {
+                int li = FirstLayerIndex(cct.layerBits);
+                if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+                uint32_t newCollide = collideByLayer[li];
+                uint32_t newQuery   = queryByLayer[li];
+                
+                // ignoreLayers 반영: 이그노어 레이어는 마스크에서 제외
+                newCollide &= ~cct.ignoreLayers;
+                newQuery   &= ~cct.ignoreLayers;
+
+                bool maskChanged = false;
+                if (cct.collideMask != newCollide)
+                {
+                    cct.collideMask = newCollide;
+                    maskChanged = true;
+                }
+                if (cct.queryMask != newQuery)
+                {
+                    cct.queryMask = newQuery;
+                    maskChanged = true;
+                }
+
+                // CCT 필터 변경 시 재생성 필요
+                if (maskChanged && m_entityToCCT.find(id) != m_entityToCCT.end())
+                {
+                    DestroyCharacterController(id);
+                    CreateCharacterController(id);
+                }
+            }
+        }
+    }
 
     // 
     // (A) 이전 시뮬 결과 반영: ActiveTransform → TransformComponent
@@ -1378,18 +1532,18 @@ DirectX::XMFLOAT3 PhysicsSystem::ToEulerRadians(const Quat& q)
     // CreateFromYawPitchRoll로 변환된 쿼터니언을 다시 Euler로 변환
     // Transform.rotation 순서: (x, y, z) = (Pitch, Yaw, Roll)
     const float x = q.x, y = q.y, z = q.z, w = q.w;
-
+    
     // pitch (X)
     float sinp = 2.0f * (w * x - y * z);
     float pitch = (std::abs(sinp) >= 1.0f)
         ? std::copysign(DirectX::XM_PIDIV2, sinp)
         : std::asin(sinp);
-
+    
     // yaw (Y)
     float siny_cosp = 2.0f * (w * y + x * z);
     float cosy_cosp = 1.0f - 2.0f * (x * x + y * y);
     float yaw = std::atan2(siny_cosp, cosy_cosp);
-
+    
     // roll (Z)
     float sinr_cosp = 2.0f * (w * z + x * y);
     float cosr_cosp = 1.0f - 2.0f * (x * x + z * z);

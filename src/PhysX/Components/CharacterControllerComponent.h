@@ -20,6 +20,7 @@ struct CharacterControllerComponent
     uint32_t layerBits = 1u << 1;
     uint32_t collideMask = 0xFFFFFFFFu; // "장애물"로 취급할 레이어
     uint32_t queryMask = 0xFFFFFFFFu;
+    uint32_t ignoreLayers = 0u; // 이그노어 레이어 비트마스크 (충돌/쿼리 모두 무시)
     bool hitTriggers = false;
 
     // --- 입력(게임플레이가 채움) ---

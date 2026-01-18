@@ -34,6 +34,9 @@ struct PhysicsSceneSettingsComponent
     // 레이어 이름 (인스펙터에서 표시용)
     std::array<std::string, MAX_PHYSICS_LAYERS> layerNames;
 
+    // 필터 매트릭스 변경 감지용 리비전 (에디터에서 매트릭스 변경 시 증가)
+    uint32_t filterRevision = 0;
+
     PhysicsSceneSettingsComponent()
     {
         // 기본값: 모든 레이어가 서로 충돌/쿼리 가능
