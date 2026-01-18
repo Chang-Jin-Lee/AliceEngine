@@ -1,4 +1,4 @@
-﻿#include "Rendering/ForwardRenderSystem.h"
+#include "Rendering/ForwardRenderSystem.h"
 
 #include <d3dcompiler.h>
 // 텍스처 로더 (vcpkg의 DirectXTK 사용)
@@ -103,6 +103,11 @@ namespace Alice
         if (!CreateToneMappingResources())
         {
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateToneMappingResources failed.");
+            return false;
+        }
+        if (!CreateUIResources())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateUIResources failed.");
             return false;
         }
 
@@ -1354,6 +1359,7 @@ namespace Alice
         m_context->PSSetShaderResources(0, 1, &nullSRV);
     }
 
+
     void ForwardRenderSystem::GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const
     {
         outExposure = m_postProcessParams.exposure;
@@ -1369,6 +1375,108 @@ namespace Alice
     {
         m_postProcessParams.exposure = exposure;
         m_postProcessParams.maxHDRNits = maxHDRNits;
+    }
+
+
+    void ForwardRenderSystem::RenderUI(UIWorldManager& uiWorld, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+    {
+
+        ID3D11ShaderResourceView* uiSrv = uiWorld.GetUISRV();
+        if (!uiSrv)
+        {
+            return; // UI 텍스처가 없으면 건너뜀
+        }
+
+        // 1) 렌더 타겟 설정 (톤매핑 후 백버퍼 또는 에디터 뷰포트)
+        m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
+        m_context->RSSetViewports(1, &viewport);
+
+        // 2) Depth OFF
+        m_context->OMSetDepthStencilState(nullptr, 0);
+
+        // 3) 알파 블렌딩 ON
+        float blendFactor[4] = { 0,0,0,0 };
+        m_context->OMSetBlendState(m_alphaBlendState.Get(), blendFactor, 0xffffffff);
+
+        // 4) IA 비우기 (SV_VertexID 방식이라 VB/IL 필요 없음)
+        m_context->IASetInputLayout(nullptr);
+        ID3D11Buffer* nullVB = nullptr;
+        UINT stride = 0, offset = 0;
+        m_context->IASetVertexBuffers(0, 1, &nullVB, &stride, &offset);
+        m_context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+        // 5) UI 텍스처 SRV 바인딩 (UIWorldManager가 만든 SRV)
+        m_context->PSSetShaderResources(0, 1, &uiSrv);
+
+        // 6) 샘플러 바인딩
+        ID3D11SamplerState* sam = m_samplerState.Get();
+        m_context->PSSetSamplers(0, 1, &sam);
+
+        // 7) 셰이더 바인딩
+        m_context->VSSetShader(m_uiQuadVS.Get(), nullptr, 0);
+        m_context->PSSetShader(m_uiCompositePS.Get(), nullptr, 0);
+
+        // 8) Draw (6 vertices = quad)
+        m_context->Draw(6, 0);
+
+        // 9) 정리(중요: 다음 패스에 영향 방지)
+        ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
+        m_context->PSSetShaderResources(0, 1, nullSRV);
+        m_context->OMSetBlendState(nullptr, blendFactor, 0xffffffff);
+    }
+
+    bool ForwardRenderSystem::CreateUIResources()
+    {
+        ALICE_LOG_INFO("ForwardRenderSystem::CreateUIResources: begin");
+
+        // UI Quad Vertex Shader 컴파일
+        ComPtr<ID3DBlob> vsBlob;
+        ComPtr<ID3DBlob> errorBlob;
+        HRESULT hr = D3DCompile(
+            ForwardShader::UIQuadVS, strlen(ForwardShader::UIQuadVS),
+            "UIQuadVS", nullptr, nullptr, "main", "vs_5_0",
+            D3DCOMPILE_ENABLE_STRICTNESS, 0, &vsBlob, &errorBlob);
+        if (FAILED(hr))
+        {
+            if (errorBlob)
+                ALICE_LOG_ERRORF("ForwardRenderSystem::CreateUIResources: VS compile failed: %s",
+                    static_cast<const char*>(errorBlob->GetBufferPointer()));
+            return false;
+        }
+
+        hr = m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(),
+            nullptr, m_uiQuadVS.GetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::CreateUIResources: CreateVertexShader failed.");
+            return false;
+        }
+
+        // UI Composite Pixel Shader 컴파일
+        ComPtr<ID3DBlob> psBlob;
+        hr = D3DCompile(
+            ForwardShader::UICompositePS, strlen(ForwardShader::UICompositePS),
+            "UICompositePS", nullptr, nullptr, "main", "ps_5_0",
+            D3DCOMPILE_ENABLE_STRICTNESS, 0, &psBlob, &errorBlob);
+        if (FAILED(hr))
+        {
+            if (errorBlob)
+                ALICE_LOG_ERRORF("ForwardRenderSystem::CreateUIResources: PS compile failed: %s",
+                    static_cast<const char*>(errorBlob->GetBufferPointer()));
+            return false;
+        }
+
+        hr = m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(),
+            nullptr, m_uiCompositePS.GetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::CreateUIResources: CreatePixelShader failed.");
+            return false;
+        }
+
+        ALICE_LOG_INFO("ForwardRenderSystem::CreateUIResources: success");
+        return true;
     }
 }
 

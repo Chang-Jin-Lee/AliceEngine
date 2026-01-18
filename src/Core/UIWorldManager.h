@@ -65,7 +65,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<IWICImagingFactory>   m_wicFactory; // 이미지 파일 -> bitmap
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_brush;
 
-        ID3D11Device* m_d3dDev{ nullptr };
+       
         ID3D11DeviceContext* m_devCon{ nullptr };
         
         //UIRenderStruct m_RenderStruct;
@@ -84,6 +84,7 @@ namespace Alice
         InputSystem* m_inputSystem{ nullptr };
 
     public:
+        ID3D11Device* m_d3dDev{ nullptr };
         void Initalize(ID3D11Device* pDev, ID3D11DeviceContext* pDevCon, UINT w, UINT h, InputSystem& tmpInput);
         void Update(UINT w, UINT h);
         void Render();
@@ -96,5 +97,15 @@ namespace Alice
 
         //3D에 합성할 2D Tex 생성
         void Create2DTex(UINT w, UINT h);
+
+        // UI 텍스처 SRV를 반환합니다 (3D 렌더러에서 합성용)
+        ID3D11ShaderResourceView* GetUISRV() const { return m_shaderRV.Get(); }
+        
+        // UI 텍스처 RTV를 반환합니다 (D2D 렌더링 타겟용)
+        ID3D11RenderTargetView* GetUIRTV() const { return m_RenderTV.Get(); }
+        
+        // 현재 UI 크기를 반환합니다
+        UINT GetWidth() const { return m_curWidth; }
+        UINT GetHeight() const { return m_curHeight; }
     };
 } 

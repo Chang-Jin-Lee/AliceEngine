@@ -822,12 +822,28 @@ namespace Alice
                 {
                     pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
                 }
+
+
+
+				// ============================================= UI 렌더링 =============================================
+				// 톤매핑 이후 UI 렌더링 (게임 UI는 톤매핑된 화면 위에 그려짐)
+				// UIWorldManager가 D2D로 렌더링한 텍스처를 백버퍼에 알파 블렌딩으로 합성
+				pImpl->m_uiWorld.Render();  // D2D → UI 텍스처 렌더링
+
+				if (pImpl->m_useForwardRendering)
+				{
+					pImpl->m_forwardRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
+				}
+				else
+				{
+					pImpl->m_deferredRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
+				}
+
+
             }
         }
 
-		// ============================================= UI 렌더링 =============================================
-		// 톤매핑 이후 UI 렌더링 (게임 UI는 톤매핑된 화면 위에 그려짐)
-		pImpl->m_uiWorld.Render();
+                
 
 		// ============================================= 오버레이 =============================================
 		// 디버그 드로우 및 ImGui(에디터 전용)
@@ -978,8 +994,12 @@ namespace Alice
 			pImpl->m_deferredRenderSystem->Resize(width, height);
 		}
 
-		// UI 시스템 리사이즈 (텍스처 재생성)
-		pImpl->m_uiWorld.Create2DTex(width, height);
+		if(pImpl->m_uiWorld.m_d3dDev)
+		{
+			// UI 시스템 리사이즈 (텍스처 재생성)
+			pImpl->m_uiWorld.Create2DTex(width, height);
+		}
+		
 	}
 
 	LRESULT Engine::HandleMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
