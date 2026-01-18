@@ -845,11 +845,11 @@ namespace Alice
 
         ImFontConfig baseConfig{};
         baseConfig.MergeMode = false;
-        const std::string fontKr =
-            (m_resources ? m_resources->Resolve("Resource/Fonts/NotoSansKR-Regular.ttf").string()
-                         : std::string("Resource/Fonts/NotoSansKR-Regular.ttf"));
+        const std::wstring fontKr =
+            (m_resources ? m_resources->Resolve("Resource/Fonts/NotoSansKR-Regular.ttf").wstring()
+                         : std::wstring(L"Resource/Fonts/NotoSansKR-Regular.ttf"));
         io.FontDefault = io.Fonts->AddFontFromFileTTF(
-            fontKr.c_str(),
+            Utf8FromWString(fontKr).c_str(),
             18.0f,
             &baseConfig,
             io.Fonts->GetGlyphRangesKorean());
@@ -857,11 +857,11 @@ namespace Alice
         ImFontConfig jpConfig{};
         jpConfig.MergeMode = true;
         jpConfig.PixelSnapH = true;
-        const std::string fontJp =
-            (m_resources ? m_resources->Resolve("Resource/Fonts/meiryo.ttc").string()
-                         : std::string("Resource/Fonts/meiryo.ttc"));
+        const std::wstring fontJp =
+            (m_resources ? m_resources->Resolve("Resource/Fonts/meiryo.ttc").wstring()
+                         : std::wstring(L"Resource/Fonts/meiryo.ttc"));
         io.Fonts->AddFontFromFileTTF(
-            fontJp.c_str(),
+            Utf8FromWString(fontJp).c_str(),
             18.0f,
             &jpConfig,
             io.Fonts->GetGlyphRangesJapanese());
