@@ -109,6 +109,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Helper.cpp
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
     ${ALICE_SRC_DIR}/Core/Input.cpp
+    ${ALICE_SRC_DIR}/Core/UIWorldManager.cpp
 
     # FBX/3D 모델 로더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
@@ -182,6 +183,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Vertex.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
+    ${ALICE_SRC_DIR}/Core/UIWorldManager.h
+
     
     #컴포넌트들
     ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h

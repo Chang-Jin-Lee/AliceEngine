@@ -1,5 +1,4 @@
 #pragma once
-
 #include <d2d1_3.h> //ID2D1Factory8,ID2D1DeviceContext7
 #pragma comment(lib, "d2d1.lib")
 
@@ -11,6 +10,12 @@
 #include <dxgi.h>           // DXGI 관련 설정 (포맷, 스왑체인 등)
 #include <d3dcompiler.h>    // 셰이더 컴파일이 필요한 경우
 
+#include <windows.h>
+#include <wincodec.h>
+#pragma comment(lib, "windowscodecs.lib")
+#include <dwrite.h>
+#pragma comment(lib, "dwrite.lib")
+
 // 라이브러리 링크 (Pragma comment 방식)
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -20,9 +25,12 @@
 #include <unordered_map>
 #include <memory>
 
+
+
 #include "Core/InputSystem.h"
 
 // 전방 선언
+struct IWICImagingFactory;
 struct UIRenderStruct;
 class UISceneManager;
 
@@ -63,7 +71,7 @@ namespace Alice
         //UIRenderStruct m_RenderStruct;
 
         //Scene Manager 저장소
-        std::unordered_map<UINT, std::unique_ptr<UISceneManager>> sceneStorages;
+       // std::unordered_map<UINT, std::unique_ptr<UISceneManager>> sceneStorages;
 
         //Scene 정보
         UINT m_SceneID{0}; // 나중에 scene으로 바꾸면 하기!!

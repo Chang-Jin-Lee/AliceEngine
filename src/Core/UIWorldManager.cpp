@@ -1,10 +1,11 @@
-﻿#include "pch.h"
-
+﻿#include "UIWorldManager.h"
 #include <d2d1_3.h> //ID2D1Factory8,ID2D1DeviceContext7
 #pragma comment(lib, "d2d1.lib")
 
 #include <dxgi1_6.h> // IDXGIFactory7
 #pragma comment(lib, "dxgi.lib")
+
+
 
 #include <dxgi1_2.h>
 #include <d2d1_1.h>
@@ -12,18 +13,20 @@
 #include <wrl/client.h>
 #include <string>
 #include <stdexcept>
-#include <windows.h>
-#include <wincodec.h>
-#pragma comment(lib, "windowscodecs.lib")
+
+
+
+
 #define IMGUI_IMPL_API 
 #include "imgui.h"
 
-#include "Core/UIWorldManager.h"
+
 #include "Core/Helper.h"
 
 // TODO: UIRenderStruct와 UISceneManager 헤더 파일이 생성되면 아래 주석을 해제하고 전방 선언을 제거하세요
 // #include "UIRenderStruct.h"
 // #include "UISceneManager.h"
+
 
 namespace Alice
 {
@@ -86,7 +89,7 @@ namespace Alice
     ));
 
     // DXGI device
-    ComPtr<IDXGIDevice> dxgiDevice;
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
     HR_T(m_d3dDev->QueryInterface(IID_PPV_ARGS(dxgiDevice.GetAddressOf())));;
 
 
@@ -129,7 +132,7 @@ namespace Alice
     m_inputSystem = &tmpInput;
 
     // 
-    m_RenderStruct.m_d2DFactory = m_d2DFactory;
+  /*  m_RenderStruct.m_d2DFactory = m_d2DFactory;
     m_RenderStruct.m_d2DDevice = m_d2DDevice;
     m_RenderStruct.m_d2DdevCon = m_d2DdevCon;
     m_RenderStruct.m_D3DWFactory = m_D3DWFactory;
@@ -137,7 +140,7 @@ namespace Alice
     m_RenderStruct.m_wicImageFactory = m_wicFactory;
     m_RenderStruct.m_d2dTargetBitmap = m_d2dTargetBitmap;
     m_RenderStruct.m_width = w;
-    m_RenderStruct.m_height = h;
+    m_RenderStruct.m_height = h;*/
 }
 
 
@@ -147,16 +150,16 @@ namespace Alice
     m_curHeight = h;
 
     // 현재 매니저 포인터 저장
-    if (sceneStorages.size() == 0) { return; }
-    m_nowManager = sceneStorages[m_nowSceneID].get();
-    m_nowManager->Update();
+//    if (sceneStorages.size() == 0) { return; }
+//    m_nowManager = sceneStorages[m_nowSceneID].get();
+//    m_nowManager->Update();
 }
-
+//
     void UIWorldManager::Render()
 {
-    if (sceneStorages.size() == 0) { return; }
-	// D2D 렌더링 시작 + 2D 텍스처에 렌더링 + 바인딩
-    m_nowManager->Render();
+//    if (sceneStorages.size() == 0) { return; }
+//	// D2D 렌더링 시작 + 2D 텍스처에 렌더링 + 바인딩
+//    m_nowManager->Render();
 
     // RTV 해제 
     ID3D11RenderTargetView* nullRTV[1] = { nullptr };
@@ -195,25 +198,25 @@ namespace Alice
 
 
     void UIWorldManager::ChangeScene(UINT nowSceneID) {
-    if (m_nowSceneID < nowSceneID && sceneStorages.size() == 0)
-    {
-        auto CreateUI = [&](UINT ID) -> UISceneManager* {
-            auto pObj = std::make_unique<UISceneManager>();
+    //if (m_nowSceneID < nowSceneID && sceneStorages.size() == 0)
+    //{
+    //    auto CreateUI = [&](UINT ID) -> UISceneManager* {
+    //        auto pObj = std::make_unique<UISceneManager>();
 
-            //없는경우 생성하면서 해당 매니저 initalize()
-            UISceneManager* ptr = pObj.get();
-            ptr->initalize(m_d3dDev, m_devCon, &m_RenderStruct, m_inputSystem);
-            m_nowManager = ptr;
-            sceneStorages.emplace(ID, std::move(pObj));
-            m_SceneID++;
-            return ptr;
-            };
-        CreateUI(nowSceneID);
-    }
-    else
-    {
-        m_nowManager = sceneStorages[nowSceneID].get();
-    }
+    //        //없는경우 생성하면서 해당 매니저 initalize()
+    //        UISceneManager* ptr = pObj.get();
+    //        ptr->initalize(m_d3dDev, m_devCon, &m_RenderStruct, m_inputSystem);
+    //        m_nowManager = ptr;
+    //        sceneStorages.emplace(ID, std::move(pObj));
+    //        m_SceneID++;
+    //        return ptr;
+    //        };
+    //    CreateUI(nowSceneID);
+    //}
+    //else
+    //{
+    //    m_nowManager = sceneStorages[nowSceneID].get();
+    //}
 
     m_nowSceneID = nowSceneID;
     }
