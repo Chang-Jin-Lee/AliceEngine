@@ -2623,21 +2623,13 @@ namespace Alice
                     world.GetComponent<RigidBodyComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<RigidBodyComponent>(_selectedEntity); });
             } else if (typeName == "ColliderComponent") {
-                DrawEngineComponent("ColliderComponent",
-                    world.GetComponent<ColliderComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<ColliderComponent>(_selectedEntity); });
+                DrawInspectorCollider(world, _selectedEntity);
             } else if (typeName == "CharacterControllerComponent") {
-                DrawEngineComponent("CharacterControllerComponent",
-                    world.GetComponent<CharacterControllerComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CharacterControllerComponent>(_selectedEntity); });
+                DrawInspectorCharacterController(world, _selectedEntity);
             } else if (typeName == "TerrainHeightFieldComponent") {
-                DrawEngineComponent("TerrainHeightFieldComponent",
-                    world.GetComponent<TerrainHeightFieldComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<TerrainHeightFieldComponent>(_selectedEntity); });
+                DrawInspectorTerrainHeightField(world, _selectedEntity);
             } else if (typeName == "PhysicsSceneSettingsComponent") {
-                DrawEngineComponent("PhysicsSceneSettingsComponent",
-                    world.GetComponent<PhysicsSceneSettingsComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<PhysicsSceneSettingsComponent>(_selectedEntity); });
+                DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }
@@ -2878,6 +2870,335 @@ namespace Alice
                     return;
                 }
 
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
+    {
+        ImGui::Text("%s", label);
+        ImGui::Indent();
+        
+        // 최대 32개 레이어를 2열로 표시
+        for (int i = 0; i < 32; i++)
+        {
+            bool bit = (mask & (1u << i)) != 0;
+            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+            std::string checkboxLabel = layerName + "##" + label + std::to_string(i);
+            
+            if (ImGui::Checkbox(checkboxLabel.c_str(), &bit))
+            {
+                if (bit)
+                    mask |= (1u << i);
+                else
+                    mask &= ~(1u << i);
+            }
+            
+            // 2열로 배치
+            if ((i + 1) % 2 == 0)
+                ImGui::SameLine();
+        }
+        
+        ImGui::Unindent();
+    }
+
+    void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* collider = world.GetComponent<ColliderComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<ColliderComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
+                    // layerBits, collideMask, queryMask는 커스텀 UI로 처리
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "physicsActorHandle";
+                });
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // PhysicsSceneSettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<PhysicsSceneSettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 32; ++i)
+                    {
+                        if ((collider->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            collider->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 32; ++i)
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                collider->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* cct = world.GetComponent<CharacterControllerComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Character Controller", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<CharacterControllerComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*cct, [](const std::string& name) {
+                    // layerBits, collideMask, queryMask는 커스텀 UI로 처리
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "controllerHandle";
+                });
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // PhysicsSceneSettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<PhysicsSceneSettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어)
+                uint32_t oldLayerBits = cct->layerBits;
+                DrawLayerMaskEditor("Layer Bits", cct->layerBits, layerNames);
+                if (oldLayerBits != cct->layerBits) changed = true;
+                
+                // Collide Mask (충돌할 레이어)
+                uint32_t oldCollideMask = cct->collideMask;
+                DrawLayerMaskEditor("Collide Mask", cct->collideMask, layerNames);
+                if (oldCollideMask != cct->collideMask) changed = true;
+                
+                // Query Mask (쿼리할 레이어)
+                uint32_t oldQueryMask = cct->queryMask;
+                DrawLayerMaskEditor("Query Mask", cct->queryMask, layerNames);
+                if (oldQueryMask != cct->queryMask) changed = true;
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorPhysicsSceneSettings(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* settings = world.GetComponent<PhysicsSceneSettingsComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Physics Scene Settings", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<PhysicsSceneSettingsComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*settings, [](const std::string& name) {
+                    // layerCollideMatrix, layerQueryMatrix, layerNames는 커스텀 UI로 처리
+                    return name != "layerCollideMatrix" && name != "layerQueryMatrix" && name != "layerNames";
+                });
+                
+                ImGui::Separator();
+                ImGui::Text("Layer Collision Matrix");
+                ImGui::Text("(Collide Mask: Check = Collision enabled between layers)");
+                
+                // 레이어 충돌 매트릭스 편집 (최대 16개 레이어만 표시)
+                ImGui::BeginChild("LayerCollideMatrix", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
+                
+                // 행 단위로 표시: "00 | 00 [ ] 01 [ ] 02 [ ] 03 [ ]"
+                for (int i = 0; i < 16; ++i)
+                {
+                    // 행 번호 표시 (2자리로 포맷팅)
+                    char rowLabel[8];
+                    snprintf(rowLabel, sizeof(rowLabel), "%02d |", i);
+                    ImGui::Text("%s", rowLabel);
+                    ImGui::SameLine();
+                    
+                    // 해당 행의 모든 열에 대한 체크박스 표시
+                    for (int j = 0; j < 16; ++j)
+                    {
+                        bool collision = settings->layerCollideMatrix[i][j];
+                        char colLabel[8];
+                        snprintf(colLabel, sizeof(colLabel), "%02d", j);
+                        ImGui::PushID(i * 16 + j);
+                        if (ImGui::Checkbox(colLabel, &collision))
+                        {
+                            settings->layerCollideMatrix[i][j] = collision;
+                            settings->layerCollideMatrix[j][i] = collision; // 대칭 적용
+                            changed = true;
+                        }
+                        ImGui::PopID();
+                        ImGui::SameLine();
+                    }
+                    ImGui::NewLine();
+                }
+                
+                ImGui::EndChild();
+                
+                ImGui::Separator();
+                ImGui::Text("Layer Query Matrix");
+                ImGui::Text("(Query Mask: Check = Query enabled between layers)");
+                
+                // 레이어 쿼리 매트릭스 편집 (최대 16개 레이어만 표시)
+                ImGui::BeginChild("LayerQueryMatrix", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
+                
+                // 행 단위로 표시: "00 | 00 [ ] 01 [ ] 02 [ ] 03 [ ]"
+                for (int i = 0; i < 16; ++i)
+                {
+                    // 행 번호 표시 (2자리로 포맷팅)
+                    char rowLabel[8];
+                    snprintf(rowLabel, sizeof(rowLabel), "%02d |", i);
+                    ImGui::Text("%s", rowLabel);
+                    ImGui::SameLine();
+                    
+                    // 해당 행의 모든 열에 대한 체크박스 표시
+                    for (int j = 0; j < 16; ++j)
+                    {
+                        bool query = settings->layerQueryMatrix[i][j];
+                        char colLabel[8];
+                        snprintf(colLabel, sizeof(colLabel), "%02d", j);
+                        ImGui::PushID(10000 + i * 16 + j);
+                        if (ImGui::Checkbox(colLabel, &query))
+                        {
+                            settings->layerQueryMatrix[i][j] = query;
+                            settings->layerQueryMatrix[j][i] = query; // 대칭 적용
+                            changed = true;
+                        }
+                        ImGui::PopID();
+                        ImGui::SameLine();
+                    }
+                    ImGui::NewLine();
+                }
+                
+                ImGui::EndChild();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* terrain = world.GetComponent<TerrainHeightFieldComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Terrain Height Field", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<TerrainHeightFieldComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*terrain, [](const std::string& name) {
+                    // layerBits, collideMask, queryMask, heightSamples, physicsActorHandle는 커스텀 UI로 처리
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && 
+                           name != "heightSamples" && name != "physicsActorHandle";
+                });
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // PhysicsSceneSettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<PhysicsSceneSettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어)
+                uint32_t oldLayerBits = terrain->layerBits;
+                DrawLayerMaskEditor("Layer Bits", terrain->layerBits, layerNames);
+                if (oldLayerBits != terrain->layerBits) changed = true;
+                
+                // Collide Mask (충돌할 레이어)
+                uint32_t oldCollideMask = terrain->collideMask;
+                DrawLayerMaskEditor("Collide Mask", terrain->collideMask, layerNames);
+                if (oldCollideMask != terrain->collideMask) changed = true;
+                
+                // Query Mask (쿼리할 레이어)
+                uint32_t oldQueryMask = terrain->queryMask;
+                DrawLayerMaskEditor("Query Mask", terrain->queryMask, layerNames);
+                if (oldQueryMask != terrain->queryMask) changed = true;
+                
                 if (changed) g_SceneDirty = true;
             }
         }
