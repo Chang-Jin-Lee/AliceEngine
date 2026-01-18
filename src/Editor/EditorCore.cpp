@@ -2903,6 +2903,99 @@ namespace Alice
         ImGui::Unindent();
     }
 
+    void EditorCore::DrawIgnoreLayersChipEditor(const char* label, uint32_t& ignoreLayers, const std::array<std::string, 32>& layerNames)
+    {
+        ImGui::Text("%s", label);
+        ImGui::Indent();
+        
+        // 현재 선택된 레이어들을 칩으로 표시
+        bool hasAnyLayers = false;
+        for (int i = 0; i < 32; ++i)
+        {
+            if ((ignoreLayers & (1u << i)) != 0)
+            {
+                hasAnyLayers = true;
+                
+                // 레이어 이름
+                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                
+                // 칩 스타일 버튼 (레이어 이름) - 클릭해도 아무 일도 안 일어남 (표시만)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.6f, 0.9f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                
+                std::string chipLabel = layerName + "##" + label + "_chip_" + std::to_string(i);
+                ImGui::Button(chipLabel.c_str()); // 버튼으로 표시만 (클릭 비활성화)
+                
+                ImGui::PopStyleColor(3);
+                
+                ImGui::SameLine(0.0f, 4.0f);
+                
+                // [x] 버튼 (제거용)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+                
+                std::string removeLabel = std::string(" [x]##") + label + "_remove_" + std::to_string(i);
+                if (ImGui::SmallButton(removeLabel.c_str()))
+                {
+                    ignoreLayers &= ~(1u << i);
+                }
+                
+                ImGui::PopStyleColor(3);
+                
+                // 다음 줄로 넘어가기 위해
+                ImGui::SameLine(0.0f, 0.0f);
+            }
+        }
+        
+        // 줄바꿈이 필요하면
+        if (hasAnyLayers)
+        {
+            ImGui::NewLine();
+        }
+        
+        // + 버튼 (레이어 추가)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
+        
+        std::string addButtonLabel = "+##" + std::string(label) + "_add";
+        if (ImGui::SmallButton(addButtonLabel.c_str()))
+        {
+            ImGui::OpenPopup((std::string("AddIgnoreLayer##") + label).c_str());
+        }
+        
+        ImGui::PopStyleColor(3);
+        
+        // 팝업: 레이어 선택
+        if (ImGui::BeginPopup((std::string("AddIgnoreLayer##") + label).c_str()))
+        {
+            ImGui::Text("Select layer to ignore:");
+            ImGui::Separator();
+            
+            for (int i = 0; i < 32; ++i)
+            {
+                // 이미 추가된 레이어는 표시하지 않음
+                if ((ignoreLayers & (1u << i)) != 0)
+                    continue;
+                
+                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                std::string selectLabel = layerName + "##" + label + "_select_" + std::to_string(i);
+                
+                if (ImGui::Selectable(selectLabel.c_str()))
+                {
+                    ignoreLayers |= (1u << i);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            
+            ImGui::EndPopup();
+        }
+        
+        ImGui::Unindent();
+    }
+
     void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEntity)
     {
         if (auto* collider = world.GetComponent<ColliderComponent>(_selectedEntity))
@@ -2989,6 +3082,12 @@ namespace Alice
                         ImGui::EndCombo();
                     }
                 }
+                ImGui::Unindent();
+                
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                DrawIgnoreLayersChipEditor("IgnoreLayers", collider->ignoreLayers, layerNames);
                 ImGui::Unindent();
                 
                 if (changed) g_SceneDirty = true;
@@ -3084,6 +3183,12 @@ namespace Alice
                 }
                 ImGui::Unindent();
                 
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                DrawIgnoreLayersChipEditor("IgnoreLayers", cct->ignoreLayers, layerNames);
+                ImGui::Unindent();
+                
                 if (changed) g_SceneDirty = true;
             }
         }
@@ -3136,7 +3241,8 @@ namespace Alice
                         if (ImGui::Checkbox(colLabel, &collision))
                         {
                             settings->layerCollideMatrix[i][j] = collision;
-                            settings->layerCollideMatrix[j][i] = collision; // 대칭 적용
+                            settings->layerCollideMatrix[j][i] = collision; // 충돌은 대칭 (필수)
+                            settings->filterRevision++; // 필터 변경 감지용
                             changed = true;
                         }
                         ImGui::PopID();
@@ -3173,7 +3279,9 @@ namespace Alice
                         if (ImGui::Checkbox(colLabel, &query))
                         {
                             settings->layerQueryMatrix[i][j] = query;
-                            settings->layerQueryMatrix[j][i] = query; // 대칭 적용
+                            // 쿼리는 비대칭이 유용한 경우가 많으므로 대칭 적용 제거
+                            // (예: 카메라 레이는 특정 레이어만 보고, AI는 또 다르게 봄)
+                            settings->filterRevision++; // 필터 변경 감지용
                             changed = true;
                         }
                         ImGui::PopID();
@@ -3329,6 +3437,12 @@ namespace Alice
                         ImGui::EndCombo();
                     }
                 }
+                ImGui::Unindent();
+                
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                DrawIgnoreLayersChipEditor("IgnoreLayers", terrain->ignoreLayers, layerNames);
                 ImGui::Unindent();
                 
                 if (changed) g_SceneDirty = true;

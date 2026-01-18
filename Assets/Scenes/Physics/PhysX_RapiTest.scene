@@ -46,6 +46,7 @@
                 "gravity": -9.8100004196167,
                 "halfHeight": 0.8999999761581421,
                 "hitTriggers": false,
+                "ignoreLayers": 0,
                 "jumpRequested": false,
                 "jumpSpeed": 5.5,
                 "layerBits": 1,
@@ -83,7 +84,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 393.8692517464515
+                "timeSec": 1111.5375826344825
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -92,9 +93,9 @@
             },
             "Transform": {
                 "position": {
-                    "x": -6.246182441711426,
-                    "y": -7.044409275054932,
-                    "z": 1.322817087173462
+                    "x": 10.253999710083008,
+                    "y": -0.6439999938011169,
+                    "z": -17.87700080871582
                 },
                 "rotation": {
                     "x": -0.0,
@@ -408,10 +409,11 @@
                 "doubleSidedQueries": true,
                 "dynamicFriction": 0.5,
                 "heightSamples": [],
-                "heightScale": 0.009999999776482582,
+                "heightScale": 0.5,
+                "ignoreLayers": 0,
                 "layerBits": 1,
-                "numCols": 5,
-                "numRows": 5,
+                "numCols": 2,
+                "numRows": 2,
                 "queryMask": 4294967295,
                 "restitution": 0.0,
                 "rowScale": 1.0,
@@ -449,297 +451,7 @@
                     "y": 1.0,
                     "z": 1.0
                 },
-                "isTrigger": false,
-                "layerBits": 1,
-                "queryMask": 4294967295,
-                "radius": 0.5,
-                "restitution": 0.0,
-                "staticFriction": 0.5,
-                "type": "Box"
-            },
-            "RigidBody": {
-                "angularDamping": 0.05000000074505806,
-                "density": 1.0,
-                "enableCCD": false,
-                "enableSpeculativeCCD": false,
-                "gravityEnabled": true,
-                "isKinematic": false,
-                "linearDamping": 0.0,
-                "lockFlags": "None",
-                "massOverride": 0.0,
-                "maxAngularVelocity": 0.0,
-                "maxLinearVelocity": 0.0,
-                "resetVelocityOnTeleport": true,
-                "sleepThreshold": -1.0,
-                "solverPositionIterations": 4,
-                "solverVelocityIterations": 1,
-                "stabilizationThreshold": -1.0,
-                "startAwake": true,
-                "teleport": false
-            },
-            "Transform": {
-                "position": {
-                    "x": -13.88083267211914,
-                    "y": 21.524368286132813,
-                    "z": 1.9377796649932861
-                },
-                "rotation": {
-                    "x": -0.032176729291677475,
-                    "y": 3.1415884494781494,
-                    "z": -1.5707999467849731
-                },
-                "scale": {
-                    "x": 0.9999996423721313,
-                    "y": 0.9999983310699463,
-                    "z": 0.9999856948852539
-                }
-            },
-            "id": 5,
-            "name": "DropBox"
-        },
-        {
-            "Collider": {
-                "capsuleAlignYAxis": true,
-                "capsuleHalfHeight": 0.5,
-                "capsuleRadius": 0.5,
-                "collideMask": 4294967295,
-                "dynamicFriction": 0.5,
-                "halfExtents": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                },
-                "isTrigger": false,
-                "layerBits": 1,
-                "queryMask": 4294967295,
-                "radius": 0.5,
-                "restitution": 0.0,
-                "staticFriction": 0.5,
-                "type": "Box"
-            },
-            "RigidBody": {
-                "angularDamping": 0.05000000074505806,
-                "density": 1.0,
-                "enableCCD": false,
-                "enableSpeculativeCCD": false,
-                "gravityEnabled": true,
-                "isKinematic": false,
-                "linearDamping": 0.0,
-                "lockFlags": "None",
-                "massOverride": 0.0,
-                "maxAngularVelocity": 0.0,
-                "maxLinearVelocity": 0.0,
-                "resetVelocityOnTeleport": true,
-                "sleepThreshold": -1.0,
-                "solverPositionIterations": 4,
-                "solverVelocityIterations": 1,
-                "stabilizationThreshold": -1.0,
-                "startAwake": true,
-                "teleport": false
-            },
-            "Transform": {
-                "position": {
-                    "x": -6.147633075714111,
-                    "y": -0.40459302067756653,
-                    "z": 11.13927936553955
-                },
-                "rotation": {
-                    "x": 0.7691321969032288,
-                    "y": 3.1414973735809326,
-                    "z": 1.5708307027816772
-                },
-                "scale": {
-                    "x": 0.9999990463256836,
-                    "y": 0.9999983310699463,
-                    "z": 0.999996542930603
-                }
-            },
-            "id": 6,
-            "name": "DropBox"
-        },
-        {
-            "Collider": {
-                "capsuleAlignYAxis": true,
-                "capsuleHalfHeight": 0.5,
-                "capsuleRadius": 0.5,
-                "collideMask": 4294967295,
-                "dynamicFriction": 0.5,
-                "halfExtents": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                },
-                "isTrigger": false,
-                "layerBits": 1,
-                "queryMask": 4294967295,
-                "radius": 0.5,
-                "restitution": 0.0,
-                "staticFriction": 0.5,
-                "type": "Box"
-            },
-            "RigidBody": {
-                "angularDamping": 0.05000000074505806,
-                "density": 1.0,
-                "enableCCD": false,
-                "enableSpeculativeCCD": false,
-                "gravityEnabled": true,
-                "isKinematic": false,
-                "linearDamping": 0.0,
-                "lockFlags": "None",
-                "massOverride": 0.0,
-                "maxAngularVelocity": 0.0,
-                "maxLinearVelocity": 0.0,
-                "resetVelocityOnTeleport": true,
-                "sleepThreshold": -1.0,
-                "solverPositionIterations": 4,
-                "solverVelocityIterations": 1,
-                "stabilizationThreshold": -1.0,
-                "startAwake": true,
-                "teleport": false
-            },
-            "Transform": {
-                "position": {
-                    "x": -5.465351104736328,
-                    "y": 19.6404972076416,
-                    "z": 4.1948466300964355
-                },
-                "rotation": {
-                    "x": -0.1262337565422058,
-                    "y": 3.1415884494781494,
-                    "z": -1.5707999467849731
-                },
-                "scale": {
-                    "x": 0.9999962449073792,
-                    "y": 0.9999982714653015,
-                    "z": 0.9999490976333618
-                }
-            },
-            "id": 7,
-            "name": "DropBox"
-        },
-        {
-            "Collider": {
-                "capsuleAlignYAxis": true,
-                "capsuleHalfHeight": 0.5,
-                "capsuleRadius": 0.5,
-                "collideMask": 4294967295,
-                "dynamicFriction": 0.5,
-                "halfExtents": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                },
-                "isTrigger": false,
-                "layerBits": 1,
-                "queryMask": 4294967295,
-                "radius": 0.5,
-                "restitution": 0.0,
-                "staticFriction": 0.5,
-                "type": "Box"
-            },
-            "RigidBody": {
-                "angularDamping": 0.05000000074505806,
-                "density": 1.0,
-                "enableCCD": false,
-                "enableSpeculativeCCD": false,
-                "gravityEnabled": true,
-                "isKinematic": false,
-                "linearDamping": 0.0,
-                "lockFlags": "None",
-                "massOverride": 0.0,
-                "maxAngularVelocity": 0.0,
-                "maxLinearVelocity": 0.0,
-                "resetVelocityOnTeleport": true,
-                "sleepThreshold": -1.0,
-                "solverPositionIterations": 4,
-                "solverVelocityIterations": 1,
-                "stabilizationThreshold": -1.0,
-                "startAwake": true,
-                "teleport": false
-            },
-            "Transform": {
-                "position": {
-                    "x": -20.34813117980957,
-                    "y": -5.007132530212402,
-                    "z": 8.03836727142334
-                },
-                "rotation": {
-                    "x": -0.31333768367767334,
-                    "y": 3.1415884494781494,
-                    "z": -1.570801019668579
-                },
-                "scale": {
-                    "x": 0.9999978542327881,
-                    "y": 0.9999983310699463,
-                    "z": 0.9999833106994629
-                }
-            },
-            "id": 8,
-            "name": "DropBox"
-        },
-        {
-            "Collider": {
-                "capsuleAlignYAxis": true,
-                "capsuleHalfHeight": 0.5,
-                "capsuleRadius": 0.5,
-                "collideMask": 4294967295,
-                "dynamicFriction": 0.5,
-                "halfExtents": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                },
-                "isTrigger": false,
-                "layerBits": 1,
-                "queryMask": 4294967295,
-                "radius": 0.5,
-                "restitution": 0.0,
-                "staticFriction": 0.5,
-                "type": "Box"
-            },
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "",
-                "color": {
-                    "x": 0.007722020149230957,
-                    "y": 1.0,
-                    "z": 0.0
-                },
-                "metalness": 0.0,
-                "roughness": 0.5
-            },
-            "Transform": {
-                "position": {
-                    "x": -12.7669095993042,
-                    "y": -5.065515995025635,
-                    "z": 24.07317352294922
-                },
-                "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": -0.04179741069674492,
-                    "z": -2.993072986602783
-                },
-                "scale": {
-                    "x": 20.0,
-                    "y": 0.999997615814209,
-                    "z": 19.999998092651367
-                }
-            },
-            "id": 9,
-            "name": "wallA_Layer00_samePlayerLayer"
-        },
-        {
-            "Collider": {
-                "capsuleAlignYAxis": true,
-                "capsuleHalfHeight": 0.5,
-                "capsuleRadius": 0.5,
-                "collideMask": 4294967295,
-                "dynamicFriction": 0.5,
-                "halfExtents": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                },
+                "ignoreLayers": 0,
                 "isTrigger": false,
                 "layerBits": 2,
                 "queryMask": 4294967295,
@@ -761,23 +473,220 @@
             },
             "Transform": {
                 "position": {
-                    "x": 4.954999923706055,
-                    "y": 4.140999794006348,
-                    "z": 16.104999542236328
+                    "x": -10.290201187133789,
+                    "y": -5.0,
+                    "z": -11.697379112243652
                 },
                 "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": 1.633715271949768,
-                    "z": -2.993072986602783
+                    "x": -0.0,
+                    "y": -2.583052158355713,
+                    "z": 0.0
                 },
                 "scale": {
-                    "x": 20.0,
-                    "y": 0.9999933242797852,
-                    "z": 19.999937057495117
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 0.4999999701976776
                 }
             },
-            "id": 10,
-            "name": "wallB_Layer01"
+            "id": 5,
+            "name": "Wall-Layer_1 "
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "ignoreLayers": 1,
+                "isTrigger": false,
+                "layerBits": 2,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.23938226699829102,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": -7.0,
+                    "z": 5.51951789855957
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 0.5
+                }
+            },
+            "id": 6,
+            "name": "Wall-Layer_1 ignorePlayer(Layer_0)"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 1,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.14671802520751953,
+                    "y": 0.0,
+                    "z": 1.0
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Transform": {
+                "position": {
+                    "x": 14.194921493530273,
+                    "y": -5.0,
+                    "z": 4.004517078399658
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": -2.3038692474365234,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 9.999618530273438,
+                    "y": 10.0,
+                    "z": 0.4999999403953552
+                }
+            },
+            "id": 7,
+            "name": "Wall-Layer_0 sameLayerToPlayer"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "ignoreLayers": 1,
+                "isTrigger": false,
+                "layerBits": 1,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.8416988849639893,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Transform": {
+                "position": {
+                    "x": 7.173680782318115,
+                    "y": -12.0,
+                    "z": -9.073347091674805
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 0.9999974966049194
+                }
+            },
+            "id": 8,
+            "name": "Wall-Layer_0 ignoreSelfLayer(Layer_0)"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 4,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Transform": {
+                "position": {
+                    "x": 20.86919593811035,
+                    "y": -8.803129196166992,
+                    "z": -9.716344833374023
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 1.867501139640808,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 0.9999974966049194
+                }
+            },
+            "id": 9,
+            "name": "Wall-Layer_2"
         }
     ],
     "version": 1

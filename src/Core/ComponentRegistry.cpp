@@ -282,6 +282,7 @@ namespace Alice
             .property("layerBits", &ColliderComponent::layerBits)
             .property("collideMask", &ColliderComponent::collideMask)
             .property("queryMask", &ColliderComponent::queryMask)
+            .property("ignoreLayers", &ColliderComponent::ignoreLayers)
             .property("isTrigger", &ColliderComponent::isTrigger);
 
         // === TerrainHeightFieldComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
@@ -300,7 +301,8 @@ namespace Alice
             .property("restitution", &TerrainHeightFieldComponent::restitution)
             .property("layerBits", &TerrainHeightFieldComponent::layerBits)
             .property("collideMask", &TerrainHeightFieldComponent::collideMask)
-            .property("queryMask", &TerrainHeightFieldComponent::queryMask);
+            .property("queryMask", &TerrainHeightFieldComponent::queryMask)
+            .property("ignoreLayers", &TerrainHeightFieldComponent::ignoreLayers);
 
         // === CCTNonWalkableMode enum 등록 ===
         rttr::registration::enumeration<CCTNonWalkableMode>("CCTNonWalkableMode")
@@ -331,6 +333,7 @@ namespace Alice
             .property("layerBits", &CharacterControllerComponent::layerBits)
             .property("collideMask", &CharacterControllerComponent::collideMask)
             .property("queryMask", &CharacterControllerComponent::queryMask)
+            .property("ignoreLayers", &CharacterControllerComponent::ignoreLayers)
             .property("hitTriggers", &CharacterControllerComponent::hitTriggers)
             .property("desiredVelocity", &CharacterControllerComponent::desiredVelocity)
             .property("applyGravity", &CharacterControllerComponent::applyGravity)
@@ -349,7 +352,8 @@ namespace Alice
             .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps)
             .property("layerCollideMatrix", &PhysicsSceneSettingsComponent::layerCollideMatrix)
             .property("layerQueryMatrix", &PhysicsSceneSettingsComponent::layerQueryMatrix)
-            .property("layerNames", &PhysicsSceneSettingsComponent::layerNames);
+            .property("layerNames", &PhysicsSceneSettingsComponent::layerNames)
+            .property("filterRevision", &PhysicsSceneSettingsComponent::filterRevision);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

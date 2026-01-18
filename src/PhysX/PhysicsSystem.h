@@ -223,4 +223,7 @@ private:
     // 이벤트 콜백
     EventCallback m_eventCallback = nullptr;
     void* m_eventCallbackUserData = nullptr;
+
+    // 전역 필터 매트릭스 변경 감지용
+    uint32_t m_lastFilterRevision = 0;
 };
