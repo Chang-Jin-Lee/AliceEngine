@@ -428,31 +428,59 @@ namespace Alice
 		}
 		else if (pImpl->m_inputSystem.IsRightButtonDown()) // 에디터 프리캠 조작
 		{
-			// 키 입력에 따른 이동 벡터 계산
-			XMVECTOR moveDir = XMVectorZero();
-			auto& input = pImpl->m_inputSystem;
-
-			if (input.IsKeyDown(Keyboard::W)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::S)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::D)) moveDir = XMVectorAdd(moveDir, XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::A)) moveDir = XMVectorAdd(moveDir, XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::E)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::Q)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f));
-
-			if (!XMVector3Equal(moveDir, XMVectorZero()))
+			// 에디터 모드일 때만 viewport 포커스 확인
+			bool viewportFocused = true; // 기본값은 true (게임 빌드에서는 항상 true)
+			
+			if (pImpl->m_editorMode && ImGui::GetCurrentContext())
 			{
-				// 현재 카메라 회전을 기준으로 로컬 이동 벡터를 월드로 변환
-				const XMMATRIX rotMat = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
-				const XMVECTOR worldDir = XMVector3Normalize(XMVector3TransformNormal(moveDir, rotMat));
-				const XMVECTOR currentPos = XMLoadFloat3(&pImpl->m_cameraPosition);
-
-				XMStoreFloat3(&pImpl->m_cameraPosition, XMVectorAdd(currentPos, XMVectorScale(worldDir, pImpl->m_cameraMoveSpeed * dt)));
+				ImGuiContext* ctx = ImGui::GetCurrentContext();
+				
+				// "Game" 창이 viewport를 포함하고 있음
+				ImGuiWindow* gameWindow = ImGui::FindWindowByName("Game");
+				if (gameWindow)
+				{
+					// Begin()/End() 블록 밖에서도 동작하도록 HoveredWindow 직접 확인
+					// NavWindow는 현재 포커스된 창, HoveredWindow는 마우스가 올라간 창
+					viewportFocused = (ctx->NavWindow == gameWindow) ||
+					                  (ctx->HoveredWindow == gameWindow) ||
+					                  (ctx->HoveredWindow && ctx->HoveredWindow->RootWindow == gameWindow->RootWindow);
+				}
+				else
+				{
+					// Game 창을 못 찾으면 기본적으로 false (에디터에서는 명시적으로 허용 필요)
+					viewportFocused = false;
+				}
 			}
 
-			// 마우스 델타로 회전 갱신
-			const POINT mouseDelta = input.GetMouseDelta();
-			pImpl->m_cameraYawRadians += mouseDelta.x * pImpl->m_cameraMouseSensitivity;
-			pImpl->m_cameraPitchRadians += mouseDelta.y * pImpl->m_cameraMouseSensitivity;
+			// viewport에 포커스가 있을 때만 카메라 이동 허용 (에디터 모드일 때만 체크, 게임 빌드는 항상 허용)
+			if (viewportFocused)
+			{
+				// 키 입력에 따른 이동 벡터 계산
+				XMVECTOR moveDir = XMVectorZero();
+				auto& input = pImpl->m_inputSystem;
+
+				if (input.IsKeyDown(Keyboard::W)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+				if (input.IsKeyDown(Keyboard::S)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f));
+				if (input.IsKeyDown(Keyboard::D)) moveDir = XMVectorAdd(moveDir, XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
+				if (input.IsKeyDown(Keyboard::A)) moveDir = XMVectorAdd(moveDir, XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f));
+				if (input.IsKeyDown(Keyboard::E)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+				if (input.IsKeyDown(Keyboard::Q)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f));
+
+				if (!XMVector3Equal(moveDir, XMVectorZero()))
+				{
+					// 현재 카메라 회전을 기준으로 로컬 이동 벡터를 월드로 변환
+					const XMMATRIX rotMat = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
+					const XMVECTOR worldDir = XMVector3Normalize(XMVector3TransformNormal(moveDir, rotMat));
+					const XMVECTOR currentPos = XMLoadFloat3(&pImpl->m_cameraPosition);
+
+					XMStoreFloat3(&pImpl->m_cameraPosition, XMVectorAdd(currentPos, XMVectorScale(worldDir, pImpl->m_cameraMoveSpeed * dt)));
+				}
+
+				// 마우스 델타로 회전 갱신
+				const POINT mouseDelta = input.GetMouseDelta();
+				pImpl->m_cameraYawRadians += mouseDelta.x * pImpl->m_cameraMouseSensitivity;
+				pImpl->m_cameraPitchRadians += mouseDelta.y * pImpl->m_cameraMouseSensitivity;
+			}
 		}
 
 		// 3. 카메라 최종 적용
