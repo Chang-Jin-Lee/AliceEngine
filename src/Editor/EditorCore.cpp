@@ -24,6 +24,7 @@
 #include "Components/CameraShakeComponent.h"
 #include "Components/CameraBlendComponent.h"
 #include "Components/CameraInputComponent.h"
+#include "Editor/Blueprint/AnimBlueprintEditor.h"
 
 // ImGui
 #include "imgui.h"
@@ -817,6 +818,10 @@ namespace Alice
         bool                     g_MaterialEditorOpen   = false;
         std::filesystem::path    g_MaterialEditorPath;
         MaterialComponent        g_MaterialEditorData;
+
+        // 애니메이션 블루프린트 에디터
+        bool                     g_AnimBlueprintOpen    = false;
+        AnimBlueprintEditor      g_AnimBlueprintEditor;
     }
 
     EditorCore::~EditorCore()
@@ -838,12 +843,14 @@ namespace Alice
 
         // 폰트 아틀라스를 모두 지우고, 한글/일본어를 포함한 폰트를 기본 폰트로 사용합니다.
         io.Fonts->Clear();
-
+        
+        // 경로에 한글이 있을 때 오류가 날 수 있으니 그때는 주석 코드로 교체하여 테스트 하세요
         ImFontConfig baseConfig{};
         baseConfig.MergeMode = false;
         const std::string fontKr =
             (m_resources ? m_resources->Resolve("Resource/Fonts/NotoSansKR-Regular.ttf").string()
                          : std::string("Resource/Fonts/NotoSansKR-Regular.ttf"));
+            //std::string("../Resource/Fonts/NotoSansKR-Regular.ttf");
         io.FontDefault = io.Fonts->AddFontFromFileTTF(
             fontKr.c_str(),
             18.0f,
@@ -856,6 +863,7 @@ namespace Alice
         const std::string fontJp =
             (m_resources ? m_resources->Resolve("Resource/Fonts/meiryo.ttc").string()
                          : std::string("Resource/Fonts/meiryo.ttc"));
+            //std::string("../Resource/Fonts/NotoSansKR-Regular.ttf");
         io.Fonts->AddFontFromFileTTF(
             fontJp.c_str(),
             18.0f,
@@ -876,6 +884,9 @@ namespace Alice
         style.RotationLineThickness = 3.0f;
         style.RotationOuterLineThickness = 2.0f;
 
+        // 애니메이션 블루프린트 에디터 초기화
+        g_AnimBlueprintEditor.Init();
+
         m_initialized = true;
         return true;
     }
@@ -884,6 +895,9 @@ namespace Alice
     {
         if (!m_initialized)
             return;
+
+        // 애니메이션 블루프린트 에디터 종료
+        g_AnimBlueprintEditor.Shutdown();
 
         if (ImGui::GetCurrentContext() != nullptr)
         {
@@ -1153,6 +1167,13 @@ namespace Alice
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("체크: Forward Rendering\n해제: Deferred Rendering");
+            }
+
+            ImGui::Separator();
+            // AnimBlueprint 탭 열기
+            if (ImGui::Button("AnimBlueprint"))
+            {
+                g_AnimBlueprintOpen = true;
             }
 
             ImGui::EndMainMenuBar();
@@ -2225,6 +2246,12 @@ namespace Alice
                 }
             }
             ImGui::End();
+        }
+
+        // === AnimBlueprint 창 ===
+        if (g_AnimBlueprintOpen)
+        {
+            g_AnimBlueprintEditor.Draw(&g_AnimBlueprintOpen);
         }
 
         // === 씬 변경사항 저장 확인 모달 ===
