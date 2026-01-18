@@ -47,16 +47,20 @@ namespace Alice
 
     void TerrainHeightFieldTest::Start()
     {
-        ALICE_LOG_INFO("[TerrainHeightFieldTest] Start called. Terrain should be ready.");
-        
         auto go = gameObject();
         if (!go.IsValid()) return;
 
         auto* terrain = go.GetComponent<TerrainHeightFieldComponent>();
-        if (terrain)
+        if (!terrain) return;
+
+        // 씬 파일에서 로드된 경우 heightSamples가 비어있을 수 있음
+        // numRows와 numCols가 설정되어 있으면 플랫 지형 자동 생성
+        if (terrain->numRows >= 2 && terrain->numCols >= 2 && terrain->heightSamples.empty())
         {
-            ALICE_LOG_INFO("[TerrainHeightFieldTest] Terrain: %u x %u, samples: %zu", 
-                terrain->numRows, terrain->numCols, terrain->heightSamples.size());
+            const size_t expectedSamples = static_cast<size_t>(terrain->numRows) * static_cast<size_t>(terrain->numCols);
+            terrain->heightSamples.resize(expectedSamples, 0.0f);
+            ALICE_LOG_INFO("[TerrainHeightFieldTest] Auto-generated flat terrain: %u x %u", 
+                terrain->numRows, terrain->numCols);
         }
     }
 

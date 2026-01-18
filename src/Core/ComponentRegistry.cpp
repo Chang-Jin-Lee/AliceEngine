@@ -284,11 +284,12 @@ namespace Alice
             .property("queryMask", &ColliderComponent::queryMask)
             .property("isTrigger", &ColliderComponent::isTrigger);
 
-        // === TerrainHeightFieldComponent 등록 (physicsActorHandle, heightSamples는 내부용이므로 등록하지 않음) ===
+        // === TerrainHeightFieldComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
         rttr::registration::class_<TerrainHeightFieldComponent>("TerrainHeightFieldComponent")
             .constructor<>()
             .property("numRows", &TerrainHeightFieldComponent::numRows)
             .property("numCols", &TerrainHeightFieldComponent::numCols)
+            .property("heightSamples", &TerrainHeightFieldComponent::heightSamples)
             .property("rowScale", &TerrainHeightFieldComponent::rowScale)
             .property("colScale", &TerrainHeightFieldComponent::colScale)
             .property("heightScale", &TerrainHeightFieldComponent::heightScale)
@@ -345,7 +346,10 @@ namespace Alice
             .property("enablePhysics", &PhysicsSceneSettingsComponent::enablePhysics)
             .property("gravity", &PhysicsSceneSettingsComponent::gravity)
             .property("fixedDt", &PhysicsSceneSettingsComponent::fixedDt)
-            .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps);
+            .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps)
+            .property("layerCollideMatrix", &PhysicsSceneSettingsComponent::layerCollideMatrix)
+            .property("layerQueryMatrix", &PhysicsSceneSettingsComponent::layerQueryMatrix)
+            .property("layerNames", &PhysicsSceneSettingsComponent::layerNames);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

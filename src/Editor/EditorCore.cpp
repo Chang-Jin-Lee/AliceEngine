@@ -2940,19 +2940,26 @@ namespace Alice
                     layerNames = settings.layerNames;
                 }
                 
-                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
                 ImGui::Text("Layer");
                 ImGui::Indent();
                 {
                     // 현재 선택된 레이어 찾기
                     int currentLayer = -1;
-                    for (int i = 0; i < 32; ++i)
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
                     {
                         if ((collider->layerBits & (1u << i)) != 0)
                         {
                             currentLayer = i;
                             break;
                         }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && collider->layerBits != 0)
+                    {
+                        collider->layerBits = 0;
+                        changed = true;
                     }
                     
                     // ComboBox로 레이어 선택
@@ -2967,7 +2974,7 @@ namespace Alice
                             collider->layerBits = 0;
                             changed = true;
                         }
-                        for (int i = 0; i < 32; ++i)
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
                         {
                             std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
                             bool isSelected = (currentLayer == i);
@@ -3026,20 +3033,56 @@ namespace Alice
                     layerNames = settings.layerNames;
                 }
                 
-                // Layer Bits (이 오브젝트가 속한 레이어)
-                uint32_t oldLayerBits = cct->layerBits;
-                DrawLayerMaskEditor("Layer Bits", cct->layerBits, layerNames);
-                if (oldLayerBits != cct->layerBits) changed = true;
-                
-                // Collide Mask (충돌할 레이어)
-                uint32_t oldCollideMask = cct->collideMask;
-                DrawLayerMaskEditor("Collide Mask", cct->collideMask, layerNames);
-                if (oldCollideMask != cct->collideMask) changed = true;
-                
-                // Query Mask (쿼리할 레이어)
-                uint32_t oldQueryMask = cct->queryMask;
-                DrawLayerMaskEditor("Query Mask", cct->queryMask, layerNames);
-                if (oldQueryMask != cct->queryMask) changed = true;
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
+                    {
+                        if ((cct->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && cct->layerBits != 0)
+                    {
+                        cct->layerBits = 0;
+                        changed = true;
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            cct->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                cct->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
                 
                 if (changed) g_SceneDirty = true;
             }
@@ -3168,6 +3211,59 @@ namespace Alice
                            name != "heightSamples" && name != "physicsActorHandle";
                 });
                 
+                // HeightSamples 상태 표시 및 생성 버튼
+                ImGui::Separator();
+                ImGui::Text("Height Samples");
+                ImGui::Indent();
+                {
+                    const size_t expectedSamples = static_cast<size_t>(terrain->numRows) * static_cast<size_t>(terrain->numCols);
+                    const bool isValid = (terrain->numRows >= 2 && terrain->numCols >= 2) && 
+                                         (terrain->heightSamples.size() == expectedSamples);
+                    
+                    if (terrain->heightSamples.empty())
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Status: Empty (requires data)");
+                    }
+                    else if (!isValid)
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 
+                            "Status: Invalid (size: %zu, expected: %zu)", 
+                            terrain->heightSamples.size(), expectedSamples);
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 
+                            "Status: Valid (size: %zu)", 
+                            terrain->heightSamples.size());
+                    }
+                    
+                    ImGui::Text("Grid: %u x %u (total: %zu samples)", 
+                        terrain->numRows, terrain->numCols, expectedSamples);
+                    
+                    if (terrain->numRows >= 2 && terrain->numCols >= 2)
+                    {
+                        if (ImGui::Button("Generate Flat (0.0)"))
+                        {
+                            terrain->heightSamples.resize(expectedSamples, 0.0f);
+                            changed = true;
+                            g_SceneDirty = true;
+                        }
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(?)");
+                        if (ImGui::IsItemHovered())
+                        {
+                            ImGui::BeginTooltip();
+                            ImGui::Text("Generates a flat terrain with all heights set to 0.0");
+                            ImGui::EndTooltip();
+                        }
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Set numRows and numCols (>= 2) to enable generation");
+                    }
+                }
+                ImGui::Unindent();
+                
                 // 레이어 마스크 편집
                 ImGui::Separator();
                 ImGui::Text("Layer Settings");
@@ -3184,20 +3280,56 @@ namespace Alice
                     layerNames = settings.layerNames;
                 }
                 
-                // Layer Bits (이 오브젝트가 속한 레이어)
-                uint32_t oldLayerBits = terrain->layerBits;
-                DrawLayerMaskEditor("Layer Bits", terrain->layerBits, layerNames);
-                if (oldLayerBits != terrain->layerBits) changed = true;
-                
-                // Collide Mask (충돌할 레이어)
-                uint32_t oldCollideMask = terrain->collideMask;
-                DrawLayerMaskEditor("Collide Mask", terrain->collideMask, layerNames);
-                if (oldCollideMask != terrain->collideMask) changed = true;
-                
-                // Query Mask (쿼리할 레이어)
-                uint32_t oldQueryMask = terrain->queryMask;
-                DrawLayerMaskEditor("Query Mask", terrain->queryMask, layerNames);
-                if (oldQueryMask != terrain->queryMask) changed = true;
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
+                    {
+                        if ((terrain->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && terrain->layerBits != 0)
+                    {
+                        terrain->layerBits = 0;
+                        changed = true;
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            terrain->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                terrain->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
                 
                 if (changed) g_SceneDirty = true;
             }

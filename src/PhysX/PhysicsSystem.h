@@ -169,16 +169,28 @@ private:
         uint32_t collideMask{};
         uint32_t queryMask{};
         DirectX::XMFLOAT3 scale{};
+        size_t heightSamplesSize{}; // heightSamples 벡터 크기 변경 감지용
     };
     std::unordered_map<Alice::EntityId, TerrainState> m_lastTerrains;
 
     // Character Controller 상태 변경 감지용
     struct CCTState
     {
+        float radius{};
+        float halfHeight{};
+        float stepOffset{};
+        float contactOffset{};
+        float slopeLimitRadians{};
+        CCTNonWalkableMode nonWalkableMode{};
+        CCTCapsuleClimbingMode climbingMode{};
+        float density{};
+        bool enableQueries{};
         uint32_t layerBits{};
         uint32_t collideMask{};
         uint32_t queryMask{};
         bool hitTriggers{};
+        DirectX::XMFLOAT3 scale{}; // Transform scale 포함
+        // 참고: applyGravity, gravity, jumpSpeed는 매 프레임 직접 사용되므로 변경 감지 불필요
     };
     std::unordered_map<Alice::EntityId, CCTState> m_lastCCTs;
 
