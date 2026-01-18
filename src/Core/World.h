@@ -364,7 +364,8 @@ namespace Alice
         // 물리
         void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
         IPhysicsWorld* GetPhysicsWorld();
-        const IPhysicsWorld* GetPhysicsWorld() const;
+        const IPhysicsWorld* GetPhysicsWorld() const;        
+        std::shared_ptr<IPhysicsWorld> GetPhysicsWorldShared() const { return m_physicsWorld; }
     private:
         std::shared_ptr<IPhysicsWorld> m_physicsWorld;
         //==============================================================

@@ -78,12 +78,19 @@ void PhysicsSystem::SetEventCallback(EventCallback callback, void* userData)
 
 void PhysicsSystem::Update(float deltaTime)
 {
+    IPhysicsWorld* current = m_world.GetPhysicsWorld();
+    if (current != m_physicsWorld) {
+        SetPhysicsWorld(current); // 바뀌었으면 정리+재바인딩
+    }
+
     if (!m_physicsWorld) return;
 
     // 
     // (A) 이전 시뮬 결과 반영: ActiveTransform → TransformComponent
     {
         std::vector<ActiveTransform> ats;
+        // 씬 전환 중 물리 월드가 해제되었을 수 있으므로 안전하게 호출
+        // DrainActiveTransforms 내부에서 impl 체크를 하므로 안전함
         m_physicsWorld->DrainActiveTransforms(ats);
         for (const auto& at : ats)
             SyncPhysicsToGame(at);
