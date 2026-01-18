@@ -1,6 +1,7 @@
 #include "PhysicsSystem.h"
 #include "Core/World.h"
 #include "Components/TransformComponent.h"
+#include "Core/Logger.h"
 #include <DirectXMath.h>
 #include <algorithm>
 #include <unordered_set>
@@ -160,13 +161,22 @@ void PhysicsSystem::Update(float deltaTime)
             }
         }
 
-        // CCT 생성
+        // CCT 초기 생성 (변경 감지 부분에서도 처리하지만, 여기서도 빠르게 처리)
+        // 변경 감지 부분이 나중에 실행되므로 여기서 먼저 생성 시도
         {
             auto ccts = m_world.GetComponents<CharacterControllerComponent>();
             for (const auto& [entityId, cct] : ccts)
             {
-                if (cct.controllerHandle == nullptr)
+                auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+                if (!ccc) continue;
+
+                auto itCCT = m_entityToCCT.find(entityId);
+                // CCT가 없거나 핸들이 null이면 생성
+                // cct는 const 참조이므로 ccc 포인터로 실제 값을 확인
+                if ((itCCT == m_entityToCCT.end() || !itCCT->second.IsValid()) || ccc->controllerHandle == nullptr)
+                {
                     CreateCharacterController(entityId);
+                }
             }
         }
 
@@ -479,11 +489,25 @@ void PhysicsSystem::Update(float deltaTime)
             cur.collideMask = terrain.collideMask;
             cur.queryMask = terrain.queryMask;
             cur.scale = transform->scale;
+            cur.heightSamplesSize = terrain.heightSamples.size(); // 높이 데이터 크기 추가
 
             auto it = m_lastTerrains.find(entityId);
             if (it == m_lastTerrains.end())
             {
+                // 첫 등록 시: 높이 데이터가 있으면 생성 시도
+                // heightSamples가 비어있고 numRows/numCols가 유효하면 자동으로 플랫 지형 생성
+                if (terrain.heightSamples.empty() && terrain.numRows >= 2 && terrain.numCols >= 2)
+                {
+                    const size_t expectedSamples = static_cast<size_t>(terrain.numRows) * static_cast<size_t>(terrain.numCols);
+                    terrain.heightSamples.resize(expectedSamples, 0.0f);
+                    cur.heightSamplesSize = expectedSamples;
+                }
+                
                 m_lastTerrains[entityId] = cur;
+                if (!terrain.heightSamples.empty() && terrain.numRows >= 2 && terrain.numCols >= 2)
+                {
+                    CreateTerrainHeightField(entityId);
+                }     
                 continue;
             }
 
@@ -494,12 +518,17 @@ void PhysicsSystem::Update(float deltaTime)
                 cur.centerPivot != prev.centerPivot || cur.doubleSidedQueries != prev.doubleSidedQueries ||
                 cur.staticFriction != prev.staticFriction || cur.dynamicFriction != prev.dynamicFriction || cur.restitution != prev.restitution ||
                 cur.layerBits != prev.layerBits || cur.collideMask != prev.collideMask || cur.queryMask != prev.queryMask ||
-                cur.scale.x != prev.scale.x || cur.scale.y != prev.scale.y || cur.scale.z != prev.scale.z;
+                cur.scale.x != prev.scale.x || cur.scale.y != prev.scale.y || cur.scale.z != prev.scale.z ||
+                cur.heightSamplesSize != prev.heightSamplesSize; // 높이 데이터 크기 변경 감지 추가
 
             if (changed)
             {
                 m_lastTerrains[entityId] = cur;
-                CreateTerrainHeightField(entityId); // 내부에서 기존 actor 정리 후 재생성
+                // 높이 데이터가 유효한 경우에만 생성 시도
+                if (!terrain.heightSamples.empty() && terrain.numRows >= 2 && terrain.numCols >= 2)
+                {
+                    CreateTerrainHeightField(entityId); // 내부에서 기존 actor 정리 후 재생성
+                }
             }
         }
 
@@ -513,47 +542,100 @@ void PhysicsSystem::Update(float deltaTime)
         for (auto eid : toErase) m_lastTerrains.erase(eid);
     }
 
-    // 5. CCT 레이어 변경 감지 및 적용
+    // 5. CCT 변경 감지 및 재생성/업데이트
     {
         auto ccts = m_world.GetComponents<CharacterControllerComponent>();
         
         for (const auto& [entityId, ccc] : ccts)
         {
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform) continue;
+
             auto itCCT = m_entityToCCT.find(entityId);
-            if (itCCT == m_entityToCCT.end() || !itCCT->second.IsValid()) continue;
+            
+            // CCTState 생성 및 변경 감지
+            CCTState cur{};
+            cur.radius = ccc.radius;
+            cur.halfHeight = ccc.halfHeight;
+            cur.stepOffset = ccc.stepOffset;
+            cur.contactOffset = ccc.contactOffset;
+            cur.slopeLimitRadians = ccc.slopeLimitRadians;
+            cur.nonWalkableMode = ccc.nonWalkableMode;
+            cur.climbingMode = ccc.climbingMode;
+            cur.density = ccc.density;
+            cur.enableQueries = ccc.enableQueries;
+            cur.layerBits = ccc.layerBits;
+            cur.collideMask = ccc.collideMask;
+            cur.queryMask = ccc.queryMask;
+            cur.hitTriggers = ccc.hitTriggers;
+            cur.scale = transform->scale;
 
-            ICharacterController* ctrl = itCCT->second.cct;
-            if (!ctrl) continue;
-
-            // 이전 상태 확인
             auto itState = m_lastCCTs.find(entityId);
             if (itState == m_lastCCTs.end())
             {
                 // 첫 등록
-                CCTState state{};
-                state.layerBits = ccc.layerBits;
-                state.collideMask = ccc.collideMask;
-                state.queryMask = ccc.queryMask;
-                state.hitTriggers = ccc.hitTriggers;
-                m_lastCCTs[entityId] = state;
+                m_lastCCTs[entityId] = cur;
+                // CCT가 없으면 생성
+                auto* cccPtr = m_world.GetComponent<CharacterControllerComponent>(entityId);
+                if (!cccPtr) continue;
+
+                bool shouldCreate = (itCCT == m_entityToCCT.end() || !itCCT->second.IsValid() || cccPtr->controllerHandle == nullptr);
+                if (shouldCreate)
+                {
+                    CreateCharacterController(entityId);
+                }
             }
             else
             {
                 // 변경 감지
-                const auto& last = itState->second;
-                if (ccc.layerBits != last.layerBits ||
-                    ccc.collideMask != last.collideMask ||
-                    ccc.queryMask != last.queryMask ||
-                    ccc.hitTriggers != last.hitTriggers)
+                const auto& prev = itState->second;
+                bool needsRebuild = false;
+                
+                // 생성 파라미터 변경 확인 (재생성 필요)
+                if (cur.radius != prev.radius ||
+                    cur.halfHeight != prev.halfHeight ||
+                    cur.stepOffset != prev.stepOffset ||
+                    cur.contactOffset != prev.contactOffset ||
+                    cur.slopeLimitRadians != prev.slopeLimitRadians ||
+                    cur.nonWalkableMode != prev.nonWalkableMode ||
+                    cur.climbingMode != prev.climbingMode ||
+                    cur.density != prev.density ||
+                    cur.enableQueries != prev.enableQueries ||
+                    cur.scale.x != prev.scale.x ||
+                    cur.scale.y != prev.scale.y ||
+                    cur.scale.z != prev.scale.z)
                 {
-                    // 레이어 마스크 변경 적용
-                    ctrl->SetLayerMasks(ccc.layerBits, ccc.collideMask, ccc.queryMask);
-                    
-                    // 상태 업데이트
-                    itState->second.layerBits = ccc.layerBits;
-                    itState->second.collideMask = ccc.collideMask;
-                    itState->second.queryMask = ccc.queryMask;
-                    itState->second.hitTriggers = ccc.hitTriggers;
+                    needsRebuild = true;
+                }
+
+                // CCT가 없거나 유효하지 않으면 생성
+                if (itCCT == m_entityToCCT.end() || !itCCT->second.IsValid() || ccc.controllerHandle == nullptr)
+                {
+                    CreateCharacterController(entityId);
+                    m_lastCCTs[entityId] = cur;
+                }
+                else if (needsRebuild)
+                {
+                    // 생성 파라미터 변경 시 재생성
+                    DestroyCharacterController(entityId);
+                    CreateCharacterController(entityId);
+                    m_lastCCTs[entityId] = cur;
+                }
+                else
+                {
+                    // 레이어 마스크만 변경된 경우 업데이트
+                    if (cur.layerBits != prev.layerBits ||
+                        cur.collideMask != prev.collideMask ||
+                        cur.queryMask != prev.queryMask ||
+                        cur.hitTriggers != prev.hitTriggers)
+                    {
+                        ICharacterController* ctrl = itCCT->second.cct;
+                        if (ctrl)
+                        {
+                            ctrl->SetLayerMasks(cur.layerBits, cur.collideMask, cur.queryMask);
+                        }
+                        m_lastCCTs[entityId] = cur;
+                    }
                 }
             }
         }
@@ -568,7 +650,11 @@ void PhysicsSystem::Update(float deltaTime)
                 cctsToRemove.push_back(entityId);
             }
         }
-        for (auto eid : cctsToRemove) m_lastCCTs.erase(eid);
+        for (auto eid : cctsToRemove)
+        {
+            DestroyCharacterController(eid);
+            m_lastCCTs.erase(eid);
+        }
     }
 
     // 6. CCT 이동 + 중력/점프 처리 + Transform 갱신
@@ -581,7 +667,28 @@ void PhysicsSystem::Update(float deltaTime)
             if (!transform) continue;
 
             auto it = m_entityToCCT.find(entityId);
-            if (it == m_entityToCCT.end() || !it->second.IsValid()) continue;
+            if (it == m_entityToCCT.end() || !it->second.IsValid())
+            {
+                // CCT가 생성되지 않은 경우 경고 (첫 프레임이 아닐 때만)
+                static std::unordered_set<EntityId> warnedEntities;
+                if (warnedEntities.find(entityId) == warnedEntities.end())
+                {
+                    ALICE_LOG_WARN("[PhysicsSystem] CCT not found for entity %llu (controllerHandle: %p). Check if CreateCharacterController succeeded.",
+                        (unsigned long long)entityId, ccc.controllerHandle);
+                    
+                    // 디버깅 정보 출력
+                    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
+                    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+                    if (rb || collider)
+                    {
+                        ALICE_LOG_WARN("[PhysicsSystem] Entity %llu has RigidBody or Collider, which conflicts with CCT!", 
+                            (unsigned long long)entityId);
+                    }
+                    
+                    warnedEntities.insert(entityId);
+                }
+                continue;
+            }
 
             ICharacterController* ctrl = it->second.cct;
             if (!ctrl) continue;
@@ -941,22 +1048,47 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
 
 void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
 {
-    if (!m_physicsWorld) return;
+    if (!m_physicsWorld)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: m_physicsWorld is null!");
+        return;
+    }
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-    if (!transform) return; // Transform이 없으면 생성 불가
+    if (!transform)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: Transform component missing!");
+        return;
+    }
 
     auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
-    if (!terrain) return;
+    if (!terrain)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: TerrainHeightFieldComponent missing!");
+        return;
+    }
 
     // HeightField 데이터 검증
+    const size_t expectedSamples = static_cast<size_t>(terrain->numRows) * static_cast<size_t>(terrain->numCols);
     if (terrain->heightSamples.empty() || terrain->numRows < 2 || terrain->numCols < 2)
     {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: Invalid terrain data (entity: %llu, rows: %u, cols: %u, samples: %zu, expected: %zu)!",
+            (unsigned long long)entityId, terrain->numRows, terrain->numCols, terrain->heightSamples.size(), expectedSamples);
         return; // 유효하지 않은 데이터
+    }
+    
+    // heightSamples 크기 검증 추가 (empty()만 체크하는 것보다 안전)
+    if (terrain->heightSamples.size() != expectedSamples)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: HeightSamples size mismatch (entity: %llu, rows: %u, cols: %u, samples: %zu, expected: %zu)!",
+            (unsigned long long)entityId, terrain->numRows, terrain->numCols, terrain->heightSamples.size(), expectedSamples);
+        return; // 크기 불일치
     }
 
     if (terrain->heightScale <= 0.0f || terrain->rowScale <= 0.0f || terrain->colScale <= 0.0f)
     {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: Invalid terrain scale (entity: %llu, heightScale: %.2f, rowScale: %.2f, colScale: %.2f)!",
+            (unsigned long long)entityId, terrain->heightScale, terrain->rowScale, terrain->colScale);
         return; // 유효하지 않은 스케일
     }
 
@@ -1023,6 +1155,10 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
         
         terrain->physicsActorHandle = actor;
         m_entityToActor[entityId] = std::move(handle);
+    }
+    else
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateTerrainHeightField: Failed to create terrain actor!");
     }
 }
 
@@ -1253,38 +1389,92 @@ DirectX::XMFLOAT3 PhysicsSystem::ToEulerRadians(const Quat& q)
     float siny_cosp = 2.0f * (w * y + x * z);
     float cosy_cosp = 1.0f - 2.0f * (x * x + y * y);
     float yaw = std::atan2(siny_cosp, cosy_cosp);
-    
-    return DirectX::XMFLOAT3(roll, pitch, yaw);
+
+    // roll (Z)
+    float sinr_cosp = 2.0f * (w * z + x * y);
+    float cosr_cosp = 1.0f - 2.0f * (x * x + z * z);
+    float roll = std::atan2(sinr_cosp, cosr_cosp);
+
+    // Transform 순서로 반환: (Pitch, Yaw, Roll) = (x, y, z)
+    return DirectX::XMFLOAT3(pitch, yaw, roll);
 }
 
 void PhysicsSystem::CreateCharacterController(EntityId entityId)
 {
-    if (!m_physicsWorld) return;
-    if (!m_physicsWorld->SupportsCharacterControllers()) return;
+    if (!m_physicsWorld)
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: m_physicsWorld is null!");
+        return;
+    }
+    if (!m_physicsWorld->SupportsCharacterControllers())
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: CharacterControllers not supported!");
+        return;
+    }
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
     auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
-    if (!transform || !ccc) return;
+    if (!transform || !ccc)
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Transform or CCT component missing! (transform: %p, ccc: %p)",
+            (void*)transform, (void*)ccc);
+        return;
+    }
 
     // ⚠️ 같은 엔티티에 RB/Collider 같이 두지 마라. 충돌/동기화 싸움 난다.
-    if (m_world.GetComponent<RigidBodyComponent>(entityId) || m_world.GetComponent<ColliderComponent>(entityId))
+    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
+    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    if (rb || collider)
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Entity has RigidBody (%p) or Collider (%p), cannot create CCT!",
+            (void*)rb, (void*)collider);
         return;
+    }
 
     auto AbsScale = [](const DirectX::XMFLOAT3& s) -> Vec3 {
         return Vec3(std::abs(s.x), std::abs(s.y), std::abs(s.z));
     };
     const Vec3 s = AbsScale(transform->scale);
+    const float radial = std::max(s.x, s.z);
 
     CharacterControllerDesc desc{};
-    desc.type = CCTType::Capsule;
+    desc.type = CCTType::Capsule; // 현재는 Capsule만 지원 (나중에 Box 지원 시 ccc->type 사용)
 
     // Capsule 스케일 규칙: Y는 높이, X/Z는 반경(비균일이면 큰 축 선택)
-    const float radial = std::max(s.x, s.z);
     desc.radius = ccc->radius * radial;
     desc.halfHeight = ccc->halfHeight * s.y;
 
-    desc.stepOffset = ccc->stepOffset;
-    desc.contactOffset = ccc->contactOffset;
+    // TODO: Box 타입 지원 시 아래 코드 활성화
+    // if (ccc->type == CCTType::Box)
+    // {
+    //     Vec3 he = ToVec3(ccc->halfExtents);
+    //     he.x *= s.x; he.y *= s.y; he.z *= s.z;
+    //     desc.halfExtents = he;
+    //     desc.halfHeight = he.y; // box isValid에서 stepOffset 비교에 씀
+    // }
+
+    // 1) stepOffset 스케일 반영(세로값이니 Y 기준)
+    desc.stepOffset = ccc->stepOffset * s.y;
+
+    // 2) contactOffset도 스케일 반영(너무 크면 이상해짐)
+    desc.contactOffset = ccc->contactOffset * std::min(radial, s.y);
+
+    // 3) PhysX isValid 통과용 클램프 (중요!)
+    float maxStep = 0.0f;
+    if (desc.type == CCTType::Capsule)
+    {
+        // PhysX: stepOffset <= height + 2*radius  (height=2*halfHeight)
+        maxStep = desc.halfHeight * 2.0f + desc.radius * 2.0f;
+    }
+    else // Box
+    {
+        // PhysX Box: stepOffset <= 2*halfHeight
+        maxStep = desc.halfHeight * 2.0f;
+    }
+
+    desc.stepOffset = std::clamp(desc.stepOffset, 0.0f, maxStep);
+    desc.contactOffset = std::max(desc.contactOffset, 0.001f);
+
     desc.slopeLimitRadians = ccc->slopeLimitRadians;
     desc.nonWalkableMode = ccc->nonWalkableMode;
     desc.climbingMode = ccc->climbingMode;
@@ -1301,7 +1491,11 @@ void PhysicsSystem::CreateCharacterController(EntityId entityId)
     desc.upDirection = Vec3::UnitY;
 
     auto ctrl = m_physicsWorld->CreateCharacterController(desc);
-    if (!ctrl) return;
+    if (!ctrl)
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Failed to create CCT (CreateCharacterController returned null)!");
+        return;
+    }
 
     CCTHandle handle(std::move(ctrl));
     ccc->controllerHandle = handle.cct;

@@ -690,30 +690,35 @@ namespace Alice
 		IPhysicsWorld* existingWorld = pImpl->m_world.GetPhysicsWorld();
 		Vec3 newGravity = Vec3(settings.gravity.x, settings.gravity.y, settings.gravity.z);
 
-		// 기존 월드가 있고 설정이 변경되지 않았다면 그대로 사용
-		if (existingWorld)
-		{
-			Vec3 currentGravity = existingWorld->GetGravity();
-			// 중력이 변경되었으면 업데이트
-			if (currentGravity.x != newGravity.x || currentGravity.y != newGravity.y || currentGravity.z != newGravity.z)
+			// 기존 월드가 있고 설정이 변경되지 않았다면 그대로 사용
+			if (existingWorld)
 			{
-				existingWorld->SetGravity(newGravity);
-				ALICE_LOG_INFO("PhysicsWorld gravity updated: (%.2f, %.2f, %.2f)", newGravity.x, newGravity.y, newGravity.z);
+				Vec3 currentGravity = existingWorld->GetGravity();
+				// 중력이 변경되었으면 업데이트
+				if (currentGravity.x != newGravity.x || currentGravity.y != newGravity.y || currentGravity.z != newGravity.z)
+				{
+					existingWorld->SetGravity(newGravity);
+					ALICE_LOG_INFO("PhysicsWorld gravity updated: (%.2f, %.2f, %.2f)", newGravity.x, newGravity.y, newGravity.z);
+				}
+
+				// fixedDt/maxSubsteps는 매 프레임 업데이트 (에디터에서 변경 가능)
+				pImpl->m_physFixedDt = settings.fixedDt;
+				pImpl->m_physMaxSubsteps = settings.maxSubsteps;
+				// accum은 유지 (프레임 드롭 방지)
+
+				// PhysicsSystem에 물리 월드 설정 (이미 있지만 재설정)
+				if (pImpl->m_physicsSystem)
+				{
+					pImpl->m_physicsSystem->SetPhysicsWorld(existingWorld);
+				}
+
+				// PhysicsSceneSettingsComponent의 layerCollideMatrix와 layerQueryMatrix 변경은
+				// 런타임에 적용할 수 없으므로 (FilterShader는 씬 생성 시 설정됨),
+				// 변경 시 물리 월드를 재생성해야 합니다.
+				// 하지만 매 프레임 체크하는 것은 비효율적이므로, 에디터에서 변경 시 씬 재로드를 권장합니다.
+
+				return;
 			}
-
-			// fixedDt/maxSubsteps는 매 프레임 업데이트 (에디터에서 변경 가능)
-			pImpl->m_physFixedDt = settings.fixedDt;
-			pImpl->m_physMaxSubsteps = settings.maxSubsteps;
-			// accum은 유지 (프레임 드롭 방지)
-
-			// PhysicsSystem에 물리 월드 설정 (이미 있지만 재설정)
-			if (pImpl->m_physicsSystem)
-			{
-				pImpl->m_physicsSystem->SetPhysicsWorld(existingWorld);
-			}
-
-			return;
-		}
 
 		// 새 월드 생성
 		PhysicsModule::WorldDesc desc{};

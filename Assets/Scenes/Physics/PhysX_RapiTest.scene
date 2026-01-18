@@ -19,7 +19,7 @@
                 },
                 "rotation": {
                     "x": -0.0,
-                    "y": 351.4531555175781,
+                    "y": 481.42181396484375,
                     "z": 0.0
                 },
                 "scale": {
@@ -31,6 +31,32 @@
             "id": 1
         },
         {
+            "CharacterController": {
+                "applyGravity": true,
+                "climbingMode": "Constrained",
+                "collideMask": 4294967295,
+                "contactOffset": 0.05000000074505806,
+                "density": 10.0,
+                "desiredVelocity": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "enableQueries": true,
+                "gravity": -9.8100004196167,
+                "halfHeight": 0.8999999761581421,
+                "hitTriggers": false,
+                "jumpRequested": false,
+                "jumpSpeed": 5.5,
+                "layerBits": 1,
+                "nonWalkableMode": "PreventClimbingAndForceSliding",
+                "queryMask": 4294967295,
+                "radius": 0.3499999940395355,
+                "slopeLimitRadians": 0.7853981852531433,
+                "stepOffset": 0.3499999940395355,
+                "teleport": false,
+                "verticalVelocity": -0.06359627097845078
+            },
             "Material": {
                 "albedoTexturePath": "Cooked/Textures/Rapi/Rapi_Diffuse_embedded0.alice",
                 "assetPath": "Assets/Materials/Rapi_0.mat",
@@ -45,11 +71,11 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "CharacterMovement",
+                    "name": "CharacterPhysMove",
                     "props": {
-                        "m_gravity": 18.0,
-                        "m_jumpSpeed": 6.5,
-                        "m_moveSpeed": 10.0
+                        "m_jumpSpeed": 5.5,
+                        "m_moveSpeed": 5.0,
+                        "m_rotationOffset": 180.0
                     }
                 }
             ],
@@ -57,7 +83,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 12.057997880503535
+                "timeSec": 393.8692517464515
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -66,19 +92,19 @@
             },
             "Transform": {
                 "position": {
-                    "x": 3.03008770942688,
-                    "y": 0.0,
-                    "z": -6.848544120788574
+                    "x": -6.246182441711426,
+                    "y": -7.044409275054932,
+                    "z": 1.322817087173462
                 },
                 "rotation": {
-                    "x": 0.0,
-                    "y": 1.6924633979797363,
+                    "x": -0.0,
+                    "y": -3.0548207759857178,
                     "z": 0.0
                 },
                 "scale": {
-                    "x": 0.05000000074505806,
-                    "y": 0.05000000074505806,
-                    "z": 0.05000000074505806
+                    "x": 0.049999818205833435,
+                    "y": 0.04999999701976776,
+                    "z": 0.04999999701976776
                 }
             },
             "id": 2,
@@ -88,7 +114,7 @@
             "Camera": {
                 "aspectOverride": 0.0,
                 "farPlane": 5000.0,
-                "fovYRad": 1.047196626663208,
+                "fovYRad": 1.0471975803375244,
                 "nearPlane": 0.10000000149011612,
                 "primary": true,
                 "useAspectOverride": false
@@ -115,7 +141,7 @@
                 "deathFovDeg": 50.0,
                 "enableInput": true,
                 "enableLockOn": true,
-                "enabled": false,
+                "enabled": true,
                 "exploreDistance": 35.0,
                 "exploreFovDeg": 60.0,
                 "fastTurnMultiplier": 2.5,
@@ -132,7 +158,7 @@
                 "maxDistance": 60.0,
                 "minDistance": 8.0,
                 "mode": 0,
-                "pitchDeg": 18.268016815185547,
+                "pitchDeg": 17.79986572265625,
                 "pitchMaxDeg": 80.0,
                 "pitchMinDeg": -45.0,
                 "positionDamping": 8.0,
@@ -141,7 +167,7 @@
                 "shoulderOffset": 0.0,
                 "shoulderSide": 1.0,
                 "targetName": "Rapi",
-                "yawDeg": 5.214242458343506
+                "yawDeg": 4.9715776443481445
             },
             "CameraInput": {
                 "blendTimeKey3": 0.6000000238418579,
@@ -171,7 +197,7 @@
                 "frequency": 20.0
             },
             "CameraSpringArm": {
-                "distance": 26.602453231811523,
+                "distance": 35.0,
                 "distanceDamping": 6.0,
                 "enableCollision": true,
                 "enableZoom": true,
@@ -226,19 +252,20 @@
                         "m_shakeAmplitude": 0.5,
                         "m_shakeDecay": 2.0,
                         "m_shakeDuration": 2.200000047683716,
-                        "m_shakeFrequency": 20.0
+                        "m_shakeFrequency": 20.0,
+                        "m_sholderOffset": 4.0
                     }
                 }
             ],
             "Transform": {
                 "position": {
-                    "x": 0.33841854333877563,
-                    "y": 17.018192291259766,
-                    "z": -31.474639892578125
+                    "x": -9.177295684814453,
+                    "y": 4.271759510040283,
+                    "z": -33.413211822509766
                 },
                 "rotation": {
-                    "x": 0.31883704662323,
-                    "y": 0.09100570529699326,
+                    "x": 0.3106662929058075,
+                    "y": 0.08677040040493011,
                     "z": 0.0
                 },
                 "scale": {
@@ -262,10 +289,138 @@
                 "metalness": 0.0,
                 "roughness": 1.0
             },
+            "PhysicsSceneSettings": {
+                "enablePhysics": true,
+                "fixedDt": 0.01666666753590107,
+                "gravity": {
+                    "x": 0.0,
+                    "y": -9.8100004196167,
+                    "z": 0.0
+                },
+                "layerCollideMatrix": [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "layerNames": [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "layerQueryMatrix": [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "maxSubsteps": 4
+            },
+            "TerrainHeightField": {
+                "centerPivot": true,
+                "colScale": 1.0,
+                "collideMask": 4294967295,
+                "doubleSidedQueries": true,
+                "dynamicFriction": 0.5,
+                "heightSamples": [],
+                "heightScale": 0.009999999776482582,
+                "layerBits": 1,
+                "numCols": 5,
+                "numRows": 5,
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "rowScale": 1.0,
+                "staticFriction": 0.5
+            },
             "Transform": {
                 "position": {
-                    "x": 0.18812775611877441,
-                    "y": -1.5509624481201172,
+                    "x": 0.0,
+                    "y": -15.0,
                     "z": 0.0
                 },
                 "rotation": {
@@ -283,339 +438,346 @@
             "name": "Ground"
         },
         {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "isTrigger": false,
+                "layerBits": 1,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
+            },
+            "Transform": {
+                "position": {
+                    "x": -13.88083267211914,
+                    "y": 21.524368286132813,
+                    "z": 1.9377796649932861
+                },
+                "rotation": {
+                    "x": -0.032176729291677475,
+                    "y": 3.1415884494781494,
+                    "z": -1.5707999467849731
+                },
+                "scale": {
+                    "x": 0.9999996423721313,
+                    "y": 0.9999983310699463,
+                    "z": 0.9999856948852539
+                }
+            },
+            "id": 5,
+            "name": "DropBox"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "isTrigger": false,
+                "layerBits": 1,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
+            },
+            "Transform": {
+                "position": {
+                    "x": -6.147633075714111,
+                    "y": -0.40459302067756653,
+                    "z": 11.13927936553955
+                },
+                "rotation": {
+                    "x": 0.7691321969032288,
+                    "y": 3.1414973735809326,
+                    "z": 1.5708307027816772
+                },
+                "scale": {
+                    "x": 0.9999990463256836,
+                    "y": 0.9999983310699463,
+                    "z": 0.999996542930603
+                }
+            },
+            "id": 6,
+            "name": "DropBox"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "isTrigger": false,
+                "layerBits": 1,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
+            },
+            "Transform": {
+                "position": {
+                    "x": -5.465351104736328,
+                    "y": 19.6404972076416,
+                    "z": 4.1948466300964355
+                },
+                "rotation": {
+                    "x": -0.1262337565422058,
+                    "y": 3.1415884494781494,
+                    "z": -1.5707999467849731
+                },
+                "scale": {
+                    "x": 0.9999962449073792,
+                    "y": 0.9999982714653015,
+                    "z": 0.9999490976333618
+                }
+            },
+            "id": 7,
+            "name": "DropBox"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "isTrigger": false,
+                "layerBits": 1,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
+            },
+            "Transform": {
+                "position": {
+                    "x": -20.34813117980957,
+                    "y": -5.007132530212402,
+                    "z": 8.03836727142334
+                },
+                "rotation": {
+                    "x": -0.31333768367767334,
+                    "y": 3.1415884494781494,
+                    "z": -1.570801019668579
+                },
+                "scale": {
+                    "x": 0.9999978542327881,
+                    "y": 0.9999983310699463,
+                    "z": 0.9999833106994629
+                }
+            },
+            "id": 8,
+            "name": "DropBox"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "isTrigger": false,
+                "layerBits": 1,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.007722020149230957,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Transform": {
+                "position": {
+                    "x": -12.7669095993042,
+                    "y": -5.065515995025635,
+                    "z": 24.07317352294922
+                },
+                "rotation": {
+                    "x": 1.3694243431091309,
+                    "y": -0.04179741069674492,
+                    "z": -2.993072986602783
+                },
+                "scale": {
+                    "x": 20.0,
+                    "y": 0.999997615814209,
+                    "z": 19.999998092651367
+                }
+            },
+            "id": 9,
+            "name": "wallA_Layer00_samePlayerLayer"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "isTrigger": false,
+                "layerBits": 2,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
             "Material": {
                 "albedoTexturePath": "",
                 "assetPath": "",
                 "color": {
                     "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                },
-                "metalness": 1.0,
-                "roughness": 0.0
-            },
-            "Scripts": [
-                {
-                    "enabled": true,
-                    "name": "RotateAndScale",
-                    "props": {
-                        "m_pulseAmplitude": 0.25,
-                        "m_pulseSpeed": 2.0,
-                        "m_spinSpeed": 1.0
-                    }
-                }
-            ],
-            "Transform": {
-                "position": {
-                    "x": 4.098037242889404,
-                    "y": 8.976366996765137,
-                    "z": 12.8917236328125
-                },
-                "rotation": {
-                    "x": -0.0,
-                    "y": 282.5460510253906,
+                    "y": 0.0,
                     "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "id": 5,
-            "name": "Entity5"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "Cooked/Textures/Zombie_Run/Zombie_Run_Diffuse_embedded5.alice",
-                "assetPath": "Assets/Materials/Zombie_Run_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
                 },
                 "metalness": 0.0,
                 "roughness": 0.5
             },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 1768.6909299232066
-            },
-            "SkinnedMesh": {
-                "boneCount": 67,
-                "instanceAssetPath": "Assets/Fbx/Zombie_Run.fbxasset",
-                "meshAssetPath": "Zombie_Run"
-            },
             "Transform": {
                 "position": {
-                    "x": -15.32771110534668,
-                    "y": 0.0,
-                    "z": 22.052547454833984
+                    "x": 4.954999923706055,
+                    "y": 4.140999794006348,
+                    "z": 16.104999542236328
                 },
                 "rotation": {
-                    "x": -0.0,
-                    "y": 0.0,
-                    "z": 0.0
+                    "x": 1.3694243431091309,
+                    "y": 1.633715271949768,
+                    "z": -2.993072986602783
                 },
                 "scale": {
-                    "x": 0.07999999821186066,
-                    "y": 0.07999999821186066,
-                    "z": 0.07999999821186066
-                }
-            },
-            "id": 6
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "Cooked/Textures/Tree/Tree_Diffuse_embedded7.alice",
-                "assetPath": "Assets/Materials/Tree_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "roughness": 0.5
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/Tree.fbxasset",
-                "meshAssetPath": "Tree"
-            },
-            "Transform": {
-                "position": {
-                    "x": 16.755603790283203,
-                    "y": 0.0,
-                    "z": 16.532390594482422
-                },
-                "rotation": {
-                    "x": -0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 5.0,
-                    "y": 5.0,
-                    "z": 5.0
-                }
-            },
-            "id": 7
-        },
-        {
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/zeldaPosed001.fbxasset",
-                "meshAssetPath": "zeldaPosed001"
-            },
-            "Transform": {
-                "position": {
-                    "x": 19.82941436767578,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": -0.005101541522890329,
-                    "y": 1.029744267463684,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 0.04000000283122063,
-                    "y": 0.03999999910593033,
-                    "z": 0.04000000283122063
-                }
-            },
-            "id": 8,
-            "name": "Enemy"
-        },
-        {
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 1673.4845811282285
-            },
-            "SkinnedMesh": {
-                "boneCount": 16,
-                "instanceAssetPath": "Assets/Fbx/BoxHuman.fbxasset",
-                "meshAssetPath": "BoxHuman"
-            },
-            "Transform": {
-                "position": {
-                    "x": -18.724641799926758,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": -0.0,
-                    "y": 11.27475643157959,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 0.029999999329447746,
-                    "y": 0.029999999329447746,
-                    "z": 0.029999999329447746
-                }
-            },
-            "id": 9
-        },
-        {
-            "Camera": {
-                "aspectOverride": 0.0,
-                "farPlane": 5000.0,
-                "fovYRad": 0.7853981852531433,
-                "nearPlane": 0.10000000149011612,
-                "primary": false,
-                "useAspectOverride": false
-            },
-            "Transform": {
-                "position": {
-                    "x": 19.534574508666992,
-                    "y": 9.538835525512695,
-                    "z": -13.315129280090332
-                },
-                "rotation": {
-                    "x": -0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
+                    "x": 20.0,
+                    "y": 0.9999933242797852,
+                    "z": 19.999937057495117
                 }
             },
             "id": 10,
-            "name": "Camera1"
-        },
-        {
-            "Camera": {
-                "aspectOverride": 0.0,
-                "farPlane": 5000.0,
-                "fovYRad": 0.7853981852531433,
-                "nearPlane": 0.10000000149011612,
-                "primary": false,
-                "useAspectOverride": false
-            },
-            "Transform": {
-                "position": {
-                    "x": 5.509352684020996,
-                    "y": 5.486000061035156,
-                    "z": 6.731231689453125
-                },
-                "rotation": {
-                    "x": -0.36651918292045593,
-                    "y": 0.8552463054656982,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 0.9999995231628418,
-                    "y": 0.9999999403953552,
-                    "z": 0.9999999403953552
-                }
-            },
-            "id": 11,
-            "name": "Camera2"
-        },
-        {
-            "Camera": {
-                "aspectOverride": 0.0,
-                "farPlane": 5000.0,
-                "fovYRad": 0.7853981852531433,
-                "nearPlane": 0.10000000149011612,
-                "primary": false,
-                "useAspectOverride": false
-            },
-            "Transform": {
-                "position": {
-                    "x": -19.898765563964844,
-                    "y": 5.294197082519531,
-                    "z": -15.394695281982422
-                },
-                "rotation": {
-                    "x": -0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "id": 12,
-            "name": "Camera3"
-        },
-        {
-            "Camera": {
-                "aspectOverride": 0.0,
-                "farPlane": 5000.0,
-                "fovYRad": 0.7853981852531433,
-                "nearPlane": 0.10000000149011612,
-                "primary": false,
-                "useAspectOverride": false
-            },
-            "Transform": {
-                "position": {
-                    "x": 34.33367156982422,
-                    "y": 7.49192476272583,
-                    "z": 22.80388069152832
-                },
-                "rotation": {
-                    "x": -0.0,
-                    "y": -2.2689099311828613,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 0.9999999403953552,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "id": 13,
-            "name": "Camera4"
-        },
-        {
-            "Camera": {
-                "aspectOverride": 0.0,
-                "farPlane": 5000.0,
-                "fovYRad": 0.7853981852531433,
-                "nearPlane": 0.10000000149011612,
-                "primary": false,
-                "useAspectOverride": false
-            },
-            "Transform": {
-                "position": {
-                    "x": -11.619190216064453,
-                    "y": 8.984113693237305,
-                    "z": 6.110073089599609
-                },
-                "rotation": {
-                    "x": -0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "id": 14,
-            "name": "Camera5"
+            "name": "wallB_Layer01"
         }
     ],
     "version": 1

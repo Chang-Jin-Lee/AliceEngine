@@ -47,11 +47,9 @@ struct PhysicsSceneSettingsComponent
         }
 
         // 기본 레이어 이름 설정
-        layerNames[0] = "Default";
-        layerNames[1] = "Player";
-        for (int i = 2; i < MAX_PHYSICS_LAYERS; ++i)
+        for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
         {
-            layerNames[i] = "Layer " + std::to_string(i);
+            layerNames[i] = "Layer_" + std::to_string(i);
         }
     }
 };
