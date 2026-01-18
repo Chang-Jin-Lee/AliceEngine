@@ -32,7 +32,7 @@ struct CharacterControllerComponent
     float verticalVelocity = 0.0f;
 
     bool jumpRequested = false;
-    float jumpSpeed = 5.5f;
+    float jumpSpeed = 20.0f;
 
     bool teleport = false; // true면 이번 틱에 Transform 위치로 강제 이동
 

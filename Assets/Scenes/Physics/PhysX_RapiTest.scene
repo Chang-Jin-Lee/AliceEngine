@@ -4,11 +4,7 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "SceneSwitchExample",
-                    "props": {
-                        "m_targetName1": "",
-                        "m_targetName2": ""
-                    }
+                    "name": "SceneSwitchExample"
                 }
             ],
             "Transform": {
@@ -72,19 +68,14 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "CharacterPhysMove",
-                    "props": {
-                        "m_jumpSpeed": 5.5,
-                        "m_moveSpeed": 5.0,
-                        "m_rotationOffset": 180.0
-                    }
+                    "name": "CharacterPhysMove"
                 }
             ],
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 7.843032906996086
+                "timeSec": 266.2612717738375
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -224,38 +215,11 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "CameraRigPreset",
-                    "props": {
-                        "m_applyEveryFrame": false,
-                        "m_blendTimeKey3": 0.6000000238418579,
-                        "m_blendTimeKey4": 0.6000000238418579,
-                        "m_blendTimeKey5": 0.800000011920929,
-                        "m_cameraListCsv": "Camera1,Camera2,Camera3,Camera4,Camera5",
-                        "m_followTargetName": "Rapi",
-                        "m_lookAtTargetName": "Enemy",
-                        "m_shakeAmplitudeKey4": 0.30000001192092896,
-                        "m_shakeDecayKey4": 2.0,
-                        "m_shakeDurationKey4": 0.4000000059604645,
-                        "m_shakeFrequencyKey4": 20.0,
-                        "m_slowDurationKey5": 0.30000001192092896,
-                        "m_slowTimeScaleKey5": 0.20000000298023224,
-                        "m_slowTriggerTKey5": 0.5,
-                        "m_springArmDistance": 35.0,
-                        "m_springArmMaxDistance": 60.0,
-                        "m_springArmMinDistance": 8.0,
-                        "m_springArmZoomSpeed": 0.009999999776482582
-                    }
+                    "name": "CameraRigPreset"
                 },
                 {
                     "enabled": true,
-                    "name": "CameraController",
-                    "props": {
-                        "m_shakeAmplitude": 0.5,
-                        "m_shakeDecay": 2.0,
-                        "m_shakeDuration": 2.200000047683716,
-                        "m_shakeFrequency": 20.0,
-                        "m_sholderOffset": 4.0
-                    }
+                    "name": "CameraController"
                 }
             ],
             "Transform": {
@@ -292,7 +256,7 @@
             },
             "PhysicsSceneSettings": {
                 "enablePhysics": true,
-                "filterRevision": 31,
+                "filterRevision": 39,
                 "fixedDt": 0.01666666753590107,
                 "gravity": [
                     0.0,
@@ -303,42 +267,8 @@
                     [
                         true,
                         true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true
-                    ],
-                    [
-                        true,
-                        true,
-                        true,
-                        true,
+                        false,
+                        false,
                         true,
                         true,
                         true,
@@ -403,7 +333,41 @@
                         true
                     ],
                     [
+                        false,
                         true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true
+                    ],
+                    [
+                        false,
                         true,
                         true,
                         true,
@@ -2551,6 +2515,170 @@
             },
             "id": 4,
             "name": "Ground"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "ignoreLayers": 1,
+                "isTrigger": false,
+                "layerBits": 1,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Transform": {
+                "position": {
+                    "x": 7.173680782318115,
+                    "y": -2.4334893226623535,
+                    "z": 2.4588069915771484
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 0.9999974966049194
+                }
+            },
+            "id": 5,
+            "name": "Wall-Layer_0"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 2,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Transform": {
+                "position": {
+                    "x": 7.173680782318115,
+                    "y": 2.219780206680298,
+                    "z": 10.347909927368164
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 0.9999974966049194
+                }
+            },
+            "id": 6,
+            "name": "Wall-Layer_1"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 4,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Transform": {
+                "position": {
+                    "x": 7.173680782318115,
+                    "y": 7.274646759033203,
+                    "z": 20.328495025634766
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 0.9999974966049194
+                }
+            },
+            "id": 7,
+            "name": "Wall-Layer_2"
+        },
+        {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "collideMask": 4294967295,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 8,
+                "queryMask": 4294967295,
+                "radius": 0.5,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Box"
+            },
+            "Transform": {
+                "position": {
+                    "x": 7.173680782318115,
+                    "y": 10.122281074523926,
+                    "z": 26.756135940551758
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 0.9999974966049194
+                }
+            },
+            "id": 8,
+            "name": "Wall-Layer_3"
         }
     ],
     "version": 1
