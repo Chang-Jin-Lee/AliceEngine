@@ -66,6 +66,7 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
         handle.Destroy();
     }
     m_entityToCCT.clear();
+    m_lastCCTs.clear();
 
     m_physicsWorld = physicsWorld;
 }
@@ -510,6 +511,64 @@ void PhysicsSystem::Update(float deltaTime)
                 toErase.push_back(eid);
         }
         for (auto eid : toErase) m_lastTerrains.erase(eid);
+    }
+
+    // 5. CCT 레이어 변경 감지 및 적용
+    {
+        auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+        
+        for (const auto& [entityId, ccc] : ccts)
+        {
+            auto itCCT = m_entityToCCT.find(entityId);
+            if (itCCT == m_entityToCCT.end() || !itCCT->second.IsValid()) continue;
+
+            ICharacterController* ctrl = itCCT->second.cct;
+            if (!ctrl) continue;
+
+            // 이전 상태 확인
+            auto itState = m_lastCCTs.find(entityId);
+            if (itState == m_lastCCTs.end())
+            {
+                // 첫 등록
+                CCTState state{};
+                state.layerBits = ccc.layerBits;
+                state.collideMask = ccc.collideMask;
+                state.queryMask = ccc.queryMask;
+                state.hitTriggers = ccc.hitTriggers;
+                m_lastCCTs[entityId] = state;
+            }
+            else
+            {
+                // 변경 감지
+                const auto& last = itState->second;
+                if (ccc.layerBits != last.layerBits ||
+                    ccc.collideMask != last.collideMask ||
+                    ccc.queryMask != last.queryMask ||
+                    ccc.hitTriggers != last.hitTriggers)
+                {
+                    // 레이어 마스크 변경 적용
+                    ctrl->SetLayerMasks(ccc.layerBits, ccc.collideMask, ccc.queryMask);
+                    
+                    // 상태 업데이트
+                    itState->second.layerBits = ccc.layerBits;
+                    itState->second.collideMask = ccc.collideMask;
+                    itState->second.queryMask = ccc.queryMask;
+                    itState->second.hitTriggers = ccc.hitTriggers;
+                }
+            }
+        }
+
+        // 제거된 CCT의 상태도 정리
+        std::vector<EntityId> cctsToRemove;
+        for (const auto& [entityId, state] : m_lastCCTs)
+        {
+            auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+            if (!ccc)
+            {
+                cctsToRemove.push_back(entityId);
+            }
+        }
+        for (auto eid : cctsToRemove) m_lastCCTs.erase(eid);
     }
 
     // 6. CCT 이동 + 중력/점프 처리 + Transform 갱신

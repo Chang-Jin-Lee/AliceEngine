@@ -172,6 +172,16 @@ private:
     };
     std::unordered_map<Alice::EntityId, TerrainState> m_lastTerrains;
 
+    // Character Controller 상태 변경 감지용
+    struct CCTState
+    {
+        uint32_t layerBits{};
+        uint32_t collideMask{};
+        uint32_t queryMask{};
+        bool hitTriggers{};
+    };
+    std::unordered_map<Alice::EntityId, CCTState> m_lastCCTs;
+
     // Character Controller 핸들
     struct CCTHandle
     {
