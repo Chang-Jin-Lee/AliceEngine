@@ -14,6 +14,7 @@
 
 #include "Core/Entity.h"
 #include "Core/World.h"
+#include "Core/UIWorldManager.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/SkinnedMeshRegistry.h"
@@ -96,6 +97,12 @@ namespace Alice
 
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }
         const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
+
+        /// UI 텍스처를 최종 렌더 타겟에 합성합니다.
+        /// @param uiWorld UIWorldManager 참조 (UI SRV 획득용)
+        /// @param targetRTV 최종 렌더 타겟 (백버퍼 또는 에디터 뷰포트)
+        /// @param viewport 뷰포트 영역
+        void RenderUI(UIWorldManager& uiWorld, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
     private:
 
@@ -306,5 +313,11 @@ namespace Alice
 
         // ==== 포스트 프로세스 파라미터 ====
         PostProcessParams m_postProcessParams;
+
+        // ==== UI 합성 리소스 ====
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_uiQuadVS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_uiCompositePS;
+        
+        bool CreateUIResources();
     };
 }
