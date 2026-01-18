@@ -99,11 +99,8 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
 	// PhysXWorld의 pending 작업을 먼저 Flush하여 안전하게 정리
 	if (physicsWorld == nullptr && m_physicsWorld != nullptr)
 	{
-		// Flush를 통해 pending release/add/remove 작업을 즉시 처리
-		// 주의: Flush는 IPhysicsWorld 인터페이스에 없으므로, 
-		// World의 shared_ptr을 통해 Flush해야 함
-		// 하지만 여기서는 직접 접근할 수 없으므로, 
-		// DestroyPhysicsActor에서 안전하게 처리하도록 함
+		// 1단계: 기존 pending 작업을 먼저 Flush (이전 씬의 작업 처리)
+		m_physicsWorld->Flush();
 	}
 
     // 기존 액터들 정리 (컴포넌트 핸들도 함께 정리)
@@ -136,6 +133,12 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
     }
     m_entityToCCT.clear();
     m_lastCCTs.clear();
+
+	// 2단계: 액터 정리 과정에서 추가된 pending 작업을 Flush (정리 작업 완료)
+	if (physicsWorld == nullptr && m_physicsWorld != nullptr)
+	{
+		m_physicsWorld->Flush();
+	}
 
     m_physicsWorld = physicsWorld;
 	m_lastFilterRevision = 0xFFFFFFFFu; // 강제로 다음 Update에서 1회 갱신
@@ -1368,15 +1371,33 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
     if (terrain) terrain->physicsActorHandle = nullptr;
 
-	// ActorHandle의 Destroy 호출
-	// Destroy()는 내부에서 world.lock()으로 안전하게 체크하므로,
-	// PhysXWorld가 이미 파괴되었어도 문제없음
-	// world.lock()이 nullptr을 반환하면 EnqueueRelease가 호출되지 않지만,
-	// owned->Destroy()가 호출되어 래퍼 객체는 해제됨
 	ActorHandle& handle = it->second;
-	// Destroy()는 내부에서 owned가 nullptr인지 체크하고,
-	// PhysXActor::Destroy()는 world.lock()으로 world 유효성을 체크하므로 안전
-	handle.Destroy();
+	
+	// 근본 원인 해결: m_physicsWorld가 null이면 Destroy() 호출하지 않고 핸들만 해제
+	// 빠른 씬 전환 시 World가 이미 파괴되었을 수 있고,
+	// 이 경우 PhysXActor::Destroy()에서 actor->getScene() 호출 시 크래시 발생 가능
+	// 따라서 World가 유효할 때만 Destroy()를 호출하여 안전하게 정리
+	// 
+	// 주의: handle.IsValid()는 owned->IsValid()를 호출하는데,
+	// 빠른 씬 전환 시 내부 객체가 이미 부분적으로 파괴되었을 수 있어
+	// IsValid() 호출 자체가 크래시를 유발할 수 있음
+	// 따라서 owned 포인터 존재 여부만 체크 (IsValid() 호출 안 함)
+	if (m_physicsWorld != nullptr && handle.owned)
+	{
+		// World가 유효하고 owned가 존재할 때만 Destroy() 호출
+		// Destroy()는 내부에서 world.lock()으로 world 유효성을 체크하지만,
+		// actor->getScene() 호출은 world.lock() 체크 후에 발생하므로
+		// m_physicsWorld가 null이 아닐 때만 호출해야 안전
+		handle.Destroy();
+	}
+	else
+	{
+		// World가 이미 파괴되었거나 owned가 없는 경우 핸들만 해제
+		// unique_ptr이 소멸될 때 PhysXActor 소멸자가 호출되지만,
+		// world.lock()이 실패하면 EnqueueRelease가 호출되지 않으므로 안전
+		handle.owned.reset();
+		handle.rigid = nullptr;
+	}
 	
 	// erase 호출 (it이 여전히 유효함, Destroy는 owned만 해제하고 it 자체는 안전)
     m_entityToActor.erase(it);

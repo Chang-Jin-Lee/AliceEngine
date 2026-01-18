@@ -935,6 +935,12 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 		}
 
+		// Remove duplicates from pendingRelease to prevent double-release crashes.
+		// This is critical for fast scene switching where the same actor may be
+		// queued for release multiple times.
+		std::sort(rels.begin(), rels.end());
+		rels.erase(std::unique(rels.begin(), rels.end()), rels.end());
+
 		// Release after applying scene ops.
 		for (PxBase* b : rels)
 		{
@@ -1568,16 +1574,18 @@ public:
 
 	void Destroy() override
 	{
-		if (!actor) return;
-		auto s = world.lock();
-		if (s)
-		{
-			// Remove first (if present), then release.
-			if (actor->getScene())
-				s->EnqueueRemove(actor);
-			s->EnqueueRelease(actor);
-		}
+		PxRigidActor* a = actor;
+		if (!a) return;
 		actor = nullptr;
+
+		auto s = world.lock();
+		if (!s) return;
+
+		// getScene() 같은 접근은 여기서 하지 마
+		// Remove가 "이미 없는 액터"일 수 있는데, FlushPending에서 a->getScene()==scene 체크하고 remove하니까 안전하게 걸러집니다.
+		if (s->scene)
+			s->EnqueueRemove(a);
+		s->EnqueueRelease(a);
 	}
 
 	// ---- Shapes
