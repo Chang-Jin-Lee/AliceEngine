@@ -54,6 +54,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
 set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
+set(IMGUI_NODE_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/imgui-node-editor")
 set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 
 # ==========================================
@@ -88,6 +89,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Engine/Engine.cpp
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.cpp
     ${ALICE_SRC_DIR}/Editor/EditorCore.cpp
+    ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.cpp
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
@@ -148,6 +150,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Engine/Engine.h
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.h
     ${ALICE_SRC_DIR}/Editor/EditorCore.h
+    ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.h
 
     # 코어
     ${ALICE_SRC_DIR}/Core/World.h
@@ -243,7 +246,6 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
 )
 
-# [변경] AliceEngine -> Engine
 add_library(Engine STATIC
     ${ENGINE_SOURCES}
     ${ENGINE_HEADERS}
@@ -308,6 +310,7 @@ target_include_directories(Engine
         ${ALICE_SRC_DIR}
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
+        ${IMGUI_NODE_EDITOR_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR 헤더 경로
 )
 
@@ -394,6 +397,42 @@ foreach(target Launch AlicePlayer)
 endforeach()
 
 # ==========================================
+# [ThirdParty] ImGui Node Editor
+# ==========================================
+
+# 경로 반영
+set(IMGUI_NODE_EDITOR_INCLUDE "${IMGUI_NODE_EDITOR_DIR}")
+set(IMGUI_NODE_EDITOR_SOURCE  "${IMGUI_NODE_EDITOR_DIR}")
+
+if(NOT EXISTS "${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp")
+    message(FATAL_ERROR
+        "오류: imgui-node-editor 소스를 찾을 수 없습니다!\n"
+        "경로 확인: ${IMGUI_NODE_EDITOR_SOURCE}\n"
+        "cpp/h 파일들이 하위 폴더 없이 해당 위치에 바로 있는지 확인해주세요."
+    )
+endif()
+
+add_library(imgui_node_editor STATIC
+    ${IMGUI_NODE_EDITOR_SOURCE}/crude_json.cpp
+    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_canvas.cpp
+    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp
+    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor_api.cpp
+)
+
+target_include_directories(imgui_node_editor PUBLIC
+    ${IMGUI_NODE_EDITOR_INCLUDE}
+)
+
+target_link_libraries(imgui_node_editor PUBLIC
+    imgui
+)
+
+target_compile_definitions(imgui_node_editor PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+
+# Engine에서 쓰는게 보통이니 Engine에만 물림(실행파일에는 중복 링크 X)
+target_link_libraries(Engine PUBLIC imgui_node_editor)
+
+# ==========================================
 # [설정] 컴파일 옵션 및 vcpkg 적용
 # ==========================================
 if(MSVC)
@@ -441,6 +480,7 @@ foreach(target Launch AlicePlayer)
             Engine          # 핵심 엔진
             imgui
             imguizmo
+            imgui_node_editor
             d3d11
             dxgi
             dxguid
@@ -456,7 +496,7 @@ endforeach()
 # [Post-Build] DLL 복사
 # ==========================================
 
-# [변경] Launch와 AlicePlayer 타겟 모두에 DLL 복사 수행
+# Launch와 AlicePlayer 타겟 모두에 DLL 복사 수행
 foreach(target Launch AlicePlayer)
     add_custom_command(TARGET ${target} POST_BUILD
         # RTTR shared 스크립트 DLL과 registry 공유
