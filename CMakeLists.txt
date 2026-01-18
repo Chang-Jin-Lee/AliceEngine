@@ -401,9 +401,9 @@ endforeach()
 # ==========================================
 if(MSVC)
     # 경고 레벨
-    target_compile_options(Engine      PRIVATE /W4 /permissive-)
-    target_compile_options(Launch      PRIVATE /W4 /permissive-)
-    target_compile_options(AlicePlayer PRIVATE /W4 /permissive-)
+    target_compile_options(Engine      PRIVATE /W4 /permissive- /bigobj)
+    target_compile_options(Launch      PRIVATE /W4 /permissive- /bigobj)
+    target_compile_options(AlicePlayer PRIVATE /W4 /permissive- /bigobj)
 
     # Include 경로 추가 (상단에서 설정한 VCPKG_ROOT 사용)
     target_include_directories(Engine
