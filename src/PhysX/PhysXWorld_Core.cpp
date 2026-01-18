@@ -36,14 +36,12 @@ void PhysXWorld::Step(float fixedDt)
 		impl->activeTransforms.clear();
 	}
 
+	// Keep the write lock held across simulate() -> fetchResults() so that no other
+	// thread can run queries/add/remove/release while the scene is simulating.
+	// This prevents race conditions during the simulation step.
 	{
 		SceneWriteLock wl(impl->scene, impl->enableSceneLocks);
 		impl->scene->simulate(fixedDt);
-	}
-
-	// fetch
-	{
-		SceneWriteLock wl(impl->scene, impl->enableSceneLocks);
 		impl->scene->fetchResults(true);
 	}
 
