@@ -484,6 +484,26 @@ namespace Alice
 		// PhysicsSystem 생성 (ECS 브릿지) - 씬 로드 이후, RefreshPhysicsForCurrentWorld 호출 전
 		pImpl->m_physicsSystem = std::make_unique<PhysicsSystem>(pImpl->m_world);
 		ALICE_LOG_INFO("Engine::Initialize: PhysicsSystem created.");
+		
+		// World::Clear() 호출 전 콜백 설정 (물리 시스템 정리 강제)
+		pImpl->m_world.SetOnBeforeClearCallback([this]() {
+			// World::Clear()가 호출되기 전에 물리 시스템을 먼저 정리
+			if (pImpl->m_physicsSystem)
+			{
+				// 물리 월드가 있으면 Flush 후 정리
+				if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
+				{
+					pwShared->Flush(); // pending add/remove/release 처리
+				}
+				
+				// PhysicsSystem의 raw pointer 해제 (dangling pointer 방지)
+				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+			}
+			
+			// 물리 이벤트 큐 및 accum 초기화
+			pImpl->m_physAccum = 0.0f;
+			pImpl->m_physicsEventQueue.clear();
+		});
 
 		RefreshPhysicsForCurrentWorld(); // 물리 1회 수동호출 (씬 로드 이후 1회)
 
@@ -666,6 +686,17 @@ namespace Alice
 
 	//=========================================================
 	// 물리 시스템
+	void Alice::Engine::ClearWorldAndPhysics()
+	{
+		// 월드와 물리 시스템을 함께 정리하는 안전한 진입점
+		// World::Clear()가 호출되면 OnBeforeClear 콜백이 자동으로 PhysicsSystem을 정리하므로,
+		// 이 함수는 단순히 World::Clear()를 호출하면 됨
+		pImpl->m_world.Clear();
+		
+		// World::Clear()에서 이미 물리 월드를 reset했지만, 명시적으로도 해제
+		pImpl->m_world.SetPhysicsWorld(nullptr);
+	}
+
 	void Alice::Engine::RefreshPhysicsForCurrentWorld()
 	{
 		// 현재 씬의 물리 월드 설정을 갱신

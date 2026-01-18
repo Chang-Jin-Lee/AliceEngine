@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 #include <typeindex>
+#include <functional>
 
 #include "Core/Entity.h"
 #include "Core/IScript.h"
@@ -366,8 +367,13 @@ namespace Alice
         IPhysicsWorld* GetPhysicsWorld();
         const IPhysicsWorld* GetPhysicsWorld() const;        
         std::shared_ptr<IPhysicsWorld> GetPhysicsWorldShared() const { return m_physicsWorld; }
+        
+        /// World::Clear() 호출 전에 호출될 콜백 설정
+        /// Engine에서 물리 시스템 정리를 위해 사용
+        void SetOnBeforeClearCallback(std::function<void()> callback) { m_onBeforeClear = std::move(callback); }
     private:
         std::shared_ptr<IPhysicsWorld> m_physicsWorld;
+        std::function<void()> m_onBeforeClear; // Clear() 호출 전 실행될 콜백
         //==============================================================
 
     private:

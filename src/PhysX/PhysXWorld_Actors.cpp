@@ -263,6 +263,7 @@ std::unique_ptr<ICharacterController> PhysXWorld::CreateCharacterController(cons
 			if (!sh) continue;
 			ApplyFilterToShape(*sh, f);
 			sh->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, desc.enableQueries);
+			sh->setFlag(PxShapeFlag::eVISUALIZATION, true); 
 		}
 	}
 

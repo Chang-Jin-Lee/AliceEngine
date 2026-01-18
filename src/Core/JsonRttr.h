@@ -366,40 +366,64 @@ namespace Alice
             // 중첩 배열 처리 (예: std::array<std::array<bool, 32>, 32>)
             if (itemType.is_sequential_container() && jitem.is_array())
             {
+                // 중첩 배열 요소를 가져와서 수정
+                // RTTR의 variant_sequential_view는 원본 배열을 참조하므로,
+                // nestedView를 통해 수정하면 원본이 수정될 수 있지만,
+                // std::array의 경우 안전하게 하기 위해 다시 설정
                 rttr::variant_sequential_view nestedView = item.create_sequential_view();
                 if (nestedView.is_valid())
                 {
+                    // 중첩 배열의 모든 요소를 JSON에서 로드
                     size_t nestedIndex = 0;
                     for (const auto& nestedItem : jitem)
                     {
                         if (nestedIndex >= nestedView.get_size()) break;
-                        SetSequentialItem(nestedView, nestedIndex, nestedItem);
+                        if (!SetSequentialItem(nestedView, nestedIndex, nestedItem))
+                            return false; // 재귀 호출 실패 시 즉시 반환
                         ++nestedIndex;
                     }
-                    view.set_value(index, item);
+                    
+                    // nestedView를 통해 중첩 배열이 수정되었으므로,
+                    // 수정된 item을 원래 배열에 다시 설정
+                    // std::array의 경우 전체 배열을 다시 설정해야 변경사항이 반영됨
+                    if (!view.set_value(index, item)) return false;
                     return true;
                 }
             }
 
             // 기본 타입 처리
-            if (itemType == rttr::type::get<bool>() && jitem.is_boolean())
+            // bool은 boolean 또는 0/1 정수로 저장될 수 있음
+            if (itemType == rttr::type::get<bool>())
             {
-                view.set_value(index, jitem.get<bool>());
+                bool value = false;
+                if (jitem.is_boolean())
+                {
+                    value = jitem.get<bool>();
+                }
+                else if (jitem.is_number_integer())
+                {
+                    value = (jitem.get<int>() != 0);
+                }
+                else
+                {
+                    return false; // bool 또는 정수가 아니면 실패
+                }
+                if (!view.set_value(index, value)) return false;
                 return true;
             }
             if (itemType == rttr::type::get<int>() && jitem.is_number_integer())
             {
-                view.set_value(index, jitem.get<int>());
+                if (!view.set_value(index, jitem.get<int>())) return false;
                 return true;
             }
             if (itemType == rttr::type::get<float>() && jitem.is_number())
             {
-                view.set_value(index, static_cast<float>(jitem.get<double>()));
+                if (!view.set_value(index, static_cast<float>(jitem.get<double>()))) return false;
                 return true;
             }
             if (itemType == rttr::type::get<std::string>() && jitem.is_string())
             {
-                view.set_value(index, jitem.get<std::string>());
+                if (!view.set_value(index, jitem.get<std::string>())) return false;
                 return true;
             }
 
@@ -420,11 +444,16 @@ namespace Alice
             size_t index = 0;
             for (const auto& jitem : jval)
             {
-                SetSequentialItem(view, index, jitem);
+                // 배열 크기 체크 (고정 크기 배열의 경우)
+                if (index >= view.get_size()) break;
+                
+                // SetSequentialItem의 반환값 확인
+                if (!SetSequentialItem(view, index, jitem))
+                    return false; // 역직렬화 실패 시 즉시 반환
                 ++index;
             }
 
-            prop.set_value(obj, var);
+            if (!prop.set_value(obj, var)) return false;
             return true;
         }
 
