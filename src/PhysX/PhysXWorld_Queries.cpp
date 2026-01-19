@@ -383,7 +383,6 @@ uint32_t PhysXWorld::RaycastAllQ(
 		outHits.push_back(rh);
 	}
 
-	// 거리순 정렬(무기/락온에서 안정적)
 	std::sort(outHits.begin(), outHits.end(),
 		[](const RaycastHit& a, const RaycastHit& b) { return a.distance < b.distance; });
 
@@ -781,6 +780,7 @@ bool PhysXWorld::ComputePenetrationBoxVsShape(
 	Vec3& outDir, float& outDepth) const
 {
 	if (!otherNativeActor || !otherNativeShape) return false;
+	if (!impl || !impl->scene) return false;
 
 	PxRigidActor* actor = reinterpret_cast<PxRigidActor*>(otherNativeActor);
 	PxShape* shape = reinterpret_cast<PxShape*>(otherNativeShape);
@@ -789,9 +789,13 @@ bool PhysXWorld::ComputePenetrationBoxVsShape(
 	const PxBoxGeometry geom0(ToPx(halfExtents));
 	const PxTransform pose0 = ToPxTransform(center, rot);
 
-	// shape global pose = actor global * shape local
-	const PxTransform pose1 = actor->getGlobalPose() * shape->getLocalPose();
-	const PxGeometryHolder gh = shape->getGeometry();
+	PxTransform pose1;
+	PxGeometryHolder gh;
+	{
+		SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+		pose1 = actor->getGlobalPose() * shape->getLocalPose();
+		gh = shape->getGeometry();
+	}
 
 	PxVec3 dir;
 	PxF32 depth = 0.0f;
@@ -814,6 +818,7 @@ bool PhysXWorld::ComputePenetrationSphereVsShape(
 	Vec3& outDir, float& outDepth) const
 {
 	if (!otherNativeActor || !otherNativeShape) return false;
+	if (!impl || !impl->scene) return false;
 
 	PxRigidActor* actor = reinterpret_cast<PxRigidActor*>(otherNativeActor);
 	PxShape* shape = reinterpret_cast<PxShape*>(otherNativeShape);
@@ -822,9 +827,13 @@ bool PhysXWorld::ComputePenetrationSphereVsShape(
 	const PxSphereGeometry geom0(radius);
 	const PxTransform pose0(ToPx(center));
 
-	// shape global pose = actor global * shape local
-	const PxTransform pose1 = actor->getGlobalPose() * shape->getLocalPose();
-	const PxGeometryHolder gh = shape->getGeometry();
+	PxTransform pose1;
+	PxGeometryHolder gh;
+	{
+		SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+		pose1 = actor->getGlobalPose() * shape->getLocalPose();
+		gh = shape->getGeometry();
+	}
 
 	PxVec3 dir;
 	PxF32 depth = 0.0f;
@@ -848,6 +857,7 @@ bool PhysXWorld::ComputePenetrationCapsuleVsShape(
 	Vec3& outDir, float& outDepth) const
 {
 	if (!otherNativeActor || !otherNativeShape) return false;
+	if (!impl || !impl->scene) return false;
 
 	PxRigidActor* actor = reinterpret_cast<PxRigidActor*>(otherNativeActor);
 	PxShape* shape = reinterpret_cast<PxShape*>(otherNativeShape);
@@ -863,9 +873,13 @@ bool PhysXWorld::ComputePenetrationCapsuleVsShape(
 	}
 	const PxTransform pose0 = ToPxTransform(center, q);
 
-	// shape global pose = actor global * shape local
-	const PxTransform pose1 = actor->getGlobalPose() * shape->getLocalPose();
-	const PxGeometryHolder gh = shape->getGeometry();
+	PxTransform pose1;
+	PxGeometryHolder gh;
+	{
+		SceneReadLock rl(impl->scene, impl->enableSceneLocks);
+		pose1 = actor->getGlobalPose() * shape->getLocalPose();
+		gh = shape->getGeometry();
+	}
 
 	PxVec3 dir;
 	PxF32 depth = 0.0f;

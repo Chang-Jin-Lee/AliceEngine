@@ -48,6 +48,7 @@
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
 #include "Core/SceneFile.h"
+#include "Core/ThreadSafety.h"
 #include "Core/CameraSystem.h"
 #include "Core/Logger.h"
 #include "Game/FbxImporter.h"
@@ -365,6 +366,9 @@ namespace Alice
 
 	bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
 	{
+		// 메인 스레드 ID 설정 (스레드 안전성 검증용)
+		ThreadSafety::SetMainThreadId(std::this_thread::get_id());
+
 		LinkComponentRegistry();
 		ALICE_LOG_INFO("Engine::Initialize: Begin (EditorMode=%d)", pImpl->m_editorMode);
 
@@ -573,49 +577,49 @@ namespace Alice
 
 		if (updateFromScene)
 		{
-		// 2-1. 로직 업데이트 (씬/스크립트)
-		if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
-		pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
+			// 2-1. 로직 업데이트 (씬/스크립트)
+			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
+			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
 
-		// ===================================================================
-		// SAFE POINT: 씬 변경/로드는 여기서만 커밋한다 (물리/카메라 돌리기 전에!)
-		// ScriptSystem과 SceneManager 모두의 pending 요청을 체크
-		if (pImpl->m_scriptSystem.HasPendingSceneRequests() || 
-		    (pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange()))
-		{
-			// 1) PhysX 쪽부터 안전하게 떼어내기: Flush + 액터 정리 경로 확보
-			if (pImpl->m_physicsSystem)
+			// ===================================================================
+			// SAFE POINT: 씬 변경/로드는 여기서만 커밋한다 (물리/카메라 돌리기 전에!)
+			// ScriptSystem과 SceneManager 모두의 pending 요청을 체크
+			if (pImpl->m_scriptSystem.HasPendingSceneRequests() ||
+				(pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange()))
 			{
-				// PhysicsSystem::SetPhysicsWorld(nullptr) 내부에서 m_physicsWorld->Flush()까지 수행함
-				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+				// 1) PhysX 쪽부터 안전하게 떼어내기: Flush + 액터 정리 경로 확보
+				if (pImpl->m_physicsSystem)
+				{
+					// PhysicsSystem::SetPhysicsWorld(nullptr) 내부에서 m_physicsWorld->Flush()까지 수행함
+					pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+				}
+
+				// 물리 월드가 있으면 Flush
+				if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
+					pwShared->Flush();
+
+				// 이벤트/고정스텝 누적치도 초기화 (이전 씬 찌꺼기 방지)
+				pImpl->m_physAccum = 0.0f;
+				pImpl->m_physicsEventQueue.clear();
+
+				// 2) ScriptSystem의 씬 요청 커밋 (LoadAuto/SwitchTo 실행)
+				if (pImpl->m_scriptSystem.HasPendingSceneRequests())
+				{
+					pImpl->m_scriptSystem.CommitSceneRequests(pImpl->m_world);
+				}
+
+				// 3) SceneManager의 씬 요청 커밋
+				if (pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange())
+				{
+					pImpl->m_sceneManager->CommitPendingSceneChange(pImpl->m_world);
+				}
+
+				// 4) 이 프레임은 더 이상 월드에 접근하면 안 됨 (방금 갈아엎었을 수 있으니까)
+				sceneChangedThisFrame = true;
 			}
+			// ===================================================================
 
-			// 물리 월드가 있으면 Flush
-			if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
-				pwShared->Flush();
-
-			// 이벤트/고정스텝 누적치도 초기화 (이전 씬 찌꺼기 방지)
-			pImpl->m_physAccum = 0.0f;
-			pImpl->m_physicsEventQueue.clear();
-
-			// 2) ScriptSystem의 씬 요청 커밋 (LoadAuto/SwitchTo 실행)
-			if (pImpl->m_scriptSystem.HasPendingSceneRequests())
-			{
-				pImpl->m_scriptSystem.CommitSceneRequests(pImpl->m_world);
-			}
-
-			// 3) SceneManager의 씬 요청 커밋
-			if (pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange())
-			{
-				pImpl->m_sceneManager->CommitPendingSceneChange(pImpl->m_world);
-			}
-
-			// 4) 이 프레임은 더 이상 월드에 접근하면 안 됨 (방금 갈아엎었을 수 있으니까)
-			sceneChangedThisFrame = true;
-		}
-		// ===================================================================
-
-			// 씬 바뀐 프레임이면 물리/카메라(월드 접근)를 스킵하고, 아래 "카메라 최종 적용"만 수행
+				// 씬 바뀐 프레임이면 물리/카메라(월드 접근)를 스킵하고, 아래 "카메라 최종 적용"만 수행
 			if (!sceneChangedThisFrame)
 			{
 				// 2-2. 물리 업데이트
@@ -734,6 +738,7 @@ namespace Alice
 
 	void Alice::Engine::RefreshPhysicsForCurrentWorld()
 	{
+		ThreadSafety::AssertMainThread();
 		// 현재 씬의 물리 월드 설정을 갱신
 		// PhysicsSceneSettingsComponent를 기반으로 물리 월드를 생성/재사용
 		// settings가 없으면, 물리월드 제거(비물리 씬)
@@ -873,23 +878,23 @@ namespace Alice
 			}
 			else
 			{
-			// Fallback: PhysicsSystem이 없을 때 직접 동기화
-			for (const auto& at : moved)
-			{
-				if (!at.userData) continue;
-				
-				// worldEpoch 검증 포함하여 EntityId 추출 (이전 씬의 userData는 무시)
-				const EntityId id = pImpl->m_world.ExtractEntityIdFromUserData(at.userData);
-				if (id == InvalidEntityId) continue;
+				// Fallback: PhysicsSystem이 없을 때 직접 동기화
+				for (const auto& at : moved)
+				{
+					if (!at.userData) continue;
 
-				auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
-				if (!tr) continue;
+					// worldEpoch 검증 포함하여 EntityId 추출 (이전 씬의 userData는 무시)
+					const EntityId id = pImpl->m_world.ExtractEntityIdFromUserData(at.userData);
+					if (id == InvalidEntityId) continue;
 
-				tr->position = { at.position.x, at.position.y, at.position.z };
-				// 회전도 동기화 (static 메서드이므로 PhysicsSystem 인스턴스 없이도 호출 가능)
-				DirectX::XMFLOAT3 euler = PhysicsSystem::ToEulerRadians(at.rotation);
-				tr->rotation = euler;
-			}
+					auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
+					if (!tr) continue;
+
+					tr->position = { at.position.x, at.position.y, at.position.z };
+					// 회전도 동기화 (static 메서드이므로 PhysicsSystem 인스턴스 없이도 호출 가능)
+					DirectX::XMFLOAT3 euler = PhysicsSystem::ToEulerRadians(at.rotation);
+					tr->rotation = euler;
+				}
 			}
 
 			// 이벤트 드레인 및 큐에 누적 (한 프레임 안전하게 처리)
@@ -934,7 +939,7 @@ namespace Alice
 				// PhysicsSystem의 IsTrackedEntity를 사용하여 현재 추적 중인 엔티티만 처리
 				// 이는 씬 전환 중 파괴된 액터의 userData가 새 엔티티를 오염시키는 것을 방지
 				if (!pImpl->m_physicsSystem->IsTrackedEntity(entityA) ||
-				    !pImpl->m_physicsSystem->IsTrackedEntity(entityB))
+					!pImpl->m_physicsSystem->IsTrackedEntity(entityB))
 				{
 					continue; // 둘 중 하나라도 추적 중이 아니면 이벤트 무시
 				}

@@ -46,6 +46,7 @@ namespace Alice
         virtual ~IScriptScene() = default;
         virtual void SwitchTo(const char* sceneName) = 0;              // 코드 씬 (SceneManager::SwitchTo)
         virtual void LoadSceneFile(const char* scenePathUtf8) = 0;      // .scene 파일 로드 (SceneFile::Load)
+        virtual bool RequestLoadSceneFile(const char* scenePathUtf8) = 0; // .scene 파일 로드 요청 (SceneManager::RequestLoadSceneFile)
     };
 
     struct ScriptServices 

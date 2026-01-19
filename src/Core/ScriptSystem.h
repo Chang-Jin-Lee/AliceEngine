@@ -53,6 +53,7 @@ namespace Alice
         // === IScriptScene ===
         void SwitchTo(const char* sceneName) override;
         void LoadSceneFile(const char* scenePathUtf8) override;
+        bool RequestLoadSceneFile(const char* scenePathUtf8) override;
 
         // 씬 요청이 남아있는지 체크 (엔진이 안전 지점에서 처리)
         bool HasPendingSceneRequests() const;

@@ -91,6 +91,7 @@ set(ENGINE_SOURCES
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
+    ${ALICE_SRC_DIR}/Core/ThreadSafety.cpp
     ${ALICE_SRC_DIR}/Core/IScript.cpp
     ${ALICE_SRC_DIR}/Core/ScriptFactory.cpp
     ${ALICE_SRC_DIR}/Core/ScriptSystem.cpp
@@ -150,6 +151,7 @@ set(ENGINE_HEADERS
 
     # 코어
     ${ALICE_SRC_DIR}/Core/World.h
+    ${ALICE_SRC_DIR}/Core/ThreadSafety.h
     ${ALICE_SRC_DIR}/Core/GameObject.h
     ${ALICE_SRC_DIR}/Core/Delegate.h
     ${ALICE_SRC_DIR}/Core/IScript.h
