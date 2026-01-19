@@ -714,13 +714,7 @@ void PhysicsSystem::Update(float deltaTime)
             auto it = m_lastTerrains.find(entityId);
             if (it == m_lastTerrains.end())
             {
-                TerrainState state{};
-                state.layerBits = terrain.layerBits;
-                state.ignoreLayers = terrain.ignoreLayers;
-                state.collideMask = newCollide;
-                state.queryMask = newQuery;
-                state.lastGeomKey = geomKey;
-
+                TerrainState state{ terrain.layerBits, terrain.ignoreLayers, newCollide, newQuery, geomKey };
                 m_lastTerrains[entityId] = state;
 
                 if (!terrain.heightSamples.empty() && terrain.numRows >= 2 && terrain.numCols >= 2)
@@ -731,16 +725,9 @@ void PhysicsSystem::Update(float deltaTime)
             }
 
             TerrainState prev = it->second;
+            TerrainState cur{ terrain.layerBits, terrain.ignoreLayers, newCollide, newQuery, geomKey };
 
-            const bool geomChanged = (geomKey != prev.lastGeomKey);
-
-            const bool maskChanged =
-                (terrain.layerBits != prev.layerBits) ||
-                (terrain.ignoreLayers != prev.ignoreLayers) ||
-                (newCollide != prev.collideMask) ||
-                (newQuery != prev.queryMask);
-
-            if (geomChanged)
+            if (cur.GeometryChanged(prev))
             {
                 if (terrain.physicsActorHandle != nullptr)
                 {
@@ -757,18 +744,11 @@ void PhysicsSystem::Update(float deltaTime)
                     CreateTerrainHeightField(entityId);
                 }
 
-                TerrainState state{};
-                state.layerBits = terrain.layerBits;
-                state.ignoreLayers = terrain.ignoreLayers;
-                state.collideMask = newCollide;
-                state.queryMask = newQuery;
-                state.lastGeomKey = geomKey;
-                m_lastTerrains[entityId] = state;
-
+                m_lastTerrains[entityId] = cur;
                 continue;
             }
 
-            if (maskChanged)
+            if (cur.MasksChanged(prev))
             {
                 auto itActor = m_entityToActor.find(entityId);
                 if (itActor != m_entityToActor.end())
@@ -784,10 +764,7 @@ void PhysicsSystem::Update(float deltaTime)
             it = m_lastTerrains.find(entityId);
             if (it != m_lastTerrains.end())
             {
-                it->second.layerBits = terrain.layerBits;
-                it->second.ignoreLayers = terrain.ignoreLayers;
-                it->second.collideMask = newCollide;
-                it->second.queryMask = newQuery;
+                it->second = cur;
             }
         }
 
@@ -811,22 +788,7 @@ void PhysicsSystem::Update(float deltaTime)
 
             auto itCCT = m_entityToCCT.find(entityId);
             
-            CCTState cur{};
-            cur.radius = ccc.radius;
-            cur.halfHeight = ccc.halfHeight;
-            cur.stepOffset = ccc.stepOffset;
-            cur.contactOffset = ccc.contactOffset;
-            cur.slopeLimitRadians = ccc.slopeLimitRadians;
-            cur.nonWalkableMode = ccc.nonWalkableMode;
-            cur.climbingMode = ccc.climbingMode;
-            cur.density = ccc.density;
-            cur.enableQueries = ccc.enableQueries;
-            cur.layerBits = ccc.layerBits;
-            cur.collideMask = ccc.collideMask;
-            cur.queryMask = ccc.queryMask;
-			cur.ignoreLayers = ccc.ignoreLayers;
-            cur.hitTriggers = ccc.hitTriggers;
-            cur.scale = transform->scale;
+            CCTState cur{ ccc, transform->scale };
 
             auto itState = m_lastCCTs.find(entityId);
             if (itState == m_lastCCTs.end())
@@ -860,23 +822,11 @@ void PhysicsSystem::Update(float deltaTime)
 						
 						ccc.collideMask = newCollide;
 						ccc.queryMask = newQuery;
-						cur.collideMask = newCollide;
-						cur.queryMask = newQuery;
+						cur.OverrideMasks(newCollide, newQuery);
                     }
 				}
                 
-                if (cur.radius != prev.radius ||
-                    cur.halfHeight != prev.halfHeight ||
-                    cur.stepOffset != prev.stepOffset ||
-                    cur.contactOffset != prev.contactOffset ||
-                    cur.slopeLimitRadians != prev.slopeLimitRadians ||
-                    cur.nonWalkableMode != prev.nonWalkableMode ||
-                    cur.climbingMode != prev.climbingMode ||
-                    cur.density != prev.density ||
-                    cur.enableQueries != prev.enableQueries ||
-                    cur.scale.x != prev.scale.x ||
-                    cur.scale.y != prev.scale.y ||
-                    cur.scale.z != prev.scale.z)
+                if (cur.NeedsRebuild(prev))
                 {
                     needsRebuild = true;
                 }
@@ -894,11 +844,7 @@ void PhysicsSystem::Update(float deltaTime)
                 }
                 else
                 {
-                    if (cur.layerBits != prev.layerBits ||
-                        cur.collideMask != prev.collideMask ||
-                        cur.queryMask != prev.queryMask ||
-						cur.ignoreLayers != prev.ignoreLayers ||
-                        cur.hitTriggers != prev.hitTriggers)
+                    if (cur.NeedsMaskUpdate(prev))
                     {
                         ICharacterController* ctrl = itCCT->second.cct;
                         if (ctrl)
