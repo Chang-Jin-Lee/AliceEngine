@@ -1,67 +1,136 @@
 ﻿#include "Core/Scene.h"
 #include "Core/ResourceManager.h"
+#include "Core/SceneFile.h"
+#include "Core/Logger.h"
 
 namespace Alice
 {
-    namespace
-    {
-        using Registry = std::unordered_map<std::string, SceneCreateFunc>;
+	namespace
+	{
+		using Registry = std::unordered_map<std::string, SceneCreateFunc>;
 
-        Registry& GetRegistry()
-        {
-            static Registry s_registry;
-            return s_registry;
-        }
-    }
+		Registry& GetRegistry()
+		{
+			static Registry s_registry;
+			return s_registry;
+		}
+	}
 
-    void SceneFactory::Register(const char* name, SceneCreateFunc func)
-    {
-        if (!name || !func) return;
-        GetRegistry()[name] = func;
-    }
+	void SceneFactory::Register(const char* name, SceneCreateFunc func)
+	{
+		if (!name || !func) return;
+		GetRegistry()[name] = func;
+	}
 
-    std::unique_ptr<IScene> SceneFactory::Create(const char* name)
-    {
-        if (!name) return nullptr;
+	std::unique_ptr<IScene> SceneFactory::Create(const char* name)
+	{
+		if (!name) return nullptr;
 
-        auto& registry = GetRegistry();
-        auto  it       = registry.find(name);
-        if (it == registry.end()) return nullptr;
+		auto& registry = GetRegistry();
+		auto  it = registry.find(name);
+		if (it == registry.end()) return nullptr;
 
-        return std::unique_ptr<IScene>(it->second());
-    }
+		return std::unique_ptr<IScene>(it->second());
+	}
 
-    SceneManager::SceneManager(World& world, ResourceManager& resources) : m_world(world)
-        , m_resources(resources)
-    {
-    }
+	SceneManager::SceneManager(World& world, ResourceManager& resources)
+		: m_world(world)
+		, m_resources(resources)
+	{
+	}
 
-    bool SceneManager::SwitchTo(const char* sceneName)
-    {
-        auto newScene = SceneFactory::Create(sceneName);
-        if (!newScene) return false;
+	// =========================
+	// 즉시 전환 (엔진 안전 지점)
+	// =========================
+	bool SceneManager::SwitchToImmediate(const char* sceneName)
+	{
+		auto newScene = SceneFactory::Create(sceneName);
+		if (!newScene) return false;
 
-        if (m_currentScene) m_currentScene->OnExit(m_world, m_resources);
+		if (m_currentScene)
+			m_currentScene->OnExit(m_world, m_resources);
 
-        m_currentScene = std::move(newScene);
-        m_currentScene->OnEnter(m_world, m_resources);
-        return true;
-    }
+		m_currentScene = std::move(newScene);
+		m_currentScene->OnEnter(m_world, m_resources);
+		return true;
+	}
 
-    void SceneManager::Update(float deltaTime)
-    {
-        if (!m_currentScene) return;
+	// =========================
+	// 지연 전환 요청 (스크립트에서 호출 안전)
+	// =========================
+	bool SceneManager::SwitchTo(const char* sceneName)
+	{
+		auto newScene = SceneFactory::Create(sceneName);
+		if (!newScene) return false;
 
-        m_currentScene->Update(m_world, m_resources, deltaTime);
-    }
+		m_pendingScene = std::move(newScene);
+		m_pendingSceneFile.reset(); // 파일 로드 요청이 있던 걸 덮어씀
+		return true;
+	}
 
-    EntityId SceneManager::GetPrimaryRenderableEntity() const
-    {
-        if (!m_currentScene) return InvalidEntityId;
+	bool SceneManager::RequestLoadSceneFile(const std::filesystem::path& logicalScenePath)
+	{
+		if (logicalScenePath.empty()) return false;
 
-        return m_currentScene->GetPrimaryRenderableEntity();
-    }
+		m_pendingSceneFile = logicalScenePath;
+		m_pendingScene.reset(); // 코드 씬 전환 요청이 있던 걸 덮어씀
+		return true;
+	}
+
+	void SceneManager::Update(float deltaTime)
+	{
+		if (!m_currentScene) return;
+		m_currentScene->Update(m_world, m_resources, deltaTime);
+	}
+
+	EntityId SceneManager::GetPrimaryRenderableEntity() const
+	{
+		if (!m_currentScene) return InvalidEntityId;
+		return m_currentScene->GetPrimaryRenderableEntity();
+	}
+
+	bool SceneManager::HasPendingSceneChange() const
+	{
+		return (m_pendingScene != nullptr) || m_pendingSceneFile.has_value();
+	}
+
+	bool SceneManager::CommitPendingSceneChange(World& world)
+	{
+		// (A) 코드 기반 씬 전환 커밋
+		if (m_pendingScene)
+		{
+			// pending 먼저 빼두고(재진입 방지)
+			auto next = std::move(m_pendingScene);
+			m_pendingScene.reset();
+
+			if (m_currentScene)
+				m_currentScene->OnExit(m_world, m_resources);
+
+			m_currentScene = std::move(next);
+			m_currentScene->OnEnter(m_world, m_resources);
+			return true;
+		}
+
+		// (B) .scene 파일 로드 커밋
+		if (m_pendingSceneFile.has_value())
+		{
+			const auto path = *m_pendingSceneFile;
+			m_pendingSceneFile.reset();
+
+			if (m_currentScene)
+				m_currentScene->OnExit(m_world, m_resources);
+
+			// 파일 기반 로드면 "현재 코드 씬" 개념이 없어질 수 있으니 비워둠
+			m_currentScene.reset();
+
+			const bool ok = SceneFile::LoadAuto(world, m_resources, path);
+			if (!ok)
+			{
+				ALICE_LOG_ERRORF("[SceneManager] SceneFile::LoadAuto failed: %s", path.generic_string().c_str());
+			}
+			return ok;
+		}
+
+		return false;
+	}
 }
-
-
-

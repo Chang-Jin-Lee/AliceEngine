@@ -476,7 +476,7 @@ namespace Alice
 
 		if (!isSceneLoaded) // 에디터 모드거나 로드 실패 시 샘플 씬 사용
 		{
-			pImpl->m_sceneManager->SwitchTo("SampleScene");
+			pImpl->m_sceneManager->SwitchToImmediate("SampleScene");
 			ALICE_LOG_INFO("Engine::Initialize: Loaded SampleScene (Fallback or Editor).");
 		}
 
@@ -484,7 +484,7 @@ namespace Alice
 		// PhysicsSystem 생성 (ECS 브릿지) - 씬 로드 이후, RefreshPhysicsForCurrentWorld 호출 전
 		pImpl->m_physicsSystem = std::make_unique<PhysicsSystem>(pImpl->m_world);
 		ALICE_LOG_INFO("Engine::Initialize: PhysicsSystem created.");
-		
+
 		// World::Clear() 호출 전 콜백 설정 (물리 시스템 정리 강제)
 		pImpl->m_world.SetOnBeforeClearCallback([this]() {
 			// World::Clear()가 호출되기 전에 물리 시스템을 먼저 정리
@@ -495,15 +495,15 @@ namespace Alice
 				{
 					pwShared->Flush(); // pending add/remove/release 처리
 				}
-				
+
 				// PhysicsSystem의 raw pointer 해제 (dangling pointer 방지)
 				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
 			}
-			
+
 			// 물리 이벤트 큐 및 accum 초기화
 			pImpl->m_physAccum = 0.0f;
 			pImpl->m_physicsEventQueue.clear();
-		});
+			});
 
 		RefreshPhysicsForCurrentWorld(); // 물리 1회 수동호출 (씬 로드 이후 1회)
 
@@ -566,81 +566,121 @@ namespace Alice
 		using namespace DirectX;
 
 		// 2. 카메라 데이터 갱신 (위치/회전)
-		// - 게임 모드(또는 에디터 플레이): 씬의 카메라 컴포넌트 동기화
-		// - 에디터 모드: 마우스/키보드 입력을 통한 프리 카메라 이동
 		bool updateFromScene = (!pImpl->m_editorMode || pImpl->m_isPlaying);
+
+		// 씬이 바뀐 프레임에는 "월드에 접근하는 코드"를 전부 스킵하기 위한 플래그
+		bool sceneChangedThisFrame = false;
 
 		if (updateFromScene)
 		{
-			// 2-1. 로직 업데이트 (씬/스크립트) - 카메라 로직은 LateUpdate에서 수행됨
-			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
-			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
+		// 2-1. 로직 업데이트 (씬/스크립트)
+		if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
+		pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
 
-			// 2-2. 물리 업데이트를 여기서 해도되나라는 생각임
-			// ===================================================================
-			// PhysicsSceneSettingsComponent가 있는데 물리 월드가 없으면 생성 시도
-			// (Awake()에서 추가된 경우 대응)
-			if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
-			{
-				const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
-				if (!settingsMap.empty())
-				{
-					const auto& settings = settingsMap.begin()->second;
-					if (settings.enablePhysics)
-					{
-						RefreshPhysicsForCurrentWorld();
-					}
-				}
-			}
-
-			// PhysicsSystem 업데이트 (Game → Physics 동기화)
+		// ===================================================================
+		// SAFE POINT: 씬 변경/로드는 여기서만 커밋한다 (물리/카메라 돌리기 전에!)
+		// ScriptSystem과 SceneManager 모두의 pending 요청을 체크
+		if (pImpl->m_scriptSystem.HasPendingSceneRequests() || 
+		    (pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange()))
+		{
+			// 1) PhysX 쪽부터 안전하게 떼어내기: Flush + 액터 정리 경로 확보
 			if (pImpl->m_physicsSystem)
 			{
-				pImpl->m_physicsSystem->Update(dt);
+				// PhysicsSystem::SetPhysicsWorld(nullptr) 내부에서 m_physicsWorld->Flush()까지 수행함
+				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
 			}
 
-			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
+			// 물리 월드가 있으면 Flush
+			if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
+				pwShared->Flush();
 
-			// 물리 이벤트 처리 (물리 시뮬레이션 이후, 게임 로직에서 안전하게 처리)
-			ProcessPhysicsEvents();
-			// ===================================================================
+			// 이벤트/고정스텝 누적치도 초기화 (이전 씬 찌꺼기 방지)
+			pImpl->m_physAccum = 0.0f;
+			pImpl->m_physicsEventQueue.clear();
 
-			// 2-3. 카메라 시스템 (컴포넌트 기반)
+			// 2) ScriptSystem의 씬 요청 커밋 (LoadAuto/SwitchTo 실행)
+			if (pImpl->m_scriptSystem.HasPendingSceneRequests())
 			{
-				CameraSystem cameraSystem;
-				cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
+				pImpl->m_scriptSystem.CommitSceneRequests(pImpl->m_world);
 			}
 
-			// 2-4. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
-			// 우선순위: Primary 카메라 -> 없으면 첫 번째 발견된 카메라
-			EntityId camId = InvalidEntityId;
-			for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
+			// 3) SceneManager의 씬 요청 커밋
+			if (pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange())
 			{
-				if (cam.primary) { camId = id; break; }
-				if (camId == InvalidEntityId) camId = id;
+				pImpl->m_sceneManager->CommitPendingSceneChange(pImpl->m_world);
 			}
 
-			if (const auto* t = pImpl->m_world.GetComponent<TransformComponent>(camId))
-			{
-				const auto* c = pImpl->m_world.GetComponent<CameraComponent>(camId);
-				pImpl->m_cameraPosition = t->position;
-				pImpl->m_cameraYawRadians = t->rotation.y;
-				pImpl->m_cameraPitchRadians = t->rotation.x;
+			// 4) 이 프레임은 더 이상 월드에 접근하면 안 됨 (방금 갈아엎었을 수 있으니까)
+			sceneChangedThisFrame = true;
+		}
+		// ===================================================================
 
-				// 투영 행렬 갱신 (게임 중 FOV 변경 대응)
-				const float defaultAspect = static_cast<float>(pImpl->m_width) / pImpl->m_height;
-				const float aspect = (c && c->useAspectOverride && c->aspectOverride > 0.0f)
-					? c->aspectOverride
-					: defaultAspect;
-				pImpl->m_camera.SetPerspective(c ? c->fovYRad : DirectX::XM_PIDIV4,
-					aspect,
-					c ? c->nearPlane : 0.1f,
-					c ? c->farPlane : 5000.0f);
+			// 씬 바뀐 프레임이면 물리/카메라(월드 접근)를 스킵하고, 아래 "카메라 최종 적용"만 수행
+			if (!sceneChangedThisFrame)
+			{
+				// 2-2. 물리 업데이트
+				// ===================================================================
+				// PhysicsSceneSettingsComponent가 있는데 물리 월드가 없으면 생성 시도
+				if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
+				{
+					const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
+					if (!settingsMap.empty())
+					{
+						const auto& settings = settingsMap.begin()->second;
+						if (settings.enablePhysics)
+						{
+							RefreshPhysicsForCurrentWorld();
+						}
+					}
+				}
+
+				// PhysicsSystem 업데이트 (Game → Physics 동기화)
+				if (pImpl->m_physicsSystem)
+				{
+					pImpl->m_physicsSystem->Update(dt);
+				}
+
+				TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
+
+				// 물리 이벤트 처리
+				ProcessPhysicsEvents();
+				// ===================================================================
+
+				// 2-3. 카메라 시스템 (컴포넌트 기반)
+				{
+					CameraSystem cameraSystem;
+					cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
+				}
+
+				// 2-4. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
+				EntityId camId = InvalidEntityId;
+				for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
+				{
+					if (cam.primary) { camId = id; break; }
+					if (camId == InvalidEntityId) camId = id;
+				}
+
+				if (const auto* t = pImpl->m_world.GetComponent<TransformComponent>(camId))
+				{
+					const auto* c = pImpl->m_world.GetComponent<CameraComponent>(camId);
+					pImpl->m_cameraPosition = t->position;
+					pImpl->m_cameraYawRadians = t->rotation.y;
+					pImpl->m_cameraPitchRadians = t->rotation.x;
+
+					const float defaultAspect = static_cast<float>(pImpl->m_width) / pImpl->m_height;
+					const float aspect = (c && c->useAspectOverride && c->aspectOverride > 0.0f)
+						? c->aspectOverride
+						: defaultAspect;
+
+					pImpl->m_camera.SetPerspective(c ? c->fovYRad : DirectX::XM_PIDIV4,
+						aspect,
+						c ? c->nearPlane : 0.1f,
+						c ? c->farPlane : 5000.0f);
+				}
 			}
 		}
-		else if (pImpl->m_inputSystem.IsRightButtonDown()) // 에디터 프리캠 조작
+		else if (pImpl->m_inputSystem.IsRightButtonDown()) // 에디터 프리캠
 		{
-			// 키 입력에 따른 이동 벡터 계산
 			XMVECTOR moveDir = XMVectorZero();
 			auto& input = pImpl->m_inputSystem;
 
@@ -653,22 +693,20 @@ namespace Alice
 
 			if (!XMVector3Equal(moveDir, XMVectorZero()))
 			{
-				// 현재 카메라 회전을 기준으로 로컬 이동 벡터를 월드로 변환
 				const XMMATRIX rotMat = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
 				const XMVECTOR worldDir = XMVector3Normalize(XMVector3TransformNormal(moveDir, rotMat));
 				const XMVECTOR currentPos = XMLoadFloat3(&pImpl->m_cameraPosition);
 
-				XMStoreFloat3(&pImpl->m_cameraPosition, XMVectorAdd(currentPos, XMVectorScale(worldDir, pImpl->m_cameraMoveSpeed * dt)));
+				XMStoreFloat3(&pImpl->m_cameraPosition,
+					XMVectorAdd(currentPos, XMVectorScale(worldDir, pImpl->m_cameraMoveSpeed * dt)));
 			}
 
-			// 마우스 델타로 회전 갱신
 			const POINT mouseDelta = input.GetMouseDelta();
 			pImpl->m_cameraYawRadians += mouseDelta.x * pImpl->m_cameraMouseSensitivity;
 			pImpl->m_cameraPitchRadians += mouseDelta.y * pImpl->m_cameraMouseSensitivity;
 		}
 
-		// 3. 카메라 최종 적용
-		// Pitch 제한 및 View Matrix 생성
+		// 3. 카메라 최종 적용 (월드 접근 없음 -> 씬 변경 프레임에도 안전)
 		const float pitchLimit = XMConvertToRadians(89.0f);
 		pImpl->m_cameraPitchRadians = std::clamp(pImpl->m_cameraPitchRadians, -pitchLimit, pitchLimit);
 
@@ -679,9 +717,6 @@ namespace Alice
 		XMFLOAT3 targetPos;
 		XMStoreFloat3(&targetPos, XMVectorAdd(camPos, camForward));
 		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
-
-		// 4. 로직 업데이트 (씬/스크립트)
-		// - updateFromScene에서는 위에서 처리
 	}
 
 	//=========================================================
@@ -692,7 +727,7 @@ namespace Alice
 		// World::Clear()가 호출되면 OnBeforeClear 콜백이 자동으로 PhysicsSystem을 정리하므로,
 		// 이 함수는 단순히 World::Clear()를 호출하면 됨
 		pImpl->m_world.Clear();
-		
+
 		// World::Clear()에서 이미 물리 월드를 reset했지만, 명시적으로도 해제
 		pImpl->m_world.SetPhysicsWorld(nullptr);
 	}
@@ -743,35 +778,35 @@ namespace Alice
 		IPhysicsWorld* existingWorld = pImpl->m_world.GetPhysicsWorld();
 		Vec3 newGravity = Vec3(settings.gravity.x, settings.gravity.y, settings.gravity.z);
 
-			// 기존 월드가 있고 설정이 변경되지 않았다면 그대로 사용
-			if (existingWorld)
+		// 기존 월드가 있고 설정이 변경되지 않았다면 그대로 사용
+		if (existingWorld)
+		{
+			Vec3 currentGravity = existingWorld->GetGravity();
+			// 중력이 변경되었으면 업데이트
+			if (currentGravity.x != newGravity.x || currentGravity.y != newGravity.y || currentGravity.z != newGravity.z)
 			{
-				Vec3 currentGravity = existingWorld->GetGravity();
-				// 중력이 변경되었으면 업데이트
-				if (currentGravity.x != newGravity.x || currentGravity.y != newGravity.y || currentGravity.z != newGravity.z)
-				{
-					existingWorld->SetGravity(newGravity);
-					ALICE_LOG_INFO("PhysicsWorld gravity updated: (%.2f, %.2f, %.2f)", newGravity.x, newGravity.y, newGravity.z);
-				}
-
-				// fixedDt/maxSubsteps는 매 프레임 업데이트 (에디터에서 변경 가능)
-				pImpl->m_physFixedDt = settings.fixedDt;
-				pImpl->m_physMaxSubsteps = settings.maxSubsteps;
-				// accum은 유지 (프레임 드롭 방지)
-
-				// PhysicsSystem에 물리 월드 설정 (이미 있지만 재설정)
-				if (pImpl->m_physicsSystem)
-				{
-					pImpl->m_physicsSystem->SetPhysicsWorld(existingWorld);
-				}
-
-				// PhysicsSceneSettingsComponent의 layerCollideMatrix와 layerQueryMatrix 변경은
-				// 런타임에 적용할 수 없으므로 (FilterShader는 씬 생성 시 설정됨),
-				// 변경 시 물리 월드를 재생성해야 합니다.
-				// 하지만 매 프레임 체크하는 것은 비효율적이므로, 에디터에서 변경 시 씬 재로드를 권장합니다.
-
-				return;
+				existingWorld->SetGravity(newGravity);
+				ALICE_LOG_INFO("PhysicsWorld gravity updated: (%.2f, %.2f, %.2f)", newGravity.x, newGravity.y, newGravity.z);
 			}
+
+			// fixedDt/maxSubsteps는 매 프레임 업데이트 (에디터에서 변경 가능)
+			pImpl->m_physFixedDt = settings.fixedDt;
+			pImpl->m_physMaxSubsteps = settings.maxSubsteps;
+			// accum은 유지 (프레임 드롭 방지)
+
+			// PhysicsSystem에 물리 월드 설정 (이미 있지만 재설정)
+			if (pImpl->m_physicsSystem)
+			{
+				pImpl->m_physicsSystem->SetPhysicsWorld(existingWorld);
+			}
+
+			// PhysicsSceneSettingsComponent의 layerCollideMatrix와 layerQueryMatrix 변경은
+			// 런타임에 적용할 수 없으므로 (FilterShader는 씬 생성 시 설정됨),
+			// 변경 시 물리 월드를 재생성해야 합니다.
+			// 하지만 매 프레임 체크하는 것은 비효율적이므로, 에디터에서 변경 시 씬 재로드를 권장합니다.
+
+			return;
+		}
 
 		// 새 월드 생성
 		PhysicsModule::WorldDesc desc{};
@@ -838,20 +873,23 @@ namespace Alice
 			}
 			else
 			{
-				// Fallback: PhysicsSystem이 없을 때 직접 동기화
-				for (const auto& at : moved)
-				{
-					if (!at.userData) continue;
-					const EntityId id = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(at.userData));
+			// Fallback: PhysicsSystem이 없을 때 직접 동기화
+			for (const auto& at : moved)
+			{
+				if (!at.userData) continue;
+				
+				// worldEpoch 검증 포함하여 EntityId 추출 (이전 씬의 userData는 무시)
+				const EntityId id = pImpl->m_world.ExtractEntityIdFromUserData(at.userData);
+				if (id == InvalidEntityId) continue;
 
-					auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
-					if (!tr) continue;
+				auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
+				if (!tr) continue;
 
-					tr->position = { at.position.x, at.position.y, at.position.z };
-					// 회전도 동기화 (static 메서드이므로 PhysicsSystem 인스턴스 없이도 호출 가능)
-					DirectX::XMFLOAT3 euler = PhysicsSystem::ToEulerRadians(at.rotation);
-					tr->rotation = euler;
-				}
+				tr->position = { at.position.x, at.position.y, at.position.z };
+				// 회전도 동기화 (static 메서드이므로 PhysicsSystem 인스턴스 없이도 호출 가능)
+				DirectX::XMFLOAT3 euler = PhysicsSystem::ToEulerRadians(at.rotation);
+				tr->rotation = euler;
+			}
 			}
 
 			// 이벤트 드레인 및 큐에 누적 (한 프레임 안전하게 처리)
@@ -883,8 +921,24 @@ namespace Alice
 		{
 			if (!e.userDataA || !e.userDataB) continue;
 
-			EntityId entityA = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(e.userDataA));
-			EntityId entityB = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(e.userDataB));
+			// worldEpoch 검증 포함하여 EntityId 추출 (이전 씬의 userData는 무시)
+			EntityId entityA = pImpl->m_world.ExtractEntityIdFromUserData(e.userDataA);
+			EntityId entityB = pImpl->m_world.ExtractEntityIdFromUserData(e.userDataB);
+
+			// 유효하지 않은 EntityId면 무시 (이전 씬의 이벤트)
+			if (entityA == InvalidEntityId || entityB == InvalidEntityId) continue;
+
+			// ✅ 핵심: 현재 물리 시스템이 추적하는 엔티티만 처리 (씬 전환 중 stale userData 방지)
+			if (pImpl->m_physicsSystem)
+			{
+				// PhysicsSystem의 IsTrackedEntity를 사용하여 현재 추적 중인 엔티티만 처리
+				// 이는 씬 전환 중 파괴된 액터의 userData가 새 엔티티를 오염시키는 것을 방지
+				if (!pImpl->m_physicsSystem->IsTrackedEntity(entityA) ||
+				    !pImpl->m_physicsSystem->IsTrackedEntity(entityB))
+				{
+					continue; // 둘 중 하나라도 추적 중이 아니면 이벤트 무시
+				}
+			}
 
 			// 이벤트 타입에 따른 처리
 			switch (e.type)

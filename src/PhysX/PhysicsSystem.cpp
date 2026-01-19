@@ -20,6 +20,19 @@ static int FirstLayerIndex(uint32_t bits)
 	return (int)std::countr_zero(bits); // C++20
 }
 
+// userData 생성/해석 헬퍼 함수 (worldEpoch + EntityId 조합)
+// userData = (worldEpoch << 32) | (entityId + 1) 형태로 저장하여 씬 전환 시 무효화 감지
+// +1 오프셋: EntityId 0(InvalidEntityId)이 nullptr가 되는 것을 방지
+static void* MakeUserData(uint64_t worldEpoch, EntityId entityId) noexcept
+{
+	// EntityId에 +1 오프셋을 추가하여 null-safe하게 만듦
+	const uint64_t combined = (worldEpoch << 32) | (static_cast<uint64_t>(entityId) + 1u);
+	return reinterpret_cast<void*>(static_cast<std::uintptr_t>(combined));
+}
+
+// 주의: EntityId 추출은 World::ExtractEntityIdFromUserData()를 사용해야 함 (epoch 검증 포함)
+// 이전 static 함수들은 제거하고 World의 메서드를 사용
+
 // 해시 결합 유틸리티
 static uint64_t HashCombine64(uint64_t a, uint64_t b) noexcept
 {
@@ -97,14 +110,24 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
 {
 	// physicsWorld가 nullptr이 되는 경우 (씬 전환/저장), 
 	// PhysXWorld의 pending 작업을 먼저 Flush하여 안전하게 정리
-	if (physicsWorld == nullptr && m_physicsWorld != nullptr)
+	IPhysicsWorld* oldWorld = m_physicsWorld;
+	if (physicsWorld == nullptr && oldWorld != nullptr)
 	{
 		// 1단계: 기존 pending 작업을 먼저 Flush (이전 씬의 작업 처리)
-		m_physicsWorld->Flush();
+		// 주의: Step()이 실행 중일 수 있으므로 Flush()는 안전하게 큐에만 추가함
+		oldWorld->Flush();
 	}
+
+	// 중요: m_physicsWorld를 먼저 null로 설정하여
+	// DestroyPhysicsActor()에서 안전하게 체크할 수 있도록 함
+	// (씬 전환 중 world가 이미 파괴되었을 수 있음)
+	// 하지만 oldWorld는 여전히 유효하므로 Destroy() 호출 시 사용 가능
+	m_physicsWorld = physicsWorld;
 
     // 기존 액터들 정리 (컴포넌트 핸들도 함께 정리)
 	// 씬 전환 중일 수 있으므로 컴포넌트 접근 시 null 체크 필수
+    // 주의: Update()가 동시에 실행 중일 수 있으므로, 
+    // entityIds를 복사한 후 순회하면서 이미 제거된 엔티티는 건너뛰도록 DestroyPhysicsActor에서 처리
     std::vector<EntityId> entityIds;
     entityIds.reserve(m_entityToActor.size());
     for (const auto& [entityId, handle] : m_entityToActor)
@@ -114,9 +137,13 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
     
     for (EntityId entityId : entityIds)
     {
+        // DestroyPhysicsActor 내부에서 이미 제거된 엔티티는 건너뛰도록 체크
+        // (Update()가 동시에 실행 중이어서 이미 제거했을 수 있음)
         DestroyPhysicsActor(entityId);
     }
     
+    // 모든 정리가 완료된 후 맵 클리어
+    // (DestroyPhysicsActor에서 이미 erase했지만, 혹시 모를 경우를 대비)
     m_entityToActor.clear();
     m_lastTransforms.clear();
     m_lastColliders.clear();
@@ -135,12 +162,11 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
     m_lastCCTs.clear();
 
 	// 2단계: 액터 정리 과정에서 추가된 pending 작업을 Flush (정리 작업 완료)
-	if (physicsWorld == nullptr && m_physicsWorld != nullptr)
+	// oldWorld를 사용하여 이미 null로 설정된 m_physicsWorld 대신 사용
+	if (physicsWorld == nullptr && oldWorld != nullptr)
 	{
-		m_physicsWorld->Flush();
+		oldWorld->Flush();
 	}
-
-    m_physicsWorld = physicsWorld;
 	m_lastFilterRevision = 0xFFFFFFFFu; // 강제로 다음 Update에서 1회 갱신
 
 }
@@ -156,6 +182,9 @@ void PhysicsSystem::Update(float deltaTime)
     IPhysicsWorld* current = m_world.GetPhysicsWorld();
     if (current != m_physicsWorld) {
         SetPhysicsWorld(current); // 바뀌었으면 정리+재바인딩
+        // SetPhysicsWorld(nullptr)가 호출되면 m_entityToActor가 모두 클리어됨
+        // 이후 로직은 실행할 필요 없음
+        if (!m_physicsWorld) return;
     }
 
     if (!m_physicsWorld) return;
@@ -1110,10 +1139,10 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         rbDesc.maxLinearVelocity = rb->maxLinearVelocity;
         rbDesc.maxAngularVelocity = rb->maxAngularVelocity;
         rbDesc.solverPositionIterations = rb->solverPositionIterations;
-        rbDesc.solverVelocityIterations = rb->solverVelocityIterations;
-        rbDesc.sleepThreshold = rb->sleepThreshold;
-        rbDesc.stabilizationThreshold = rb->stabilizationThreshold;
-        rbDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+		rbDesc.solverVelocityIterations = rb->solverVelocityIterations;
+		rbDesc.sleepThreshold = rb->sleepThreshold;
+		rbDesc.stabilizationThreshold = rb->stabilizationThreshold;
+		rbDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         if (collider)
         {
@@ -1136,10 +1165,10 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 boxDesc.layerBits = collider->layerBits;
                 boxDesc.collideMask = collider->collideMask;
                 boxDesc.queryMask = collider->queryMask;
-                boxDesc.isTrigger = collider->isTrigger;
-                boxDesc.userData = rbDesc.userData;
+				boxDesc.isTrigger = collider->isTrigger;
+				boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-                auto bodyPtr = m_physicsWorld->CreateDynamicBox(pos, rot, rbDesc, boxDesc);
+				auto bodyPtr = m_physicsWorld->CreateDynamicBox(pos, rot, rbDesc, boxDesc);
                 if (bodyPtr)
                 {
                     // unique_ptr을 그대로 move하여 소유권 유지
@@ -1165,11 +1194,11 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 sphereDesc.restitution = collider->restitution;
                 sphereDesc.layerBits = collider->layerBits;
                 sphereDesc.collideMask = collider->collideMask;
-                sphereDesc.queryMask = collider->queryMask;
-                sphereDesc.isTrigger = collider->isTrigger;
-                sphereDesc.userData = rbDesc.userData;
+				sphereDesc.queryMask = collider->queryMask;
+				sphereDesc.isTrigger = collider->isTrigger;
+				sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-                auto bodyPtr = m_physicsWorld->CreateDynamicSphere(pos, rot, rbDesc, sphereDesc);
+				auto bodyPtr = m_physicsWorld->CreateDynamicSphere(pos, rot, rbDesc, sphereDesc);
                 if (bodyPtr)
                 {
                     ActorHandle handle(std::move(bodyPtr));
@@ -1204,11 +1233,11 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 capsuleDesc.restitution = collider->restitution;
                 capsuleDesc.layerBits = collider->layerBits;
                 capsuleDesc.collideMask = collider->collideMask;
-                capsuleDesc.queryMask = collider->queryMask;
-                capsuleDesc.isTrigger = collider->isTrigger;
-                capsuleDesc.userData = rbDesc.userData;
+				capsuleDesc.queryMask = collider->queryMask;
+				capsuleDesc.isTrigger = collider->isTrigger;
+				capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-                auto bodyPtr = m_physicsWorld->CreateDynamicCapsule(pos, rot, rbDesc, capsuleDesc);
+				auto bodyPtr = m_physicsWorld->CreateDynamicCapsule(pos, rot, rbDesc, capsuleDesc);
                 if (bodyPtr)
                 {
                     ActorHandle handle(std::move(bodyPtr));
@@ -1246,7 +1275,7 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         filterDesc.collideMask = collider->collideMask;
         filterDesc.queryMask = collider->queryMask;
         filterDesc.isTrigger = collider->isTrigger;
-        filterDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+        filterDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         MaterialDesc materialDesc{};
         materialDesc.staticFriction = collider->staticFriction;
@@ -1272,7 +1301,7 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             boxDesc.collideMask = collider->collideMask;
             boxDesc.queryMask = collider->queryMask;
             boxDesc.isTrigger = collider->isTrigger;
-            boxDesc.userData = filterDesc.userData;
+            boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
             auto actorPtr = m_physicsWorld->CreateStaticBox(pos, rot, boxDesc);
             if (actorPtr)
@@ -1299,7 +1328,7 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             sphereDesc.collideMask = collider->collideMask;
             sphereDesc.queryMask = collider->queryMask;
             sphereDesc.isTrigger = collider->isTrigger;
-            sphereDesc.userData = filterDesc.userData;
+            sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
             auto actorPtr = m_physicsWorld->CreateStaticSphere(pos, rot, sphereDesc);
             if (actorPtr)
@@ -1337,7 +1366,7 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             capsuleDesc.collideMask = collider->collideMask;
             capsuleDesc.queryMask = collider->queryMask;
             capsuleDesc.isTrigger = collider->isTrigger;
-            capsuleDesc.userData = filterDesc.userData;
+            capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
             auto actorPtr = m_physicsWorld->CreateStaticCapsule(pos, rot, capsuleDesc);
             if (actorPtr)
@@ -1360,6 +1389,15 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     auto it = m_entityToActor.find(entityId);
     if (it == m_entityToActor.end()) return;
 
+	// 핸들이 이미 비어있는 경우 (이중 호출 방지)
+	// std::move로 이미 이동된 경우 빈 핸들이 남을 수 있음
+	if (!it->second.owned)
+	{
+		// 빈 핸들이면 그냥 제거하고 종료
+		m_entityToActor.erase(it);
+		return;
+	}
+
 	// 씬 전환 중일 수 있으므로, 컴포넌트 접근 전에 안전하게 핸들만 가져옴
 	// 컴포넌트가 이미 제거되었을 수 있으므로 null 체크는 필수
     auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
@@ -1371,32 +1409,28 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
     if (terrain) terrain->physicsActorHandle = nullptr;
 
-	ActorHandle& handle = it->second;
+	// 핸들을 복사하여 안전하게 접근 (it이 무효화될 수 있으므로)
+	ActorHandle handle = std::move(it->second);
 	
-	// 근본 원인 해결: m_physicsWorld가 null이면 Destroy() 호출하지 않고 핸들만 해제
-	// 빠른 씬 전환 시 World가 이미 파괴되었을 수 있고,
-	// 이 경우 PhysXActor::Destroy()에서 actor->getScene() 호출 시 크래시 발생 가능
-	// 따라서 World가 유효할 때만 Destroy()를 호출하여 안전하게 정리
-	// 
-	// 주의: handle.IsValid()는 owned->IsValid()를 호출하는데,
-	// 빠른 씬 전환 시 내부 객체가 이미 부분적으로 파괴되었을 수 있어
-	// IsValid() 호출 자체가 크래시를 유발할 수 있음
-	// 따라서 owned 포인터 존재 여부만 체크 (IsValid() 호출 안 함)
-	if (m_physicsWorld != nullptr && handle.owned)
+	// 씬 전환 중 m_physicsWorld가 이미 null일 수 있지만,
+	// PhysXActor::Destroy()는 내부에서 world.lock()을 통해 Impl에 접근하므로
+	// shared_ptr<IPhysicsWorld>가 아직 살아있으면 EnqueueRemove/EnqueueRelease가 호출됨
+	// 따라서 handle.owned가 있으면 항상 Destroy()를 호출하여 안전하게 정리
+	if (handle.owned)
 	{
-		// World가 유효하고 owned가 존재할 때만 Destroy() 호출
-		// Destroy()는 내부에서 world.lock()으로 world 유효성을 체크하지만,
-		// actor->getScene() 호출은 world.lock() 체크 후에 발생하므로
-		// m_physicsWorld가 null이 아닐 때만 호출해야 안전
+		// Destroy() 호출: PhysXActor::Destroy()는 내부에서 world.lock()을 체크하므로
+		// Impl이 아직 살아있으면 EnqueueRemove/EnqueueRelease가 호출되어 안전하게 정리됨
+		// Impl이 이미 파괴되었으면 world.lock()이 실패하여 아무것도 하지 않음 (안전)
+		// 
+		// 주의: simulate()와 fetchResults() 사이에 호출되더라도
+		// EnqueueRemove/EnqueueRelease는 큐에만 추가되므로 안전함
+		// fetchResults() 후 FlushPending()에서 처리됨
 		handle.Destroy();
 	}
 	else
 	{
-		// World가 이미 파괴되었거나 owned가 없는 경우 핸들만 해제
-		// unique_ptr이 소멸될 때 PhysXActor 소멸자가 호출되지만,
-		// world.lock()이 실패하면 EnqueueRelease가 호출되지 않으므로 안전
-		handle.owned.reset();
-		handle.rigid = nullptr;
+		// owned가 없는 경우는 이미 파괴되었거나 빈 핸들
+		// 아무것도 할 필요 없음
 	}
 	
 	// erase 호출 (it이 여전히 유효함, Destroy는 owned만 해제하고 it 자체는 안전)
@@ -1498,7 +1532,7 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
     hfDesc.queryMask = terrain->queryMask;
     hfDesc.isTrigger = false; // HeightField는 절대 트리거 불가 (PhysX 제약)
     hfDesc.doubleSidedQueries = terrain->doubleSidedQueries; 
-    hfDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+    hfDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
     // 피벗 보정: centerPivot이 true면 지형 중앙으로 localPos 조정
     Vec3 localPos = Vec3::Zero;
@@ -1513,6 +1547,13 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
 
     // RigidStatic + HeightField 생성
     // localPos/localRot를 적용하기 위해 빈 액터를 만들고 shape를 직접 추가
+    // 주의: CreateStaticEmpty 호출 전에 m_physicsWorld가 null이 될 수 있으므로 체크
+    if (!m_physicsWorld)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: m_physicsWorld became null during creation!");
+        return;
+    }
+    
     auto actorPtr = m_physicsWorld->CreateStaticEmpty(pos, rot, hfDesc.userData);
     if (actorPtr)
     {
@@ -1523,10 +1564,16 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
         if (!actor->AddHeightFieldShape(hfDesc, localPos, localRot))
         {
             // 실패 시 액터 정리
+            // 주의: handle.Destroy()는 owned->Destroy()를 호출하여 EnqueueRemove/EnqueueRelease를 호출함
+            // 하지만 m_entityToActor에는 추가되지 않았으므로 씬 전환 시 DestroyPhysicsActor가 호출되지 않음
+            // 따라서 중복 호출 문제는 없음
             handle.Destroy();
             return;
         }
         
+        // 성공 시에만 m_entityToActor에 추가
+        // 주의: 이 시점에서 씬 전환이 발생하면 SetPhysicsWorld(nullptr)에서 DestroyPhysicsActor가 호출될 수 있음
+        // 하지만 handle은 이미 move되었으므로 안전함
         terrain->physicsActorHandle = actor;
         m_entityToActor[entityId] = std::move(handle);
     }
@@ -1579,7 +1626,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         boxDesc.collideMask = collider->collideMask;
         boxDesc.queryMask = collider->queryMask;
         boxDesc.isTrigger = collider->isTrigger;
-        boxDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+        boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         actor->AddBoxShape(boxDesc, Vec3::Zero, Quat::Identity);
         break;
@@ -1596,7 +1643,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         sphereDesc.collideMask = collider->collideMask;
         sphereDesc.queryMask = collider->queryMask;
         sphereDesc.isTrigger = collider->isTrigger;
-        sphereDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+        sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         actor->AddSphereShape(sphereDesc, Vec3::Zero, Quat::Identity);
         break;
@@ -1625,7 +1672,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         capsuleDesc.collideMask = collider->collideMask;
         capsuleDesc.queryMask = collider->queryMask;
         capsuleDesc.isTrigger = collider->isTrigger;
-        capsuleDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+        capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         actor->AddCapsuleShape(capsuleDesc, Vec3::Zero, Quat::Identity);
         break;
@@ -1705,7 +1752,14 @@ void PhysicsSystem::SyncPhysicsToGame(const ActiveTransform& transform)
 {
     if (!transform.userData) return;
 
-    EntityId entityId = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(transform.userData));
+    // worldEpoch 검증 포함하여 EntityId 추출 (이전 씬의 userData는 InvalidEntityId 반환)
+    EntityId entityId = m_world.ExtractEntityIdFromUserData(transform.userData);
+    if (entityId == InvalidEntityId) return;
+
+    // ✅ 핵심: 현재 물리 시스템이 추적하는 엔티티만 반영 (씬 전환 중 stale userData 방지)
+    if (!IsTrackedEntity(entityId))
+        return;
+
     auto* transformComp = m_world.GetComponent<TransformComponent>(entityId);
     if (!transformComp) return;
 
@@ -1722,6 +1776,12 @@ void PhysicsSystem::SyncPhysicsToGame(const ActiveTransform& transform)
         transformComp->rotation,
         transformComp->scale
     };
+}
+
+bool PhysicsSystem::IsTrackedEntity(Alice::EntityId id) const noexcept
+{
+    return (m_entityToActor.find(id) != m_entityToActor.end()) ||
+           (m_entityToCCT.find(id) != m_entityToCCT.end());
 }
 
 Vec3 PhysicsSystem::ToVec3(const DirectX::XMFLOAT3& v)
@@ -1858,7 +1918,7 @@ void PhysicsSystem::CreateCharacterController(EntityId entityId)
     desc.layerBits = ccc->layerBits;
     desc.collideMask = ccc->collideMask;
     desc.queryMask = ccc->queryMask;
-    desc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+    desc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
     // foot 기준: Transform.position을 발 위치로 사용
     desc.footPosition = ToVec3(transform->position);

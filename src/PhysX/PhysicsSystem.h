@@ -39,6 +39,9 @@ public:
     // Physics → Game 동기화 (외부에서 호출 가능)
     void SyncPhysicsToGame(const ActiveTransform& transform);
 
+    // 현재 추적 중인 엔티티인지 확인 (씬 전환 중 stale userData 방지)
+    bool IsTrackedEntity(Alice::EntityId id) const noexcept;
+
     // 유틸리티: Quat → Euler 변환
     static DirectX::XMFLOAT3 ToEulerRadians(const Quat& q);
 
@@ -77,10 +80,18 @@ private:
 
     // EntityId → 물리 액터 매핑
     // unique_ptr을 소유하여 래퍼 객체의 생명주기를 안전하게 관리
+    // 
+    // 주의: ActorHandle은 두 가지 타입을 저장할 수 있음:
+    // 1. IPhysicsActor (Static Actor) - rigid == nullptr
+    // 2. IRigidBody (Dynamic Body) - rigid != nullptr (IRigidBody는 IPhysicsActor를 상속)
+    // 
+    // GetRigidBody()는 Static Actor인 경우 nullptr를 반환하므로,
+    // 호출 시 null 체크가 필수임
     struct ActorHandle
     {
         std::unique_ptr<IPhysicsActor> owned;  // 소유권 유지! (래퍼 객체 delete 보장)
         IRigidBody* rigid = nullptr;           // owned.get()의 non-owning 캐시 (편의용)
+                                              // Static Actor인 경우 nullptr, Dynamic Body인 경우 유효한 포인터
         
         ActorHandle() = default;
         
@@ -101,12 +112,16 @@ private:
         bool IsValid() const { return owned && owned->IsValid(); }
         
         IPhysicsActor* GetActor() const { return owned.get(); }
+        
+        // IRigidBody*를 반환 (Static Actor인 경우 nullptr)
+        // 주의: 호출 전에 null 체크가 필수임
         IRigidBody* GetRigidBody() const { return rigid; }
         
         void Destroy()
         {
             if (owned)
             {
+                //TODO : 여기 터지는거 원인 찾아서 고쳐야함
                 owned->Destroy();  // native PxActor 정리 예약 (deferred-safe)
                 owned.reset();     // 래퍼 객체 delete (누수 방지!)
             }
