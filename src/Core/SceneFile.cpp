@@ -7,6 +7,7 @@
 #include "Core/JsonRttr.h"
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
+#include "Core/ThreadSafety.h"
 
 #include <fstream>
 #include <string>
@@ -668,6 +669,7 @@ namespace Alice
 
         bool Load(World& world, const std::filesystem::path& path)
         {
+            ThreadSafety::AssertMainThread();
             // 레거시 빈 씬(텍스트 헤더만 존재) 자동 처리:
             // - 예전 포맷으로 생성된 "# AliceRenderer scene" 파일은 JSON이 아니므로 파싱에 실패합니다.
             // - 이 경우 기본 엔티티 1개를 넣어 JSON 씬으로 즉시 업그레이드합니다.

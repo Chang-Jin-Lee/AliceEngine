@@ -78,31 +78,19 @@ private:
     Alice::World& m_world;
     IPhysicsWorld* m_physicsWorld = nullptr;
 
-    // EntityId → 물리 액터 매핑
-    // unique_ptr을 소유하여 래퍼 객체의 생명주기를 안전하게 관리
-    // 
-    // 주의: ActorHandle은 두 가지 타입을 저장할 수 있음:
-    // 1. IPhysicsActor (Static Actor) - rigid == nullptr
-    // 2. IRigidBody (Dynamic Body) - rigid != nullptr (IRigidBody는 IPhysicsActor를 상속)
-    // 
-    // GetRigidBody()는 Static Actor인 경우 nullptr를 반환하므로,
-    // 호출 시 null 체크가 필수임
     struct ActorHandle
     {
-        std::unique_ptr<IPhysicsActor> owned;  // 소유권 유지! (래퍼 객체 delete 보장)
-        IRigidBody* rigid = nullptr;           // owned.get()의 non-owning 캐시 (편의용)
-                                              // Static Actor인 경우 nullptr, Dynamic Body인 경우 유효한 포인터
+        std::unique_ptr<IPhysicsActor> owned;
+        IRigidBody* rigid = nullptr;
         
         ActorHandle() = default;
         
-        // unique_ptr<IPhysicsActor>로부터 생성 (Static Actor용)
         explicit ActorHandle(std::unique_ptr<IPhysicsActor> actor)
             : owned(std::move(actor))
-            , rigid(nullptr)  // Static Actor는 IRigidBody가 아님
+            , rigid(nullptr)
         {
         }
         
-        // unique_ptr<IRigidBody>로부터 생성 (IRigidBody는 IPhysicsActor를 상속)
         explicit ActorHandle(std::unique_ptr<IRigidBody> body)
             : owned(std::move(body))
             , rigid(static_cast<IRigidBody*>(owned.get()))
@@ -113,17 +101,14 @@ private:
         
         IPhysicsActor* GetActor() const { return owned.get(); }
         
-        // IRigidBody*를 반환 (Static Actor인 경우 nullptr)
-        // 주의: 호출 전에 null 체크가 필수임
         IRigidBody* GetRigidBody() const { return rigid; }
         
         void Destroy()
         {
             if (owned)
             {
-                //TODO : 여기 터지는거 원인 찾아서 고쳐야함
-                owned->Destroy();  // native PxActor 정리 예약 (deferred-safe)
-                owned.reset();     // 래퍼 객체 delete (누수 방지!)
+                owned->Destroy();
+                owned.reset();
             }
             rigid = nullptr;
         }

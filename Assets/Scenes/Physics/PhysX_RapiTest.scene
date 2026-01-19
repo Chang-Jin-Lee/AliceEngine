@@ -28,13 +28,13 @@
                     "z": 0.9999999403953552
                 }
             },
-            "id": 2
+            "id": 62
         },
         {
             "CharacterController": {
                 "applyGravity": true,
                 "climbingMode": "Constrained",
-                "collideMask": 4294967294,
+                "collideMask": 4294967283,
                 "contactOffset": 0.5,
                 "density": 10.0,
                 "desiredVelocity": {
@@ -56,7 +56,7 @@
                 "slopeLimitRadians": 0.7853981852531433,
                 "stepOffset": 0.5,
                 "teleport": false,
-                "verticalVelocity": -0.07069772481918335
+                "verticalVelocity": -0.06065817549824715
             },
             "Material": {
                 "albedoTexturePath": "Cooked/Textures/Rapi/Rapi_Diffuse_embedded0.alice",
@@ -84,7 +84,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 376.8345689474372
+                "timeSec": 73.8508899146691
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -93,13 +93,13 @@
             },
             "Transform": {
                 "position": {
-                    "x": 4.194103717803955,
-                    "y": 0.9249992370605469,
-                    "z": -5.695326328277588
+                    "x": 3.729231357574463,
+                    "y": 0.9123597145080566,
+                    "z": -6.717822074890137
                 },
                 "rotation": {
                     "x": 0.0,
-                    "y": 2.825303792953491,
+                    "y": 4.471036434173584,
                     "z": 0.0
                 },
                 "scale": {
@@ -108,7 +108,7 @@
                     "z": 0.04999999329447746
                 }
             },
-            "id": 3,
+            "id": 63,
             "name": "Rapi"
         },
         {
@@ -159,7 +159,7 @@
                 "maxDistance": 60.0,
                 "minDistance": 8.0,
                 "mode": 0,
-                "pitchDeg": 5.885915279388428,
+                "pitchDeg": 5.885900020599365,
                 "pitchMaxDeg": 80.0,
                 "pitchMinDeg": -45.0,
                 "positionDamping": 8.0,
@@ -260,14 +260,14 @@
             ],
             "Transform": {
                 "position": {
-                    "x": 6.345229625701904,
-                    "y": 10.315373420715332,
-                    "z": -13.356903076171875
+                    "x": 5.880349636077881,
+                    "y": 10.302749633789063,
+                    "z": -14.379383087158203
                 },
                 "rotation": {
-                    "x": 0.10272860527038574,
+                    "x": 0.10272834450006485,
                     "y": -0.27372056245803833,
-                    "z": -5.587935891782081e-09
+                    "z": 0.0
                 },
                 "scale": {
                     "x": 0.9999983906745911,
@@ -275,7 +275,7 @@
                     "z": 0.9999995231628418
                 }
             },
-            "id": 4,
+            "id": 64,
             "name": "MainCamera"
         },
         {
@@ -2515,6 +2515,33 @@
                 ],
                 "maxSubsteps": 4
             },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SceneSwitchExample",
+                    "props": {
+                        "m_targetName1": "",
+                        "m_targetName2": ""
+                    }
+                }
+            ],
+            "TerrainHeightField": {
+                "centerPivot": true,
+                "colScale": 1.0,
+                "collideMask": 4294967283,
+                "doubleSidedQueries": true,
+                "dynamicFriction": 0.5,
+                "heightSamples": [],
+                "heightScale": 0.009999999776482582,
+                "ignoreLayers": 0,
+                "layerBits": 1,
+                "numCols": 4,
+                "numRows": 4,
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "rowScale": 1.0,
+                "staticFriction": 0.5
+            },
             "Transform": {
                 "position": {
                     "x": 0.0,
@@ -2532,7 +2559,7 @@
                     "z": 118.77100372314453
                 }
             },
-            "id": 5,
+            "id": 65,
             "name": "Ground"
         },
         {
@@ -2540,7 +2567,7 @@
                 "capsuleAlignYAxis": true,
                 "capsuleHalfHeight": 0.5,
                 "capsuleRadius": 0.5,
-                "collideMask": 4294967295,
+                "collideMask": 4294967282,
                 "dynamicFriction": 0.5,
                 "halfExtents": {
                     "x": 1.0,
@@ -2550,7 +2577,7 @@
                 "ignoreLayers": 1,
                 "isTrigger": false,
                 "layerBits": 1,
-                "queryMask": 4294967295,
+                "queryMask": 4294967294,
                 "radius": 0.5,
                 "restitution": 0.0,
                 "staticFriction": 0.5,
@@ -2573,7 +2600,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 6,
+            "id": 66,
             "name": "Wall-Layer_0"
         },
         {
@@ -2614,7 +2641,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 7,
+            "id": 67,
             "name": "Wall-Layer_1"
         },
         {
@@ -2622,7 +2649,7 @@
                 "capsuleAlignYAxis": true,
                 "capsuleHalfHeight": 0.5,
                 "capsuleRadius": 0.5,
-                "collideMask": 4294967295,
+                "collideMask": 4294967294,
                 "dynamicFriction": 0.5,
                 "halfExtents": {
                     "x": 1.0,
@@ -2655,7 +2682,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 8,
+            "id": 68,
             "name": "Wall-Layer_2"
         },
         {
@@ -2663,7 +2690,7 @@
                 "capsuleAlignYAxis": true,
                 "capsuleHalfHeight": 0.5,
                 "capsuleRadius": 0.5,
-                "collideMask": 4294967295,
+                "collideMask": 4294967294,
                 "dynamicFriction": 0.5,
                 "halfExtents": {
                     "x": 1.0,
@@ -2696,7 +2723,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 9,
+            "id": 69,
             "name": "Wall-Layer_3"
         }
     ],

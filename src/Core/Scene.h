@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <optional>
 #include <filesystem>
+#include <mutex>
 
 #include "Core/Entity.h"
 #include "Core/World.h"
@@ -87,7 +88,8 @@ namespace Alice
 
 		std::unique_ptr<IScene> m_currentScene;
 
-		// pending(지연) 전환 요청
+		// pending(지연) 전환 요청 (멀티스레드 접근 보호)
+		mutable std::mutex m_pendingMtx;
 		std::unique_ptr<IScene> m_pendingScene;
 		std::optional<std::filesystem::path> m_pendingSceneFile;
 	};

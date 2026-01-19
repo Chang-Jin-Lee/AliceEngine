@@ -8,10 +8,7 @@
 PhysXWorld::PhysXWorld(PhysXContext& inCtx, const Desc& desc)
 	: ctx(inCtx)
 {
-	// NOTE: Impl uses shared_from_this internally for callback owner.
-	// We create shared_ptr with a custom deleter that ensures proper init.
 	impl = std::shared_ptr<Impl>(new Impl(inCtx, desc));
-	// Repair callback owner now that we have the final shared_ptr.
 	impl->eventCb.owner = impl;
 }
 

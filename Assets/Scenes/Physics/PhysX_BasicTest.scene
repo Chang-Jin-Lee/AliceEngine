@@ -69,7 +69,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 24,
+            "id": 66,
             "name": "DropBox"
         },
         {
@@ -2308,14 +2308,31 @@
                     }
                 }
             ],
+            "TerrainHeightField": {
+                "centerPivot": true,
+                "colScale": 10.0,
+                "collideMask": 4294967295,
+                "doubleSidedQueries": true,
+                "dynamicFriction": 0.5,
+                "heightSamples": [],
+                "heightScale": 0.009999999776482582,
+                "ignoreLayers": 0,
+                "layerBits": 1,
+                "numCols": 4,
+                "numRows": 4,
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "rowScale": 10.0,
+                "staticFriction": 0.5
+            },
             "Transform": {
                 "position": {
                     "x": 0.0,
                     "y": 0.0,
-                    "z": 0.0
+                    "z": 20.0
                 },
                 "rotation": {
-                    "x": 0.0,
+                    "x": -0.0,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -2325,7 +2342,7 @@
                     "z": 1.0
                 }
             },
-            "id": 25,
+            "id": 67,
             "name": "GameObject4"
         },
         {
@@ -2397,7 +2414,7 @@
                     "z": 1.0
                 }
             },
-            "id": 26,
+            "id": 68,
             "name": "DropBox2"
         },
         {
@@ -2458,7 +2475,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 27,
+            "id": 69,
             "name": "DropBox"
         },
         {
@@ -2519,7 +2536,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 28,
+            "id": 70,
             "name": "DropBox"
         },
         {
@@ -2580,7 +2597,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 29,
+            "id": 71,
             "name": "DropBox"
         }
     ],

@@ -1,10 +1,12 @@
 #include "Core/World.h"
 #include "Core/GameObject.h"
 #include "Core/ScriptFactory.h"
+#include "Core/ThreadSafety.h"
 
 namespace Alice {
 	void World::Clear()
 	{
+		ThreadSafety::AssertMainThread();
 		// 0. Clear 전 콜백 호출 (Engine에서 물리 시스템 정리)
 		if (m_onBeforeClear)
 		{
