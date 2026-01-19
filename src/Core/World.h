@@ -360,6 +360,13 @@ namespace Alice
         /// 엔티티가 유효한지 확인합니다. (generation 비교)
         bool IsEntityValid(EntityId id, std::uint32_t generation) const;
 
+        // ==== World Epoch (씬 전환 시 증가하여 이전 userData 무효화) ====
+        /// 현재 World의 Epoch를 가져옵니다. (씬 전환 시 증가)
+        uint64_t GetWorldEpoch() const { return m_worldEpoch; }
+        
+        /// userData에서 EntityId를 추출합니다. (worldEpoch 검증 포함)
+        /// 이전 씬의 userData인 경우 InvalidEntityId를 반환합니다.
+        EntityId ExtractEntityIdFromUserData(void* userData) const;
 
         //==============================================================
         // 물리
@@ -421,6 +428,7 @@ namespace Alice
 
     private:
         EntityId m_nextEntityId{ 1 };
+        uint64_t m_worldEpoch{ 1 }; // 씬 전환 시 증가하여 이전 userData 무효화
 
         std::unordered_map<EntityId, std::string> m_names;
 

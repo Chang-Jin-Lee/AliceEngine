@@ -28,7 +28,7 @@
                     "z": 0.9999999403953552
                 }
             },
-            "id": 1
+            "id": 2
         },
         {
             "CharacterController": {
@@ -84,7 +84,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 364.70784587133676
+                "timeSec": 376.8345689474372
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -108,7 +108,7 @@
                     "z": 0.04999999329447746
                 }
             },
-            "id": 2,
+            "id": 3,
             "name": "Rapi"
         },
         {
@@ -275,7 +275,7 @@
                     "z": 0.9999995231628418
                 }
             },
-            "id": 3,
+            "id": 4,
             "name": "MainCamera"
         },
         {
@@ -2515,23 +2515,6 @@
                 ],
                 "maxSubsteps": 4
             },
-            "TerrainHeightField": {
-                "centerPivot": true,
-                "colScale": 1.0,
-                "collideMask": 4294967294,
-                "doubleSidedQueries": true,
-                "dynamicFriction": 0.5,
-                "heightSamples": [],
-                "heightScale": 0.5,
-                "ignoreLayers": 0,
-                "layerBits": 1,
-                "numCols": 2,
-                "numRows": 2,
-                "queryMask": 4294967295,
-                "restitution": 0.0,
-                "rowScale": 1.0,
-                "staticFriction": 0.5
-            },
             "Transform": {
                 "position": {
                     "x": 0.0,
@@ -2549,7 +2532,7 @@
                     "z": 118.77100372314453
                 }
             },
-            "id": 4,
+            "id": 5,
             "name": "Ground"
         },
         {
@@ -2590,7 +2573,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 5,
+            "id": 6,
             "name": "Wall-Layer_0"
         },
         {
@@ -2631,7 +2614,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 6,
+            "id": 7,
             "name": "Wall-Layer_1"
         },
         {
@@ -2672,7 +2655,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 7,
+            "id": 8,
             "name": "Wall-Layer_2"
         },
         {
@@ -2713,7 +2696,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 8,
+            "id": 9,
             "name": "Wall-Layer_3"
         }
     ],

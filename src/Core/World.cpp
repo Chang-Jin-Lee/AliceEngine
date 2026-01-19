@@ -32,9 +32,32 @@ namespace Alice {
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
 
-		// 3. 엔티티 ID 카운터 초기화 (선택 사항이지만 권장)
-		//    새 씬을 로드할 때 ID가 1번부터 다시 시작하도록 함.
-		m_nextEntityId = 1;
+		// 3. World Epoch 증가 (씬 전환 시 이전 userData 무효화)
+		//    EntityId는 재사용하지 않고 단조 증가하여 안전성 보장
+		//    worldEpoch를 증가시켜 이전 씬의 PhysX userData를 무효화
+		++m_worldEpoch;
+
+		// 주의: m_nextEntityId는 리셋하지 않음 (EntityId 재사용 방지)
+		//       대신 worldEpoch를 증가시켜 userData 매칭 안전성 보장
+	}
+
+	EntityId World::ExtractEntityIdFromUserData(void* userData) const
+	{
+		if (!userData) return InvalidEntityId;
+		
+		const uint64_t combined = static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(userData));
+		const uint64_t userDataEpoch = (combined >> 32) & 0xFFFFFFFFull;
+		
+		// worldEpoch 검증: 이전 씬의 userData는 무시
+		if (userDataEpoch != m_worldEpoch)
+		{
+			return InvalidEntityId;
+		}
+		
+		// +1 오프셋 제거 (인코딩 시 +1을 했으므로)
+		const uint64_t encodedEntityId = combined & 0xFFFFFFFFull;
+		if (encodedEntityId == 0) return InvalidEntityId; // 오프셋 후 0이면 원래 InvalidEntityId
+		return static_cast<EntityId>(encodedEntityId - 1u);
 	}
 	EntityId World::CreateEntity()
 	{

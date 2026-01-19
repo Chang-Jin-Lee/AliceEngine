@@ -54,6 +54,12 @@ namespace Alice
         void SwitchTo(const char* sceneName) override;
         void LoadSceneFile(const char* scenePathUtf8) override;
 
+        // 씬 요청이 남아있는지 체크 (엔진이 안전 지점에서 처리)
+        bool HasPendingSceneRequests() const;
+        
+        // 씬 요청 커밋 (엔진이 안전 지점에서만 호출)
+        void CommitSceneRequests(World& world);
+
         // === editormode ===
         void SetEditorMode(const bool& isEditor) { m_editorMode = isEditor; }
 

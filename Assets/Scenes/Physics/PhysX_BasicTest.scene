@@ -69,7 +69,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 1,
+            "id": 24,
             "name": "DropBox"
         },
         {
@@ -2301,19 +2301,6 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "TerrainHeightFieldTest",
-                    "props": {
-                        "m_centerPivot": true,
-                        "m_colScale": 1.0,
-                        "m_heightScale": 0.009999999776482582,
-                        "m_maxHeight": 1.0,
-                        "m_numCols": 64,
-                        "m_numRows": 64,
-                        "m_rowScale": 1.0
-                    }
-                },
-                {
-                    "enabled": true,
                     "name": "SceneSwitchExample",
                     "props": {
                         "m_targetName1": "FbxTestScene",
@@ -2338,7 +2325,7 @@
                     "z": 1.0
                 }
             },
-            "id": 2,
+            "id": 25,
             "name": "GameObject4"
         },
         {
@@ -2410,7 +2397,7 @@
                     "z": 1.0
                 }
             },
-            "id": 3,
+            "id": 26,
             "name": "DropBox2"
         },
         {
@@ -2471,7 +2458,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 4,
+            "id": 27,
             "name": "DropBox"
         },
         {
@@ -2532,7 +2519,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 5,
+            "id": 28,
             "name": "DropBox"
         },
         {
@@ -2593,7 +2580,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 6,
+            "id": 29,
             "name": "DropBox"
         }
     ],
