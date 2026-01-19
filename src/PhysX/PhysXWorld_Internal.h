@@ -1628,6 +1628,8 @@ public:
 		const PxTriangleMeshGeometry geom(tm, scale, gflags);
 		return AddShapeCommon(geom, mesh, localPos, localRot);
 #else
+		// 쿠킹이 비활성화된 경우: TriangleMesh는 런타임 쿠킹이 필요하므로 생성 불가
+		// 매개변수 미사용 경고 방지를 위한 void 캐스팅
 		(void)mesh; (void)localPos; (void)localRot;
 		return false;
 #endif
@@ -1647,6 +1649,8 @@ public:
 		const PxConvexMeshGeometry geom(cm, scale);
 		return AddShapeCommon(geom, mesh, localPos, localRot);
 #else
+		// 쿠킹이 비활성화된 경우: ConvexMesh는 런타임 쿠킹이 필요하므로 생성 불가
+		// 매개변수 미사용 경고 방지를 위한 void 캐스팅
 		(void)mesh; (void)localPos; (void)localRot;
 		return false;
 #endif
