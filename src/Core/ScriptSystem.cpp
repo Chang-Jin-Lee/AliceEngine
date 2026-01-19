@@ -252,7 +252,7 @@ namespace Alice
         m_pendingSceneFile = p.string().c_str();
     }
 
-    bool ScriptSystem::RequestLoadSceneFile(const char* scenePathUtf8)
+    bool ScriptSystem::LoadSceneFileRequest(const char* scenePathUtf8)
     {
         if (!m_scenes || !scenePathUtf8) return false;
 
@@ -260,7 +260,7 @@ namespace Alice
         std::filesystem::path p = resolvedPath;
         if (p.extension() != ".scene") p += ".scene";
 
-        return m_scenes->RequestLoadSceneFile(p);
+        return m_scenes->LoadSceneFileRequest(p);
     }
 
     void ScriptSystem::EnsureServicesBound(World& world)

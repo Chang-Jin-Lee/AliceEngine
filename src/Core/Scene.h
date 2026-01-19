@@ -53,7 +53,7 @@ namespace Alice
 	/// 현재 활성 씬 한 개를 관리하는 간단한 매니저입니다.
 	/// 핵심 규칙:
 	/// - 게임 루프 도중(특히 Script Tick 안)에는 "즉시 전환"을 하지 않는다.
-	/// - SwitchTo/RequestLoadSceneFile 로 "요청"만 걸어두고,
+	/// - SwitchTo/LoadSceneFileRequest 로 "요청"만 걸어두고,
 	/// - Engine::Update 안전 지점에서 CommitPendingSceneChange 로 커밋한다.
 	class SceneManager
 	{
@@ -67,7 +67,7 @@ namespace Alice
 		bool SwitchTo(const char* sceneName);
 
 		/// (지연 전환 요청) .scene 파일 로드도 지연 커밋으로 처리
-		bool RequestLoadSceneFile(const std::filesystem::path& logicalScenePath);
+		bool LoadSceneFileRequest(const std::filesystem::path& logicalScenePath);
 
 		/// 현재 씬 업데이트
 		void Update(float deltaTime);
