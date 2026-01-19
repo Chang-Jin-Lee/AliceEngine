@@ -67,7 +67,8 @@ namespace Alice
 			Phong = 1,
 			BlinnPhong = 2,
 			Toon = 3,
-			PBR = 4
+			PBR = 4,
+			ToonPBR = 5
 		};
 
 		HINSTANCE m_hInstance = nullptr;

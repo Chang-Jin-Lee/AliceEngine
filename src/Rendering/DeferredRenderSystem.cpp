@@ -621,9 +621,9 @@ namespace Alice
 
     bool DeferredRenderSystem::CreateConstantBuffers()
     {
-        // PerObject CB (Forward와 동일한 구조: 행렬 + 재질 정보)
+        // PerObject CB (Forward와 동일한 구조: 행렬 + 재질 정보 + 셰이딩 모드)
         D3D11_BUFFER_DESC cbDesc = {};
-        cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX) * 3 + sizeof(DirectX::XMFLOAT4) + sizeof(float) * 2 + sizeof(int) * 2; // world, view, proj, color, rough, metal, useTex, enableNorm
+        cbDesc.ByteWidth = sizeof(CBPerObject);
         cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         cbDesc.Usage = D3D11_USAGE_DYNAMIC;
         cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -1056,7 +1056,7 @@ namespace Alice
                 if (flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
                 else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
 
-                UpdatePerObjectCB(worldM, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false);
+                UpdatePerObjectCB(worldM, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0);
                 m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
             }
         }
@@ -1082,7 +1082,7 @@ namespace Alice
                 else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
 
                 UpdateBonesCB(cmd.bones, cmd.boneCount);
-                UpdatePerObjectCB(cmd.world, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false);
+                UpdatePerObjectCB(cmd.world, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
             }
         }
@@ -1114,7 +1114,7 @@ namespace Alice
         m_context->RSSetViewports(1, &vp);
 
         // G-Buffer 패스
-        PassGBuffer(world, camera, skinnedCommands, cameraEntities, editorMode, isPlaying);
+        PassGBuffer(world, camera, skinnedCommands, cameraEntities, shadingMode, editorMode, isPlaying);
 
         // Deferred Light 패스
         PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
@@ -1126,7 +1126,7 @@ namespace Alice
         }
 
         // 반투명(알파 블렌딩) 오브젝트는 라이트 패스 이후 Forward-Style로 합성
-        PassTransparentForward(camera, skinnedCommands);
+        PassTransparentForward(camera, skinnedCommands, shadingMode);
 
         // 에디터 뷰포트 표시용 LDR 텍스처로 톤매핑 (ImGui::Image에서 사용)
         if (m_viewportRTV)
@@ -1146,6 +1146,7 @@ namespace Alice
                                            const Camera& camera,
                                            const std::vector<SkinnedDrawCommand>& skinnedCommands,
                                            const std::unordered_set<EntityId>& cameraEntities,
+                                           int shadingMode,
                                            bool editorMode,
                                            bool isPlaying)
     {
@@ -1211,7 +1212,8 @@ namespace Alice
             ID3D11ShaderResourceView* texSRV = nullptr;
             
             // MaterialComponent가 있으면 값 적용
-            if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id)) {
+            const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id);
+            if (mat) {
                 color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
                 rough = mat->roughness; 
                 metal = mat->metalness;
@@ -1226,7 +1228,8 @@ namespace Alice
             m_context->PSSetShaderResources(0, 2, srvs);
 
             // CB 업데이트 (재질 정보 포함)
-            UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false);
+            const int objectShadingMode = (mat && mat->shadingMode >= 0) ? mat->shadingMode : shadingMode;
+            UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false, objectShadingMode);
 
             m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
         }
@@ -1268,9 +1271,11 @@ namespace Alice
                         ID3D11ShaderResourceView* srvs[] = { diff, norm };
                         m_context->PSSetShaderResources(0, 2, srvs);
 
+                        const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
                         UpdatePerObjectCB(cmd.world, view, proj, color,
                                           cmd.roughness, cmd.metalness,
-                                          (diff != nullptr), (norm != nullptr));
+                                          (diff != nullptr), (norm != nullptr),
+                                          objectShadingMode);
 
                         m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
                     }
@@ -1282,9 +1287,11 @@ namespace Alice
                     ID3D11ShaderResourceView* srvs[] = { diff, nullptr };
                     m_context->PSSetShaderResources(0, 2, srvs);
 
+                    const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
                     UpdatePerObjectCB(cmd.world, view, proj, color,
                                       cmd.roughness, cmd.metalness,
-                                      (diff != nullptr), false);
+                                      (diff != nullptr), false,
+                                      objectShadingMode);
 
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 }
@@ -1322,7 +1329,7 @@ namespace Alice
 
                 // 카메라 큐브 재질 (흰색)
                 XMFLOAT4 cameraCubeColor(1.0f, 1.0f, 1.0f, 1.0f);
-                UpdatePerObjectCB(cameraCubeWorld, view, proj, cameraCubeColor, 0.5f, 0.0f, false, false);
+                UpdatePerObjectCB(cameraCubeWorld, view, proj, cameraCubeColor, 0.5f, 0.0f, false, false, shadingMode);
 
                 ID3D11ShaderResourceView* srvs[] = { nullptr, nullptr };
                 m_context->PSSetShaderResources(0, 2, srvs);
@@ -1355,7 +1362,7 @@ namespace Alice
 
                 // 하늘색 (0.5, 0.8, 1.0)
                 XMFLOAT4 skyBlueColor(0.5f, 0.8f, 1.0f, 1.0f);
-                UpdatePerObjectCB(directionCubeWorld, view, proj, skyBlueColor, 0.5f, 0.0f, false, false);
+                UpdatePerObjectCB(directionCubeWorld, view, proj, skyBlueColor, 0.5f, 0.0f, false, false, shadingMode);
 
                 m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
             }
@@ -1457,7 +1464,8 @@ namespace Alice
 
     void DeferredRenderSystem::PassTransparentForward(
         const Camera& camera,
-        const std::vector<SkinnedDrawCommand>& skinnedCommands)
+        const std::vector<SkinnedDrawCommand>& skinnedCommands,
+        int shadingMode)
     {
         if (!m_device || !m_context) return;
         if (!m_sceneRTV || !m_sceneDSV) return;
@@ -1539,7 +1547,8 @@ namespace Alice
 
             // PerObject CB
             const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
-            UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, true, true);
+            const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+            UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, true, true, objectShadingMode);
 
             // FBX 서브셋 머티리얼이 있으면 그걸 우선 사용 (Forward와 동일)
             std::shared_ptr<SkinnedMeshGPU> mesh =
@@ -1561,7 +1570,8 @@ namespace Alice
                     m_context->PSSetShaderResources(0, 2, srvs01);
 
                     // enableNormalMap은 "노말 SRV가 존재할 때만" 켜는게 안정적입니다.
-                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr));
+                    const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr), objectShadingMode);
 
                     m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
                 }
@@ -1572,7 +1582,8 @@ namespace Alice
                 ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
                 ID3D11ShaderResourceView* srvs01[2] = { diff, nullptr };
                 m_context->PSSetShaderResources(0, 2, srvs01);
-                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false);
+                const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false, objectShadingMode);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
             }
         }
@@ -1672,13 +1683,14 @@ namespace Alice
     }
 
     void DeferredRenderSystem::UpdatePerObjectCB(const DirectX::XMMATRIX& world,
-                                                  const DirectX::XMMATRIX& view,
-                                                  const DirectX::XMMATRIX& projection,
-                                                  const DirectX::XMFLOAT4& color,
-                                                  float roughness,
-                                                  float metalness,
-                                                  bool useTexture,
-                                                  bool enableNormalMap)
+                                                 const DirectX::XMMATRIX& view,
+                                                 const DirectX::XMMATRIX& projection,
+                                                 const DirectX::XMFLOAT4& color,
+                                                 float roughness,
+                                                 float metalness,
+                                                 bool useTexture,
+                                                 bool enableNormalMap,
+                                                 int shadingMode)
     {
         struct CBPerObjectData
         {
@@ -1690,6 +1702,8 @@ namespace Alice
             float    gMetalness;
             int      gUseTexture;
             int      gEnableNormalMap;
+            int      gShadingMode;
+            int      gPad[3];
         };
 
         D3D11_MAPPED_SUBRESOURCE mapped;
@@ -1704,6 +1718,7 @@ namespace Alice
             data->gMetalness = metalness;
             data->gUseTexture = useTexture ? 1 : 0;
             data->gEnableNormalMap = enableNormalMap ? 1 : 0;
+            data->gShadingMode = shadingMode;
             m_context->Unmap(m_cbPerObject.Get(), 0);
         }
 
