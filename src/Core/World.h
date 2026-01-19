@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 #include <typeindex>
+#include <functional>
 
 #include "Core/Entity.h"
 #include "Core/IScript.h"
@@ -32,11 +33,11 @@
 
 
 // 물리 컴포넌트들
-#include "PhysX/Components/RigidBodyComponent.h"
-#include "PhysX/Components/ColliderComponent.h"
-#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
-#include "PhysX/Components/TerrainHeightFieldComponent.h"
-#include "PhysX/Components/CharacterControllerComponent.h"
+#include "PhysX/Components/Phy_RigidBodyComponent.h"
+#include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_SettingsComponent.h"
+#include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
+#include "PhysX/Components/Phy_CCTComponent.h"
 
 class IPhysicsWorld; // 물리 인터페이스 전방선언
 
@@ -281,16 +282,16 @@ namespace Alice
         // ==== 전체 컴포넌트 순회 (시스템/에디터용) ====
         // 
         // 사용 예시 (읽기 전용):
-        //   for (const auto& [entityId, transform] : world.GetComponents<TransformComponent>())
+        //   for (auto&& [entityId, transform] : world.GetComponents<TransformComponent>())
         //   {
-        //       // transform은 const TransformComponent&
+        //       // transform은 TransformComponent& (auto&& 사용으로 참조 보장)
         //       // 연속 메모리에서 효율적으로 순회됨 (캐시 친화적)
         //   }
         //
         // 사용 예시 (수정 가능):
-        //   for (auto& [entityId, transform] : world.GetComponents<TransformComponent>())
+        //   for (auto&& [entityId, transform] : world.GetComponents<TransformComponent>())
         //   {
-        //       // transform은 TransformComponent&
+        //       // transform은 TransformComponent& (auto&& 사용으로 참조 보장)
         //       transform.position.x += 1.0f; // 수정 가능
         //   }
         //
@@ -359,14 +360,27 @@ namespace Alice
         /// 엔티티가 유효한지 확인합니다. (generation 비교)
         bool IsEntityValid(EntityId id, std::uint32_t generation) const;
 
+        // ==== World Epoch (씬 전환 시 증가하여 이전 userData 무효화) ====
+        /// 현재 World의 Epoch를 가져옵니다. (씬 전환 시 증가)
+        uint64_t GetWorldEpoch() const { return m_worldEpoch; }
+        
+        /// userData에서 EntityId를 추출합니다. (worldEpoch 검증 포함)
+        /// 이전 씬의 userData인 경우 InvalidEntityId를 반환합니다.
+        EntityId ExtractEntityIdFromUserData(void* userData) const;
 
         //==============================================================
         // 물리
         void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
         IPhysicsWorld* GetPhysicsWorld();
-        const IPhysicsWorld* GetPhysicsWorld() const;
+        const IPhysicsWorld* GetPhysicsWorld() const;        
+        std::shared_ptr<IPhysicsWorld> GetPhysicsWorldShared() const { return m_physicsWorld; }
+        
+        /// World::Clear() 호출 전에 호출될 콜백 설정
+        /// Engine에서 물리 시스템 정리를 위해 사용
+        void SetOnBeforeClearCallback(std::function<void()> callback) { m_onBeforeClear = std::move(callback); }
     private:
         std::shared_ptr<IPhysicsWorld> m_physicsWorld;
+        std::function<void()> m_onBeforeClear; // Clear() 호출 전 실행될 콜백
         //==============================================================
 
     private:
@@ -414,6 +428,7 @@ namespace Alice
 
     private:
         EntityId m_nextEntityId{ 1 };
+        uint64_t m_worldEpoch{ 1 }; // 씬 전환 시 증가하여 이전 userData 무효화
 
         std::unordered_map<EntityId, std::string> m_names;
 

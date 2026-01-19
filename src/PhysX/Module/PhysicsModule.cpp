@@ -84,9 +84,6 @@ bool PhysicsModule::InitializeContext(const ContextInitDesc& desc)
 
 void PhysicsModule::ShutdownContext()
 {
-    // 중요한 포인트:
-    // - 월드가 살아있으면 deleter가 ctx를 붙잡고 있어서 안전함.
-    // - 여기서는 모듈이 들고 있는 ctx 참조만 끊는다.
     m->ctx.reset();
 }
 

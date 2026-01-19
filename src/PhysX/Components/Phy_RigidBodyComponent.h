@@ -5,7 +5,7 @@
 
 // RigidBody 컴포넌트
 // 엔티티에 붙으면 자동으로 물리 바디가 생성됨
-struct RigidBodyComponent
+struct Phy_RigidBodyComponent
 {
     // 기본 설정
     float density = 1.0f;

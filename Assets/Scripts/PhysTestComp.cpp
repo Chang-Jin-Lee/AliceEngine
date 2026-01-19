@@ -4,9 +4,9 @@
 #include "Core/GameObject.h"
 #include "Core/World.h"
 
-#include "PhysX/Components/RigidBodyComponent.h"
-#include "PhysX/Components/ColliderComponent.h"
-#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
+#include "PhysX/Components/Phy_RigidBodyComponent.h"
+#include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_SettingsComponent.h"
 
 namespace Alice
 {
@@ -17,20 +17,20 @@ namespace Alice
         auto* world = GetWorld();
         if (!world) return;
 
-        // 씬에 PhysicsSceneSettingsComponent가 있는지 확인
-        const auto& settingsMap = world->GetComponents<PhysicsSceneSettingsComponent>();
+        // 씬에 Phy_SettingsComponent가 있는지 확인
+        const auto& settingsMap = world->GetComponents<Phy_SettingsComponent>();
         if (settingsMap.empty())
         {
-            // 새 엔티티를 만들어서 PhysicsSceneSettingsComponent 추가
+            // 새 엔티티를 만들어서 Phy_SettingsComponent 추가
             // (어떤 엔티티든 상관없지만, 빈 엔티티가 깔끔함)
             EntityId physicsSettingsEntity = world->CreateEntity();
-            auto& settings = world->AddComponent<PhysicsSceneSettingsComponent>(physicsSettingsEntity);
+            auto& settings = world->AddComponent<Phy_SettingsComponent>(physicsSettingsEntity);
             settings.enablePhysics = true;
             settings.gravity = { 0.0f, -9.81f, 0.0f };
             settings.fixedDt = 1.0f / 60.0f;
             settings.maxSubsteps = 4;
 
-            ALICE_LOG_INFO("[PhysicsTest] PhysicsSceneSettingsComponent added to new entity (%llu)",
+            ALICE_LOG_INFO("[PhysicsTest] Phy_SettingsComponent added to new entity (%llu)",
                 (unsigned long long)physicsSettingsEntity);
 
             // 씬 전환 시 RefreshPhysicsForCurrentWorld가 호출되지만,
@@ -69,7 +69,7 @@ namespace Alice
         }
 
         // RigidBody 추가 및 설정
-        auto& rb = go.AddComponent<RigidBodyComponent>();
+        auto& rb = go.AddComponent<Phy_RigidBodyComponent>();
         rb.density = 1.0f;
         rb.gravityEnabled = true;  // 중력 활성화
         rb.startAwake = true;      // 시작 시 깨어있음
@@ -78,7 +78,7 @@ namespace Alice
         // Collider 추가 및 설정 (Box)
         // 렌더링 큐브 메시가 -1~1 범위이므로 기본 크기가 2입니다.
         // 콜라이더 halfExtents를 1.0으로 설정하면 scale=1일 때 크기가 2가 되어 렌더링 큐브와 일치합니다.
-        auto& col = go.AddComponent<ColliderComponent>();
+        auto& col = go.AddComponent<Phy_ColliderComponent>();
         col.type = ColliderType::Box;
         col.halfExtents = { 1.0f, 1.0f, 1.0f };  // 렌더링 큐브 크기와 일치하도록 변경
         col.isTrigger = false;
@@ -103,13 +103,13 @@ namespace Alice
         }
         else
         {
-            ALICE_LOG_ERRORF("[PhysicsTest] Physics world not created! Check PhysicsSceneSettingsComponent.");
+            ALICE_LOG_ERRORF("[PhysicsTest] Physics world not created! Check Phy_SettingsComponent.");
         }
 
         auto go = gameObject();
         if (!go.IsValid()) return;
 
-        auto* rb = go.GetComponent<RigidBodyComponent>();
+        auto* rb = go.GetComponent<Phy_RigidBodyComponent>();
         if (rb)
         {
             ALICE_LOG_INFO("[PhysicsTest] RigidBody component: physicsActorHandle = %p (at Start)", rb->physicsActorHandle);
@@ -125,7 +125,7 @@ namespace Alice
         if (transform)
         {
             // 물리 액터가 생성되었는지 확인
-            auto* rb = go.GetComponent<RigidBodyComponent>();
+            auto* rb = go.GetComponent<Phy_RigidBodyComponent>();
             if (rb && rb->physicsActorHandle)
             {
                 // 물리 액터가 생성되었으면 Y 위치를 주기적으로 로그
@@ -157,7 +157,7 @@ namespace Alice
         // 스페이스바로 점프 (실제로는 RigidBody에 힘을 가하는 방식 사용)
         if (input->GetKeyDown(KeyCode::Space))
         {
-            auto* rb = go.GetComponent<RigidBodyComponent>();
+            auto* rb = go.GetComponent<Phy_RigidBodyComponent>();
             if (rb)
             {
                 // 주의: 실제 힘 적용은 IRigidBody 인터페이스를 통해야 함

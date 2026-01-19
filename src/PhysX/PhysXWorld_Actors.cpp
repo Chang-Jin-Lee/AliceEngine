@@ -14,10 +14,9 @@ std::unique_ptr<IRigidBody> PhysXWorld::CreateDynamicEmpty(const Vec3& pos, cons
 
 	ApplyRbDesc(*body, rb);
 
-	if (impl->enableActiveTransforms)
+		if (impl->enableActiveTransforms)
 		body->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_POSE_INTEGRATION_PREVIEW, true);
 
-	// Set reasonable defaults to avoid invalid mass/inertia before shapes are attached.
 	body->setMass(1.0f);
 	body->setMassSpaceInertiaTensor(PxVec3(1.0f, 1.0f, 1.0f));
 
@@ -64,7 +63,6 @@ std::unique_ptr<IRigidBody> PhysXWorld::CreateDynamicCapsule(const Vec3& pos, co
 	return body;
 }
 
-// 해당 함수는 사용하지 말것, CreateStaticPlaneActor() 사용 권장함
 void PhysXWorld::CreateStaticPlane(float staticFriction, float dynamicFriction, float restitution, const FilterDesc& filter)
 {
 	(void)CreateStaticPlaneActor(staticFriction, dynamicFriction, restitution, filter);
@@ -82,7 +80,6 @@ std::unique_ptr<IPhysicsActor> PhysXWorld::CreateStaticPlaneActor(float staticFr
 
 	PxRigidStatic* plane = PxCreatePlane(*impl->physics, PxPlane(0, 1, 0, 0), *mat);
 	if (!plane) return {};
-	// Convenience: allow user code to tag the created actor.
 	plane->userData = filter.userData;
 
 	// Apply filter to its only shape
@@ -172,14 +169,12 @@ std::unique_ptr<ICharacterController> PhysXWorld::CreateCharacterController(cons
 #if PHYSXWRAP_ENABLE_CCT && PHYSXWRAP_HAS_CCT_HEADERS
 	if (!impl || !impl->scene || !impl->controllerMgr) return {};
 
-	// Minimal sanity checks (PhysX will also validate)
 	if (desc.type == CCTType::Capsule)
 	{
 		if (desc.radius <= 0.0f || desc.halfHeight <= 0.0f) return {};
 	}
-	else
+		else
 	{
-		// PhysX box controller uses 3 half-extents
 		if (desc.halfExtents.x <= 0.0f || desc.halfExtents.y <= 0.0f || desc.halfExtents.z <= 0.0f) return {};
 	}
 
@@ -189,7 +184,6 @@ std::unique_ptr<ICharacterController> PhysXWorld::CreateCharacterController(cons
 	PxMaterial* mat = impl->GetOrCreateMaterial(desc);
 	if (!mat) return {};
 
-	// Convert slope angle -> cosine (PhysX expects cosine).
 	const float clampedSlope = std::max(0.0f, std::min(desc.slopeLimitRadians, 1.56079633f));
 	const float slopeCos = std::cos(clampedSlope);
 
@@ -263,6 +257,7 @@ std::unique_ptr<ICharacterController> PhysXWorld::CreateCharacterController(cons
 			if (!sh) continue;
 			ApplyFilterToShape(*sh, f);
 			sh->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, desc.enableQueries);
+			sh->setFlag(PxShapeFlag::eVISUALIZATION, true); 
 		}
 	}
 
