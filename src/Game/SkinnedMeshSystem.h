@@ -88,6 +88,7 @@ namespace Alice
                     cmd.color = mat->color;
                     cmd.roughness = mat->roughness;
                     cmd.metalness = mat->metalness;
+                    cmd.shadingMode = mat->shadingMode;
                     cmd.albedoTexturePath = mat->albedoTexturePath;
 
                     if (!mat->albedoTexturePath.empty())
