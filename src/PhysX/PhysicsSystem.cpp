@@ -285,7 +285,7 @@ void PhysicsSystem::Update(float deltaTime)
 				}
 
 				// CCT에 적용 (전역 매트릭스 변경 시에만)
-				auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+				auto ccts = m_world.GetComponents<Phy_CCTComponent>();
 				for (auto&& [id, cct] : ccts)
         {
 					int li = FirstLayerIndex(cct.layerBits);
@@ -362,10 +362,10 @@ void PhysicsSystem::Update(float deltaTime)
         }
 
         {
-            auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+            auto ccts = m_world.GetComponents<Phy_CCTComponent>();
             for (const auto& [entityId, cct] : ccts)
             {
-                auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+                auto* ccc = m_world.GetComponent<Phy_CCTComponent>(entityId);
                 if (!ccc) continue;
 
                 auto itCCT = m_entityToCCT.find(entityId);
@@ -398,7 +398,7 @@ void PhysicsSystem::Update(float deltaTime)
             std::vector<EntityId> cctToRemove;
             for (const auto& [entityId, h] : m_entityToCCT)
             {
-                if (!m_world.GetComponent<CharacterControllerComponent>(entityId))
+                if (!m_world.GetComponent<Phy_CCTComponent>(entityId))
                     cctToRemove.push_back(entityId);
             }
             for (auto eid : cctToRemove)
@@ -779,7 +779,7 @@ void PhysicsSystem::Update(float deltaTime)
 
     // 5. CCT 변경 감지
     {
-        auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+        auto ccts = m_world.GetComponents<Phy_CCTComponent>();
         
         for (const auto& [entityId, ccc] : ccts)
         {
@@ -794,7 +794,7 @@ void PhysicsSystem::Update(float deltaTime)
             if (itState == m_lastCCTs.end())
             {
                 m_lastCCTs[entityId] = cur;
-                auto* cccPtr = m_world.GetComponent<CharacterControllerComponent>(entityId);
+                auto* cccPtr = m_world.GetComponent<Phy_CCTComponent>(entityId);
                 if (!cccPtr) continue;
 
                 bool shouldCreate = (itCCT == m_entityToCCT.end() || !itCCT->second.IsValid() || cccPtr->controllerHandle == nullptr);
@@ -860,7 +860,7 @@ void PhysicsSystem::Update(float deltaTime)
         std::vector<EntityId> cctsToRemove;
         for (const auto& [entityId, state] : m_lastCCTs)
         {
-            auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+            auto* ccc = m_world.GetComponent<Phy_CCTComponent>(entityId);
             if (!ccc)
             {
                 cctsToRemove.push_back(entityId);
@@ -875,7 +875,7 @@ void PhysicsSystem::Update(float deltaTime)
 
     // 6. CCT 이동 및 Transform 갱신
     {        
-        auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+        auto ccts = m_world.GetComponents<Phy_CCTComponent>();
 
         for (const auto& [entityId, ccc] : ccts)
         {
@@ -1606,7 +1606,7 @@ void PhysicsSystem::CreateCharacterController(EntityId entityId)
     }
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-    auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+    auto* ccc = m_world.GetComponent<Phy_CCTComponent>(entityId);
     if (!transform || !ccc)
     {
         ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Transform or CCT component missing! (transform: %p, ccc: %p)",
@@ -1682,6 +1682,6 @@ void PhysicsSystem::DestroyCharacterController(EntityId entityId)
     it->second.Destroy();
     m_entityToCCT.erase(it);
 
-    auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+    auto* ccc = m_world.GetComponent<Phy_CCTComponent>(entityId);
     if (ccc) ccc->controllerHandle = nullptr;
 }

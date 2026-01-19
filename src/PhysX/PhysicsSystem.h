@@ -4,7 +4,7 @@
 #include "Components/Phy_RigidBodyComponent.h"
 #include "Components/Phy_ColliderComponent.h"
 #include "Components/Phy_TerrainHeightFieldComponent.h"
-#include "Components/CharacterControllerComponent.h"
+#include "Components/Phy_CCTComponent.h"
 #include "Components/Phy_SettingsComponent.h"
 #include <Core/World.h>
 #include <DirectXMath.h>
@@ -230,7 +230,7 @@ private:
         CCTState() = default;
 
         // TransformComponent 의존 없애려고 scale만 받음 (헤더에서 TransformComponent 몰라도 됨)
-        explicit CCTState(const CharacterControllerComponent& ccc,
+        explicit CCTState(const Phy_CCTComponent& ccc,
                          const DirectX::XMFLOAT3& inScale) noexcept
             : radius(ccc.radius)
             , halfHeight(ccc.halfHeight)
