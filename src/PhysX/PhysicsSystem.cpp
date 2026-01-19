@@ -1,7 +1,7 @@
 #include "PhysicsSystem.h"
 #include "Core/World.h"
 #include "Components/TransformComponent.h"
-#include "Components/PhysicsSceneSettingsComponent.h"
+#include "Components/Phy_SettingsComponent.h"
 #include "Core/Logger.h"
 #include "Core/ThreadSafety.h"
 #include <DirectXMath.h>
@@ -33,7 +33,7 @@ static uint64_t HashCombine64(uint64_t a, uint64_t b) noexcept
 	return a;
 }
 
-static uint64_t MakeTerrainGeomKey(const TerrainHeightFieldComponent& t) noexcept
+static uint64_t MakeTerrainGeomKey(const Phy_TerrainHeightFieldComponent& t) noexcept
 {
 	uint64_t key = 0;
 	key = HashCombine64(key, static_cast<uint64_t>(t.numRows));
@@ -162,16 +162,16 @@ void PhysicsSystem::Update(float deltaTime)
 
 	// (추가) Scene Settings -> 각 컴포넌트 mask로 반영 (전역 매트릭스 기반)
 	// 매 프레임 collideByLayer/queryByLayer를 계산하여 layerBits/ignoreLayers 변경 시에도 사용 가능하게 함
-	// PhysicsSceneSettingsComponent가 없어도 기본값으로 전부 허용
+	// Phy_SettingsComponent가 없어도 기본값으로 전부 허용
 	LayerMaskArray collideByLayer = MakeAllMaskArray();
 	LayerMaskArray queryByLayer = MakeAllMaskArray();
 	
-	// PhysicsSceneSettingsComponent가 있으면 매트릭스 기반으로 덮어쓰기
+	// Phy_SettingsComponent가 있으면 매트릭스 기반으로 덮어쓰기
 	{
-		const auto& settingsMap = m_world.GetComponents<PhysicsSceneSettingsComponent>();
+		const auto& settingsMap = m_world.GetComponents<Phy_SettingsComponent>();
 		if (!settingsMap.empty())
 		{
-			auto& s = const_cast<PhysicsSceneSettingsComponent&>(settingsMap.begin()->second);
+			auto& s = const_cast<Phy_SettingsComponent&>(settingsMap.begin()->second);
 
 			// filterRevision 변경 감지: 전역 매트릭스가 변경되었는지 확인
 			bool filterMatrixChanged = (s.filterRevision != m_lastFilterRevision);
@@ -206,7 +206,7 @@ void PhysicsSystem::Update(float deltaTime)
 				m_lastFilterRevision = s.filterRevision;
 
 				// Collider들에 적용 (전역 매트릭스 변경 시에만 전체 재계산)
-				auto colliders = m_world.GetComponents<ColliderComponent>();
+				auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
 				for (auto&& [id, col] : colliders)
 				{
 					int li = FirstLayerIndex(col.layerBits);
@@ -238,7 +238,7 @@ void PhysicsSystem::Update(float deltaTime)
 							ActorHandle& handle = it->second;
 							if (handle.IsValid() && handle.GetActor())
 							{
-								auto* collider = m_world.GetComponent<ColliderComponent>(id);
+								auto* collider = m_world.GetComponent<Phy_ColliderComponent>(id);
 								if (collider)
 								{
 									handle.GetActor()->SetLayerMasks(col.layerBits, col.collideMask, col.queryMask);
@@ -249,7 +249,7 @@ void PhysicsSystem::Update(float deltaTime)
     }
 
 				// Terrain에 적용 (전역 매트릭스 변경 시에만)
-				auto terrains = m_world.GetComponents<TerrainHeightFieldComponent>();
+				auto terrains = m_world.GetComponents<Phy_TerrainHeightFieldComponent>();
 				for (auto&& [id, terrain] : terrains)
 				{
 					int li = FirstLayerIndex(terrain.layerBits);
@@ -326,7 +326,7 @@ void PhysicsSystem::Update(float deltaTime)
 
     // 1. 컴포넌트 변경 감지 및 물리 액터 생성/삭제
     {
-        auto rigidBodies = m_world.GetComponents<RigidBodyComponent>();
+        auto rigidBodies = m_world.GetComponents<Phy_RigidBodyComponent>();
         std::unordered_set<EntityId> entitiesWithRigidBody;
         
         for (const auto& [entityId, rb] : rigidBodies)
@@ -339,7 +339,7 @@ void PhysicsSystem::Update(float deltaTime)
             }
         }
 
-        auto colliders = m_world.GetComponents<ColliderComponent>();
+        auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
         for (const auto& [entityId, collider] : colliders)
         {
             const bool hasRB = (entitiesWithRigidBody.find(entityId) != entitiesWithRigidBody.end());
@@ -351,8 +351,8 @@ void PhysicsSystem::Update(float deltaTime)
             }
             else
             {
-                auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-				auto* col = m_world.GetComponent<ColliderComponent>(entityId);
+                auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+				auto* col = m_world.GetComponent<Phy_ColliderComponent>(entityId);
 				if (rb && rb->physicsActorHandle && col && col->physicsActorHandle == nullptr)
                 {
 					col->physicsActorHandle = rb->physicsActorHandle;
@@ -379,9 +379,9 @@ void PhysicsSystem::Update(float deltaTime)
         std::vector<EntityId> toRemove;
         for (const auto& [entityId, handle] : m_entityToActor)
         {
-            auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-            auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
-            auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
+            auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+            auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+            auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
             
             if (!rb && !collider && !terrain)
             {
@@ -411,8 +411,8 @@ void PhysicsSystem::Update(float deltaTime)
         auto transforms = m_world.GetComponents<TransformComponent>();
         for (const auto& [entityId, transform] : transforms)
         {
-            auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-            auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+            auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+            auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
             
             if (!rb && !collider) continue;
 
@@ -454,7 +454,7 @@ void PhysicsSystem::Update(float deltaTime)
 
     // 3. Collider 변경 감지 및 Shape 재구성
     {
-        auto colliders = m_world.GetComponents<ColliderComponent>();
+        auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
         for (const auto& [entityId, collider] : colliders)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
@@ -577,7 +577,7 @@ void PhysicsSystem::Update(float deltaTime)
         std::vector<EntityId> collidersToRemove;
         for (const auto& [entityId, state] : m_lastColliders)
         {
-            auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+            auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
             if (!collider)
             {
                 collidersToRemove.push_back(entityId);
@@ -607,9 +607,9 @@ void PhysicsSystem::Update(float deltaTime)
         }
     }
 
-    //  4. RigidBodyComponent 변경 감지
+    //  4. Phy_RigidBodyComponent 변경 감지
     {
-        auto rigidBodies = m_world.GetComponents<RigidBodyComponent>();
+        auto rigidBodies = m_world.GetComponents<Phy_RigidBodyComponent>();
         for (const auto& [entityId, rb] : rigidBodies)
         {
             IRigidBody* body = nullptr;
@@ -685,7 +685,7 @@ void PhysicsSystem::Update(float deltaTime)
 
 	// 4. Terrain 변경 감지
     {
-        auto terrains = m_world.GetComponents<TerrainHeightFieldComponent>();
+        auto terrains = m_world.GetComponents<Phy_TerrainHeightFieldComponent>();
         for (const auto& [entityId, terrain] : terrains)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
@@ -771,7 +771,7 @@ void PhysicsSystem::Update(float deltaTime)
         std::vector<EntityId> toErase;
         for (auto& [eid, st] : m_lastTerrains)
         {
-            if (!m_world.GetComponent<TerrainHeightFieldComponent>(eid))
+            if (!m_world.GetComponent<Phy_TerrainHeightFieldComponent>(eid))
                 toErase.push_back(eid);
         }
         for (auto eid : toErase) m_lastTerrains.erase(eid);
@@ -891,8 +891,8 @@ void PhysicsSystem::Update(float deltaTime)
                     ALICE_LOG_WARN("[PhysicsSystem] CCT not found for entity %llu (controllerHandle: %p). Check if CreateCharacterController succeeded.",
                         (unsigned long long)entityId, ccc.controllerHandle);
                     
-                    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-                    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+                    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+                    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
                     if (rb || collider)
                     {
                         ALICE_LOG_WARN("[PhysicsSystem] Entity %llu has RigidBody or Collider, which conflicts with CCT!", 
@@ -960,8 +960,8 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
     if (!transform) return;
 
-    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
 
     if (!rb && !collider) return;
 
@@ -1226,13 +1226,13 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
 		m_entityToActor.erase(it);
 		return;
 	}
-    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
+    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
     if (rb) rb->physicsActorHandle = nullptr;
 
-    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
     if (collider) collider->physicsActorHandle = nullptr;
 
-    auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
+    auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
     if (terrain) terrain->physicsActorHandle = nullptr;
 
 	ActorHandle handle = std::move(it->second);
@@ -1263,10 +1263,10 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
         return;
     }
 
-    auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
+    auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
     if (!terrain)
     {
-        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: TerrainHeightFieldComponent missing!");
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: Phy_TerrainHeightFieldComponent missing!");
         return;
     }
 
@@ -1382,7 +1382,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
     if (!actor || !actor->IsValid()) return;
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
     if (!transform || !collider) return;
 
     auto AbsScale = [](const DirectX::XMFLOAT3& s) -> Vec3 {
@@ -1482,7 +1482,7 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
     Vec3 pos = ToVec3(position);
     Quat rot = ToQuat(rotation);
 
-    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
+    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
 
     if (rb && body && body->IsValid())
     {
@@ -1614,8 +1614,8 @@ void PhysicsSystem::CreateCharacterController(EntityId entityId)
         return;
     }
 
-    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
     if (rb || collider)
     {
         ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Entity has RigidBody (%p) or Collider (%p), cannot create CCT!",

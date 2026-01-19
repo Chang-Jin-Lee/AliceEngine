@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <DirectXMath.h>
 #include <cstdint>
 #include <array>
@@ -11,7 +11,7 @@
 // 최대 32개 레이어 지원 (uint32_t bitmask 기반)
 constexpr int MAX_PHYSICS_LAYERS = 32;
 
-struct PhysicsSceneSettingsComponent
+struct Phy_SettingsComponent
 {
     bool enablePhysics = true;
 
@@ -37,7 +37,7 @@ struct PhysicsSceneSettingsComponent
     // 필터 매트릭스 변경 감지용 리비전 (에디터에서 매트릭스 변경 시 증가)
     uint32_t filterRevision = 0;
 
-    PhysicsSceneSettingsComponent()
+    Phy_SettingsComponent()
     {
         // 기본값: 모든 레이어가 서로 충돌/쿼리 가능
         for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)

@@ -238,10 +238,10 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
     #Components
-    ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
-	${ALICE_SRC_DIR}/PhysX/Components/ColliderComponent.h
-	${ALICE_SRC_DIR}/PhysX/Components/RigidBodyComponent.h	
-	${ALICE_SRC_DIR}/PhysX/Components/TerrainHeightFieldComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_SettingsComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp

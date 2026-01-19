@@ -17,7 +17,7 @@
 
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
-#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
+#include "PhysX/Components/Phy_SettingsComponent.h"
 #include <wrl/client.h>
 #include <dxgi.h>
 #include <dxgi1_3.h>
@@ -87,8 +87,8 @@ namespace Alice
             return path;
         }
 
-        // PhysicsSceneSettingsComponent 수동 직렬화
-        static JsonRttr::json WritePhysicsSceneSettings(const PhysicsSceneSettingsComponent& settings)
+        // Phy_SettingsComponent 수동 직렬화
+        static JsonRttr::json WritePhysicsSceneSettings(const Phy_SettingsComponent& settings)
         {
             JsonRttr::json j = JsonRttr::json::object();
             
@@ -133,8 +133,8 @@ namespace Alice
             return j;
         }
         
-        // PhysicsSceneSettingsComponent 수동 역직렬화
-        static bool LoadPhysicsSceneSettings(PhysicsSceneSettingsComponent& settings, const JsonRttr::json& j)
+        // Phy_SettingsComponent 수동 역직렬화
+        static bool LoadPhysicsSceneSettings(Phy_SettingsComponent& settings, const JsonRttr::json& j)
         {
             if (!j.is_object()) return false;
             
@@ -344,15 +344,15 @@ namespace Alice
             }
 
             // PhysX Components
-            if (const auto* rigidBody = world.GetComponent<RigidBodyComponent>(id); rigidBody)
+            if (const auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(id); rigidBody)
             {
-                rttr::instance inst = const_cast<RigidBodyComponent&>(*rigidBody);
+                rttr::instance inst = const_cast<Phy_RigidBodyComponent&>(*rigidBody);
                 outEntity["RigidBody"] = JsonRttr::ToJsonObject(inst);
             }
 
-            if (const auto* collider = world.GetComponent<ColliderComponent>(id); collider)
+            if (const auto* collider = world.GetComponent<Phy_ColliderComponent>(id); collider)
             {
-                rttr::instance inst = const_cast<ColliderComponent&>(*collider);
+                rttr::instance inst = const_cast<Phy_ColliderComponent&>(*collider);
                 outEntity["Collider"] = JsonRttr::ToJsonObject(inst);
             }
 
@@ -362,13 +362,13 @@ namespace Alice
                 outEntity["CharacterController"] = JsonRttr::ToJsonObject(inst);
             }
 
-            if (const auto* terrain = world.GetComponent<TerrainHeightFieldComponent>(id); terrain)
+            if (const auto* terrain = world.GetComponent<Phy_TerrainHeightFieldComponent>(id); terrain)
             {
-                rttr::instance inst = const_cast<TerrainHeightFieldComponent&>(*terrain);
+                rttr::instance inst = const_cast<Phy_TerrainHeightFieldComponent&>(*terrain);
                 outEntity["TerrainHeightField"] = JsonRttr::ToJsonObject(inst);
             }
 
-            if (const auto* physicsSettings = world.GetComponent<PhysicsSceneSettingsComponent>(id); physicsSettings)
+            if (const auto* physicsSettings = world.GetComponent<Phy_SettingsComponent>(id); physicsSettings)
             {
                 // 수동 직렬화 사용 (중첩 배열 보장)
                 outEntity["PhysicsSceneSettings"] = WritePhysicsSceneSettings(*physicsSettings);
@@ -564,7 +564,7 @@ namespace Alice
             auto itRB = e.find("RigidBody");
             if (itRB != e.end() && itRB->is_object())
             {
-                RigidBodyComponent& rb = world.AddComponent<RigidBodyComponent>(id);
+                Phy_RigidBodyComponent& rb = world.AddComponent<Phy_RigidBodyComponent>(id);
                 rttr::instance inst = rb;
                 if (!JsonRttr::FromJsonObject(inst, *itRB)) return false;
             }
@@ -572,7 +572,7 @@ namespace Alice
             auto itCollider = e.find("Collider");
             if (itCollider != e.end() && itCollider->is_object())
             {
-                ColliderComponent& col = world.AddComponent<ColliderComponent>(id);
+                Phy_ColliderComponent& col = world.AddComponent<Phy_ColliderComponent>(id);
                 rttr::instance inst = col;
                 if (!JsonRttr::FromJsonObject(inst, *itCollider)) return false;
             }
@@ -588,7 +588,7 @@ namespace Alice
             auto itTerrain = e.find("TerrainHeightField");
             if (itTerrain != e.end() && itTerrain->is_object())
             {
-                TerrainHeightFieldComponent& terrain = world.AddComponent<TerrainHeightFieldComponent>(id);
+                Phy_TerrainHeightFieldComponent& terrain = world.AddComponent<Phy_TerrainHeightFieldComponent>(id);
                 rttr::instance inst = terrain;
                 if (!JsonRttr::FromJsonObject(inst, *itTerrain)) return false;
             }
@@ -596,7 +596,7 @@ namespace Alice
             auto itPhysicsSettings = e.find("PhysicsSceneSettings");
             if (itPhysicsSettings != e.end() && itPhysicsSettings->is_object())
             {
-                PhysicsSceneSettingsComponent& ps = world.AddComponent<PhysicsSceneSettingsComponent>(id);
+                Phy_SettingsComponent& ps = world.AddComponent<Phy_SettingsComponent>(id);
                 // 수동 역직렬화 사용 (중첩 배열 보장)
                 if (!LoadPhysicsSceneSettings(ps, *itPhysicsSettings)) return false;
             }

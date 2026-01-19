@@ -6,11 +6,11 @@
 #include <DirectXMath.h>
 
 // 물리 컴포넌트 헤더
-#include "PhysX/Components/RigidBodyComponent.h"
-#include "PhysX/Components/ColliderComponent.h"
-#include "PhysX/Components/TerrainHeightFieldComponent.h"
+#include "PhysX/Components/Phy_RigidBodyComponent.h"
+#include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "PhysX/Components/CharacterControllerComponent.h"
-#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
+#include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/IPhysicsWorld.h"
 
 using namespace DirectX;
@@ -245,64 +245,64 @@ namespace Alice
                 rttr::value("LockAngularZ", RigidBodyLockFlags::LockAngularZ)
                 );
 
-        // === RigidBodyComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
-        rttr::registration::class_<RigidBodyComponent>("RigidBodyComponent")
+        // === Phy_RigidBodyComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<Phy_RigidBodyComponent>("Phy_RigidBodyComponent")
             .constructor<>()
-            .property("density", &RigidBodyComponent::density)
-            .property("massOverride", &RigidBodyComponent::massOverride)
-            .property("isKinematic", &RigidBodyComponent::isKinematic)
-            .property("gravityEnabled", &RigidBodyComponent::gravityEnabled)
-            .property("startAwake", &RigidBodyComponent::startAwake)
-            .property("enableCCD", &RigidBodyComponent::enableCCD)
-            .property("enableSpeculativeCCD", &RigidBodyComponent::enableSpeculativeCCD)
-            .property("lockFlags", &RigidBodyComponent::lockFlags)
-            .property("linearDamping", &RigidBodyComponent::linearDamping)
-            .property("angularDamping", &RigidBodyComponent::angularDamping)
-            .property("maxLinearVelocity", &RigidBodyComponent::maxLinearVelocity)
-            .property("maxAngularVelocity", &RigidBodyComponent::maxAngularVelocity)
-            .property("solverPositionIterations", &RigidBodyComponent::solverPositionIterations)
-            .property("solverVelocityIterations", &RigidBodyComponent::solverVelocityIterations)
-            .property("sleepThreshold", &RigidBodyComponent::sleepThreshold)
-            .property("stabilizationThreshold", &RigidBodyComponent::stabilizationThreshold)
-            .property("teleport", &RigidBodyComponent::teleport)
-            .property("resetVelocityOnTeleport", &RigidBodyComponent::resetVelocityOnTeleport);
+            .property("density", &Phy_RigidBodyComponent::density)
+            .property("massOverride", &Phy_RigidBodyComponent::massOverride)
+            .property("isKinematic", &Phy_RigidBodyComponent::isKinematic)
+            .property("gravityEnabled", &Phy_RigidBodyComponent::gravityEnabled)
+            .property("startAwake", &Phy_RigidBodyComponent::startAwake)
+            .property("enableCCD", &Phy_RigidBodyComponent::enableCCD)
+            .property("enableSpeculativeCCD", &Phy_RigidBodyComponent::enableSpeculativeCCD)
+            .property("lockFlags", &Phy_RigidBodyComponent::lockFlags)
+            .property("linearDamping", &Phy_RigidBodyComponent::linearDamping)
+            .property("angularDamping", &Phy_RigidBodyComponent::angularDamping)
+            .property("maxLinearVelocity", &Phy_RigidBodyComponent::maxLinearVelocity)
+            .property("maxAngularVelocity", &Phy_RigidBodyComponent::maxAngularVelocity)
+            .property("solverPositionIterations", &Phy_RigidBodyComponent::solverPositionIterations)
+            .property("solverVelocityIterations", &Phy_RigidBodyComponent::solverVelocityIterations)
+            .property("sleepThreshold", &Phy_RigidBodyComponent::sleepThreshold)
+            .property("stabilizationThreshold", &Phy_RigidBodyComponent::stabilizationThreshold)
+            .property("teleport", &Phy_RigidBodyComponent::teleport)
+            .property("resetVelocityOnTeleport", &Phy_RigidBodyComponent::resetVelocityOnTeleport);
 
-        // === ColliderComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
-        rttr::registration::class_<ColliderComponent>("ColliderComponent")
+        // === Phy_ColliderComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<Phy_ColliderComponent>("Phy_ColliderComponent")
             .constructor<>()
-            .property("type", &ColliderComponent::type)
-            .property("halfExtents", &ColliderComponent::halfExtents)
-            .property("radius", &ColliderComponent::radius)
-            .property("capsuleRadius", &ColliderComponent::capsuleRadius)
-            .property("capsuleHalfHeight", &ColliderComponent::capsuleHalfHeight)
-            .property("capsuleAlignYAxis", &ColliderComponent::capsuleAlignYAxis)
-            .property("staticFriction", &ColliderComponent::staticFriction)
-            .property("dynamicFriction", &ColliderComponent::dynamicFriction)
-            .property("restitution", &ColliderComponent::restitution)
-            .property("layerBits", &ColliderComponent::layerBits)
-            .property("collideMask", &ColliderComponent::collideMask)
-            .property("queryMask", &ColliderComponent::queryMask)
-            .property("ignoreLayers", &ColliderComponent::ignoreLayers)
-            .property("isTrigger", &ColliderComponent::isTrigger);
+            .property("type", &Phy_ColliderComponent::type)
+            .property("halfExtents", &Phy_ColliderComponent::halfExtents)
+            .property("radius", &Phy_ColliderComponent::radius)
+            .property("capsuleRadius", &Phy_ColliderComponent::capsuleRadius)
+            .property("capsuleHalfHeight", &Phy_ColliderComponent::capsuleHalfHeight)
+            .property("capsuleAlignYAxis", &Phy_ColliderComponent::capsuleAlignYAxis)
+            .property("staticFriction", &Phy_ColliderComponent::staticFriction)
+            .property("dynamicFriction", &Phy_ColliderComponent::dynamicFriction)
+            .property("restitution", &Phy_ColliderComponent::restitution)
+            .property("layerBits", &Phy_ColliderComponent::layerBits)
+            .property("collideMask", &Phy_ColliderComponent::collideMask)
+            .property("queryMask", &Phy_ColliderComponent::queryMask)
+            .property("ignoreLayers", &Phy_ColliderComponent::ignoreLayers)
+            .property("isTrigger", &Phy_ColliderComponent::isTrigger);
 
-        // === TerrainHeightFieldComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
-        rttr::registration::class_<TerrainHeightFieldComponent>("TerrainHeightFieldComponent")
+        // === Phy_TerrainHeightFieldComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<Phy_TerrainHeightFieldComponent>("Phy_TerrainHeightFieldComponent")
             .constructor<>()
-            .property("numRows", &TerrainHeightFieldComponent::numRows)
-            .property("numCols", &TerrainHeightFieldComponent::numCols)
-            .property("heightSamples", &TerrainHeightFieldComponent::heightSamples)
-            .property("rowScale", &TerrainHeightFieldComponent::rowScale)
-            .property("colScale", &TerrainHeightFieldComponent::colScale)
-            .property("heightScale", &TerrainHeightFieldComponent::heightScale)
-            .property("centerPivot", &TerrainHeightFieldComponent::centerPivot)
-            .property("doubleSidedQueries", &TerrainHeightFieldComponent::doubleSidedQueries)
-            .property("staticFriction", &TerrainHeightFieldComponent::staticFriction)
-            .property("dynamicFriction", &TerrainHeightFieldComponent::dynamicFriction)
-            .property("restitution", &TerrainHeightFieldComponent::restitution)
-            .property("layerBits", &TerrainHeightFieldComponent::layerBits)
-            .property("collideMask", &TerrainHeightFieldComponent::collideMask)
-            .property("queryMask", &TerrainHeightFieldComponent::queryMask)
-            .property("ignoreLayers", &TerrainHeightFieldComponent::ignoreLayers);
+            .property("numRows", &Phy_TerrainHeightFieldComponent::numRows)
+            .property("numCols", &Phy_TerrainHeightFieldComponent::numCols)
+            .property("heightSamples", &Phy_TerrainHeightFieldComponent::heightSamples)
+            .property("rowScale", &Phy_TerrainHeightFieldComponent::rowScale)
+            .property("colScale", &Phy_TerrainHeightFieldComponent::colScale)
+            .property("heightScale", &Phy_TerrainHeightFieldComponent::heightScale)
+            .property("centerPivot", &Phy_TerrainHeightFieldComponent::centerPivot)
+            .property("doubleSidedQueries", &Phy_TerrainHeightFieldComponent::doubleSidedQueries)
+            .property("staticFriction", &Phy_TerrainHeightFieldComponent::staticFriction)
+            .property("dynamicFriction", &Phy_TerrainHeightFieldComponent::dynamicFriction)
+            .property("restitution", &Phy_TerrainHeightFieldComponent::restitution)
+            .property("layerBits", &Phy_TerrainHeightFieldComponent::layerBits)
+            .property("collideMask", &Phy_TerrainHeightFieldComponent::collideMask)
+            .property("queryMask", &Phy_TerrainHeightFieldComponent::queryMask)
+            .property("ignoreLayers", &Phy_TerrainHeightFieldComponent::ignoreLayers);
 
         // === CCTNonWalkableMode enum 등록 ===
         rttr::registration::enumeration<CCTNonWalkableMode>("CCTNonWalkableMode")
@@ -343,17 +343,17 @@ namespace Alice
             .property("jumpSpeed", &CharacterControllerComponent::jumpSpeed)
             .property("teleport", &CharacterControllerComponent::teleport);
 
-        // === PhysicsSceneSettingsComponent 등록 ===
-        rttr::registration::class_<PhysicsSceneSettingsComponent>("PhysicsSceneSettingsComponent")
+        // === Phy_SettingsComponent 등록 ===
+        rttr::registration::class_<Phy_SettingsComponent>("Phy_SettingsComponent")
             .constructor<>()
-            .property("enablePhysics", &PhysicsSceneSettingsComponent::enablePhysics)
-            .property("gravity", &PhysicsSceneSettingsComponent::gravity)
-            .property("fixedDt", &PhysicsSceneSettingsComponent::fixedDt)
-            .property("maxSubsteps", &PhysicsSceneSettingsComponent::maxSubsteps)
-            .property("layerCollideMatrix", &PhysicsSceneSettingsComponent::layerCollideMatrix)
-            .property("layerQueryMatrix", &PhysicsSceneSettingsComponent::layerQueryMatrix)
-            .property("layerNames", &PhysicsSceneSettingsComponent::layerNames)
-            .property("filterRevision", &PhysicsSceneSettingsComponent::filterRevision);
+            .property("enablePhysics", &Phy_SettingsComponent::enablePhysics)
+            .property("gravity", &Phy_SettingsComponent::gravity)
+            .property("fixedDt", &Phy_SettingsComponent::fixedDt)
+            .property("maxSubsteps", &Phy_SettingsComponent::maxSubsteps)
+            .property("layerCollideMatrix", &Phy_SettingsComponent::layerCollideMatrix)
+            .property("layerQueryMatrix", &Phy_SettingsComponent::layerQueryMatrix)
+            .property("layerNames", &Phy_SettingsComponent::layerNames)
+            .property("filterRevision", &Phy_SettingsComponent::filterRevision);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();
