@@ -177,6 +177,33 @@ private:
         
         // 지형 형상이 바뀌었는지 감지용
         uint64_t lastGeomKey = 0;
+
+        TerrainState() = default;
+
+        TerrainState(uint32_t inLayerBits,
+                     uint32_t inIgnoreLayers,
+                     uint32_t inCollideMask,
+                     uint32_t inQueryMask,
+                     uint64_t inGeomKey) noexcept
+            : layerBits(inLayerBits)
+            , ignoreLayers(inIgnoreLayers)
+            , collideMask(inCollideMask)
+            , queryMask(inQueryMask)
+            , lastGeomKey(inGeomKey)
+        {}
+
+        bool GeometryChanged(const TerrainState& prev) const noexcept
+        {
+            return lastGeomKey != prev.lastGeomKey;
+        }
+
+        bool MasksChanged(const TerrainState& prev) const noexcept
+        {
+            return layerBits != prev.layerBits ||
+                   ignoreLayers != prev.ignoreLayers ||
+                   collideMask != prev.collideMask ||
+                   queryMask != prev.queryMask;
+        }
     };
     std::unordered_map<Alice::EntityId, TerrainState> m_lastTerrains;
 
@@ -199,6 +226,59 @@ private:
         bool hitTriggers{};
         DirectX::XMFLOAT3 scale{}; // Transform scale 포함
         // 참고: applyGravity, gravity, jumpSpeed는 매 프레임 직접 사용되므로 변경 감지 불필요
+
+        CCTState() = default;
+
+        // TransformComponent 의존 없애려고 scale만 받음 (헤더에서 TransformComponent 몰라도 됨)
+        explicit CCTState(const CharacterControllerComponent& ccc,
+                         const DirectX::XMFLOAT3& inScale) noexcept
+            : radius(ccc.radius)
+            , halfHeight(ccc.halfHeight)
+            , stepOffset(ccc.stepOffset)
+            , contactOffset(ccc.contactOffset)
+            , slopeLimitRadians(ccc.slopeLimitRadians)
+            , nonWalkableMode(ccc.nonWalkableMode)
+            , climbingMode(ccc.climbingMode)
+            , density(ccc.density)
+            , enableQueries(ccc.enableQueries)
+            , layerBits(ccc.layerBits)
+            , collideMask(ccc.collideMask)
+            , queryMask(ccc.queryMask)
+            , ignoreLayers(ccc.ignoreLayers)
+            , hitTriggers(ccc.hitTriggers)
+            , scale(inScale)
+        {}
+
+        void OverrideMasks(uint32_t inCollide, uint32_t inQuery) noexcept
+        {
+            collideMask = inCollide;
+            queryMask   = inQuery;
+        }
+
+        bool NeedsRebuild(const CCTState& prev) const noexcept
+        {
+            return radius != prev.radius ||
+                   halfHeight != prev.halfHeight ||
+                   stepOffset != prev.stepOffset ||
+                   contactOffset != prev.contactOffset ||
+                   slopeLimitRadians != prev.slopeLimitRadians ||
+                   nonWalkableMode != prev.nonWalkableMode ||
+                   climbingMode != prev.climbingMode ||
+                   density != prev.density ||
+                   enableQueries != prev.enableQueries ||
+                   scale.x != prev.scale.x ||
+                   scale.y != prev.scale.y ||
+                   scale.z != prev.scale.z;
+        }
+
+        bool NeedsMaskUpdate(const CCTState& prev) const noexcept
+        {
+            return layerBits != prev.layerBits ||
+                   collideMask != prev.collideMask ||
+                   queryMask != prev.queryMask ||
+                   ignoreLayers != prev.ignoreLayers ||
+                   hitTriggers != prev.hitTriggers;
+        }
     };
     std::unordered_map<Alice::EntityId, CCTState> m_lastCCTs;
 
