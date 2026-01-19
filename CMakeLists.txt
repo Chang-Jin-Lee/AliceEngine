@@ -91,6 +91,7 @@ set(ENGINE_SOURCES
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
+    ${ALICE_SRC_DIR}/Core/ThreadSafety.cpp
     ${ALICE_SRC_DIR}/Core/IScript.cpp
     ${ALICE_SRC_DIR}/Core/ScriptFactory.cpp
     ${ALICE_SRC_DIR}/Core/ScriptSystem.cpp
@@ -150,6 +151,7 @@ set(ENGINE_HEADERS
 
     # 코어
     ${ALICE_SRC_DIR}/Core/World.h
+    ${ALICE_SRC_DIR}/Core/ThreadSafety.h
     ${ALICE_SRC_DIR}/Core/GameObject.h
     ${ALICE_SRC_DIR}/Core/Delegate.h
     ${ALICE_SRC_DIR}/Core/IScript.h
@@ -236,14 +238,14 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
     #Components
-    ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
-	${ALICE_SRC_DIR}/PhysX/Components/ColliderComponent.h
-	${ALICE_SRC_DIR}/PhysX/Components/RigidBodyComponent.h	
-	${ALICE_SRC_DIR}/PhysX/Components/TerrainHeightFieldComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_SettingsComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
-	${ALICE_SRC_DIR}/PhysX/Components/CharacterControllerComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
 )
 
 # [변경] AliceEngine -> Engine
@@ -401,9 +403,9 @@ endforeach()
 # ==========================================
 if(MSVC)
     # 경고 레벨
-    target_compile_options(Engine      PRIVATE /W4 /permissive-)
-    target_compile_options(Launch      PRIVATE /W4 /permissive-)
-    target_compile_options(AlicePlayer PRIVATE /W4 /permissive-)
+    target_compile_options(Engine      PRIVATE /W4 /permissive- /bigobj)
+    target_compile_options(Launch      PRIVATE /W4 /permissive- /bigobj)
+    target_compile_options(AlicePlayer PRIVATE /W4 /permissive- /bigobj)
 
     # Include 경로 추가 (상단에서 설정한 VCPKG_ROOT 사용)
     target_include_directories(Engine
