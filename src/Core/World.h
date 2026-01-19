@@ -33,10 +33,10 @@
 
 
 // 물리 컴포넌트들
-#include "PhysX/Components/RigidBodyComponent.h"
-#include "PhysX/Components/ColliderComponent.h"
-#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
-#include "PhysX/Components/TerrainHeightFieldComponent.h"
+#include "PhysX/Components/Phy_RigidBodyComponent.h"
+#include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_SettingsComponent.h"
+#include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "PhysX/Components/CharacterControllerComponent.h"
 
 class IPhysicsWorld; // 물리 인터페이스 전방선언

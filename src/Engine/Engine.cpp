@@ -624,10 +624,10 @@ namespace Alice
 			{
 				// 2-2. 물리 업데이트
 				// ===================================================================
-				// PhysicsSceneSettingsComponent가 있는데 물리 월드가 없으면 생성 시도
+				// Phy_SettingsComponent가 있는데 물리 월드가 없으면 생성 시도
 				if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
 				{
-					const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
+					const auto& settingsMap = pImpl->m_world.GetComponents<Phy_SettingsComponent>();
 					if (!settingsMap.empty())
 					{
 						const auto& settings = settingsMap.begin()->second;
@@ -740,9 +740,9 @@ namespace Alice
 	{
 		ThreadSafety::AssertMainThread();
 		// 현재 씬의 물리 월드 설정을 갱신
-		// PhysicsSceneSettingsComponent를 기반으로 물리 월드를 생성/재사용
+		// Phy_SettingsComponent를 기반으로 물리 월드를 생성/재사용
 		// settings가 없으면, 물리월드 제거(비물리 씬)
-		const auto& settingsMap = pImpl->m_world.GetComponents<PhysicsSceneSettingsComponent>();
+		const auto& settingsMap = pImpl->m_world.GetComponents<Phy_SettingsComponent>();
 
 		if (settingsMap.empty())
 		{
@@ -805,7 +805,7 @@ namespace Alice
 				pImpl->m_physicsSystem->SetPhysicsWorld(existingWorld);
 			}
 
-			// PhysicsSceneSettingsComponent의 layerCollideMatrix와 layerQueryMatrix 변경은
+			// Phy_SettingsComponent의 layerCollideMatrix와 layerQueryMatrix 변경은
 			// 런타임에 적용할 수 없으므로 (FilterShader는 씬 생성 시 설정됨),
 			// 변경 시 물리 월드를 재생성해야 합니다.
 			// 하지만 매 프레임 체크하는 것은 비효율적이므로, 에디터에서 변경 시 씬 재로드를 권장합니다.

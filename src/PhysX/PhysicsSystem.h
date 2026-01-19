@@ -1,11 +1,11 @@
 #pragma once
 
 #include "IPhysicsWorld.h"
-#include "Components/RigidBodyComponent.h"
-#include "Components/ColliderComponent.h"
-#include "Components/TerrainHeightFieldComponent.h"
+#include "Components/Phy_RigidBodyComponent.h"
+#include "Components/Phy_ColliderComponent.h"
+#include "Components/Phy_TerrainHeightFieldComponent.h"
 #include "Components/CharacterControllerComponent.h"
-#include "Components/PhysicsSceneSettingsComponent.h"
+#include "Components/Phy_SettingsComponent.h"
 #include <Core/World.h>
 #include <DirectXMath.h>
 #include <unordered_map>
@@ -62,7 +62,7 @@ private:
     void CreatePhysicsActor(Alice::EntityId entityId);
     void DestroyPhysicsActor(Alice::EntityId entityId);
     
-    // HeightField 전용 생성 (TerrainHeightFieldComponent)
+    // HeightField 전용 생성 (Phy_TerrainHeightFieldComponent)
     void CreateTerrainHeightField(Alice::EntityId entityId);
 
     // Game → Physics 동기화

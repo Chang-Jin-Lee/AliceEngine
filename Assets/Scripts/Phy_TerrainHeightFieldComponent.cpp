@@ -1,8 +1,8 @@
-#include "TerrainHeightFieldComponent.h"
+#include "Phy_TerrainHeightFieldComponent.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 #include "Core/GameObject.h"
-#include "PhysX/Components/TerrainHeightFieldComponent.h"
+#include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "Components/TransformComponent.h"
 #include <cmath>
 #include <algorithm>
@@ -32,13 +32,13 @@ namespace Alice
             ALICE_LOG_INFO("[TerrainHeightFieldTest] TransformComponent added.");
         }
 
-        // TerrainHeightFieldComponent 확인
-        auto* terrain = go.GetComponent<TerrainHeightFieldComponent>();
+        // Phy_TerrainHeightFieldComponent 확인
+        auto* terrain = go.GetComponent<Phy_TerrainHeightFieldComponent>();
         if (!terrain)
         {
             // 컴포넌트가 없으면 추가
-            terrain = &go.AddComponent<TerrainHeightFieldComponent>();
-            ALICE_LOG_INFO("[TerrainHeightFieldTest] TerrainHeightFieldComponent added.");
+            terrain = &go.AddComponent<Phy_TerrainHeightFieldComponent>();
+            ALICE_LOG_INFO("[TerrainHeightFieldTest] Phy_TerrainHeightFieldComponent added.");
         }
 
         // 높이맵 생성
@@ -50,7 +50,7 @@ namespace Alice
         auto go = gameObject();
         if (!go.IsValid()) return;
 
-        auto* terrain = go.GetComponent<TerrainHeightFieldComponent>();
+        auto* terrain = go.GetComponent<Phy_TerrainHeightFieldComponent>();
         if (!terrain) return;
 
         // 씬 파일에서 로드된 경우 heightSamples가 비어있을 수 있음
@@ -75,10 +75,10 @@ namespace Alice
         auto go = gameObject();
         if (!go.IsValid()) return;
 
-        auto* terrain = go.GetComponent<TerrainHeightFieldComponent>();
+        auto* terrain = go.GetComponent<Phy_TerrainHeightFieldComponent>();
         if (!terrain)
         {
-            ALICE_LOG_ERRORF("[TerrainHeightFieldTest] TerrainHeightFieldComponent not found!");
+            ALICE_LOG_ERRORF("[TerrainHeightFieldTest] Phy_TerrainHeightFieldComponent not found!");
             return;
         }
 

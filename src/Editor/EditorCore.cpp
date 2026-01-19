@@ -2599,20 +2599,20 @@ namespace Alice
                     } else if (typeName == "RectLightComponent") {
                         world.AddComponent<RectLightComponent>(_selectedEntity);
                         added = true;
-                    } else if (typeName == "RigidBodyComponent") {
-                        world.AddComponent<RigidBodyComponent>(_selectedEntity);
+                    } else if (typeName == "Phy_RigidBodyComponent") {
+                        world.AddComponent<Phy_RigidBodyComponent>(_selectedEntity);
                         added = true;
-                    } else if (typeName == "ColliderComponent") {
-                        world.AddComponent<ColliderComponent>(_selectedEntity);
+                    } else if (typeName == "Phy_ColliderComponent") {
+                        world.AddComponent<Phy_ColliderComponent>(_selectedEntity);
                         added = true;
                     } else if (typeName == "CharacterControllerComponent") {
                         world.AddComponent<CharacterControllerComponent>(_selectedEntity);
                         added = true;
-                    } else if (typeName == "TerrainHeightFieldComponent") {
-                        world.AddComponent<TerrainHeightFieldComponent>(_selectedEntity);
+                    } else if (typeName == "Phy_TerrainHeightFieldComponent") {
+                        world.AddComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
                         added = true;
-                    } else if (typeName == "PhysicsSceneSettingsComponent") {
-                        world.AddComponent<PhysicsSceneSettingsComponent>(_selectedEntity);
+                    } else if (typeName == "Phy_SettingsComponent") {
+                        world.AddComponent<Phy_SettingsComponent>(_selectedEntity);
                         added = true;
                     }
                     
@@ -2693,17 +2693,17 @@ namespace Alice
                 DrawEngineComponent("RectLightComponent",
                     world.GetComponent<RectLightComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
-            } else if (typeName == "RigidBodyComponent") {
-                DrawEngineComponent("RigidBodyComponent",
-                    world.GetComponent<RigidBodyComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<RigidBodyComponent>(_selectedEntity); });
-            } else if (typeName == "ColliderComponent") {
+            } else if (typeName == "Phy_RigidBodyComponent") {
+                DrawEngineComponent("Phy_RigidBodyComponent",
+                    world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
+            } else if (typeName == "Phy_ColliderComponent") {
                 DrawInspectorCollider(world, _selectedEntity);
             } else if (typeName == "CharacterControllerComponent") {
                 DrawInspectorCharacterController(world, _selectedEntity);
-            } else if (typeName == "TerrainHeightFieldComponent") {
+            } else if (typeName == "Phy_TerrainHeightFieldComponent") {
                 DrawInspectorTerrainHeightField(world, _selectedEntity);
-            } else if (typeName == "PhysicsSceneSettingsComponent") {
+            } else if (typeName == "Phy_SettingsComponent") {
                 DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
@@ -3169,7 +3169,7 @@ namespace Alice
 
     void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEntity)
     {
-        if (auto* collider = world.GetComponent<ColliderComponent>(_selectedEntity))
+        if (auto* collider = world.GetComponent<Phy_ColliderComponent>(_selectedEntity))
         {
             if (ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen))
             {
@@ -3177,7 +3177,7 @@ namespace Alice
                 
                 if (ImGui::Button("Remove"))
                 {
-                    world.RemoveComponent<ColliderComponent>(_selectedEntity);
+                    world.RemoveComponent<Phy_ColliderComponent>(_selectedEntity);
                     g_SceneDirty = true;
                     return;
                 }
@@ -3192,12 +3192,12 @@ namespace Alice
                 ImGui::Separator();
                 ImGui::Text("Layer Settings");
                 
-                // PhysicsSceneSettingsComponent에서 레이어 이름 가져오기
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
                 std::array<std::string, 32> layerNames;
                 for (int i = 0; i < 32; ++i)
                     layerNames[i] = "Layer " + std::to_string(i);
                 
-                const auto& settingsMap = world.GetComponents<PhysicsSceneSettingsComponent>();
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
                 if (!settingsMap.empty())
                 {
                     const auto& settings = settingsMap.begin()->second;
@@ -3297,12 +3297,12 @@ namespace Alice
                 ImGui::Separator();
                 ImGui::Text("Layer Settings");
                 
-                // PhysicsSceneSettingsComponent에서 레이어 이름 가져오기
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
                 std::array<std::string, 32> layerNames;
                 for (int i = 0; i < 32; ++i)
                     layerNames[i] = "Layer " + std::to_string(i);
                 
-                const auto& settingsMap = world.GetComponents<PhysicsSceneSettingsComponent>();
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
                 if (!settingsMap.empty())
                 {
                     const auto& settings = settingsMap.begin()->second;
@@ -3379,7 +3379,7 @@ namespace Alice
 
     void EditorCore::DrawInspectorPhysicsSceneSettings(World& world, const EntityId& _selectedEntity)
     {
-        if (auto* settings = world.GetComponent<PhysicsSceneSettingsComponent>(_selectedEntity))
+        if (auto* settings = world.GetComponent<Phy_SettingsComponent>(_selectedEntity))
         {
             if (ImGui::CollapsingHeader("Physics Scene Settings", ImGuiTreeNodeFlags_DefaultOpen))
             {
@@ -3387,7 +3387,7 @@ namespace Alice
                 
                 if (ImGui::Button("Remove"))
                 {
-                    world.RemoveComponent<PhysicsSceneSettingsComponent>(_selectedEntity);
+                    world.RemoveComponent<Phy_SettingsComponent>(_selectedEntity);
                     g_SceneDirty = true;
                     return;
                 }
@@ -3482,7 +3482,7 @@ namespace Alice
 
     void EditorCore::DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity)
     {
-        if (auto* terrain = world.GetComponent<TerrainHeightFieldComponent>(_selectedEntity))
+        if (auto* terrain = world.GetComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity))
         {
             if (ImGui::CollapsingHeader("Terrain Height Field", ImGuiTreeNodeFlags_DefaultOpen))
             {
@@ -3490,7 +3490,7 @@ namespace Alice
                 
                 if (ImGui::Button("Remove"))
                 {
-                    world.RemoveComponent<TerrainHeightFieldComponent>(_selectedEntity);
+                    world.RemoveComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
                     g_SceneDirty = true;
                     return;
                 }
@@ -3559,12 +3559,12 @@ namespace Alice
                 ImGui::Separator();
                 ImGui::Text("Layer Settings");
                 
-                // PhysicsSceneSettingsComponent에서 레이어 이름 가져오기
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
                 std::array<std::string, 32> layerNames;
                 for (int i = 0; i < 32; ++i)
                     layerNames[i] = "Layer " + std::to_string(i);
                 
-                const auto& settingsMap = world.GetComponents<PhysicsSceneSettingsComponent>();
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
                 if (!settingsMap.empty())
                 {
                     const auto& settings = settingsMap.begin()->second;

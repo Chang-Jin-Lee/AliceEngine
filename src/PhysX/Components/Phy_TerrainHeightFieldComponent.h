@@ -6,11 +6,11 @@
 #include <vector>
 
 // Terrain HeightField 컴포넌트
-// HeightField는 지형용 전용 컴포넌트로, ColliderComponent와 분리됨
+// HeightField는 지형용 전용 컴포넌트로, Phy_ColliderComponent와 분리됨
 // - RigidStatic으로만 생성 (움직이지 않는 지형)
 // - Trigger 불가 (PhysX 제약)
 // - Non-kinematic dynamic body에 붙일 수 없음
-struct TerrainHeightFieldComponent
+struct Phy_TerrainHeightFieldComponent
 {
     // HeightField 데이터
     // TODO: 나중에 AssetHandle로 리소스 시스템과 연동 가능
