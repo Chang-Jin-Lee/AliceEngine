@@ -2605,8 +2605,8 @@ namespace Alice
                     } else if (typeName == "Phy_ColliderComponent") {
                         world.AddComponent<Phy_ColliderComponent>(_selectedEntity);
                         added = true;
-                    } else if (typeName == "CharacterControllerComponent") {
-                        world.AddComponent<CharacterControllerComponent>(_selectedEntity);
+                    } else if (typeName == "Phy_CCTComponent") {
+                        world.AddComponent<Phy_CCTComponent>(_selectedEntity);
                         added = true;
                     } else if (typeName == "Phy_TerrainHeightFieldComponent") {
                         world.AddComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
@@ -2699,7 +2699,7 @@ namespace Alice
                     [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
             } else if (typeName == "Phy_ColliderComponent") {
                 DrawInspectorCollider(world, _selectedEntity);
-            } else if (typeName == "CharacterControllerComponent") {
+            } else if (typeName == "Phy_CCTComponent") {
                 DrawInspectorCharacterController(world, _selectedEntity);
             } else if (typeName == "Phy_TerrainHeightFieldComponent") {
                 DrawInspectorTerrainHeightField(world, _selectedEntity);
@@ -3274,7 +3274,7 @@ namespace Alice
 
     void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& _selectedEntity)
     {
-        if (auto* cct = world.GetComponent<CharacterControllerComponent>(_selectedEntity))
+        if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
         {
             if (ImGui::CollapsingHeader("Character Controller", ImGuiTreeNodeFlags_DefaultOpen))
             {
@@ -3282,7 +3282,7 @@ namespace Alice
                 
                 if (ImGui::Button("Remove"))
                 {
-                    world.RemoveComponent<CharacterControllerComponent>(_selectedEntity);
+                    world.RemoveComponent<Phy_CCTComponent>(_selectedEntity);
                     g_SceneDirty = true;
                     return;
                 }

@@ -9,7 +9,7 @@
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
 #include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
-#include "PhysX/Components/CharacterControllerComponent.h"
+#include "PhysX/Components/Phy_CCTComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/IPhysicsWorld.h"
 
@@ -318,30 +318,30 @@ namespace Alice
                 rttr::value("Constrained", CCTCapsuleClimbingMode::Constrained)
             );
 
-        // === CharacterControllerComponent 등록 (내부 핸들과 출력 값들은 제외) ===
-        rttr::registration::class_<CharacterControllerComponent>("CharacterControllerComponent")
+        // === Phy_CCTComponent 등록 (내부 핸들과 출력 값들은 제외) ===
+        rttr::registration::class_<Phy_CCTComponent>("Phy_CCTComponent")
             .constructor<>()
-            .property("radius", &CharacterControllerComponent::radius)
-            .property("halfHeight", &CharacterControllerComponent::halfHeight)
-            .property("stepOffset", &CharacterControllerComponent::stepOffset)
-            .property("contactOffset", &CharacterControllerComponent::contactOffset)
-            .property("slopeLimitRadians", &CharacterControllerComponent::slopeLimitRadians)
-            .property("nonWalkableMode", &CharacterControllerComponent::nonWalkableMode)
-            .property("climbingMode", &CharacterControllerComponent::climbingMode)
-            .property("density", &CharacterControllerComponent::density)
-            .property("enableQueries", &CharacterControllerComponent::enableQueries)
-            .property("layerBits", &CharacterControllerComponent::layerBits)
-            .property("collideMask", &CharacterControllerComponent::collideMask)
-            .property("queryMask", &CharacterControllerComponent::queryMask)
-            .property("ignoreLayers", &CharacterControllerComponent::ignoreLayers)
-            .property("hitTriggers", &CharacterControllerComponent::hitTriggers)
-            .property("desiredVelocity", &CharacterControllerComponent::desiredVelocity)
-            .property("applyGravity", &CharacterControllerComponent::applyGravity)
-            .property("gravity", &CharacterControllerComponent::gravity)
-            .property("verticalVelocity", &CharacterControllerComponent::verticalVelocity)
-            .property("jumpRequested", &CharacterControllerComponent::jumpRequested)
-            .property("jumpSpeed", &CharacterControllerComponent::jumpSpeed)
-            .property("teleport", &CharacterControllerComponent::teleport);
+            .property("radius", &Phy_CCTComponent::radius)
+            .property("halfHeight", &Phy_CCTComponent::halfHeight)
+            .property("stepOffset", &Phy_CCTComponent::stepOffset)
+            .property("contactOffset", &Phy_CCTComponent::contactOffset)
+            .property("slopeLimitRadians", &Phy_CCTComponent::slopeLimitRadians)
+            .property("nonWalkableMode", &Phy_CCTComponent::nonWalkableMode)
+            .property("climbingMode", &Phy_CCTComponent::climbingMode)
+            .property("density", &Phy_CCTComponent::density)
+            .property("enableQueries", &Phy_CCTComponent::enableQueries)
+            .property("layerBits", &Phy_CCTComponent::layerBits)
+            .property("collideMask", &Phy_CCTComponent::collideMask)
+            .property("queryMask", &Phy_CCTComponent::queryMask)
+            .property("ignoreLayers", &Phy_CCTComponent::ignoreLayers)
+            .property("hitTriggers", &Phy_CCTComponent::hitTriggers)
+            .property("desiredVelocity", &Phy_CCTComponent::desiredVelocity)
+            .property("applyGravity", &Phy_CCTComponent::applyGravity)
+            .property("gravity", &Phy_CCTComponent::gravity)
+            .property("verticalVelocity", &Phy_CCTComponent::verticalVelocity)
+            .property("jumpRequested", &Phy_CCTComponent::jumpRequested)
+            .property("jumpSpeed", &Phy_CCTComponent::jumpSpeed)
+            .property("teleport", &Phy_CCTComponent::teleport);
 
         // === Phy_SettingsComponent 등록 ===
         rttr::registration::class_<Phy_SettingsComponent>("Phy_SettingsComponent")

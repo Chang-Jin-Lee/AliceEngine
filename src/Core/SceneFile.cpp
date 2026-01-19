@@ -356,9 +356,9 @@ namespace Alice
                 outEntity["Collider"] = JsonRttr::ToJsonObject(inst);
             }
 
-            if (const auto* cct = world.GetComponent<CharacterControllerComponent>(id); cct)
+            if (const auto* cct = world.GetComponent<Phy_CCTComponent>(id); cct)
             {
-                rttr::instance inst = const_cast<CharacterControllerComponent&>(*cct);
+                rttr::instance inst = const_cast<Phy_CCTComponent&>(*cct);
                 outEntity["CharacterController"] = JsonRttr::ToJsonObject(inst);
             }
 
@@ -580,7 +580,7 @@ namespace Alice
             auto itCCT = e.find("CharacterController");
             if (itCCT != e.end() && itCCT->is_object())
             {
-                CharacterControllerComponent& cct = world.AddComponent<CharacterControllerComponent>(id);
+                Phy_CCTComponent& cct = world.AddComponent<Phy_CCTComponent>(id);
                 rttr::instance inst = cct;
                 if (!JsonRttr::FromJsonObject(inst, *itCCT)) return false;
             }

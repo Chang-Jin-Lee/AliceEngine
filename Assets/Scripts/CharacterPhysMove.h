@@ -8,7 +8,7 @@ namespace Alice
     // CCT(Character Controller) 기반 캐릭터 이동 스크립트
     // 
     // 작동 방식:
-    // 1. CharacterControllerComponent의 desiredVelocity를 설정하여 수평 이동 제어
+    // 1. Phy_CCTComponent의 desiredVelocity를 설정하여 수평 이동 제어
     // 2. jumpRequested 플래그로 점프 요청
     // 3. PhysicsSystem이 CCT를 통해 실제 이동, 중력, 충돌 처리
     // 4. Transform.position은 PhysicsSystem이 CCT의 foot position으로 자동 동기화

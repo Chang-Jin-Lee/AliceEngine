@@ -1,9 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include "../IPhysicsWorld.h"
 #include <DirectXMath.h>
 
-struct CharacterControllerComponent
+struct Phy_CCTComponent
 {
     // --- 생성 파라미터 (Capsule 기준) ---
     float radius = 0.35f;

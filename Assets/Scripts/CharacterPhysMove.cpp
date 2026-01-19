@@ -4,7 +4,7 @@
 #include "Core/GameObject.h"
 #include "Core/World.h"
 #include "Core/Input.h"
-#include "PhysX/Components/CharacterControllerComponent.h"
+#include "PhysX/Components/Phy_CCTComponent.h"
 #include "Components/TransformComponent.h"
 #include <cmath>
 
@@ -30,17 +30,17 @@ namespace Alice
             return;
         }
 
-        // CharacterControllerComponent 확인 및 자동 추가
-        auto* cct = go.GetComponent<CharacterControllerComponent>();
+        // Phy_CCTComponent 확인 및 자동 추가
+        auto* cct = go.GetComponent<Phy_CCTComponent>();
         if (!cct)
         {
-            ALICE_LOG_INFO("[CharacterPhysMove] CharacterControllerComponent not found. Adding it...");
-            go.AddComponent<CharacterControllerComponent>();
-            cct = go.GetComponent<CharacterControllerComponent>();
+            ALICE_LOG_INFO("[CharacterPhysMove] Phy_CCTComponent not found. Adding it...");
+            go.AddComponent<Phy_CCTComponent>();
+            cct = go.GetComponent<Phy_CCTComponent>();
             
             if (!cct)
             {
-                ALICE_LOG_ERRORF("[CharacterPhysMove] Failed to add CharacterControllerComponent!");
+                ALICE_LOG_ERRORF("[CharacterPhysMove] Failed to add Phy_CCTComponent!");
                 return;
             }
         }
@@ -58,7 +58,7 @@ namespace Alice
         auto go = gameObject();
         if (!input || !go.IsValid()) return;
 
-        auto* cct = go.GetComponent<CharacterControllerComponent>();
+        auto* cct = go.GetComponent<Phy_CCTComponent>();
         auto* t = go.GetComponent<TransformComponent>();
         auto anim = go.GetAnimator();
         
