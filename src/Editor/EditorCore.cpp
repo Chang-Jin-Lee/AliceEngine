@@ -2404,7 +2404,7 @@ namespace Alice
 				{
 					const std::filesystem::path loadAbs =
 						(m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
-					if (!sceneManager->RequestLoadSceneFile(loadAbs))
+					if (!sceneManager->LoadSceneFileRequest(loadAbs))
 					{
 						// 요청 실패: 에러 로그 및 팝업 표시
 						const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
@@ -2436,11 +2436,11 @@ namespace Alice
                 // 씬 로드 요청 (안전 지점에서 커밋)
                 if (sceneManager)
                 {
-                    ALICE_LOG_INFO("[Editor] RequestLoadSceneFile (dont-save): \"%s\"\n",
+                    ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (dont-save): \"%s\"\n",
                         g_NextScenePath.string().c_str());
                     const std::filesystem::path loadAbs =
                         (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
-                    if (!sceneManager->RequestLoadSceneFile(loadAbs))
+                    if (!sceneManager->LoadSceneFileRequest(loadAbs))
                     {
                         // 요청 실패: 에러 로그 및 팝업 표시
                         const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
@@ -4253,12 +4253,12 @@ namespace Alice
         g_SceneDirty = false;
     }
 
-    // 씬 로드 (레거시 함수 - 이제는 RequestLoadSceneFile 사용 권장)
+    // 씬 로드 (레거시 함수 - 이제는 LoadSceneFileRequest 사용 권장)
     void EditorCore::LoadScene(World& world)
     {
-        // 이 함수는 더 이상 사용하지 않음. SceneManager::RequestLoadSceneFile을 사용해야 함.
+        // 이 함수는 더 이상 사용하지 않음. SceneManager::LoadSceneFileRequest을 사용해야 함.
         // 하지만 호환성을 위해 남겨둠 (내부적으로는 즉시 로드)
-        ALICE_LOG_WARN("[Editor] LoadScene() is deprecated. Use SceneManager::RequestLoadSceneFile() instead.");
+        ALICE_LOG_WARN("[Editor] LoadScene() is deprecated. Use SceneManager::LoadSceneFileRequest() instead.");
 
         const std::filesystem::path loadAbs = m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath;
         

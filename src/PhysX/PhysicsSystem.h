@@ -125,7 +125,7 @@ private:
     std::unordered_map<Alice::EntityId, TransformState> m_lastTransforms;
 
     // 이전 프레임의 Collider 상태 (변경 감지 및 Shape 재구성용)
-    struct ColliderState
+    struct ColliderState    
     {
         ColliderType type{};
         DirectX::XMFLOAT3 halfExtents{};

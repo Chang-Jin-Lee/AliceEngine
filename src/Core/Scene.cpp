@@ -69,7 +69,7 @@ namespace Alice
 		return true;
 	}
 
-	bool SceneManager::RequestLoadSceneFile(const std::filesystem::path& logicalScenePath)
+	bool SceneManager::LoadSceneFileRequest(const std::filesystem::path& logicalScenePath)
 	{
 		if (logicalScenePath.empty()) return false;
 
