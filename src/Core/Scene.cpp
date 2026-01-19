@@ -63,7 +63,6 @@ namespace Alice
 		auto newScene = SceneFactory::Create(sceneName);
 		if (!newScene) return false;
 
-		std::scoped_lock lock(m_pendingMtx);
 		m_pendingScene = std::move(newScene);
 		m_pendingSceneFile.reset(); // 파일 로드 요청이 있던 걸 덮어씀
 		return true;
@@ -77,7 +76,6 @@ namespace Alice
 		if (!logicalScenePath.has_extension()) return false;
 		if (logicalScenePath.extension() != ".scene") return false;
 
-		std::scoped_lock lock(m_pendingMtx);
 		m_pendingSceneFile = logicalScenePath;
 		m_pendingScene.reset(); // 코드 씬 전환 요청이 있던 걸 덮어씀
 		return true;
@@ -97,22 +95,15 @@ namespace Alice
 
 	bool SceneManager::HasPendingSceneChange() const
 	{
-		std::scoped_lock lock(m_pendingMtx);
 		return (m_pendingScene != nullptr) || m_pendingSceneFile.has_value();
 	}
 
 	bool SceneManager::CommitPendingSceneChange(World& world)
 	{
-		// pending만 "빼고", 무거운 작업은 락 풀고 한다
-		std::unique_ptr<IScene> pendingScene;
-		std::optional<std::filesystem::path> pendingFile;
-
-		{
-			std::scoped_lock lock(m_pendingMtx);
-			pendingScene = std::move(m_pendingScene);
-			pendingFile = std::move(m_pendingSceneFile);
-			m_pendingSceneFile.reset();
-		}
+		// pending 데이터 추출
+		std::unique_ptr<IScene> pendingScene = std::move(m_pendingScene);
+		std::optional<std::filesystem::path> pendingFile = std::move(m_pendingSceneFile);
+		m_pendingSceneFile.reset();
 
 		// (A) 코드 기반 씬 전환 커밋
 		if (pendingScene)

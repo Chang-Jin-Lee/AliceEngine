@@ -932,6 +932,8 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 		}
 
+		// TODO: 나중에 구조를 변경해서 중복을 허용하지 않게 만들자
+		// 솔트해서 중복 제거하는 방식이 좋은건 아니라고 생각함
 		std::sort(rels.begin(), rels.end());
 		rels.erase(std::unique(rels.begin(), rels.end()), rels.end());
 
