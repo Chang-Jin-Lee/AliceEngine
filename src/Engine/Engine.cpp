@@ -933,7 +933,7 @@ namespace Alice
 			// 유효하지 않은 EntityId면 무시 (이전 씬의 이벤트)
 			if (entityA == InvalidEntityId || entityB == InvalidEntityId) continue;
 
-			// ✅ 핵심: 현재 물리 시스템이 추적하는 엔티티만 처리 (씬 전환 중 stale userData 방지)
+			// 현재 물리 시스템이 추적하는 엔티티만 처리 (씬 전환 중 stale userData 방지)
 			if (pImpl->m_physicsSystem)
 			{
 				// PhysicsSystem의 IsTrackedEntity를 사용하여 현재 추적 중인 엔티티만 처리
