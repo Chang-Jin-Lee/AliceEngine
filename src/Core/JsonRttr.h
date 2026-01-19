@@ -22,6 +22,7 @@
 #include <rttr/variant_sequential_view.h>
 
 #include "json/json.hpp"
+#include "Logger.h"
 
 namespace Alice
 {
@@ -67,7 +68,17 @@ namespace Alice
             std::ofstream ofs(path);
             if (!ofs.is_open()) return false;
 
-            ofs << j.dump(indent);
+            // 한글 경로 오류 해결
+            try
+            {
+                ofs << j.dump(indent);
+            }
+            catch (...)
+            {
+                ALICE_LOG_ERRORF("JsonRttr 파일의 inline bool SaveJsonFile(const std::filesystem::path& path, const json& j, int indent = 4) 부분에 uft8 에러가 났습니다. 저장 경로에 힌글이 있습니다. 다른 글자로 대체합니다");
+                ofs << j.dump(indent, ' ', false, json::error_handler_t::replace);
+            }
+            
             return true;
         }
 
