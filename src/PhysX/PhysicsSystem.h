@@ -11,10 +11,12 @@
 #include <Core/World.h>
 #include <DirectXMath.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <array>
 #include <string>
 #include <limits>
+#include <cmath>
 
 namespace Alice { class SkinnedMeshRegistry; }
 
@@ -299,18 +301,22 @@ private:
 
         bool NeedsRebuild(const CCTState& prev) const noexcept
         {
-            return radius != prev.radius ||
-                   halfHeight != prev.halfHeight ||
-                   stepOffset != prev.stepOffset ||
-                   contactOffset != prev.contactOffset ||
-                   slopeLimitRadians != prev.slopeLimitRadians ||
+            // Float 비교를 위한 epsilon (PhysicsSystem.cpp의 kFloatEpsilon과 동일)
+            constexpr float kEpsilon = 1e-5f;
+            auto FloatEqual = [](float a, float b) { return std::abs(a - b) < kEpsilon; };
+            
+            return !FloatEqual(radius, prev.radius) ||
+                   !FloatEqual(halfHeight, prev.halfHeight) ||
+                   !FloatEqual(stepOffset, prev.stepOffset) ||
+                   !FloatEqual(contactOffset, prev.contactOffset) ||
+                   !FloatEqual(slopeLimitRadians, prev.slopeLimitRadians) ||
                    nonWalkableMode != prev.nonWalkableMode ||
                    climbingMode != prev.climbingMode ||
-                   density != prev.density ||
+                   !FloatEqual(density, prev.density) ||
                    enableQueries != prev.enableQueries ||
-                   scale.x != prev.scale.x ||
-                   scale.y != prev.scale.y ||
-                   scale.z != prev.scale.z;
+                   !FloatEqual(scale.x, prev.scale.x) ||
+                   !FloatEqual(scale.y, prev.scale.y) ||
+                   !FloatEqual(scale.z, prev.scale.z);
         }
 
         bool NeedsMaskUpdate(const CCTState& prev) const noexcept
@@ -387,4 +393,9 @@ private:
 
     // Mesh asset access
     class Alice::SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
+
+    // 성능 최적화: 매 프레임 재사용할 임시 컨테이너들
+    mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithRigidBody;
+    mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithMeshCollider;
+    mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithJoint;
 };
