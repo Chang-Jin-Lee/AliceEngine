@@ -45,5 +45,6 @@ struct Phy_ColliderComponent
     // 내부 사용: 물리 액터 핸들 (PhysicsSystem이 관리)
     // Phy_RigidBodyComponent가 있으면 그 바디에 shape이 추가됨
     // 없으면 Static Actor로 생성됨
-    void* physicsActorHandle = nullptr; // IPhysicsActor* 또는 IRigidBody*를 void*로 저장
+    //  직접 접근 금지: PhysicsSystem::ValidateAndGetActor()를 통해 접근하세요
+    IPhysicsActor* physicsActorHandle = nullptr; // 타입 안전 핸들 (worldEpoch 검증 + IsValid() 강제)
 };
