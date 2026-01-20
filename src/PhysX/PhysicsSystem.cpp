@@ -69,6 +69,8 @@ static bool JointFrameEqual(const Phy_JointFrame& a, const Phy_JointFrame& b) no
 
 static bool RevoluteEqual(const Phy_RevoluteJointSettings& a, const Phy_RevoluteJointSettings& b) noexcept
 {
+	// 구조적 설정만 비교 (재생성 트리거)
+	// driveVelocity, driveForceLimit는 런타임 제어값이므로 재생성 트리거에서 제외
 	return a.enableLimit == b.enableLimit &&
 		a.lowerLimit == b.lowerLimit &&
 		a.upperLimit == b.upperLimit &&
@@ -77,8 +79,7 @@ static bool RevoluteEqual(const Phy_RevoluteJointSettings& a, const Phy_Revolute
 		a.limitRestitution == b.limitRestitution &&
 		a.limitBounceThreshold == b.limitBounceThreshold &&
 		a.enableDrive == b.enableDrive &&
-		a.driveVelocity == b.driveVelocity &&
-		a.driveForceLimit == b.driveForceLimit &&
+		// driveVelocity, driveForceLimit는 런타임 제어이므로 제외
 		a.driveFreeSpin == b.driveFreeSpin &&
 		a.driveLimitsAreForces == b.driveLimitsAreForces;
 }
@@ -157,6 +158,8 @@ static bool D6SwingEqual(const Phy_D6SwingLimitSettings& a, const Phy_D6SwingLim
 
 static bool D6Equal(const Phy_D6JointSettings& a, const Phy_D6JointSettings& b) noexcept
 {
+	// 구조적 설정만 비교 (재생성 트리거)
+	// drivePose, driveLinearVelocity, driveAngularVelocity는 런타임 제어값이므로 재생성 트리거에서 제외
 	return a.driveLimitsAreForces == b.driveLimitsAreForces &&
 		a.motionX == b.motionX &&
 		a.motionY == b.motionY &&
@@ -174,14 +177,15 @@ static bool D6Equal(const Phy_D6JointSettings& a, const Phy_D6JointSettings& b) 
 		D6DriveEqual(a.driveZ, b.driveZ) &&
 		D6DriveEqual(a.driveSwing, b.driveSwing) &&
 		D6DriveEqual(a.driveTwist, b.driveTwist) &&
-		D6DriveEqual(a.driveSlerp, b.driveSlerp) &&
-		JointFrameEqual(a.drivePose, b.drivePose) &&
-		Float3Equal(a.driveLinearVelocity, b.driveLinearVelocity) &&
-		Float3Equal(a.driveAngularVelocity, b.driveAngularVelocity);
+		D6DriveEqual(a.driveSlerp, b.driveSlerp);
+		// drivePose, driveLinearVelocity, driveAngularVelocity는 런타임 제어이므로 제외
 }
 
 static bool JointSnapshotEqual(const Phy_JointComponent& a, const Phy_JointComponent& b) noexcept
 {
+	// 구조적 설정만 비교 (재생성 트리거)
+	// breakForce, breakTorque, collideConnected는 런타임 제어 가능하지만
+	// 구조 변경으로 간주하여 재생성 트리거에 포함 (나중에 in-place 업데이트로 개선 가능)
 	return a.type == b.type &&
 		a.targetName == b.targetName &&
 		JointFrameEqual(a.frameA, b.frameA) &&
@@ -246,11 +250,38 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
 {
 	ThreadSafety::AssertMainThread();
 	IPhysicsWorld* oldWorld = m_physicsWorld;
-	if (physicsWorld == nullptr && oldWorld != nullptr)
+	
+	// shared_ptr로 보관하여 수명 안전성 확보
+	// raw pointer만 받되, World에서 shared_ptr을 가져와서 보관
+	if (physicsWorld != nullptr)
 	{
-		oldWorld->Flush();
+		// World에서 shared_ptr을 가져옴
+		auto shared = m_world.GetPhysicsWorldShared();
+		if (shared.get() == physicsWorld)
+		{
+			m_physicsWorldShared = shared;
+		}
+		else
+		{
+			// World에 등록되지 않은 외부 월드인 경우 (일반적이지 않지만 방어적 처리)
+			// 외부 소유는 가정하지 않고, 약한 참조로만 처리
+			m_physicsWorldShared = std::shared_ptr<IPhysicsWorld>(physicsWorld, [](IPhysicsWorld*) { /* 외부 소유, 해제하지 않음 */ });
+		}
 	}
-
+	else
+	{
+		// old world 정리 전에 shared_ptr 유지하여 안전한 정리 보장
+		// oldShared가 스코프를 벗어날 때까지 oldWorld는 살아있음
+		auto oldShared = std::move(m_physicsWorldShared);
+		m_physicsWorldShared.reset();
+		
+		// oldWorld 정리는 oldShared가 유지하는 동안 수행 (수명 보장)
+		if (oldWorld != nullptr)
+		{
+			oldWorld->Flush();
+		}
+	}
+	
 	m_physicsWorld = physicsWorld;
 
     // 기존 액터들 정리
@@ -293,10 +324,7 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
     m_entityToJoint.clear();
     m_lastJoints.clear();
 
-	if (oldWorld != nullptr)
-	{
-		oldWorld->Flush();
-	}
+	// oldWorld->Flush()는 위에서 이미 호출됨 (shared_ptr 유지 중에 안전하게 호출)
 	m_lastFilterRevision = 0xFFFFFFFFu; // 강제로 다음 Update에서 1회 갱신
 
 }
@@ -310,13 +338,19 @@ void PhysicsSystem::SetEventCallback(EventCallback callback, void* userData)
 void PhysicsSystem::Update(float deltaTime)
 {
 	ThreadSafety::AssertMainThread();
-    IPhysicsWorld* current = m_world.GetPhysicsWorld();
+    // World에서 shared_ptr을 가져와서 비교 (raw pointer 대신)
+    // shared_ptr을 통해 수명 보장 (스코프 끝까지 월드가 살아있음)
+    auto currentShared = m_world.GetPhysicsWorldShared();
+    IPhysicsWorld* current = currentShared.get();
+    
     if (current != m_physicsWorld) {
+        // shared_ptr을 통해 SetPhysicsWorld 호출 (SetPhysicsWorld 내부에서 shared_ptr 보관)
         SetPhysicsWorld(current); // 바뀌었으면 정리+재바인딩
         // SetPhysicsWorld(nullptr)가 호출되면 m_entityToActor가 모두 클리어됨
         // 이후 로직은 실행할 필요 없음
         if (!m_physicsWorld) return;
     }
+    // currentShared가 살아있음으로써 월드 수명 보장 (스코프 끝까지)
 
     if (!m_physicsWorld) return;
 
@@ -608,14 +642,29 @@ void PhysicsSystem::Update(float deltaTime)
                     continue;
                 }
 
-                GameObject targetGo = m_world.FindGameObject(joint->targetName);
-                if (!targetGo.IsValid())
+                // targetName 캐싱: 이전 상태에서 targetName이 같으면 캐시된 targetId 사용
+                EntityId targetId = InvalidEntityId;
+                bool needResolve = true;
+                auto itState = m_lastJoints.find(entityId);
+                if (itState != m_lastJoints.end() && itState->second.targetName == joint->targetName)
                 {
-                    DestroyJoint(entityId);
-                    continue;
+                    // 캐시된 targetId 사용
+                    targetId = itState->second.targetId;
+                    needResolve = false;
                 }
 
-                const EntityId targetId = targetGo.id();
+                // 캐시가 없거나 targetName이 변경된 경우 재탐색
+                if (needResolve)
+                {
+                    GameObject targetGo = m_world.FindGameObject(joint->targetName);
+                    if (!targetGo.IsValid())
+                    {
+                        DestroyJoint(entityId);
+                        continue;
+                    }
+                    targetId = targetGo.id();
+                }
+
                 IPhysicsActor* actorA = getActor(entityId);
                 IPhysicsActor* actorB = getActor(targetId);
                 if (!actorA || !actorB)
@@ -625,15 +674,27 @@ void PhysicsSystem::Update(float deltaTime)
                 }
 
                 const Phy_JointComponent snapshot = MakeJointSnapshot(*joint);
-                const JointState newState{ snapshot, targetId };
+                JointState newState{ snapshot, targetId, joint->targetName };
 
                 bool hasJoint = false;
                 auto itJoint = m_entityToJoint.find(entityId);
                 if (itJoint != m_entityToJoint.end() && itJoint->second && itJoint->second->IsValid())
                     hasJoint = true;
 
+                // breakForce/collideConnected는 in-place 업데이트 가능
+                bool needsInPlaceUpdate = false;
+                if (hasJoint && itState != m_lastJoints.end())
+                {
+                    const JointState& prev = itState->second;
+                    if (prev.snapshot.breakForce != joint->breakForce ||
+                        prev.snapshot.breakTorque != joint->breakTorque ||
+                        prev.snapshot.collideConnected != joint->collideConnected)
+                    {
+                        needsInPlaceUpdate = true;
+                    }
+                }
+
                 bool needsRebuild = !hasJoint;
-                auto itState = m_lastJoints.find(entityId);
                 if (itState == m_lastJoints.end())
                 {
                     needsRebuild = true;
@@ -641,13 +702,34 @@ void PhysicsSystem::Update(float deltaTime)
                 else
                 {
                     const JointState& prev = itState->second;
-                    if (prev.targetId != newState.targetId || !JointSnapshotEqual(prev.snapshot, newState.snapshot))
+                    // targetName 변경 또는 구조적 설정 변경 시 재생성
+                    if (prev.targetName != newState.targetName ||
+                        prev.targetId != newState.targetId ||
+                        !JointSnapshotEqual(prev.snapshot, newState.snapshot))
+                    {
                         needsRebuild = true;
+                    }
+                }
+
+                // In-place 업데이트 (breakForce/collideConnected)
+                if (needsInPlaceUpdate && !needsRebuild && itJoint->second && itJoint->second->IsValid())
+                {
+                    itJoint->second->SetBreakForce(joint->breakForce, joint->breakTorque);
+                    itJoint->second->SetCollideConnected(joint->collideConnected);
+                    // 스냅샷 업데이트 (다음 프레임 재업데이트 방지)
+                    newState.snapshot.breakForce = joint->breakForce;
+                    newState.snapshot.breakTorque = joint->breakTorque;
+                    newState.snapshot.collideConnected = joint->collideConnected;
+                    m_lastJoints[entityId] = newState;
+                    joint->jointHandle = itJoint->second.get();
+                    continue;
                 }
 
                 if (!needsRebuild)
                 {
                     joint->jointHandle = itJoint->second.get();
+                    // 스냅샷 업데이트 (targetName은 이미 같음)
+                    m_lastJoints[entityId] = newState;
                     continue;
                 }
 

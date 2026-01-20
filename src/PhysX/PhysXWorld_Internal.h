@@ -510,6 +510,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		}
 		void onWake(PxActor**, PxU32) override {}
 		void onSleep(PxActor**, PxU32) override {}
+		// onAdvance는 simulate~fetchResults 사이(시뮬레이션 도는 중)에 호출됨
+		// PhysX 문서: PxSimulationEventCallback::onAdvance는 eENABLE_POSE_INTEGRATION_PREVIEW가
+		// 켜진 바디들의 포즈를 미리 제공하기 위해 시뮬레이션 중간에 호출됨
+		// 주의: 이 콜백 내에서는 할당/로그/복잡한 연산을 피해야 함 (성능/안정성)
 		void onAdvance(const PxRigidBody* const* bodyBuffer, const PxTransform* poseBuffer, const PxU32 count) override
 		{
 			auto s = owner.lock();
@@ -517,6 +521,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (!bodyBuffer || !poseBuffer || count == 0) return;
 
 			std::scoped_lock lock(s->activeMtx);
+			// reserve로 할당 최소화 (시뮬레이션 중 할당을 피하기 위함)
 			s->activeTransforms.reserve(s->activeTransforms.size() + count);
 
 			for (PxU32 i = 0; i < count; ++i)
@@ -629,14 +634,36 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			{
 				const PxContactPair& cp = pairs[i];
 
-				// if shape removed, ignore
-				if ((static_cast<PxU32>(cp.flags) &
+				const bool removedShape = (static_cast<PxU32>(cp.flags) &
 					(static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_0) |
-						static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_1))) != 0u)
-					continue;
+						static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_1))) != 0u;
 
 				const PxShape* sh0 = cp.shapes[0];
 				const PxShape* sh1 = cp.shapes[1];
+
+				// if shape removed, 정리 후 스킵
+				if (removedShape)
+				{
+					// 가능한 범위에서 상태 정리 (누수 방지)
+					// shape가 유효하면 shapeKey를 계산해서 제거
+					if (sh0 && sh1)
+					{
+						const uint64_t shapeKey = PtrPairKey(sh0, sh1);
+						if (s->activeContactShapePairs.erase(shapeKey) > 0)
+						{
+							// actorCount 감소
+							auto it = s->activeContactActorCounts.find(actorKey);
+							if (it != s->activeContactActorCounts.end())
+							{
+								if (it->second > 0) --it->second;
+								if (it->second == 0)
+									s->activeContactActorCounts.erase(it);
+							}
+						}
+					}
+					continue;
+				}
+
 				if (!sh0 || !sh1) continue;
 
 				const uint64_t shapeKey = PtrPairKey(sh0, sh1);
@@ -1592,7 +1619,7 @@ public:
 		PxTriangleMesh* tm = s->GetOrCreateTriangleMesh(mesh);
 		if (!tm) return false;
 
-		PxMeshGeometryFlags gflags;
+		PxMeshGeometryFlags gflags{}; // 초기화 필수: 미초기화 시 랜덤 플래그로 인한 크래시 위험
 		if (mesh.doubleSidedQueries) gflags |= PxMeshGeometryFlag::eDOUBLE_SIDED;
 
 		const PxMeshScale scale(ToPx(mesh.scale));
@@ -1645,7 +1672,7 @@ public:
 		PxHeightField* heightField = s->GetOrCreateHeightField(hf);
 		if (!heightField) return false;
 
-		PxMeshGeometryFlags gflags;
+		PxMeshGeometryFlags gflags{}; // 초기화 필수: 미초기화 시 랜덤 플래그로 인한 크래시 위험
 		if (hf.doubleSidedQueries) gflags |= PxMeshGeometryFlag::eDOUBLE_SIDED;
 		const PxHeightFieldGeometry geom(heightField, gflags, hf.heightScale, hf.rowScale, hf.colScale);
 		if (!geom.isValid()) return false;
