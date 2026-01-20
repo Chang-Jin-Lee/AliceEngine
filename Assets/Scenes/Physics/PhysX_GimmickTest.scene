@@ -2263,7 +2263,6 @@
                     "z": 1.0
                 }
             },
-            "id": 30,
             "name": "PhyMananger"
         },
         {
@@ -2335,7 +2334,6 @@
                     "z": 0.9999974370002747
                 }
             },
-            "id": 31,
             "name": "DropBox"
         },
         {
@@ -2378,7 +2376,6 @@
                     "z": 1.0
                 }
             },
-            "id": 32,
             "name": "legacy"
         },
         {
@@ -2458,8 +2455,7 @@
                     "z": 1.0
                 }
             },
-            "id": 33,
-            "name": "parts_A"
+            "name": "parts_1"
         },
         {
             "Material": {
@@ -2538,8 +2534,7 @@
                     "z": 1.0
                 }
             },
-            "id": 34,
-            "name": "parts_B"
+            "name": "parts_2"
         },
         {
             "Material": {
@@ -2618,8 +2613,7 @@
                     "z": 1.0
                 }
             },
-            "id": 35,
-            "name": "parts_C"
+            "name": "parts_3"
         },
         {
             "Material": {
@@ -2698,8 +2692,7 @@
                     "z": 1.0
                 }
             },
-            "id": 36,
-            "name": "parts_D"
+            "name": "parts_4"
         },
         {
             "Material": {
@@ -2778,8 +2771,7 @@
                     "z": 1.0
                 }
             },
-            "id": 37,
-            "name": "parts_E"
+            "name": "parts_5"
         }
     ],
     "version": 1
