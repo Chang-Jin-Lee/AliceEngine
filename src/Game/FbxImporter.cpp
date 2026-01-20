@@ -1,4 +1,4 @@
-﻿#include "Game/FbxImporter.h"
+#include "Game/FbxImporter.h"
 
 #include <algorithm>
 #include <system_error>
@@ -247,6 +247,7 @@ namespace Alice
                 static int embeddedIndex = 0;
                 const std::string texStem = baseName + "_" + tag + "_embedded" + std::to_string(embeddedIndex++);
 
+                // 임베디드 텍스처는 baseName 폴더에 저장 (레거시 호환)
                 fs::path cooked = "Cooked/Textures";
                 cooked /= baseName;
                 cooked /= texStem + ".alice";
@@ -260,6 +261,7 @@ namespace Alice
                 return;
             }
 
+            // 외부 텍스처: Resource 구조를 따라 Cooked/Textures에 저장
             fs::path srcTex = t;
             if (!srcTex.is_absolute())
             {
@@ -268,17 +270,38 @@ namespace Alice
                 srcTex = fbxParent / srcTex;
             }
 
-            auto texBytes = resources.LoadSharedBinaryAuto(srcTex);
-            if (!texBytes || texBytes->empty())
-                return;
+            // srcTex를 논리 경로로 정규화
+            std::string logicalTexStr = srcTex.generic_string();
+            if (logicalTexStr.rfind("Resource/", 0) == 0)
+            {
+                // Resource/... 경로를 Cooked/Textures/...로 변환
+                std::string rel = logicalTexStr.substr(strlen("Resource/")); // "fbx/char/T_Diff.png"
+                fs::path cooked = fs::path("Cooked/Textures") / fs::path(rel);
+                cooked.replace_extension(".alice"); // "Cooked/Textures/fbx/char/T_Diff.alice"
 
-            const std::string texStem = fs::path(t).stem().string();
-            fs::path cooked = "Cooked/Textures";
-            cooked /= baseName;
-            cooked /= texStem + ".alice";
-            const fs::path cookedAbs = resources.Resolve(cooked);
-            resources.CookAndSaveBytes(*texBytes, cookedAbs);
-            cookedTextures.push_back(cooked);
+                auto texBytes = resources.LoadSharedBinaryAuto(srcTex);
+                if (!texBytes || texBytes->empty())
+                    return;
+
+                const fs::path cookedAbs = resources.Resolve(cooked);
+                resources.CookAndSaveBytes(*texBytes, cookedAbs);
+                cookedTextures.push_back(cooked);
+            }
+            else
+            {
+                // Resource가 아닌 경우 레거시 방식 (baseName 폴더)
+                auto texBytes = resources.LoadSharedBinaryAuto(srcTex);
+                if (!texBytes || texBytes->empty())
+                    return;
+
+                const std::string texStem = fs::path(t).stem().string();
+                fs::path cooked = "Cooked/Textures";
+                cooked /= baseName;
+                cooked /= texStem + ".alice";
+                const fs::path cookedAbs = resources.Resolve(cooked);
+                resources.CookAndSaveBytes(*texBytes, cookedAbs);
+                cookedTextures.push_back(cooked);
+            }
         }
     }
 
@@ -303,25 +326,35 @@ namespace Alice
         // - 없으면(Resource/Cooked/Chunks) 메모리에서 복호화된 바이트를 받아 Assimp ReadFileFromMemory 로 로드
         namespace fs = std::filesystem;
 
-        const bool fileExists = !fbxPath.empty() && fs::exists(fbxPath);
+        //const bool fileExists = !fbxPath.empty() && fs::exists(fbxPath);
+		const fs::path resolved = m_resources.Resolve(fbxPath);
+        const bool isChunk = (resolved.extension() == ".alice");   // Cooked/Chunks/.../*.alice
+		const bool fileExists = !isChunk && fs::exists(resolved);
 
         // 키/생성물 이름은 항상 원래 요청된 fbxPath 기준(stem)으로 고정함
         // C:/Models/Robot/robot_01.fbx -> 	robot_01
         std::string baseName = std::filesystem::path(fbxPath).stem().string();
 
+        // 논리 경로 정규화 (ResourceManager가 처리할 수 있도록)
         std::filesystem::path resolvedLogical = fbxPath;
+        if (resolvedLogical.is_absolute())
+        {
+            // 절대 경로를 논리 경로로 변환
+            resolvedLogical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(resolvedLogical);
+        }
 
         if (fileExists)
         {
-            const fs::path absFbxPath = fs::absolute(fbxPath);
-            if (!model->Load(device, absFbxPath.wstring()))
+            // 파일이 존재하는 경우: 새로운 ResourceManager 기반 Load 사용
+            if (!model->Load(device, m_resources, resolvedLogical))
             {
-                ALICE_LOG_ERRORF("[FbxImporter] FbxModel::Load FAILED for \"%s\"\n", absFbxPath.string().c_str());
+                ALICE_LOG_ERRORF("[FbxImporter] FbxModel::Load FAILED for \"%s\"\n", resolved.string().c_str());
                 return result;
             }
         }
         else
         {
+            // 청크/메모리 로드: ResourceManager 기반 LoadFromMemory 사용
             auto sp = m_resources.LoadSharedBinaryAuto(resolvedLogical);
             if (!sp || sp->empty())
             {
@@ -330,8 +363,7 @@ namespace Alice
                 return result;
             }
 
-            // baseDirW는 외부 텍스처 상대경로 해석용인데, 배포 빌드에선 파일이 없을 수 있어 빈 값으로 둡니다.
-            if (!model->LoadFromMemory(device, sp->data(), sp->size(), baseName + ".fbx", L""))
+            if (!model->LoadFromMemory(device, m_resources, resolvedLogical, sp->data(), sp->size(), baseName + ".fbx"))
             {
                 ALICE_LOG_ERRORF("[FbxImporter] FbxModel::LoadFromMemory FAILED for \"%s\" (bytes=%zu)\n", resolvedLogical.string().c_str(), sp->size());
                 return result;
