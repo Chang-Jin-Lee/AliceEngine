@@ -532,6 +532,8 @@ ID3D11Buffer* FbxModel::GetIndexBuffer() const { return m_->geometry.GetIB(); }
 int FbxModel::GetIndexCount() const { return m_->geometry.GetIndexCount(); }
 UINT FbxModel::GetVertexStride() const { return m_->geometry.GetVertexStride(); }
 const std::vector<FbxSubset>& FbxModel::GetSubsets() const { return m_->geometry.GetSubsets(); }
+const std::vector<VertexSkinnedTBN>& FbxModel::GetCPUVertices() const { return m_->geometry.GetCPUVertices(); }
+const std::vector<uint32_t>& FbxModel::GetCPUIndices() const { return m_->geometry.GetCPUIndices(); }
 const std::vector<ID3D11ShaderResourceView*>& FbxModel::GetMaterialSRVs() const { return m_->materials.GetMaterialSRVs(); }
 const std::vector<ID3D11ShaderResourceView*>& FbxModel::GetNormalSRVs() const { return m_->materials.GetNormalSRVs(); }
 const std::vector<ID3D11ShaderResourceView*>& FbxModel::GetMetallicSRVs() const { return m_->materials.GetMetallicSRVs(); }

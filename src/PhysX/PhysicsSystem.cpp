@@ -3,8 +3,12 @@
 #include "Core/GameObject.h"
 #include "Components/TransformComponent.h"
 #include "Components/Phy_SettingsComponent.h"
+#include "Components/SkinnedMeshComponent.h"
 #include "Core/Logger.h"
 #include "Core/ThreadSafety.h"
+#include "Rendering/SkinnedMeshRegistry.h"
+#include "3Dmodel/FbxModel.h"
+#include "Core/Vertex.h"
 #include <DirectXMath.h>
 #include <algorithm>
 #include <unordered_set>
@@ -12,6 +16,7 @@
 #include <bit>
 #include <cstring>
 #include <cassert>
+#include <vector>
 
 using namespace DirectX;
 using namespace Alice;
@@ -56,6 +61,50 @@ static uint64_t MakeTerrainGeomKey(const Phy_TerrainHeightFieldComponent& t) noe
 	key = HashCombine64(key, static_cast<uint64_t>(t.heightSamples.size()));
 	
 	return key;
+}
+
+static std::string ResolveMeshAssetPath(const World& world,
+	                                    EntityId entityId,
+	                                    const Phy_MeshColliderComponent& mesh) 
+{
+	if (!mesh.meshAssetPath.empty())
+		return mesh.meshAssetPath;
+
+	if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId))
+	{
+		if (!skinned->meshAssetPath.empty())
+			return skinned->meshAssetPath;
+	}
+
+	return {};
+}
+
+static bool BuildMeshBuffers(const SkinnedMeshRegistry* registry,
+	                         const std::string& assetPath,
+	                         std::vector<Vec3>& outVertices,
+	                         std::vector<uint32_t>& outIndices)
+{
+	outVertices.clear();
+	outIndices.clear();
+
+	if (!registry || assetPath.empty())
+		return false;
+
+	auto mesh = registry->Find(assetPath);
+	if (!mesh || !mesh->sourceModel)
+		return false;
+
+	const auto& verts = mesh->sourceModel->GetCPUVertices();
+	const auto& indices = mesh->sourceModel->GetCPUIndices();
+	if (verts.empty() || indices.empty())
+		return false;
+
+	outVertices.reserve(verts.size());
+	for (const auto& v : verts)
+		outVertices.emplace_back(v.pos.x, v.pos.y, v.pos.z);
+
+	outIndices = indices;
+	return !outVertices.empty() && !outIndices.empty();
 }
 
 static bool Float3Equal(const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) noexcept
@@ -245,6 +294,12 @@ PhysicsSystem::~PhysicsSystem()
 
     m_entityToJoint.clear();
     m_lastJoints.clear();
+
+    if (m_groundPlaneActor)
+    {
+        m_groundPlaneActor->Destroy();
+        m_groundPlaneActor.reset();
+    }
 }
 
 void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
@@ -286,6 +341,7 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
     m_entityToActor.clear();
     m_lastTransforms.clear();
     m_lastColliders.clear();
+    m_lastMeshColliders.clear();
     m_lastRigidBodies.clear();
     m_lastTerrains.clear();
 
@@ -313,6 +369,14 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
 	// 4) teardown 끝난 뒤 oldWorld flush (누수/잔존 방지)
 	if (oldWorld)
 		oldWorld->Flush();
+
+	// Ground Plane 정리
+	if (m_groundPlaneActor)
+	{
+		m_groundPlaneActor->Destroy();
+		m_groundPlaneActor.reset();
+	}
+	m_lastGroundPlane = GroundPlaneState{};
 	
 	m_lastFilterRevision = 0xFFFFFFFFu; // 강제로 다음 Update에서 1회 갱신
 
@@ -429,7 +493,46 @@ void PhysicsSystem::Update(float deltaTime)
 							}
 						}
 					}
-    }
+				}
+
+				// MeshCollider에 적용 (전역 매트릭스 변경 시에만)
+				auto meshColliders = m_world.GetComponents<Phy_MeshColliderComponent>();
+				for (auto&& [id, mc] : meshColliders)
+				{
+					int li = FirstLayerIndex(mc.layerBits);
+					if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+					uint32_t newCollide = collideByLayer[li];
+					uint32_t newQuery = queryByLayer[li];
+
+					newCollide &= ~mc.ignoreLayers;
+					newQuery &= ~mc.ignoreLayers;
+
+					bool maskChanged = false;
+					if (mc.collideMask != newCollide)
+					{
+						mc.collideMask = newCollide;
+						maskChanged = true;
+					}
+					if (mc.queryMask != newQuery)
+					{
+						mc.queryMask = newQuery;
+						maskChanged = true;
+					}
+
+					if (maskChanged)
+					{
+						auto it = m_entityToActor.find(id);
+						if (it != m_entityToActor.end())
+						{
+							ActorHandle& handle = it->second;
+							if (handle.IsValid() && handle.GetActor())
+							{
+								handle.GetActor()->SetLayerMasks(mc.layerBits, mc.collideMask, mc.queryMask);
+							}
+						}
+					}
+				}
 
 				// Terrain에 적용 (전역 매트릭스 변경 시에만)
 				auto terrains = m_world.GetComponents<Phy_TerrainHeightFieldComponent>();
@@ -506,6 +609,91 @@ void PhysicsSystem::Update(float deltaTime)
 
 	}
 
+	// Ground Plane (Scene Settings 기반)
+	{
+		const auto& settingsMap = m_world.GetComponents<Phy_SettingsComponent>();
+		Phy_SettingsComponent* settings = settingsMap.empty()
+			? nullptr
+			: &const_cast<Phy_SettingsComponent&>(settingsMap.begin()->second);
+
+		if (!settings || !settings->enableGroundPlane)
+		{
+			if (m_groundPlaneActor)
+			{
+				m_groundPlaneActor->Destroy();
+				m_groundPlaneActor.reset();
+			}
+			m_lastGroundPlane = GroundPlaneState{};
+		}
+		else
+		{
+			int li = FirstLayerIndex(settings->groundLayerBits);
+			if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+			{
+				uint32_t newCollide = collideByLayer[li];
+				uint32_t newQuery = queryByLayer[li];
+
+				newCollide &= ~settings->groundIgnoreLayers;
+				newQuery &= ~settings->groundIgnoreLayers;
+
+				settings->groundCollideMask = newCollide;
+				settings->groundQueryMask = newQuery;
+			}
+
+			GroundPlaneState cur{};
+			cur.enabled = settings->enableGroundPlane;
+			cur.staticFriction = settings->groundStaticFriction;
+			cur.dynamicFriction = settings->groundDynamicFriction;
+			cur.restitution = settings->groundRestitution;
+			cur.layerBits = settings->groundLayerBits;
+			cur.collideMask = settings->groundCollideMask;
+			cur.queryMask = settings->groundQueryMask;
+			cur.ignoreLayers = settings->groundIgnoreLayers;
+			cur.isTrigger = settings->groundIsTrigger;
+
+			const bool needRebuild =
+				!m_groundPlaneActor ||
+				cur.enabled != m_lastGroundPlane.enabled ||
+				cur.staticFriction != m_lastGroundPlane.staticFriction ||
+				cur.dynamicFriction != m_lastGroundPlane.dynamicFriction ||
+				cur.restitution != m_lastGroundPlane.restitution ||
+				cur.layerBits != m_lastGroundPlane.layerBits ||
+				cur.collideMask != m_lastGroundPlane.collideMask ||
+				cur.queryMask != m_lastGroundPlane.queryMask ||
+				cur.ignoreLayers != m_lastGroundPlane.ignoreLayers ||
+				cur.isTrigger != m_lastGroundPlane.isTrigger;
+
+			if (needRebuild)
+			{
+				if (m_groundPlaneActor)
+				{
+					m_groundPlaneActor->Destroy();
+					m_groundPlaneActor.reset();
+				}
+
+				FilterDesc filter{};
+				filter.layerBits = settings->groundLayerBits;
+				filter.collideMask = settings->groundCollideMask;
+				filter.queryMask = settings->groundQueryMask;
+				filter.isTrigger = settings->groundIsTrigger;
+				filter.userData = nullptr;
+
+				m_groundPlaneActor = m_physicsWorld->CreateStaticPlaneActor(
+					settings->groundStaticFriction,
+					settings->groundDynamicFriction,
+					settings->groundRestitution,
+					filter);
+
+				if (!m_groundPlaneActor)
+				{
+					ALICE_LOG_WARN("[PhysicsSystem] Ground Plane creation failed.");
+				}
+			}
+
+			m_lastGroundPlane = cur;
+		}
+	}
+
 
     // 1. 컴포넌트 변경 감지 및 물리 액터 생성/삭제
     {
@@ -522,12 +710,45 @@ void PhysicsSystem::Update(float deltaTime)
             }
         }
 
+        auto meshColliders = m_world.GetComponents<Phy_MeshColliderComponent>();
+        std::unordered_set<EntityId> entitiesWithMeshCollider;
+        for (const auto& [entityId, mc] : meshColliders)
+        {
+            entitiesWithMeshCollider.insert(entityId);
+
+            const bool hasRB = (entitiesWithRigidBody.find(entityId) != entitiesWithRigidBody.end());
+            if (!hasRB)
+            {
+                if (mc.physicsActorHandle == nullptr)
+                {
+                    if (m_entityToActor.find(entityId) != m_entityToActor.end())
+                        DestroyPhysicsActor(entityId);
+                    CreatePhysicsActor(entityId);
+                }
+            }
+            else
+            {
+                auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+                auto* mesh = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+                if (rb && rb->physicsActorHandle && mesh && mesh->physicsActorHandle == nullptr)
+                {
+                    mesh->physicsActorHandle = rb->physicsActorHandle;
+                    RebuildMeshShapes(entityId);
+                }
+            }
+        }
+
         auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
         for (const auto& [entityId, collider] : colliders)
         {
             const bool hasRB = (entitiesWithRigidBody.find(entityId) != entitiesWithRigidBody.end());
+            const bool hasMesh = (entitiesWithMeshCollider.find(entityId) != entitiesWithMeshCollider.end());
 
-            if (!hasRB)
+            if (hasMesh)
+            {
+                continue;
+            }
+            else if (!hasRB)
             {
                 if (collider.physicsActorHandle == nullptr)
                     CreatePhysicsActor(entityId);
@@ -564,9 +785,10 @@ void PhysicsSystem::Update(float deltaTime)
         {
             auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
             auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+            auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
             auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
             
-            if (!rb && !collider && !terrain)
+            if (!rb && !collider && !meshCollider && !terrain)
             {
                 toRemove.push_back(entityId);
             }
@@ -921,8 +1143,9 @@ void PhysicsSystem::Update(float deltaTime)
         {
             auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
             auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+            auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
             
-            if (!rb && !collider) continue;
+            if (!rb && !collider && !meshCollider) continue;
 
             auto it = m_lastTransforms.find(entityId);
             bool needsSync = false;
@@ -967,6 +1190,8 @@ void PhysicsSystem::Update(float deltaTime)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
             if (!transform) continue;
+            if (m_world.GetComponent<Phy_MeshColliderComponent>(entityId))
+                continue;
 
             auto it = m_lastColliders.find(entityId);
             bool needsRebuild = false;
@@ -1112,6 +1337,161 @@ void PhysicsSystem::Update(float deltaTime)
             }
 
             m_lastColliders.erase(entityId);
+        }
+    }
+
+    // 3.5 MeshCollider 변경 감지 및 Shape 재구성
+    {
+        auto meshColliders = m_world.GetComponents<Phy_MeshColliderComponent>();
+        for (const auto& [entityId, mc] : meshColliders)
+        {
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform) continue;
+
+            const std::string resolvedPath = ResolveMeshAssetPath(m_world, entityId, mc);
+
+            auto it = m_lastMeshColliders.find(entityId);
+            bool needsRebuild = false;
+
+            if (it == m_lastMeshColliders.end())
+            {
+                MeshColliderState state{};
+                state.type = mc.type;
+                state.meshAssetPath = resolvedPath;
+                state.staticFriction = mc.staticFriction;
+                state.dynamicFriction = mc.dynamicFriction;
+                state.restitution = mc.restitution;
+                state.layerBits = mc.layerBits;
+                state.collideMask = mc.collideMask;
+                state.queryMask = mc.queryMask;
+                state.ignoreLayers = mc.ignoreLayers;
+                state.isTrigger = mc.isTrigger;
+                state.flipNormals = mc.flipNormals;
+                state.doubleSidedQueries = mc.doubleSidedQueries;
+                state.validate = mc.validate;
+                state.shiftVertices = mc.shiftVertices;
+                state.vertexLimit = mc.vertexLimit;
+                state.scale = transform->scale;
+                m_lastMeshColliders[entityId] = state;
+            }
+            else
+            {
+                const auto& last = it->second;
+                bool changed = false;
+                bool maskOnlyChanged = false;
+
+                bool layerOrIgnoreChanged = (mc.layerBits != last.layerBits || mc.ignoreLayers != last.ignoreLayers);
+                if (layerOrIgnoreChanged)
+                {
+                    int li = FirstLayerIndex(mc.layerBits);
+                    if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+                    {
+                        uint32_t newCollide = collideByLayer[li];
+                        uint32_t newQuery = queryByLayer[li];
+
+                        newCollide &= ~mc.ignoreLayers;
+                        newQuery &= ~mc.ignoreLayers;
+
+                        mc.collideMask = newCollide;
+                        mc.queryMask = newQuery;
+                        maskOnlyChanged = true;
+                    }
+                }
+
+                if (mc.type != last.type ||
+                    resolvedPath != last.meshAssetPath ||
+                    mc.staticFriction != last.staticFriction ||
+                    mc.dynamicFriction != last.dynamicFriction ||
+                    mc.restitution != last.restitution ||
+                    mc.isTrigger != last.isTrigger ||
+                    mc.flipNormals != last.flipNormals ||
+                    mc.doubleSidedQueries != last.doubleSidedQueries ||
+                    mc.validate != last.validate ||
+                    mc.shiftVertices != last.shiftVertices ||
+                    mc.vertexLimit != last.vertexLimit)
+                {
+                    changed = true;
+                }
+
+                if (mc.collideMask != last.collideMask || mc.queryMask != last.queryMask)
+                {
+                    if (!maskOnlyChanged) maskOnlyChanged = true;
+                }
+
+                if (transform->scale.x != last.scale.x ||
+                    transform->scale.y != last.scale.y ||
+                    transform->scale.z != last.scale.z)
+                {
+                    changed = true;
+                }
+
+                if (maskOnlyChanged && !changed)
+                {
+                    auto itActor = m_entityToActor.find(entityId);
+                    if (itActor != m_entityToActor.end())
+                    {
+                        ActorHandle& handle = itActor->second;
+                        if (handle.IsValid() && handle.GetActor())
+                        {
+                            handle.GetActor()->SetLayerMasks(mc.layerBits, mc.collideMask, mc.queryMask);
+                        }
+                    }
+                }
+
+                if (changed || maskOnlyChanged)
+                {
+                    if (changed) needsRebuild = true;
+                    it->second.type = mc.type;
+                    it->second.meshAssetPath = resolvedPath;
+                    it->second.staticFriction = mc.staticFriction;
+                    it->second.dynamicFriction = mc.dynamicFriction;
+                    it->second.restitution = mc.restitution;
+                    it->second.layerBits = mc.layerBits;
+                    it->second.collideMask = mc.collideMask;
+                    it->second.queryMask = mc.queryMask;
+                    it->second.ignoreLayers = mc.ignoreLayers;
+                    it->second.isTrigger = mc.isTrigger;
+                    it->second.flipNormals = mc.flipNormals;
+                    it->second.doubleSidedQueries = mc.doubleSidedQueries;
+                    it->second.validate = mc.validate;
+                    it->second.shiftVertices = mc.shiftVertices;
+                    it->second.vertexLimit = mc.vertexLimit;
+                    it->second.scale = transform->scale;
+                }
+            }
+
+            if (needsRebuild)
+            {
+                RebuildMeshShapes(entityId);
+            }
+        }
+
+        std::vector<EntityId> meshToRemove;
+        for (const auto& [entityId, state] : m_lastMeshColliders)
+        {
+            auto* mesh = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+            if (!mesh)
+            {
+                meshToRemove.push_back(entityId);
+            }
+        }
+        for (EntityId entityId : meshToRemove)
+        {
+            auto itActor = m_entityToActor.find(entityId);
+            if (itActor != m_entityToActor.end() && itActor->second.IsValid())
+            {
+                auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+                if (collider)
+                {
+                    ActorHandle& handle = itActor->second;
+                    collider->physicsActorHandle = handle.GetRigidBody()
+                        ? static_cast<void*>(handle.GetRigidBody())
+                        : static_cast<void*>(handle.GetActor());
+                    RebuildShapes(entityId);
+                }
+            }
+
+            m_lastMeshColliders.erase(entityId);
         }
     }
 
@@ -1401,7 +1781,8 @@ void PhysicsSystem::Update(float deltaTime)
                     
                     auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
                     auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
-                    if (rb || collider)
+                    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+                    if (rb || collider || meshCollider)
                     {
                         ALICE_LOG_WARN("[PhysicsSystem] Entity %llu has RigidBody or Collider, which conflicts with CCT!", 
                             (unsigned long long)entityId);
@@ -1470,8 +1851,25 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
 
     auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
     auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+    auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
 
-    if (!rb && !collider) return;
+    if (!rb && !collider && !meshCollider) return;
+    if (terrain)
+    {
+        if (rb || collider || meshCollider)
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] Entity %llu has TerrainHeightField with other colliders; Terrain takes priority.",
+                (unsigned long long)entityId);
+        }
+        return;
+    }
+
+    if (meshCollider && collider)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] Entity %llu has both MeshCollider and Collider. MeshCollider will be used.",
+            (unsigned long long)entityId);
+    }
 
     Vec3 pos = ToVec3(transform->position);
     Quat rot = ToQuat(transform->rotation);
@@ -1497,7 +1895,70 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
 		rbDesc.stabilizationThreshold = rb->stabilizationThreshold;
 		rbDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-        if (collider)
+        if (meshCollider)
+        {
+            if (!m_physicsWorld->SupportsMeshCooking())
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] Mesh cooking not supported. MeshCollider skipped (entity: %llu).",
+                    (unsigned long long)entityId);
+                return;
+            }
+
+            std::vector<Vec3> vertices;
+            std::vector<uint32_t> indices;
+            const std::string meshPath = ResolveMeshAssetPath(m_world, entityId, *meshCollider);
+            if (!BuildMeshBuffers(m_skinnedRegistry, meshPath, vertices, indices))
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] MeshCollider: invalid mesh asset (entity: %llu, path: %s).",
+                    (unsigned long long)entityId, meshPath.c_str());
+                return;
+            }
+
+            if (meshCollider->type == MeshColliderType::Triangle)
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic RigidBody (entity: %llu).",
+                    (unsigned long long)entityId);
+                return;
+            }
+
+            Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+
+            ConvexMeshColliderDesc convexDesc{};
+            convexDesc.vertices = vertices.data();
+            convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+            convexDesc.scale = scale;
+            convexDesc.shiftVertices = meshCollider->shiftVertices;
+            convexDesc.vertexLimit = meshCollider->vertexLimit;
+            convexDesc.validate = meshCollider->validate;
+
+            convexDesc.staticFriction = meshCollider->staticFriction;
+            convexDesc.dynamicFriction = meshCollider->dynamicFriction;
+            convexDesc.restitution = meshCollider->restitution;
+            convexDesc.layerBits = meshCollider->layerBits;
+            convexDesc.collideMask = meshCollider->collideMask;
+            convexDesc.queryMask = meshCollider->queryMask;
+            convexDesc.isTrigger = meshCollider->isTrigger;
+            convexDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+            if (convexDesc.vertexCount > 255)
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] Convex mesh has too many vertices (%u). Consider simplified mesh.",
+                    convexDesc.vertexCount);
+            }
+
+            auto bodyPtr = m_physicsWorld->CreateDynamicConvexMesh(pos, rot, rbDesc, convexDesc);
+            if (bodyPtr)
+            {
+                ActorHandle handle(std::move(bodyPtr));
+                IRigidBody* body = handle.GetRigidBody();
+
+                rb->physicsActorHandle = body;
+                meshCollider->physicsActorHandle = body;
+                m_entityToActor[entityId] = std::move(handle);
+            }
+            return;
+        }
+        else if (collider)
         {
             switch (collider->type)
             {
@@ -1607,6 +2068,94 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 IRigidBody* body = handle.GetRigidBody();
                 
                 rb->physicsActorHandle = body;
+                m_entityToActor[entityId] = std::move(handle);
+            }
+        }
+    }
+    else if (meshCollider)
+    {
+        if (!m_physicsWorld->SupportsMeshCooking())
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] Mesh cooking not supported. MeshCollider skipped (entity: %llu).",
+                (unsigned long long)entityId);
+            return;
+        }
+
+        std::vector<Vec3> vertices;
+        std::vector<uint32_t> indices;
+        const std::string meshPath = ResolveMeshAssetPath(m_world, entityId, *meshCollider);
+        if (!BuildMeshBuffers(m_skinnedRegistry, meshPath, vertices, indices))
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] MeshCollider: invalid mesh asset (entity: %llu, path: %s).",
+                (unsigned long long)entityId, meshPath.c_str());
+            return;
+        }
+
+        Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+
+        if (meshCollider->type == MeshColliderType::Triangle)
+        {
+            TriangleMeshColliderDesc triDesc{};
+            triDesc.vertices = vertices.data();
+            triDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+            triDesc.indices32 = indices.data();
+            triDesc.indexCount = static_cast<uint32_t>(indices.size());
+            triDesc.scale = scale;
+            triDesc.flipNormals = meshCollider->flipNormals;
+            triDesc.doubleSidedQueries = meshCollider->doubleSidedQueries;
+            triDesc.validate = meshCollider->validate;
+
+            triDesc.staticFriction = meshCollider->staticFriction;
+            triDesc.dynamicFriction = meshCollider->dynamicFriction;
+            triDesc.restitution = meshCollider->restitution;
+            triDesc.layerBits = meshCollider->layerBits;
+            triDesc.collideMask = meshCollider->collideMask;
+            triDesc.queryMask = meshCollider->queryMask;
+            triDesc.isTrigger = meshCollider->isTrigger;
+            triDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+            auto actorPtr = m_physicsWorld->CreateStaticTriangleMesh(pos, rot, triDesc);
+            if (actorPtr)
+            {
+                ActorHandle handle(std::move(actorPtr));
+                IPhysicsActor* actor = handle.GetActor();
+
+                meshCollider->physicsActorHandle = actor;
+                m_entityToActor[entityId] = std::move(handle);
+            }
+        }
+        else
+        {
+            ConvexMeshColliderDesc convexDesc{};
+            convexDesc.vertices = vertices.data();
+            convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+            convexDesc.scale = scale;
+            convexDesc.shiftVertices = meshCollider->shiftVertices;
+            convexDesc.vertexLimit = meshCollider->vertexLimit;
+            convexDesc.validate = meshCollider->validate;
+
+            convexDesc.staticFriction = meshCollider->staticFriction;
+            convexDesc.dynamicFriction = meshCollider->dynamicFriction;
+            convexDesc.restitution = meshCollider->restitution;
+            convexDesc.layerBits = meshCollider->layerBits;
+            convexDesc.collideMask = meshCollider->collideMask;
+            convexDesc.queryMask = meshCollider->queryMask;
+            convexDesc.isTrigger = meshCollider->isTrigger;
+            convexDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+            if (convexDesc.vertexCount > 255)
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] Convex mesh has too many vertices (%u). Consider simplified mesh.",
+                    convexDesc.vertexCount);
+            }
+
+            auto actorPtr = m_physicsWorld->CreateStaticConvexMesh(pos, rot, convexDesc);
+            if (actorPtr)
+            {
+                ActorHandle handle(std::move(actorPtr));
+                IPhysicsActor* actor = handle.GetActor();
+
+                meshCollider->physicsActorHandle = actor;
                 m_entityToActor[entityId] = std::move(handle);
             }
         }
@@ -1740,6 +2289,9 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
     if (collider) collider->physicsActorHandle = nullptr;
 
+    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+    if (meshCollider) meshCollider->physicsActorHandle = nullptr;
+
     auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
     if (terrain) terrain->physicsActorHandle = nullptr;
 
@@ -1753,6 +2305,7 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     m_entityToActor.erase(it);
     m_lastTransforms.erase(entityId);
     m_lastColliders.erase(entityId);
+    m_lastMeshColliders.erase(entityId);
     m_lastRigidBodies.erase(entityId);
 }
 
@@ -1991,6 +2544,115 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
     }
 }
 
+void PhysicsSystem::RebuildMeshShapes(EntityId entityId)
+{
+    auto it = m_entityToActor.find(entityId);
+    if (it == m_entityToActor.end()) return;
+
+    ActorHandle& handle = it->second;
+    if (!handle.IsValid()) return;
+
+    IPhysicsActor* actor = handle.GetActor();
+    if (!actor || !actor->IsValid()) return;
+
+    auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+    if (!transform || !meshCollider) return;
+
+    if (!m_physicsWorld->SupportsMeshCooking())
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] Mesh cooking not supported. RebuildMeshShapes skipped (entity: %llu).",
+            (unsigned long long)entityId);
+        return;
+    }
+
+    std::vector<Vec3> vertices;
+    std::vector<uint32_t> indices;
+    const std::string meshPath = ResolveMeshAssetPath(m_world, entityId, *meshCollider);
+    if (!BuildMeshBuffers(m_skinnedRegistry, meshPath, vertices, indices))
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] MeshCollider: invalid mesh asset (entity: %llu, path: %s).",
+            (unsigned long long)entityId, meshPath.c_str());
+        return;
+    }
+
+    if (meshCollider->type == MeshColliderType::Triangle && handle.GetRigidBody())
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic RigidBody (entity: %llu).",
+            (unsigned long long)entityId);
+        actor->ClearShapes();
+        return;
+    }
+
+    Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+    actor->ClearShapes();
+
+    if (meshCollider->type == MeshColliderType::Triangle)
+    {
+        TriangleMeshColliderDesc triDesc{};
+        triDesc.vertices = vertices.data();
+        triDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+        triDesc.indices32 = indices.data();
+        triDesc.indexCount = static_cast<uint32_t>(indices.size());
+        triDesc.scale = scale;
+        triDesc.flipNormals = meshCollider->flipNormals;
+        triDesc.doubleSidedQueries = meshCollider->doubleSidedQueries;
+        triDesc.validate = meshCollider->validate;
+
+        triDesc.staticFriction = meshCollider->staticFriction;
+        triDesc.dynamicFriction = meshCollider->dynamicFriction;
+        triDesc.restitution = meshCollider->restitution;
+        triDesc.layerBits = meshCollider->layerBits;
+        triDesc.collideMask = meshCollider->collideMask;
+        triDesc.queryMask = meshCollider->queryMask;
+        triDesc.isTrigger = meshCollider->isTrigger;
+        triDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+        if (!actor->AddTriangleMeshShape(triDesc, Vec3::Zero, Quat::Identity))
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] AddTriangleMeshShape failed (entity: %llu).",
+                (unsigned long long)entityId);
+        }
+    }
+    else
+    {
+        ConvexMeshColliderDesc convexDesc{};
+        convexDesc.vertices = vertices.data();
+        convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+        convexDesc.scale = scale;
+        convexDesc.shiftVertices = meshCollider->shiftVertices;
+        convexDesc.vertexLimit = meshCollider->vertexLimit;
+        convexDesc.validate = meshCollider->validate;
+
+        convexDesc.staticFriction = meshCollider->staticFriction;
+        convexDesc.dynamicFriction = meshCollider->dynamicFriction;
+        convexDesc.restitution = meshCollider->restitution;
+        convexDesc.layerBits = meshCollider->layerBits;
+        convexDesc.collideMask = meshCollider->collideMask;
+        convexDesc.queryMask = meshCollider->queryMask;
+        convexDesc.isTrigger = meshCollider->isTrigger;
+        convexDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+        if (convexDesc.vertexCount > 255)
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] Convex mesh has too many vertices (%u). Consider simplified mesh.",
+                convexDesc.vertexCount);
+        }
+
+        if (!actor->AddConvexMeshShape(convexDesc, Vec3::Zero, Quat::Identity))
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] AddConvexMeshShape failed (entity: %llu).",
+                (unsigned long long)entityId);
+        }
+    }
+
+    IRigidBody* body = handle.GetRigidBody();
+    if (body && body->IsValid())
+    {
+        body->RecomputeMass();
+    }
+}
+
 void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation)
 {
     auto it = m_entityToActor.find(entityId);
@@ -2139,7 +2801,8 @@ void PhysicsSystem::CreateCharacterController(EntityId entityId)
 
     auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
     auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
-    if (rb || collider)
+    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+    if (rb || collider || meshCollider)
     {
         ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Entity has RigidBody (%p) or Collider (%p), cannot create CCT!",
             (void*)rb, (void*)collider);

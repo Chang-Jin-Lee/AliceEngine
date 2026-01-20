@@ -242,10 +242,12 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_MeshColliderComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_JointComponent.h
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
 )
 
 # [변경] AliceEngine -> Engine

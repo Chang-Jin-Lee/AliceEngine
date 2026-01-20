@@ -19,6 +19,7 @@
 #include "Components/ScriptComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
+#include "PhysX/Components/Phy_MeshColliderComponent.h"
 #include <wrl/client.h>
 #include <dxgi.h>
 #include <dxgi1_3.h>
@@ -95,6 +96,15 @@ namespace Alice
             
             // 기본 프로퍼티
             out["enablePhysics"] = settings.enablePhysics;
+            out["enableGroundPlane"] = settings.enableGroundPlane;
+            out["groundStaticFriction"] = settings.groundStaticFriction;
+            out["groundDynamicFriction"] = settings.groundDynamicFriction;
+            out["groundRestitution"] = settings.groundRestitution;
+            out["groundLayerBits"] = settings.groundLayerBits;
+            out["groundCollideMask"] = settings.groundCollideMask;
+            out["groundQueryMask"] = settings.groundQueryMask;
+            out["groundIgnoreLayers"] = settings.groundIgnoreLayers;
+            out["groundIsTrigger"] = settings.groundIsTrigger;
             out["gravity"] = JsonRttr::json::array({ settings.gravity.x, settings.gravity.y, settings.gravity.z });
             out["fixedDt"] = settings.fixedDt;
             out["maxSubsteps"] = settings.maxSubsteps;
@@ -142,6 +152,33 @@ namespace Alice
             // 기본 프로퍼티
             if (root.contains("enablePhysics") && root["enablePhysics"].is_boolean())
                 settings.enablePhysics = root["enablePhysics"].get<bool>();
+
+            if (root.contains("enableGroundPlane") && root["enableGroundPlane"].is_boolean())
+                settings.enableGroundPlane = root["enableGroundPlane"].get<bool>();
+
+            if (root.contains("groundStaticFriction") && root["groundStaticFriction"].is_number())
+                settings.groundStaticFriction = root["groundStaticFriction"].get<float>();
+
+            if (root.contains("groundDynamicFriction") && root["groundDynamicFriction"].is_number())
+                settings.groundDynamicFriction = root["groundDynamicFriction"].get<float>();
+
+            if (root.contains("groundRestitution") && root["groundRestitution"].is_number())
+                settings.groundRestitution = root["groundRestitution"].get<float>();
+
+            if (root.contains("groundLayerBits") && root["groundLayerBits"].is_number_unsigned())
+                settings.groundLayerBits = root["groundLayerBits"].get<uint32_t>();
+
+            if (root.contains("groundCollideMask") && root["groundCollideMask"].is_number_unsigned())
+                settings.groundCollideMask = root["groundCollideMask"].get<uint32_t>();
+
+            if (root.contains("groundQueryMask") && root["groundQueryMask"].is_number_unsigned())
+                settings.groundQueryMask = root["groundQueryMask"].get<uint32_t>();
+
+            if (root.contains("groundIgnoreLayers") && root["groundIgnoreLayers"].is_number_unsigned())
+                settings.groundIgnoreLayers = root["groundIgnoreLayers"].get<uint32_t>();
+
+            if (root.contains("groundIsTrigger") && root["groundIsTrigger"].is_boolean())
+                settings.groundIsTrigger = root["groundIsTrigger"].get<bool>();
             
             if (root.contains("gravity") && root["gravity"].is_array() && root["gravity"].size() == 3)
             {
@@ -355,6 +392,12 @@ namespace Alice
             {
                 rttr::instance inst = const_cast<Phy_ColliderComponent&>(*collider);
                 outEntity["Collider"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* meshCollider = world.GetComponent<Phy_MeshColliderComponent>(id); meshCollider)
+            {
+                rttr::instance inst = const_cast<Phy_MeshColliderComponent&>(*meshCollider);
+                outEntity["MeshCollider"] = JsonRttr::ToJsonObject(inst);
             }
 
             if (const auto* cct = world.GetComponent<Phy_CCTComponent>(id); cct)
@@ -582,6 +625,14 @@ namespace Alice
                 Phy_ColliderComponent& col = world.AddComponent<Phy_ColliderComponent>(id);
                 rttr::instance inst = col;
                 if (!JsonRttr::FromJsonObject(inst, *itCollider)) return false;
+            }
+
+            auto itMeshCollider = e.find("MeshCollider");
+            if (itMeshCollider != e.end() && itMeshCollider->is_object())
+            {
+                Phy_MeshColliderComponent& mc = world.AddComponent<Phy_MeshColliderComponent>(id);
+                rttr::instance inst = mc;
+                if (!JsonRttr::FromJsonObject(inst, *itMeshCollider)) return false;
             }
 
             auto itCCT = e.find("CharacterController");

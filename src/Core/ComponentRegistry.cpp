@@ -8,6 +8,7 @@
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_MeshColliderComponent.h"
 #include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "PhysX/Components/Phy_CCTComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
@@ -234,6 +235,12 @@ namespace Alice
                 rttr::value("Capsule", ColliderType::Capsule)
                 );
 
+        rttr::registration::enumeration<MeshColliderType>("MeshColliderType")
+            (
+                rttr::value("Triangle", MeshColliderType::Triangle),
+                rttr::value("Convex", MeshColliderType::Convex)
+                );
+
         // === RigidBodyLockFlags enum 등록 ===
         rttr::registration::enumeration<RigidBodyLockFlags>("RigidBodyLockFlags")
             (
@@ -285,6 +292,25 @@ namespace Alice
             .property("queryMask", &Phy_ColliderComponent::queryMask)
             .property("ignoreLayers", &Phy_ColliderComponent::ignoreLayers)
             .property("isTrigger", &Phy_ColliderComponent::isTrigger);
+
+        // === Phy_MeshColliderComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<Phy_MeshColliderComponent>("Phy_MeshColliderComponent")
+            .constructor<>()
+            .property("type", &Phy_MeshColliderComponent::type)
+            .property("staticFriction", &Phy_MeshColliderComponent::staticFriction)
+            .property("dynamicFriction", &Phy_MeshColliderComponent::dynamicFriction)
+            .property("restitution", &Phy_MeshColliderComponent::restitution)
+            .property("layerBits", &Phy_MeshColliderComponent::layerBits)
+            .property("collideMask", &Phy_MeshColliderComponent::collideMask)
+            .property("queryMask", &Phy_MeshColliderComponent::queryMask)
+            .property("ignoreLayers", &Phy_MeshColliderComponent::ignoreLayers)
+            .property("isTrigger", &Phy_MeshColliderComponent::isTrigger)
+            .property("meshAssetPath", &Phy_MeshColliderComponent::meshAssetPath)
+            .property("flipNormals", &Phy_MeshColliderComponent::flipNormals)
+            .property("doubleSidedQueries", &Phy_MeshColliderComponent::doubleSidedQueries)
+            .property("validate", &Phy_MeshColliderComponent::validate)
+            .property("shiftVertices", &Phy_MeshColliderComponent::shiftVertices)
+            .property("vertexLimit", &Phy_MeshColliderComponent::vertexLimit);
 
         // === Phy_TerrainHeightFieldComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
         rttr::registration::class_<Phy_TerrainHeightFieldComponent>("Phy_TerrainHeightFieldComponent")
@@ -348,6 +374,15 @@ namespace Alice
         rttr::registration::class_<Phy_SettingsComponent>("Phy_SettingsComponent")
             .constructor<>()
             .property("enablePhysics", &Phy_SettingsComponent::enablePhysics)
+            .property("enableGroundPlane", &Phy_SettingsComponent::enableGroundPlane)
+            .property("groundStaticFriction", &Phy_SettingsComponent::groundStaticFriction)
+            .property("groundDynamicFriction", &Phy_SettingsComponent::groundDynamicFriction)
+            .property("groundRestitution", &Phy_SettingsComponent::groundRestitution)
+            .property("groundLayerBits", &Phy_SettingsComponent::groundLayerBits)
+            .property("groundCollideMask", &Phy_SettingsComponent::groundCollideMask)
+            .property("groundQueryMask", &Phy_SettingsComponent::groundQueryMask)
+            .property("groundIgnoreLayers", &Phy_SettingsComponent::groundIgnoreLayers)
+            .property("groundIsTrigger", &Phy_SettingsComponent::groundIsTrigger)
             .property("gravity", &Phy_SettingsComponent::gravity)
             .property("fixedDt", &Phy_SettingsComponent::fixedDt)
             .property("maxSubsteps", &Phy_SettingsComponent::maxSubsteps)
