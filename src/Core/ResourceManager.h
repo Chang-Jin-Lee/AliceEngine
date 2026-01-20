@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <filesystem>
 #include <string_view>
@@ -27,6 +27,12 @@ namespace Alice
     public:
         ResourceManager()  = default;
         ~ResourceManager() = default;
+
+        /// 싱글톤 인스턴스 접근
+        static ResourceManager& Get();
+
+        /// 게임 모드 여부 확인
+        bool IsGameMode() const { return m_gameMode; }
 
         /// GameMode(배포용 실행)인지 여부에 따라, Assets/Resource/Cooked 루트 해석 기준을 설정합니다.
         /// - editorMode(false): 프로젝트 루트(= exeDir 기준 3단계 상위)를 기준으로 Assets/Resource/Cooked 를 찾습니다.
@@ -88,15 +94,31 @@ namespace Alice
 
         /// -----------------------------------------------------------------------
         /// [템플릿 로드 함수]
-        /// 사용법: auto srv = mgr.LoadData<ID3D11ShaderResourceView>("Path", device);
+        /// 사용법: auto srv = ResourceManager::Get().Load<ID3D11ShaderResourceView>("Path", device);
         /// -----------------------------------------------------------------------
         template <typename T, typename... Args>
-        auto LoadData(const std::filesystem::path& logicalPath, Args&&... args) const
+        auto Load(const std::filesystem::path& logicalPath, Args&&... args) const
         {
             // 컴파일러는 ResourceLoader<T>의 선언을 보고 반환 타입을 추론합니다.
             // 구현은 cpp에 있어도 링킹 시점에 해결됩니다.
             return ResourceLoader<T>::Load(*this, logicalPath, std::forward<Args>(args)...);
         }
+
+        /// LoadData는 Load의 별칭 (하위 호환성)
+        template <typename T, typename... Args>
+        auto LoadData(const std::filesystem::path& logicalPath, Args&&... args) const
+        {
+            return Load<T>(logicalPath, std::forward<Args>(args)...);
+        }
+
+        /// 텍스트 파일 로드 (JSON, .mat, .fbxasset 등)
+        bool LoadText(const std::filesystem::path& logicalPath, std::string& outText) const;
+
+        /// 이미지 파일 경로인지 확인 (확장자 기반)
+        static bool IsImageLogicalPath(const std::filesystem::path& p);
+
+        /// 절대 경로를 논리 경로로 정규화 (public 유틸)
+        static std::filesystem::path NormalizeResourcePathAbsoluteToLogical(const std::filesystem::path& p);
 
     private:
         /// 매우 단순한 XOR 기반 스트림 암·복호화
@@ -105,7 +127,6 @@ namespace Alice
         static bool StartsWith(std::string_view s, std::string_view prefix);
         static std::filesystem::path NormalizeLegacyDotDot(const std::filesystem::path& p);
         static std::filesystem::path ToAlicePath(std::filesystem::path p);
-        static std::filesystem::path NormalizeResourcePathAbsoluteToLogical(const std::filesystem::path& p);
         static std::uint64_t Fnv1a64Bytes(const std::uint8_t* data, std::size_t size);
         static std::uint64_t HashString64(std::string_view s);
         static std::uint64_t ComputeBufferHashSampled(const std::vector<std::uint8_t>& data);
