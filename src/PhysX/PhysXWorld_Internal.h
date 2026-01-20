@@ -377,6 +377,13 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		enableSceneLocks = desc.enableSceneLocks;
 		enableActiveTransforms = desc.enableActiveTransforms;
 
+		// Pre-reserve activeTransforms to avoid reallocation during simulation
+		// (onAdvance callback runs during simulation, so allocations should be minimized)
+		if (enableActiveTransforms)
+		{
+			activeTransforms.reserve(256);  // 예상치: 일반적인 씬에서 활성 액터 수
+		}
+
 		// Default material (used for planes and as a fallback)
 		defaultMaterial = physics->createMaterial(0.5f, 0.5f, 0.0f);
 		if (!defaultMaterial) throw std::runtime_error("createMaterial failed");
@@ -550,14 +557,38 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			{
 				const PxTriggerPair& tp = pairs[i];
 
-				if (HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER) ||
-					HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_OTHER))
-					continue;
+				const bool removedShape = HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER) ||
+					HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_OTHER);
 
 				const PxShape* shA = tp.triggerShape;
 				const PxShape* shB = tp.otherShape;
 				const PxActor* acA = tp.triggerActor;
 				const PxActor* acB = tp.otherActor;
+
+				// if shape removed, 정리 후 스킵
+				if (removedShape)
+				{
+					// 가능한 범위에서 상태 정리 (누수 방지)
+					// shape가 유효하면 shapeKey를 계산해서 제거
+					if (shA && shB && acA && acB)
+					{
+						const uint64_t shapeKey = PtrPairKey(shA, shB);
+						const uint64_t actorKey = PtrPairKey(acA, acB);
+						
+						if (s->activeTriggerShapePairs.erase(shapeKey) > 0)
+						{
+							// actorCount 감소
+							auto it = s->activeTriggerActorCounts.find(actorKey);
+							if (it != s->activeTriggerActorCounts.end())
+							{
+								if (it->second > 0) --it->second;
+								if (it->second == 0)
+									s->activeTriggerActorCounts.erase(it);
+							}
+						}
+					}
+					continue;
+				}
 
 				if (!shA || !shB || !acA || !acB)
 					continue;

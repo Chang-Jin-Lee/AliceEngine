@@ -390,6 +390,6 @@ private:
 	PhysXContext& ctx;
 	std::shared_ptr<Impl> impl;
 	// 월드가 소유하는 내부 액터들 (CreateStaticPlane 등 void 반환 함수용)
-	// impl 다음에 선언하여 파괴 순서 보장: impl 먼저 파괴 → internalActors 정리
+	// impl 다음에 선언하여 파괴 순서 보장: m_internalActors 먼저 파괴 → impl 파괴 (C++ 파괴 순서는 역순)
 	std::vector<std::unique_ptr<IPhysicsActor>> m_internalActors;
 };

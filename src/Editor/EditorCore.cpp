@@ -1873,6 +1873,17 @@ namespace Alice
                             );
                             
                             transform->scale = XMFLOAT3(matrixScale[0], matrixScale[1], matrixScale[2]);
+                            
+                            // ImGuizmo로 Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
+                            if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(selectedEntity))
+                            {
+                                rigidBody->teleport = true;
+                            }
+                            if (auto* cct = world.GetComponent<Phy_CCTComponent>(selectedEntity))
+                            {
+                                cct->teleport = true;
+                            }
+                            g_SceneDirty = true;
                         }
                     }
                 }
@@ -2501,7 +2512,20 @@ namespace Alice
                 }
 
                 changed |= ReflectionUI::RenderProperty(*transform, "scale", "Scale");
-                if (changed) g_SceneDirty = true;
+                
+                // Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
+                if (changed)
+                {
+                    if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity))
+                    {
+                        rigidBody->teleport = true;
+                    }
+                    if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
+                    {
+                        cct->teleport = true;
+                    }
+                    g_SceneDirty = true;
+                }
             }
         }
     }
@@ -3681,18 +3705,20 @@ namespace Alice
                 changed |= ImGui::DragFloat("Break Force", &joint->breakForce, 1.0f, 0.0f);
                 changed |= ImGui::DragFloat("Break Torque", &joint->breakTorque, 1.0f, 0.0f);
 
-                auto drawFrame = [&](const char* label, Phy_JointFrame& frame)
+                auto drawFrame = [&](const char* label, Phy_JointFrame& frame) -> bool
                 {
+                    bool frameChanged = false;
                     if (ImGui::TreeNode(label))
                     {
-                        changed |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
-                        changed |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
+                        frameChanged |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
+                        frameChanged |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
                         ImGui::TreePop();
                     }
+                    return frameChanged;
                 };
 
-                drawFrame("Frame A", joint->frameA);
-                drawFrame("Frame B", joint->frameB);
+                changed |= drawFrame("Frame A", joint->frameA);
+                changed |= drawFrame("Frame B", joint->frameB);
 
                 ImGui::Separator();
                 switch (joint->type)
@@ -3872,7 +3898,7 @@ namespace Alice
 
                     if (ImGui::TreeNode("Drive Target"))
                     {
-                        drawFrame("Drive Pose", joint->d6.drivePose);
+                        changed |= drawFrame("Drive Pose", joint->d6.drivePose);
                         changed |= ImGui::DragFloat3("Drive Linear Vel", &joint->d6.driveLinearVelocity.x, 0.01f);
                         changed |= ImGui::DragFloat3("Drive Angular Vel", &joint->d6.driveAngularVelocity.x, 0.01f);
                         ImGui::TreePop();

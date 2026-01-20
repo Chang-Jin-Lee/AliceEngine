@@ -18,6 +18,7 @@
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
+#include "PhysX/Components/Phy_JointComponent.h"
 #include <wrl/client.h>
 #include <dxgi.h>
 #include <dxgi1_3.h>
@@ -374,6 +375,12 @@ namespace Alice
                 outEntity["PhysicsSceneSettings"] = WritePhysicsSceneSettings(*physicsSettings);
             }
 
+            if (const auto* joint = world.GetComponent<Phy_JointComponent>(id); joint)
+            {
+                rttr::instance inst = const_cast<Phy_JointComponent&>(*joint);
+                outEntity["Joint"] = JsonRttr::ToJsonObject(inst);
+            }
+
             return true;
         }
 
@@ -591,6 +598,14 @@ namespace Alice
                 Phy_TerrainHeightFieldComponent& terrain = world.AddComponent<Phy_TerrainHeightFieldComponent>(id);
                 rttr::instance inst = terrain;
                 if (!JsonRttr::FromJsonObject(inst, *itTerrain)) return false;
+            }
+
+            auto itJoint = e.find("Joint");
+            if (itJoint != e.end() && itJoint->is_object())
+            {
+                Phy_JointComponent& joint = world.AddComponent<Phy_JointComponent>(id);
+                rttr::instance inst = joint;
+                if (!JsonRttr::FromJsonObject(inst, *itJoint)) return false;
             }
 
             auto itPhysicsSettings = e.find("PhysicsSceneSettings");
