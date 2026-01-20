@@ -710,6 +710,14 @@ namespace Alice
             std::uint32_t payloadSize;
         };
 
+        // Manifest 엔트리 구조 (POD)
+        struct ManifestEntry
+        {
+            std::uint64_t fileId;
+            std::uint32_t chunkCount;
+        };
+        std::vector<ManifestEntry> manifestList;
+
         std::size_t fileCount = 0;
         for (fs::recursive_directory_iterator it(resourceDirAbs, ec), end; it != end; it.increment(ec))
         {
@@ -746,6 +754,9 @@ namespace Alice
                            static_cast<unsigned long long>(originalSize),
                            static_cast<unsigned>(chunkCount));
 
+            // Manifest에 추가
+            manifestList.push_back({ fileId, chunkCount });
+
             for (std::uint32_t i = 0; i < chunkCount; ++i)
             {
                 const std::size_t off = static_cast<std::size_t>(i) * chunkBytes;
@@ -781,6 +792,23 @@ namespace Alice
             }
 
             ++fileCount;
+        }
+
+        // Manifest 파일 저장
+        if (!manifestList.empty())
+        {
+            std::size_t totalBytes = manifestList.size() * sizeof(ManifestEntry);
+            std::vector<std::uint8_t> manifestData(totalBytes);
+            std::memcpy(manifestData.data(), manifestList.data(), totalBytes);
+
+            fs::path manifestPath = cookedDirAbs / "Manifest.alice";
+            if (!CookAndSaveBytes(manifestData, manifestPath))
+            {
+                ALICE_LOG_ERRORF("CookResourceToChunkStore: Failed to save Manifest. \"%s\"", manifestPath.string().c_str());
+                return false;
+            }
+
+            ALICE_LOG_INFO("CookResourceToChunkStore: Manifest saved. entries=%zu", manifestList.size());
         }
 
         ALICE_LOG_INFO("CookResourceToChunkStore: cooked %zu files into \"%s/Chunks\"",
@@ -893,7 +921,7 @@ namespace Alice
         return outSrv;
     }
 
-    // std::string 로더 구현 (텍스트 파일)
+    // std::string 로더 구현 텍스트 파일
     std::shared_ptr<std::string>
     ResourceLoader<std::string>::Load(const ResourceManager& rm, 
                                       const std::filesystem::path& path)
@@ -934,6 +962,75 @@ namespace Alice
                 path.string().c_str(), e.what());
             return nullptr;
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // [데이터 무결성 검증]
+    // -----------------------------------------------------------------------
+
+    bool ResourceManager::ValidateGameData() const
+    {
+        namespace fs = std::filesystem;
+
+        // 1. 매니페스트 로드
+        std::vector<std::uint8_t> data;
+        fs::path manifestPath = CookedDir() / "Manifest.alice";
+
+        if (!LoadBinary(manifestPath, data, true)) // true = 암호화된 파일 복호화
+        {
+            ALICE_LOG_ERRORF("[Integrity] Missing Manifest file: %s", manifestPath.string().c_str());
+            return false;
+        }
+
+        // 2. 데이터 파싱
+        struct ManifestEntry
+        {
+            std::uint64_t fileId;
+            std::uint32_t chunkCount;
+        };
+
+        if (data.size() % sizeof(ManifestEntry) != 0)
+        {
+            ALICE_LOG_ERRORF("[Integrity] Corrupted Manifest file size.");
+            return false;
+        }
+
+        std::size_t count = data.size() / sizeof(ManifestEntry);
+        const ManifestEntry* entries = reinterpret_cast<const ManifestEntry*>(data.data());
+
+        ALICE_LOG_INFO("[Integrity] Verifying %zu assets...", count);
+
+        // 3. 실제 파일 존재 여부 전수 검사
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            const std::uint64_t fid = entries[i].fileId;
+            const std::uint32_t cCount = entries[i].chunkCount;
+
+            // FileID -> Hex Path 변환
+            char hex[17] = {};
+            std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(fid));
+            std::string hexStr = hex;
+            fs::path baseDir = CookedDir() / "Chunks" / hexStr.substr(0, 2) / hexStr;
+
+            // 각 청크 파일(c0000.alice ...)이 실제로 있는지 확인
+            for (std::uint32_t c = 0; c < cCount; ++c)
+            {
+                char name[32] = {};
+                std::snprintf(name, sizeof(name), "c%04u.alice", static_cast<unsigned>(c));
+                fs::path p = baseDir / name;
+
+                std::error_code ec;
+                if (!fs::exists(p, ec))
+                {
+                    ALICE_LOG_ERRORF("[Integrity] Missing chunk! ID=%s Chunk=%u Path=%s",
+                        hexStr.c_str(), static_cast<unsigned>(c), p.string().c_str());
+                    return false;
+                }
+            }
+        }
+
+        ALICE_LOG_INFO("[Integrity] Verification Passed. All %zu assets verified.", count);
+        return true;
     }
 }
 
