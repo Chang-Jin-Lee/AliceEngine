@@ -101,7 +101,9 @@ std::unique_ptr<IRigidBody> PhysXWorld::CreateDynamicCapsule(const Vec3& pos, co
 
 void PhysXWorld::CreateStaticPlane(float staticFriction, float dynamicFriction, float restitution, const FilterDesc& filter)
 {
-	(void)CreateStaticPlaneActor(staticFriction, dynamicFriction, restitution, filter);
+	// 월드가 소유하는 내부 액터로 보관 (즉시 파괴 방지)
+	if (auto actor = CreateStaticPlaneActor(staticFriction, dynamicFriction, restitution, filter))
+		m_internalActors.push_back(std::move(actor));
 }
 
 std::unique_ptr<IPhysicsActor> PhysXWorld::CreateStaticPlaneActor(float staticFriction, float dynamicFriction, float restitution, const FilterDesc& filter)

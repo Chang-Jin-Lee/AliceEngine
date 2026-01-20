@@ -78,7 +78,9 @@ private:
 
 private:
     Alice::World& m_world;
-    IPhysicsWorld* m_physicsWorld = nullptr;
+    // shared_ptr로 보관하여 수명 안전성 확보 (씬 전환 시 old world가 먼저 파괴되는 것을 방지)
+    std::shared_ptr<IPhysicsWorld> m_physicsWorldShared;
+    IPhysicsWorld* m_physicsWorld = nullptr; // m_physicsWorldShared.get()과 동기화
 
     struct ActorHandle
     {
@@ -315,6 +317,7 @@ private:
     {
         Phy_JointComponent snapshot{};
         Alice::EntityId targetId = Alice::InvalidEntityId;
+        std::string targetName; // 캐싱: targetName이 같으면 재탐색 생략
     };
     std::unordered_map<Alice::EntityId, std::unique_ptr<IPhysicsJoint>> m_entityToJoint;
     std::unordered_map<Alice::EntityId, JointState> m_lastJoints;

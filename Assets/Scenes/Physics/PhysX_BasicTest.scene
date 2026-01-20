@@ -50,17 +50,17 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
                     "x": 0.0,
-                    "y": 50.0,
+                    "y": 43.97502517700195,
                     "z": 21.0
                 },
                 "rotation": {
                     "x": 1.3694243431091309,
-                    "y": -0.041798047721385956,
+                    "y": -0.041798077523708344,
                     "z": -2.993072986602783
                 },
                 "scale": {
@@ -69,8 +69,8 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 66,
-            "name": "DropBox"
+            "id": 190,
+            "name": "DropBoxa"
         },
         {
             "PhysicsSceneSettings": {
@@ -2310,7 +2310,7 @@
             ],
             "TerrainHeightField": {
                 "centerPivot": true,
-                "colScale": 10.0,
+                "colScale": 100.0,
                 "collideMask": 4294967295,
                 "doubleSidedQueries": true,
                 "dynamicFriction": 0.5,
@@ -2318,11 +2318,11 @@
                 "heightScale": 0.009999999776482582,
                 "ignoreLayers": 0,
                 "layerBits": 1,
-                "numCols": 4,
-                "numRows": 4,
+                "numCols": 10,
+                "numRows": 10,
                 "queryMask": 4294967295,
                 "restitution": 0.0,
-                "rowScale": 10.0,
+                "rowScale": 100.0,
                 "staticFriction": 0.5
             },
             "Transform": {
@@ -2337,13 +2337,13 @@
                     "z": 0.0
                 },
                 "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
+                    "x": 100.0,
+                    "y": 0.10000000149011612,
+                    "z": 100.0
                 }
             },
-            "id": 67,
-            "name": "GameObject4"
+            "id": 191,
+            "name": "Ground"
         },
         {
             "Collider": {
@@ -2395,13 +2395,13 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 40.0,
-                    "z": 20.5
+                    "x": 8.086417198181152,
+                    "y": 40.19684982299805,
+                    "z": 17.391822814941406
                 },
                 "rotation": {
                     "x": -0.0,
@@ -2414,7 +2414,7 @@
                     "z": 1.0
                 }
             },
-            "id": 68,
+            "id": 192,
             "name": "DropBox2"
         },
         {
@@ -2438,6 +2438,17 @@
                 "staticFriction": 0.5,
                 "type": "Box"
             },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 1.0,
+                    "y": 0.7019608020782471,
+                    "z": 0.7019608020782471
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
             "RigidBody": {
                 "angularDamping": 0.05000000074505806,
                 "density": 1.0,
@@ -2456,18 +2467,18 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 30.0,
-                    "z": 20.0
+                    "x": 6.5791497230529785,
+                    "y": 15.64814567565918,
+                    "z": 18.63827133178711
                 },
                 "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": -0.041798047721385956,
-                    "z": -2.993072986602783
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
                 },
                 "scale": {
                     "x": 0.9999999403953552,
@@ -2475,8 +2486,8 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 69,
-            "name": "DropBox"
+            "id": 193,
+            "name": "C"
         },
         {
             "Collider": {
@@ -2499,6 +2510,17 @@
                 "staticFriction": 0.5,
                 "type": "Box"
             },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.7019608020782471,
+                    "y": 1.0,
+                    "z": 0.7019608020782471
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
             "RigidBody": {
                 "angularDamping": 0.05000000074505806,
                 "density": 1.0,
@@ -2517,18 +2539,18 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 20.0,
-                    "z": 19.5
+                    "x": -0.3574776351451874,
+                    "y": 15.839079856872559,
+                    "z": 19.515857696533203
                 },
                 "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": -0.041798047721385956,
-                    "z": -2.993072986602783
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
                 },
                 "scale": {
                     "x": 0.9999999403953552,
@@ -2536,8 +2558,8 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 70,
-            "name": "DropBox"
+            "id": 194,
+            "name": "B"
         },
         {
             "Collider": {
@@ -2560,6 +2582,17 @@
                 "staticFriction": 0.5,
                 "type": "Box"
             },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.7019608020782471,
+                    "y": 0.7019608020782471,
+                    "z": 1.0
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
             "RigidBody": {
                 "angularDamping": 0.05000000074505806,
                 "density": 1.0,
@@ -2578,18 +2611,18 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 10.0,
-                    "z": 19.0
+                    "x": -8.350833892822266,
+                    "y": 15.955245018005371,
+                    "z": 18.37095832824707
                 },
                 "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": -0.041798047721385956,
-                    "z": -2.993072986602783
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
                 },
                 "scale": {
                     "x": 0.9999999403953552,
@@ -2597,8 +2630,8 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 71,
-            "name": "DropBox"
+            "id": 195,
+            "name": "A"
         }
     ],
     "version": 1

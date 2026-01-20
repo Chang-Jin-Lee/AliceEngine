@@ -163,10 +163,13 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateRevoluteJoint(const IPhysicsAct
 	// Drive (motor)
 	j->setRevoluteJointFlag(PxRevoluteJointFlag::eDRIVE_ENABLED, desc.enableDrive);
 	j->setRevoluteJointFlag(PxRevoluteJointFlag::eDRIVE_FREESPIN, desc.driveFreeSpin);
+	j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
+
+	if (desc.enableDrive)
+	{
 		j->setDriveVelocity(desc.driveVelocity, true);
 		j->setDriveForceLimit((desc.driveForceLimit > 0.0f) ? desc.driveForceLimit : PX_MAX_F32);
-
-		j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
+	}
 
 	return std::make_unique<PhysXJoint>(j, impl);
 }
