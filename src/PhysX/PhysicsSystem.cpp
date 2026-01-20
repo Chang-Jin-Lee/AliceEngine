@@ -732,7 +732,8 @@ void PhysicsSystem::Update(float deltaTime)
                 auto* mesh = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
                 if (rb && rb->physicsActorHandle && mesh && mesh->physicsActorHandle == nullptr)
                 {
-                    mesh->physicsActorHandle = rb->physicsActorHandle;
+                    // IRigidBody*는 IPhysicsActor*로 암시적 변환 가능
+                    mesh->physicsActorHandle = static_cast<IPhysicsActor*>(rb->physicsActorHandle);
                     RebuildMeshShapes(entityId);
                 }
             }
@@ -759,7 +760,8 @@ void PhysicsSystem::Update(float deltaTime)
 				auto* col = m_world.GetComponent<Phy_ColliderComponent>(entityId);
 				if (rb && rb->physicsActorHandle && col && col->physicsActorHandle == nullptr)
                 {
-					col->physicsActorHandle = rb->physicsActorHandle;
+					// IRigidBody*는 IPhysicsActor*로 암시적 변환 가능
+					col->physicsActorHandle = static_cast<IPhysicsActor*>(rb->physicsActorHandle);
                     RebuildShapes(entityId);
                 }
             }
@@ -1484,9 +1486,10 @@ void PhysicsSystem::Update(float deltaTime)
                 if (collider)
                 {
                     ActorHandle& handle = itActor->second;
+                    // IRigidBody가 있으면 IRigidBody* 사용, 없으면 IPhysicsActor* 사용
                     collider->physicsActorHandle = handle.GetRigidBody()
-                        ? static_cast<void*>(handle.GetRigidBody())
-                        : static_cast<void*>(handle.GetActor());
+                        ? static_cast<IPhysicsActor*>(handle.GetRigidBody())
+                        : handle.GetActor();
                     RebuildShapes(entityId);
                 }
             }
@@ -2744,6 +2747,140 @@ bool PhysicsSystem::IsTrackedEntity(Alice::EntityId id) const noexcept
 {
     return (m_entityToActor.find(id) != m_entityToActor.end()) ||
            (m_entityToCCT.find(id) != m_entityToCCT.end());
+}
+
+IPhysicsActor* PhysicsSystem::ValidateAndGetActor(void* handle, Alice::EntityId entityId) const noexcept
+{
+    if (!handle) return nullptr;
+    
+    // 1. worldEpoch 검증: IsTrackedEntity로 확인
+    if (!IsTrackedEntity(entityId))
+    {
+        // 이전 씬의 핸들 또는 추적되지 않는 엔티티
+        return nullptr;
+    }
+    
+    // 2. m_entityToActor에서 실제 소유권 확인
+    auto it = m_entityToActor.find(entityId);
+    if (it == m_entityToActor.end() || !it->second.IsValid())
+    {
+        return nullptr;
+    }
+    
+    // 3. 핸들이 실제로 m_entityToActor의 것과 일치하는지 확인
+    IPhysicsActor* actor = it->second.GetActor();
+    IRigidBody* body = it->second.GetRigidBody();
+    
+    if (handle != actor && handle != body)
+    {
+        // 핸들이 실제 소유권과 일치하지 않음 (stale handle)
+        return nullptr;
+    }
+    
+    // 4. IsValid() 최종 검증
+    if (body && handle == body)
+    {
+        if (!body->IsValid()) return nullptr;
+        return body; // IRigidBody는 IPhysicsActor를 상속
+    }
+    
+    if (actor && handle == actor)
+    {
+        if (!actor->IsValid()) return nullptr;
+        return actor;
+    }
+    
+    return nullptr;
+}
+
+IRigidBody* PhysicsSystem::ValidateAndGetRigidBody(void* handle, Alice::EntityId entityId) const noexcept
+{
+    if (!handle) return nullptr;
+    
+    // 1. worldEpoch 검증
+    if (!IsTrackedEntity(entityId))
+    {
+        return nullptr;
+    }
+    
+    // 2. m_entityToActor에서 확인
+    auto it = m_entityToActor.find(entityId);
+    if (it == m_entityToActor.end() || !it->second.IsValid())
+    {
+        return nullptr;
+    }
+    
+    // 3. 핸들 일치 확인
+    IRigidBody* body = it->second.GetRigidBody();
+    if (!body || handle != body)
+    {
+        return nullptr;
+    }
+    
+    // 4. IsValid() 검증
+    if (!body->IsValid()) return nullptr;
+    
+    return body;
+}
+
+IPhysicsJoint* PhysicsSystem::ValidateAndGetJoint(void* handle, Alice::EntityId entityId) const noexcept
+{
+    if (!handle) return nullptr;
+    
+    // 1. worldEpoch 검증
+    if (!IsTrackedEntity(entityId))
+    {
+        return nullptr;
+    }
+    
+    // 2. m_entityToJoint에서 확인
+    auto it = m_entityToJoint.find(entityId);
+    if (it == m_entityToJoint.end() || !it->second)
+    {
+        return nullptr;
+    }
+    
+    // 3. 핸들 일치 확인
+    IPhysicsJoint* joint = it->second.get();
+    if (handle != joint)
+    {
+        return nullptr;
+    }
+    
+    // 4. IsValid() 검증
+    if (!joint->IsValid()) return nullptr;
+    
+    return joint;
+}
+
+ICharacterController* PhysicsSystem::ValidateAndGetController(void* handle, Alice::EntityId entityId) const noexcept
+{
+    if (!handle) return nullptr;
+    
+    // 1. worldEpoch 검증
+    if (!IsTrackedEntity(entityId))
+    {
+        return nullptr;
+    }
+    
+    // 2. m_entityToCCT에서 확인
+    auto it = m_entityToCCT.find(entityId);
+    if (it == m_entityToCCT.end() || !it->second.IsValid())
+    {
+        return nullptr;
+    }
+    
+    // 3. 핸들 일치 확인
+    ICharacterController* cct = it->second.cct;
+    if (handle != cct)
+    {
+        return nullptr;
+    }
+    
+    // 4. IsValid() 검증
+    if (!cct->IsValid()) return nullptr;
+    
+    return cct;
 }
 
 Vec3 PhysicsSystem::ToVec3(const DirectX::XMFLOAT3& v)

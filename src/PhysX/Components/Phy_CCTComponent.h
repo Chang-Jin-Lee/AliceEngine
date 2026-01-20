@@ -43,5 +43,6 @@ struct Phy_CCTComponent
     uint8_t collisionFlags = 0; // CCTCollisionFlags bitmask
 
     // 내부 핸들
-    void* controllerHandle = nullptr; // ICharacterController*
+    // 직접 접근 금지: PhysicsSystem::ValidateAndGetController()를 통해 접근하세요
+    ICharacterController* controllerHandle = nullptr; // 타입 안전 핸들 (worldEpoch 검증 + IsValid() 강제)
 };

@@ -51,6 +51,14 @@ public:
     // 현재 추적 중인 엔티티인지 확인 (씬 전환 중 stale userData 방지)
     bool IsTrackedEntity(Alice::EntityId id) const noexcept;
 
+    // 타입 안전 핸들 검증 및 접근
+    // 컴포넌트의 void* 핸들을 안전하게 IPhysicsActor*로 변환
+    // worldEpoch 검증 + IsValid() 체크를 강제함
+    IPhysicsActor* ValidateAndGetActor(void* handle, Alice::EntityId entityId) const noexcept;
+    IRigidBody* ValidateAndGetRigidBody(void* handle, Alice::EntityId entityId) const noexcept;
+    IPhysicsJoint* ValidateAndGetJoint(void* handle, Alice::EntityId entityId) const noexcept;
+    ICharacterController* ValidateAndGetController(void* handle, Alice::EntityId entityId) const noexcept;
+
     // 유틸리티: Quat → Euler 변환
     static DirectX::XMFLOAT3 ToEulerRadians(const Quat& q);
 

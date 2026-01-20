@@ -176,5 +176,6 @@ struct Phy_JointComponent
     Phy_D6JointSettings d6{};
 
     // 내부 핸들 (PhysicsSystem이 관리)
-    void* jointHandle = nullptr; // IPhysicsJoint*
+    //  직접 접근 금지: PhysicsSystem::ValidateAndGetJoint()를 통해 접근하세요
+    IPhysicsJoint* jointHandle = nullptr; // 타입 안전 핸들 (worldEpoch 검증 + IsValid() 강제)
 };
