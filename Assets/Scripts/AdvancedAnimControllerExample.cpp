@@ -18,8 +18,21 @@ namespace Alice
         if (!go.IsValid())
             return;
 
-        if (!go.GetComponent<AdvancedAnimComponent>())
-            go.AddComponent<AdvancedAnimComponent>();
+        auto* anim = go.GetComponent<AdvancedAnimComponent>();
+        if (!anim)
+            anim = &go.AddComponent<AdvancedAnimComponent>();
+
+        // ★ 핵심: 시작하자마자 Idle 상태로 진입 (언리얼의 Entry -> Idle 로직)
+        // 게임 시작 시 T-Pose가 아닌 Idle 애니메이션으로 시작
+        if (anim->base.clipA.empty() && !idleClip.empty())
+        {
+            anim->base.clipA = idleClip;
+            anim->base.clipB.clear();
+            anim->base.blend01 = 0.0f;
+            anim->base.enabled = true;
+            anim->playing = true;  // 자동 재생 시작
+            anim->globalSpeed = 1.0f;
+        }
     }
 
     void AdvancedAnimControllerExample::Update(float deltaTime)

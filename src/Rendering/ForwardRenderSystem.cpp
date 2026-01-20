@@ -1,4 +1,4 @@
-﻿#include "Rendering/ForwardRenderSystem.h"
+#include "Rendering/ForwardRenderSystem.h"
 
 #include <d3dcompiler.h>
 // 텍스처 로더 (vcpkg의 DirectXTK 사용)
