@@ -487,6 +487,7 @@ namespace Alice
 		// ============================================= 물리 시스템 생성 =============================================
 		// PhysicsSystem 생성 (ECS 브릿지) - 씬 로드 이후, RefreshPhysicsForCurrentWorld 호출 전
 		pImpl->m_physicsSystem = std::make_unique<PhysicsSystem>(pImpl->m_world);
+		pImpl->m_physicsSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 		ALICE_LOG_INFO("Engine::Initialize: PhysicsSystem created.");
 
 		// World::Clear() 호출 전 콜백 설정 (물리 시스템 정리 강제)

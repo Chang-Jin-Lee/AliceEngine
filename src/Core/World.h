@@ -35,6 +35,7 @@
 // 물리 컴포넌트들
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_MeshColliderComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "PhysX/Components/Phy_CCTComponent.h"

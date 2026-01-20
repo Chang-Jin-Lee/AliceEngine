@@ -9,6 +9,7 @@
 #include <DirectXMath.h>
 
 #include "FbxTypes.h"
+#include "Core/Vertex.h"
 #include <wtypes.h>
 
 struct ID3D11Device;
@@ -49,6 +50,8 @@ public:
 	const std::vector<ID3D11ShaderResourceView*>& GetNormalSRVs() const;        // Normal map
 	const std::vector<ID3D11ShaderResourceView*>& GetMetallicSRVs() const;      // PBR Metallic
 	const std::vector<ID3D11ShaderResourceView*>& GetRoughnessSRVs() const;     // PBR Roughness
+	const std::vector<VertexSkinnedTBN>& GetCPUVertices() const;
+	const std::vector<uint32_t>& GetCPUIndices() const;
 
 	// Skeleton
 	bool HasSkeleton() const;

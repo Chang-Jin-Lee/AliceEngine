@@ -3,6 +3,7 @@
 #include "IPhysicsWorld.h"
 #include "Components/Phy_RigidBodyComponent.h"
 #include "Components/Phy_ColliderComponent.h"
+#include "Components/Phy_MeshColliderComponent.h"
 #include "Components/Phy_TerrainHeightFieldComponent.h"
 #include "Components/Phy_CCTComponent.h"
 #include "Components/Phy_SettingsComponent.h"
@@ -12,6 +13,9 @@
 #include <unordered_map>
 #include <memory>
 #include <array>
+#include <string>
+
+namespace Alice { class SkinnedMeshRegistry; }
 
 // PhysicsSystem: ECS 컴포넌트와 PhysX를 연결하는 브릿지
 // - 컴포넌트 추가/제거 시 물리 액터 자동 생성/삭제
@@ -39,6 +43,9 @@ public:
 
     // Physics → Game 동기화 (외부에서 호출 가능)
     void SyncPhysicsToGame(const ActiveTransform& transform);
+
+    // MeshCollider용 스키닝 메시 레지스트리
+    void SetSkinnedMeshRegistry(class Alice::SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
 
     // 현재 추적 중인 엔티티인지 확인 (씬 전환 중 stale userData 방지)
     bool IsTrackedEntity(Alice::EntityId id) const noexcept;
@@ -148,6 +155,28 @@ private:
         DirectX::XMFLOAT3 scale{}; // Transform scale 포함
     };
     std::unordered_map<Alice::EntityId, ColliderState> m_lastColliders;
+
+    // MeshCollider 파라미터 변경 감지용
+    struct MeshColliderState
+    {
+        MeshColliderType type{};
+        std::string meshAssetPath;
+        float staticFriction{};
+        float dynamicFriction{};
+        float restitution{};
+        uint32_t layerBits{};
+        uint32_t collideMask{};
+        uint32_t queryMask{};
+        uint32_t ignoreLayers{};
+        bool isTrigger{};
+        bool flipNormals{};
+        bool doubleSidedQueries{};
+        bool validate{};
+        bool shiftVertices{};
+        uint32_t vertexLimit{};
+        DirectX::XMFLOAT3 scale{};
+    };
+    std::unordered_map<Alice::EntityId, MeshColliderState> m_lastMeshColliders;
 
     // RigidBody 파라미터 변경 감지용
     struct RigidBodyState
@@ -311,6 +340,7 @@ private:
 
     // Collider/Scale 변경 시 Shape 재구성
     void RebuildShapes(Alice::EntityId entityId);
+    void RebuildMeshShapes(Alice::EntityId entityId);
 
     // Joint 관리
     struct JointState
@@ -329,4 +359,23 @@ private:
 
     // 전역 필터 매트릭스 변경 감지용
     uint32_t m_lastFilterRevision = 0;
+
+    // Ground Plane 상태
+    struct GroundPlaneState
+    {
+        bool enabled{};
+        float staticFriction{};
+        float dynamicFriction{};
+        float restitution{};
+        uint32_t layerBits{};
+        uint32_t collideMask{};
+        uint32_t queryMask{};
+        uint32_t ignoreLayers{};
+        bool isTrigger{};
+    };
+    std::unique_ptr<IPhysicsActor> m_groundPlaneActor;
+    GroundPlaneState m_lastGroundPlane{};
+
+    // Mesh asset access
+    class Alice::SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
 };

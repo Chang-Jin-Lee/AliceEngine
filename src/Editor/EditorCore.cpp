@@ -2629,6 +2629,9 @@ namespace Alice
                     } else if (typeName == "Phy_ColliderComponent") {
                         world.AddComponent<Phy_ColliderComponent>(_selectedEntity);
                         added = true;
+                    } else if (typeName == "Phy_MeshColliderComponent") {
+                        world.AddComponent<Phy_MeshColliderComponent>(_selectedEntity);
+                        added = true;
                     } else if (typeName == "Phy_CCTComponent") {
                         world.AddComponent<Phy_CCTComponent>(_selectedEntity);
                         added = true;
@@ -2726,6 +2729,8 @@ namespace Alice
                     [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
             } else if (typeName == "Phy_ColliderComponent") {
                 DrawInspectorCollider(world, _selectedEntity);
+            } else if (typeName == "Phy_MeshColliderComponent") {
+                DrawInspectorMeshCollider(world, _selectedEntity);
             } else if (typeName == "Phy_CCTComponent") {
                 DrawInspectorCharacterController(world, _selectedEntity);
             } else if (typeName == "Phy_TerrainHeightFieldComponent") {
@@ -3301,6 +3306,122 @@ namespace Alice
         }
     }
 
+    void EditorCore::DrawInspectorMeshCollider(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* meshCollider = world.GetComponent<Phy_MeshColliderComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Mesh Collider", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_MeshColliderComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                changed |= ReflectionUI::RenderInspector(*meshCollider, [](const std::string& name) {
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" &&
+                           name != "ignoreLayers" && name != "physicsActorHandle" &&
+                           name != "flipNormals" && name != "doubleSidedQueries" && name != "validate" &&
+                           name != "shiftVertices" && name != "vertexLimit";
+                });
+
+                ImGui::Separator();
+                ImGui::TextUnformatted("Mesh Options");
+
+                if (meshCollider->meshAssetPath.empty())
+                    ImGui::TextUnformatted("Mesh Asset: (empty) -> uses SkinnedMeshComponent if present");
+
+                if (meshCollider->type == MeshColliderType::Triangle)
+                {
+                    changed |= ImGui::Checkbox("Flip Normals", &meshCollider->flipNormals);
+                    changed |= ImGui::Checkbox("Double-Sided Queries", &meshCollider->doubleSidedQueries);
+                    changed |= ImGui::Checkbox("Validate (Debug)", &meshCollider->validate);
+                }
+                else
+                {
+                    changed |= ImGui::Checkbox("Shift Vertices", &meshCollider->shiftVertices);
+                    changed |= ImGui::InputScalar("Vertex Limit", ImGuiDataType_U32, &meshCollider->vertexLimit);
+                    changed |= ImGui::Checkbox("Validate (Debug)", &meshCollider->validate);
+                }
+
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i)
+                    {
+                        if ((meshCollider->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+
+                    if (currentLayer == -1 && meshCollider->layerBits != 0)
+                    {
+                        meshCollider->layerBits = 0;
+                        changed = true;
+                    }
+
+                    std::string preview = (currentLayer >= 0) ?
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) :
+                        "None";
+
+                    if (ImGui::BeginCombo("##MeshColliderLayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            meshCollider->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i)
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                meshCollider->layerBits = (1u << i);
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+
+                changed |= DrawLayerMaskChipEditor("Collide Mask", meshCollider->collideMask, layerNames);
+                changed |= DrawLayerMaskChipEditor("Query Mask", meshCollider->queryMask, layerNames);
+
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("MeshIgnoreLayers", meshCollider->ignoreLayers, layerNames);
+                ImGui::Unindent();
+
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
     void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& _selectedEntity)
     {
         if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
@@ -3424,8 +3545,80 @@ namespace Alice
                 // 기본 프로퍼티는 ReflectionUI로
                 changed |= ReflectionUI::RenderInspector(*settings, [](const std::string& name) {
                     // layerCollideMatrix, layerQueryMatrix, layerNames는 커스텀 UI로 처리
-                    return name != "layerCollideMatrix" && name != "layerQueryMatrix" && name != "layerNames";
+                    return name != "layerCollideMatrix" && name != "layerQueryMatrix" && name != "layerNames" &&
+                           name != "enableGroundPlane" && name != "groundStaticFriction" && name != "groundDynamicFriction" &&
+                           name != "groundRestitution" && name != "groundLayerBits" && name != "groundCollideMask" &&
+                           name != "groundQueryMask" && name != "groundIgnoreLayers" && name != "groundIsTrigger";
                 });
+
+                ImGui::Separator();
+                ImGui::Text("Ground Plane (y=0)");
+                changed |= ImGui::Checkbox("Enable Ground Plane", &settings->enableGroundPlane);
+
+                if (settings->enableGroundPlane)
+                {
+                    changed |= ImGui::DragFloat("Static Friction", &settings->groundStaticFriction, 0.01f, 0.0f, 10.0f);
+                    changed |= ImGui::DragFloat("Dynamic Friction", &settings->groundDynamicFriction, 0.01f, 0.0f, 10.0f);
+                    changed |= ImGui::DragFloat("Restitution", &settings->groundRestitution, 0.01f, 0.0f, 1.0f);
+                    changed |= ImGui::Checkbox("Trigger", &settings->groundIsTrigger);
+
+                    std::array<std::string, 32> layerNames = settings->layerNames;
+
+                    ImGui::Text("Layer");
+                    ImGui::Indent();
+                    {
+                        int currentLayer = -1;
+                        for (int i = 0; i < 16; ++i)
+                        {
+                            if ((settings->groundLayerBits & (1u << i)) != 0)
+                            {
+                                currentLayer = i;
+                                break;
+                            }
+                        }
+
+                        if (currentLayer == -1 && settings->groundLayerBits != 0)
+                        {
+                            settings->groundLayerBits = 0;
+                            changed = true;
+                        }
+
+                        std::string preview = (currentLayer >= 0) ?
+                            (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) :
+                            "None";
+
+                        if (ImGui::BeginCombo("##GroundLayerBits", preview.c_str()))
+                        {
+                            if (ImGui::Selectable("None", currentLayer == -1))
+                            {
+                                settings->groundLayerBits = 0;
+                                changed = true;
+                            }
+                            for (int i = 0; i < 16; ++i)
+                            {
+                                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                                bool isSelected = (currentLayer == i);
+                                if (ImGui::Selectable(layerName.c_str(), isSelected))
+                                {
+                                    settings->groundLayerBits = (1u << i);
+                                    changed = true;
+                                }
+                                if (isSelected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                            ImGui::EndCombo();
+                        }
+                    }
+                    ImGui::Unindent();
+
+                    changed |= DrawLayerMaskChipEditor("Ground Collide Mask", settings->groundCollideMask, layerNames);
+                    changed |= DrawLayerMaskChipEditor("Ground Query Mask", settings->groundQueryMask, layerNames);
+
+                    ImGui::Text("Ground Ignore Layers");
+                    ImGui::Indent();
+                    changed |= DrawIgnoreLayersChipEditor("GroundIgnoreLayers", settings->groundIgnoreLayers, layerNames);
+                    ImGui::Unindent();
+                }
                 
                 ImGui::Separator();
                 ImGui::Text("Layer Collision Matrix");
