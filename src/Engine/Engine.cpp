@@ -442,6 +442,7 @@ namespace Alice
 		if (!pImpl->m_effectSystem->Initialize()) return false;
 
 		pImpl->m_swordRenderSystem = std::make_unique<SwordRenderSystem>(*pImpl->m_renderDevice);
+		pImpl->m_swordRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		if (!pImpl->m_swordRenderSystem->Initialize()) return false;
 
 		// DeferredRenderSystem에 SwordRenderSystem 주입
