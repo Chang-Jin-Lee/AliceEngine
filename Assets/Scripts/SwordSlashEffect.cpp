@@ -85,23 +85,26 @@ namespace Alice
         {
 			DirectX::XMFLOAT3 rootPos = m_rootPoint;
             DirectX::XMFLOAT3 tipPos = m_tipPoint;
-
+            DirectX::XMFLOAT3 ownerPos = GetTransform()->position;
             // 자동 이동 시뮬레이션 (테스트용)
-            if (m_autoMove)
-            {
-                float angle = m_currentTime * m_moveSpeed;
-                float radius = 2.0f;
-                rootPos = DirectX::XMFLOAT3(
-                    std::cos(angle) * radius,
-                    1.5f + std::sin(angle * 0.5f) * 0.5f,
-                    std::sin(angle) * radius
-                );
-                tipPos = DirectX::XMFLOAT3(
-                    std::cos(angle + 0.3f) * (radius + 0.5f),
-                    rootPos.y + 0.3f,
-                    std::sin(angle + 0.3f) * (radius + 0.5f)
-                );
-            }
+            //if (m_autoMove)
+            //{
+            //    float angle = m_currentTime * m_moveSpeed;
+            //    float radius = 2.0f;
+            //    rootPos = DirectX::XMFLOAT3(
+            //        std::cos(angle) * radius,
+            //        1.5f + std::sin(angle * 0.5f) * 0.5f,
+            //        std::sin(angle) * radius
+            //    );
+            //    tipPos = DirectX::XMFLOAT3(
+            //        std::cos(angle + 0.3f) * (radius + 0.5f),
+            //        rootPos.y + 0.3f,
+            //        std::sin(angle + 0.3f) * (radius + 0.5f)
+            //    );
+            //}
+
+			rootPos = DirectX::XMFLOAT3(ownerPos.x, ownerPos.y, ownerPos.z);
+            tipPos = DirectX::XMFLOAT3(rootPos.x + 0.3f, rootPos.y + 0.3f, rootPos.z + 0.3f);
 
             AddTrailSample(effect, rootPos, tipPos, m_currentTime);
             m_lastSampleTime = m_currentTime;
