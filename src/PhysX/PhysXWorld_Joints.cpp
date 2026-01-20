@@ -23,12 +23,9 @@ void PhysXWorld::DrainEvents(std::vector<PhysicsEvent>& outEvents)
 	outEvents.swap(impl->events);
 }
 
-// enableContactModify=true로 Scene을 만들지 않으면 절대 호출 안 됨
 void PhysXWorld::SetContactModifyCallback(ContactModifyCallback cb, void* userContext)
 {
 	if (!impl) return;
-	// NOTE: This is only effective if the scene was created with contact modify enabled
-	// (PhysXWorld::Desc.enableContactModify = true). Otherwise PhysX will never call it.
 	std::scoped_lock lock(impl->contactModifyMtx);
 	impl->contactModifyCb = cb;
 	impl->contactModifyUser = userContext;
@@ -166,11 +163,10 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateRevoluteJoint(const IPhysicsAct
 	// Drive (motor)
 	j->setRevoluteJointFlag(PxRevoluteJointFlag::eDRIVE_ENABLED, desc.enableDrive);
 	j->setRevoluteJointFlag(PxRevoluteJointFlag::eDRIVE_FREESPIN, desc.driveFreeSpin);
-	j->setDriveVelocity(desc.driveVelocity, true);
-	j->setDriveForceLimit((desc.driveForceLimit > 0.0f) ? desc.driveForceLimit : PX_MAX_F32);
+		j->setDriveVelocity(desc.driveVelocity, true);
+		j->setDriveForceLimit((desc.driveForceLimit > 0.0f) ? desc.driveForceLimit : PX_MAX_F32);
 
-	// NOTE: PhysX default interprets drive force limit as impulse unless this flag is set.
-	j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
+		j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
 
 	return std::make_unique<PhysXJoint>(j, impl);
 }
@@ -316,9 +312,6 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateD6Joint(const IPhysicsActor& a,
 			desc.linearLimitZ.lower, desc.linearLimitZ.upper,
 			desc.linearLimitZ.stiffness, desc.linearLimitZ.damping,
 			desc.linearLimitZ.restitution, desc.linearLimitZ.bounceThreshold));
-
-	// Distance limit for multi-axis linear limits (kept generous; per-axis limits are set above)
-	// If you want a strict spherical distance limit, configure it explicitly via PxD6Joint::setDistanceLimit.
 
 	// Angular limits
 	if (desc.motionTwist == D6Motion::Limited)

@@ -6,7 +6,7 @@
 namespace Alice
 {
     // Terrain HeightField 컴포넌트를 추가하고 설정하는 스크립트
-    // - Awake에서 TerrainHeightFieldComponent를 추가하고 높이맵 데이터를 생성합니다.
+    // - Awake에서 Phy_TerrainHeightFieldComponent를 추가하고 높이맵 데이터를 생성합니다.
     // - 에디터에서 파라미터를 조정할 수 있습니다.
     class TerrainHeightFieldTest : public IScript
     {
