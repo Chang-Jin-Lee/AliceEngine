@@ -238,11 +238,9 @@ namespace Alice
 
     void ScriptSystem::SwitchTo(const char* sceneName)
     {
-        m_pendingSwitch = GetResolvedPath(sceneName);
-
-        std::filesystem::path p = m_pendingSwitch;
-        if (p.extension() != ".scene") p += ".scene";
-        m_pendingSwitch = p.string().c_str();
+        // "코드 씬 이름" 전환용: 여기서 경로/확장자 붙이면 SceneFactory에서 못 찾는다.
+        // SceneManager::SwitchTo()가 내부에서 처리하므로 그대로 전달
+        m_pendingSwitch = (sceneName ? sceneName : "");
     }
 
     void ScriptSystem::LoadSceneFile(const char* scenePathUtf8)
@@ -252,6 +250,17 @@ namespace Alice
         std::filesystem::path p = m_pendingSceneFile;
         if (p.extension() != ".scene") p += ".scene";
         m_pendingSceneFile = p.string().c_str();
+    }
+
+    bool ScriptSystem::LoadSceneFileRequest(const char* scenePathUtf8)
+    {
+        if (!m_scenes || !scenePathUtf8) return false;
+
+        std::string resolvedPath = GetResolvedPath(scenePathUtf8);
+        std::filesystem::path p = resolvedPath;
+        if (p.extension() != ".scene") p += ".scene";
+
+        return m_scenes->LoadSceneFileRequest(p);
     }
 
     void ScriptSystem::EnsureServicesBound(World& world)
@@ -396,6 +405,17 @@ namespace Alice
         }
     }
 
+    bool ScriptSystem::HasPendingSceneRequests() const
+    {
+        return !m_pendingSwitch.empty() || !m_pendingSceneFile.empty();
+    }
+
+    void ScriptSystem::CommitSceneRequests(World& world)
+    {
+        // 기존 로직 그대로 사용 (단, 이제 엔진이 안전 지점에서 호출)
+        ProcessSceneRequests(world);
+    }
+
     void ScriptSystem::ProcessSceneRequests(World& world)
     {
         if (m_pendingSwitch.empty() && m_pendingSceneFile.empty())
@@ -451,8 +471,9 @@ namespace Alice
         // 지연 파괴 업데이트
         world.UpdateDelayedDestruction(deltaTime);
 
-        // 씬 요청은 프레임 끝에 반영
-        ProcessSceneRequests(world);
+        // (중요) 씬 요청 커밋은 여기서 하지 않는다.
+        // Engine::Update()의 안전 지점에서 CommitSceneRequests()를 호출한다.
+        // ProcessSceneRequests(world);
     }
 
     void ScriptSystem::OnApplicationQuit(World& world)
