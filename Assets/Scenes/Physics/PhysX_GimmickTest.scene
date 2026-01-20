@@ -19,7 +19,7 @@
                 "fixedDt": 0.01666666753590107,
                 "gravity": [
                     0.0,
-                    -9.8100004196167,
+                    -980.0,
                     0.0
                 ],
                 "groundCollideMask": 4294967295,
@@ -2246,6 +2246,16 @@
                 ],
                 "maxSubsteps": 4
             },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SceneSwitchExample",
+                    "props": {
+                        "m_targetName1": "Physics/PhysX_BasicTest",
+                        "m_targetName2": "Physics/PhysX_RapiTest"
+                    }
+                }
+            ],
             "Transform": {
                 "position": {
                     "x": 0.0,
@@ -2319,14 +2329,14 @@
             },
             "Transform": {
                 "position": {
-                    "x": -4.1945037841796875,
-                    "y": 0.9999945163726807,
-                    "z": 23.876996994018555
+                    "x": -4.194502830505371,
+                    "y": 0.9999943375587463,
+                    "z": 23.87700653076172
                 },
                 "rotation": {
-                    "x": -1.6657372725603636e-07,
-                    "y": 2.929530143737793,
-                    "z": 1.3541137377615087e-05
+                    "x": -1.5868101854721317e-07,
+                    "y": 2.9295315742492676,
+                    "z": 1.3691689673578367e-05
                 },
                 "scale": {
                     "x": 0.9999998807907104,
@@ -2348,6 +2358,43 @@
                 "metalness": 0.0,
                 "roughness": 0.5
             },
+            "MeshCollider": {
+                "collideMask": 4294967295,
+                "doubleSidedQueries": false,
+                "dynamicFriction": 0.5,
+                "flipNormals": false,
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 1,
+                "meshAssetPath": "",
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "shiftVertices": true,
+                "staticFriction": 0.5,
+                "type": "Convex",
+                "validate": false,
+                "vertexLimit": 255
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": true
+            },
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
@@ -2362,11 +2409,11 @@
             "Transform": {
                 "position": {
                     "x": 0.0,
-                    "y": -1.0,
+                    "y": 30.0,
                     "z": 0.0
                 },
                 "rotation": {
-                    "x": -0.0,
+                    "x": 0.0,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -2425,7 +2472,7 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": false
+                "teleport": true
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2441,7 +2488,7 @@
             "Transform": {
                 "position": {
                     "x": 0.0,
-                    "y": 10.0,
+                    "y": 5.0,
                     "z": 0.0
                 },
                 "rotation": {
@@ -2504,7 +2551,7 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": false
+                "teleport": true
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2520,7 +2567,7 @@
             "Transform": {
                 "position": {
                     "x": 0.0,
-                    "y": 10.0,
+                    "y": 5.0,
                     "z": 0.0
                 },
                 "rotation": {
@@ -2583,7 +2630,7 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": false
+                "teleport": true
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2599,7 +2646,7 @@
             "Transform": {
                 "position": {
                     "x": 0.0,
-                    "y": 10.0,
+                    "y": 5.0,
                     "z": 0.0
                 },
                 "rotation": {
@@ -2662,7 +2709,7 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": false
+                "teleport": true
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2678,7 +2725,7 @@
             "Transform": {
                 "position": {
                     "x": 0.0,
-                    "y": 10.0,
+                    "y": 5.0,
                     "z": 0.0
                 },
                 "rotation": {
@@ -2741,7 +2788,7 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": false
+                "teleport": true
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2757,7 +2804,7 @@
             "Transform": {
                 "position": {
                     "x": 0.0,
-                    "y": 10.0,
+                    "y": 5.0,
                     "z": 0.0
                 },
                 "rotation": {

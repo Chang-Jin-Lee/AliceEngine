@@ -50,30 +50,30 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": false
+                "teleport": true
             },
             "Transform": {
                 "position": {
-                    "x": 11.457094192504883,
-                    "y": 1.0038446187973022,
-                    "z": 35.325889587402344
+                    "x": -4.044521331787109,
+                    "y": 21.286785125732422,
+                    "z": 37.552467346191406
                 },
                 "rotation": {
-                    "x": -1.5707963705062866,
-                    "y": 0.9151006937026978,
-                    "z": -2.2485976219177246
+                    "x": -1.5707954168319702,
+                    "y": -2.226491689682007,
+                    "z": 0.8929948210716248
                 },
                 "scale": {
-                    "x": 0.9999999403953552,
-                    "y": 0.9999983310699463,
-                    "z": 0.9999974966049194
+                    "x": 0.9999998807907104,
+                    "y": 0.9999989867210388,
+                    "z": 0.9999974370002747
                 }
             },
-            "id": 2,
             "name": "DropBoxa"
         },
         {
             "PhysicsSceneSettings": {
+                "enableGroundPlane": true,
                 "enablePhysics": true,
                 "filterRevision": 0,
                 "fixedDt": 0.01666666753590107,
@@ -82,6 +82,14 @@
                     -9.8100004196167,
                     0.0
                 ],
+                "groundCollideMask": 4294967295,
+                "groundDynamicFriction": 0.5,
+                "groundIgnoreLayers": 0,
+                "groundIsTrigger": false,
+                "groundLayerBits": 1,
+                "groundQueryMask": 4294967295,
+                "groundRestitution": 0.0,
+                "groundStaticFriction": 0.5,
                 "layerCollideMatrix": [
                     [
                         true,
@@ -2303,7 +2311,7 @@
                     "enabled": true,
                     "name": "SceneSwitchExample",
                     "props": {
-                        "m_targetName1": "FbxTestScene",
+                        "m_targetName1": "Physics/PhysX_GimmickTest",
                         "m_targetName2": "Physics/PhysX_RapiTest"
                     }
                 }
@@ -2314,108 +2322,7 @@
                 "collideMask": 4294967295,
                 "doubleSidedQueries": true,
                 "dynamicFriction": 0.5,
-                "heightSamples": [
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    {}
-                ],
+                "heightSamples": [],
                 "heightScale": 0.009999999776482582,
                 "ignoreLayers": 0,
                 "layerBits": 1,
@@ -2443,7 +2350,6 @@
                     "z": 100.0
                 }
             },
-            "id": 3,
             "name": "Ground"
         },
         {
@@ -2496,26 +2402,25 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": false
+                "teleport": true
             },
             "Transform": {
                 "position": {
-                    "x": 22.035242080688477,
-                    "y": 1.0000240802764893,
-                    "z": 7.1578688621521
+                    "x": 1.1850684881210327,
+                    "y": 8.35261058807373,
+                    "z": 25.009519577026367
                 },
                 "rotation": {
-                    "x": -3.7956051528453827e-06,
-                    "y": -0.009493161924183369,
+                    "x": -3.7955362586217234e-06,
+                    "y": -0.00949300266802311,
                     "z": 1.5707998275756836
                 },
                 "scale": {
                     "x": 1.0,
                     "y": 1.0,
-                    "z": 1.0
+                    "z": 0.9999940991401672
                 }
             },
-            "id": 4,
             "name": "DropBox2"
         },
         {
@@ -2767,7 +2672,6 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 5,
             "name": "C"
         },
         {
@@ -3019,7 +2923,6 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 6,
             "name": "B"
         },
         {
@@ -3271,7 +3174,6 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 7,
             "name": "A"
         }
     ],
