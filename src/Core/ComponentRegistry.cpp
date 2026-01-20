@@ -307,17 +307,15 @@ namespace Alice
             .property("enabled", &EffectComponent::enabled)
             .property("alpha", &EffectComponent::alpha);
 
-        // === SwordEffectComponent 등록 (splinePoints는 내부용이므로 등록하지 않음) ===
-        rttr::registration::class_<SwordEffectComponent>("SwordEffectComponent")
-            .constructor<>()
-            .property("color", &SwordEffectComponent::color)
-            .property("alpha", &SwordEffectComponent::alpha)
-            .property("enabled", &SwordEffectComponent::enabled)
-            .property("startPoint", &SwordEffectComponent::startPoint)
-            .property("endPoint", &SwordEffectComponent::endPoint)
-            .property("controlPoint1", &SwordEffectComponent::controlPoint1)
-            .property("controlPoint2", &SwordEffectComponent::controlPoint2)
-            .property("segmentCount", &SwordEffectComponent::segmentCount);
+	// === SwordEffectComponent 등록 (trailSamples는 내부용이므로 등록하지 않음) ===
+	rttr::registration::class_<SwordEffectComponent>("SwordEffectComponent")
+		.constructor<>()
+		.property("color", &SwordEffectComponent::color)
+		.property("alpha", &SwordEffectComponent::alpha)
+		.property("enabled", &SwordEffectComponent::enabled)
+		.property("maxSamples", &SwordEffectComponent::maxSamples)
+		.property("sampleInterval", &SwordEffectComponent::sampleInterval)
+		.property("fadeDuration", &SwordEffectComponent::fadeDuration);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

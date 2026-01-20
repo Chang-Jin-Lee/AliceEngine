@@ -26,16 +26,19 @@ namespace Alice
 		void Render(const World& world, const Camera& camera);
 
 	private:
-		struct SplineVertex
+		struct TrailVertex
 		{
 			DirectX::XMFLOAT3 position;
-			float alpha;
+			DirectX::XMFLOAT2 texCoord;
+			float birthTime;
 		};
 
 		struct CBPerSwordEffect
 		{
 			DirectX::XMMATRIX viewProj;
 			DirectX::XMFLOAT3 color;
+			float currentTime;
+			float fadeDuration;
 		};
 
 		bool CreateShadersAndInputLayout();
