@@ -1,4 +1,4 @@
-﻿#include "Core/ResourceManager.h"
+#include "Core/ResourceManager.h"
 
 // 구현부에서만 필요한 무거운 헤더들
 #include <d3d11.h>
@@ -9,7 +9,9 @@
 #include <system_error>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include "Core/Logger.h"
+#include "json/json.hpp" // JSON 구현부 포함
 
 namespace
 {
@@ -27,6 +29,12 @@ namespace
 
 namespace Alice
 {
+	ResourceManager& ResourceManager::Get()
+	{
+		static ResourceManager s_instance;
+		return s_instance;
+	}
+
     bool ResourceManager::StartsWith(std::string_view s, std::string_view prefix)
     {
         return s.size() >= prefix.size() && s.substr(0, prefix.size()) == prefix;
@@ -117,6 +125,25 @@ namespace Alice
         return finalHash;
     }
 
+    bool ResourceManager::LoadText(const std::filesystem::path& logicalPath, std::string& outText) const
+    {
+        outText.clear();
+        std::vector<std::uint8_t> data;
+        if (!LoadBinaryAuto(logicalPath, data) || data.empty())
+            return false;
+
+        outText.assign(reinterpret_cast<const char*>(data.data()), data.size());
+        return true;
+    }
+
+    bool ResourceManager::IsImageLogicalPath(const std::filesystem::path& p)
+    {
+        std::string ext = p.extension().string();
+        for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+               ext == ".tga" || ext == ".bmp" || ext == ".dds";
+    }
+
     void ResourceManager::Configure(bool gameMode, const std::filesystem::path& exeDir)
     {
         m_gameMode = gameMode;
@@ -140,7 +167,15 @@ namespace Alice
 
         // lexically_normal()를 쓰면 사이사이에 있는 ./ or ../ or /// 등을 정리해줌
         if (logicalOrRelative.is_absolute())
-            return NormalizeResourcePathAbsoluteToLogical(logicalOrRelative).lexically_normal();
+        {
+            // absolute 경로를 논리 경로로 정규화
+            auto logical = NormalizeResourcePathAbsoluteToLogical(logicalOrRelative);
+            // 논리 경로로 변환된 경우 (Resource/... 또는 Assets/...) 다시 Resolve 호출
+            if (!logical.is_absolute())
+                return Resolve(logical);
+            // Resource 폴더가 아닌 진짜 absolute 경로는 그대로 반환
+            return logical.lexically_normal();
+        }
 
         std::filesystem::path p = NormalizeLegacyDotDot(logicalOrRelative);
         p = NormalizeResourcePathAbsoluteToLogical(p);
@@ -269,6 +304,9 @@ namespace Alice
             if (StartsWith(s, "Resource/"))
             {
                 const std::string rel = s.substr(std::string_view("Resource/").size());
+                
+                // 게임 모드에서는 모든 Resource/... 경로를 청크 시스템으로만 로드
+                // 텍스처, 메시, FBX 등 모든 파일이 청크로 패킹되어 있음
                 auto sp = LoadResourceChunksByRel(rel);
                 if (sp)
                 {
@@ -278,12 +316,15 @@ namespace Alice
                     m_pathToHash[logicalKey] = h;
                     return sp;
                 }
+                
+                ALICE_LOG_ERRORF("ResourceManager: Chunk not found for \"%s\"", s.c_str());
                 return nullptr;
             }
 
             // 그 외 Cooked 경로는 단일 .alice 파일(암호화)로 로드
             const auto resolved = Resolve(normalized);
-            if (StartsWith(resolved.generic_string(), (CookedDir().generic_string() + "/")))
+            //if (resolved.extension() == ".alice")
+			if (StartsWith(resolved.generic_string(), (CookedDir().generic_string() + "/")))
             {
                 std::vector<std::uint8_t> data;
                 if (!LoadBinary(resolved, data, true))
@@ -764,6 +805,29 @@ namespace Alice
     // -----------------------------------------------------------------------
 
     // ID3D11ShaderResourceView 로드 구현
+    // DDS 파일 시그니처 체크 (바이트 기반)
+    static bool IsDDS(const std::vector<std::uint8_t>& data)
+    {
+        return data.size() >= 4 && data[0] == 'D' && data[1] == 'D' && data[2] == 'S' && data[3] == ' ';
+    }
+
+    // TGA 파일 시그니처 체크 (Footer "TRUEVISION-XFILE")
+    // TGA는 헤더 매직넘버가 없어서 Footer를 확인해야 함
+    // WIC가 지원하지 않으므로 경고용으로만 사용
+    static bool IsTGA(const std::vector<std::uint8_t>& data)
+    {
+        if (data.size() < 18) return false;
+        const char* signature = "TRUEVISION-XFILE";
+        const size_t sigLen = 16;
+        if (data.size() < sigLen + 2) return false;
+        
+        // 파일 끝에서 18바이트 앞부터 시그니처가 있는지 확인
+        const size_t offset = data.size() - 18;
+        if (offset + sigLen > data.size()) return false;
+        
+        return std::memcmp(data.data() + offset, signature, sigLen) == 0;
+    }
+
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> 
     ResourceLoader<ID3D11ShaderResourceView>::Load(const ResourceManager& rm, 
                                                    const std::filesystem::path& path, 
@@ -785,44 +849,91 @@ namespace Alice
             return nullptr;
         }
 
-        // 2. 확장자를 확인하여 WIC 또는 DDS 로드 시도
-        std::filesystem::path ext = path.extension();
-        std::string extLower = ext.string();
-        for (auto& c : extLower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-
+        // 2. 바이트 시그니처로 포맷 판별 (확장자 기반이 아닌 실제 파일 포맷 확인)
+        //    .alice 파일로 감싸진 경우도 올바르게 처리하기 위함
         HRESULT hr = E_FAIL;
-
-        // DDS 파일인 경우
-        if (extLower == ".dds")
+        
+        if (IsDDS(data))
         {
+            // DDS 파일인 경우
             hr = DirectX::CreateDDSTextureFromMemory(
                 device,
                 data.data(),
                 static_cast<size_t>(data.size()),
-                nullptr, // texture resource 필요시 인자 추가
+                nullptr,
                 outSrv.GetAddressOf()
             );
         }
+        else if (IsTGA(data) || path.extension() == ".tga" || path.extension() == ".TGA")
+        {
+            // TGA는 DirectXTK WIC 로더가 지원하지 않습니다.
+            ALICE_LOG_ERRORF("[ResourceManager] Load<SRV> Error: .tga is NOT supported by runtime loader (WIC limitation). Use .dds or .png! \"%s\"", 
+                path.string().c_str());
+            return nullptr;
+        }
         else
         {
-            // WIC로 로드 시도 (JPG, PNG, TGA 등)
+            // WIC로 로드 시도 (PNG, JPG, BMP 등)
             hr = DirectX::CreateWICTextureFromMemory(
                 device,
                 data.data(),
                 static_cast<size_t>(data.size()),
-                nullptr, // texture resource 필요시 인자 추가
+                nullptr,
                 outSrv.GetAddressOf()
             );
         }
 
         if (FAILED(hr))
         {
-            ALICE_LOG_ERRORF("ResourceLoader<SRV>: Failed to create texture from memory. \"%s\" HRESULT=0x%08X", 
-                path.string().c_str(), static_cast<unsigned int>(hr));
+            ALICE_LOG_ERRORF("[ResourceManager] Load<SRV> Error: CreateTextureFromMemory failed. HRESULT=0x%08X path=\"%s\"", 
+                static_cast<unsigned int>(hr), path.string().c_str());
             return nullptr;
         }
 
         return outSrv;
+    }
+
+    // std::string 로더 구현 (텍스트 파일)
+    std::shared_ptr<std::string>
+    ResourceLoader<std::string>::Load(const ResourceManager& rm, 
+                                      const std::filesystem::path& path)
+    {
+        std::vector<std::uint8_t> data;
+        if (!rm.LoadBinaryAuto(path, data) || data.empty())
+        {
+            ALICE_LOG_ERRORF("[ResourceManager] Load<string> Failed: File not found or empty. \"%s\"", 
+                path.string().c_str());
+            return nullptr;
+        }
+
+        // null terminator 처리를 위해 string 생성
+        return std::make_shared<std::string>(data.begin(), data.end());
+    }
+
+    // nlohmann::json 로더 구현 (JSON 파일)
+    std::shared_ptr<nlohmann::json>
+    ResourceLoader<nlohmann::json>::Load(const ResourceManager& rm, 
+                                         const std::filesystem::path& path)
+    {
+        std::vector<std::uint8_t> data;
+        if (!rm.LoadBinaryAuto(path, data) || data.empty())
+        {
+            ALICE_LOG_ERRORF("[ResourceManager] Load<json> Failed: File not found or empty. \"%s\"", 
+                path.string().c_str());
+            return nullptr;
+        }
+
+        try
+        {
+            auto j = std::make_shared<nlohmann::json>(nlohmann::json::parse(data.begin(), data.end()));
+            return j;
+        }
+        catch (const std::exception& e)
+        {
+            ALICE_LOG_ERRORF("[ResourceManager] Load<json> Error: Parse failed \"%s\" (%s)", 
+                path.string().c_str(), e.what());
+            return nullptr;
+        }
     }
 }
 

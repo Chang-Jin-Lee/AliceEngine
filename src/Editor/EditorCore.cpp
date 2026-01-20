@@ -804,6 +804,7 @@ namespace Alice
 
         // 간단한 게임 빌드 UI 상태
         bool                     g_ShowBuildGameWindow  = false;
+        bool                     g_ShowPvdSettingsWindow = false;
 
         // Build Game 진행 상황 (간단한 멀티스레드 + atomic 사용)
         std::atomic<bool>        g_BuildInProgress { false };
@@ -847,12 +848,11 @@ namespace Alice
         // 경로에 한글이 있을 때 오류가 날 수 있으니 그때는 주석 코드로 교체하여 테스트 하세요
         ImFontConfig baseConfig{};
         baseConfig.MergeMode = false;
-        const std::string fontKr =
-            (m_resources ? m_resources->Resolve("Resource/Fonts/NotoSansKR-Regular.ttf").string()
-                         : std::string("Resource/Fonts/NotoSansKR-Regular.ttf"));
-            //std::string("../Resource/Fonts/NotoSansKR-Regular.ttf");
+        const std::wstring fontKr =
+            (m_resources ? m_resources->Resolve("Resource/Fonts/NotoSansKR-Regular.ttf").wstring()
+                         : std::wstring(L"Resource/Fonts/NotoSansKR-Regular.ttf"));
         io.FontDefault = io.Fonts->AddFontFromFileTTF(
-            fontKr.c_str(),
+            Utf8FromWString(fontKr).c_str(),
             18.0f,
             &baseConfig,
             io.Fonts->GetGlyphRangesKorean());
@@ -860,12 +860,11 @@ namespace Alice
         ImFontConfig jpConfig{};
         jpConfig.MergeMode = true;
         jpConfig.PixelSnapH = true;
-        const std::string fontJp =
-            (m_resources ? m_resources->Resolve("Resource/Fonts/meiryo.ttc").string()
-                         : std::string("Resource/Fonts/meiryo.ttc"));
-            //std::string("../Resource/Fonts/NotoSansKR-Regular.ttf");
+        const std::wstring fontJp =
+            (m_resources ? m_resources->Resolve("Resource/Fonts/meiryo.ttc").wstring()
+                         : std::wstring(L"Resource/Fonts/meiryo.ttc"));
         io.Fonts->AddFontFromFileTTF(
-            fontJp.c_str(),
+            Utf8FromWString(fontJp).c_str(),
             18.0f,
             &jpConfig,
             io.Fonts->GetGlyphRangesJapanese());
@@ -944,7 +943,10 @@ namespace Alice
                                   EntityId& selectedEntity,
                                   ViewportPicker& picker,
                                   float& cameraMoveSpeed,
-                                  bool& useForwardRendering)
+                                  bool& useForwardRendering,
+                                  bool& pvdEnabled,
+                                  std::string& pvdHost,
+                                  int& pvdPort)
     {
         // 메인 뷰포트 전체를 도킹 스페이스로 사용합니다.
         ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -1142,7 +1144,7 @@ namespace Alice
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = result.materialAssetPaths.front();
-                                MaterialFile::Load(mat.assetPath, mat);
+                                MaterialFile::Load(mat.assetPath, mat, m_resources);
                             }
 
                             selectedEntity = e;
@@ -1158,6 +1160,13 @@ namespace Alice
             if (ImGui::Button("Build"))
             {
                 g_ShowBuildGameWindow = true;
+            }
+
+            ImGui::Separator();
+            // PVD 설정 버튼
+            if (ImGui::Button("PVD Settings"))
+            {
+                g_ShowPvdSettingsWindow = true;
             }
 
             ImGui::Separator();
@@ -1179,6 +1188,96 @@ namespace Alice
             }
 
             ImGui::EndMainMenuBar();
+        }
+
+        // === PVD Settings 창 ===
+        if (g_ShowPvdSettingsWindow)
+        {
+            static bool s_wasOpen = false;
+            bool isOpen = g_ShowPvdSettingsWindow;
+            
+            if (ImGui::Begin("PVD Settings", &g_ShowPvdSettingsWindow))
+            {
+                ImGui::Text("PhysX Visual Debugger Settings");
+                ImGui::Separator();
+                
+                // PVD 활성화 체크박스
+                ImGui::Checkbox("Enable PVD", &pvdEnabled);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Enable PhysX Visual Debugger.\n"
+                                     "Note: Requires restart to apply changes.\n"
+                                     "Make sure PVD is running on the target host/port.");
+                }
+
+                // PVD 설정 (비활성화 상태에서도 표시)
+                ImGui::BeginDisabled(!pvdEnabled);
+                
+                // PVD Host 입력
+                static char pvdHostBuf[256] = {};
+                static bool s_hostBufInitialized = false;
+                if (!s_hostBufInitialized || !s_wasOpen)
+                {
+                    strncpy_s(pvdHostBuf, pvdHost.c_str(), 255);
+                    pvdHostBuf[255] = '\0';
+                    s_hostBufInitialized = true;
+                }
+                ImGui::Text("Host:");
+                ImGui::SameLine();
+                if (ImGui::InputText("##PvdHost", pvdHostBuf, sizeof(pvdHostBuf)))
+                {
+                    pvdHost = pvdHostBuf;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("PVD server host (default: 127.0.0.1)");
+                }
+
+                // PVD Port 입력
+                ImGui::Text("Port:");
+                ImGui::SameLine();
+                if (ImGui::InputInt("##PvdPort", &pvdPort))
+                {
+                    if (pvdPort < 1) pvdPort = 1;
+                    if (pvdPort > 65535) pvdPort = 65535;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("PVD server port (default: 5425)");
+                }
+
+                ImGui::EndDisabled();
+
+                ImGui::Separator();
+                
+                // 상태 표시
+                ImGui::Text("Status:");
+                ImGui::SameLine();
+                if (pvdEnabled)
+                {
+                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Enabled");
+                    ImGui::Text("PVD will be enabled on next restart.");
+                    ImGui::Text("Connection: %s:%d", pvdHost.c_str(), pvdPort);
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Disabled");
+                }
+
+                ImGui::Separator();
+                ImGui::TextWrapped("Note: PVD settings are saved automatically when the engine shuts down.\n"
+                                  "Restart the engine to apply changes.");
+            }
+            
+            // 창이 닫힐 때 설정 저장 (이전에 열려있었고 지금 닫힌 경우)
+            if (s_wasOpen && !g_ShowPvdSettingsWindow)
+            {
+                // 엔진 종료 시 자동 저장되므로 여기서는 선택적
+                // 필요시 여기서도 저장 가능
+            }
+            s_wasOpen = isOpen;
+            
+            ImGui::End();
         }
 
         // === Build Game 창 (씬 선택 + 간단한 해상도 옵션) ===
@@ -3165,7 +3264,7 @@ namespace Alice
                     g_MaterialEditorPath = path;
                     g_MaterialEditorData = {};
                     // 파일에서 값을 불러옵니다. 실패하면 기본 값으로 남겨둡니다.
-                    MaterialFile::Load(path, g_MaterialEditorData);
+                    MaterialFile::Load(path, g_MaterialEditorData, m_resources);
                     g_MaterialEditorData.assetPath = path.string();
                     g_MaterialEditorOpen = true;
                 }
@@ -3241,7 +3340,7 @@ namespace Alice
 
                         if (mat)
                         {
-                            MaterialFile::Load(path, *mat);
+                            MaterialFile::Load(path, *mat, m_resources);
                             mat->assetPath = path.string();
                             g_SceneDirty   = true;
                         }
@@ -3326,7 +3425,7 @@ namespace Alice
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = asset.materialAssetPaths.front();
-                                MaterialFile::Load(mat.assetPath, mat);
+                                MaterialFile::Load(mat.assetPath, mat, m_resources);
                             }
 
                             selectedEntity = e;

@@ -132,7 +132,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.cpp
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
-    ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
+    ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.cpp
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
     
     #PhysX
@@ -141,11 +141,10 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Core.cpp
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Joints.cpp
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Queries.cpp
-    ${ALICE_SRC_DIR}/PhysX/Module/
+    ${ALICE_SRC_DIR}/PhysX/PhysicsSystem.cpp
     #Physx Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
-    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.cpp
 
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
@@ -199,6 +198,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Audio/SoundManager.h
     
     #컴포넌트들
+    ${ALICE_SRC_DIR}/Components/ComponentStorage.h
     ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h
     ${ALICE_SRC_DIR}/Components/CameraComponent.h
     ${ALICE_SRC_DIR}/Components/CameraFollowComponent.h
@@ -256,17 +256,20 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
+	${ALICE_SRC_DIR}/PhysX/PhysicsSystem.h
     #Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
-    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.h
     #Components
     ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
-
+	${ALICE_SRC_DIR}/PhysX/Components/ColliderComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/RigidBodyComponent.h	
+	${ALICE_SRC_DIR}/PhysX/Components/TerrainHeightFieldComponent.h
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
+	${ALICE_SRC_DIR}/PhysX/Components/CharacterControllerComponent.h
 )
 
 add_library(Engine STATIC
