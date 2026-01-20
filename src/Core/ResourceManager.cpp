@@ -303,7 +303,8 @@ namespace Alice
             {
                 const std::string rel = s.substr(std::string_view("Resource/").size());
                 
-                // 1) 먼저 청크 스토어 시도 (메시/FBX 등)
+                // 게임 모드에서는 모든 Resource/... 경로를 청크 시스템으로만 로드
+                // 텍스처, 메시, FBX 등 모든 파일이 청크로 패킹되어 있음
                 auto sp = LoadResourceChunksByRel(rel);
                 if (sp)
                 {
@@ -313,32 +314,8 @@ namespace Alice
                     m_pathToHash[logicalKey] = h;
                     return sp;
                 }
-
-                // 2) 청크가 없고 "이미지"면 Cooked/Textures로 폴백
-                if (IsImageLogicalPath(normalized))
-                {
-                    namespace fs = std::filesystem;
-                    
-                    fs::path cooked = CookedDir() / "Textures" / fs::path(rel);
-                    cooked.replace_extension(".alice");   // 원본 .png -> .alice
-
-                    std::vector<std::uint8_t> data;
-                    if (!LoadBinary(cooked, data, /*encrypted=*/true) || data.empty())
-                    {
-                        ALICE_LOG_ERRORF("ResourceManager: missing cooked texture for Resource/%s -> \"%s\"",
-                            rel.c_str(), cooked.string().c_str());
-                        return nullptr;
-                    }
-
-                    auto out = std::make_shared<std::vector<std::uint8_t>>(std::move(data));
-                    const auto h = ComputeBufferHashSampled(*out);
-                    std::lock_guard<std::mutex> lock(m_cacheMutex);
-                    m_blobCache[h] = out;
-                    m_pathToHash[logicalKey] = h;
-                    return out;
-                }
-
-                // 3) 그 외는 실패
+                
+                ALICE_LOG_ERRORF("ResourceManager: Chunk not found for \"%s\"", s.c_str());
                 return nullptr;
             }
 
