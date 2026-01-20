@@ -3218,10 +3218,24 @@ namespace Alice
                     return;
                 }
                 
+                // Collider Type 선택
+                ImGui::Text("Collider Type");
+                ImGui::Indent();
+                {
+                    const char* typeLabels[] = { "Box", "Sphere", "Capsule" };
+                    int typeIndex = static_cast<int>(collider->type);
+                    if (ImGui::Combo("##ColliderType", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                    {
+                        collider->type = static_cast<ColliderType>(typeIndex);
+                        changed = true;
+                    }
+                }
+                ImGui::Unindent();
+                
                 // 기본 프로퍼티는 ReflectionUI로
                 changed |= ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
-                    // layerBits, collideMask, queryMask는 커스텀 UI로 처리
-                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "physicsActorHandle";
+                    // type, layerBits, collideMask, queryMask는 커스텀 UI로 처리
+                    return name != "type" && name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "physicsActorHandle";
                 });
                 
                 // 레이어 마스크 편집
@@ -3323,8 +3337,22 @@ namespace Alice
                     return;
                 }
 
+                // Mesh Collider Type 선택
+                ImGui::Text("Mesh Collider Type");
+                ImGui::Indent();
+                {
+                    const char* typeLabels[] = { "Triangle", "Convex" };
+                    int typeIndex = static_cast<int>(meshCollider->type);
+                    if (ImGui::Combo("##MeshColliderType", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                    {
+                        meshCollider->type = static_cast<MeshColliderType>(typeIndex);
+                        changed = true;
+                    }
+                }
+                ImGui::Unindent();
+
                 changed |= ReflectionUI::RenderInspector(*meshCollider, [](const std::string& name) {
-                    return name != "layerBits" && name != "collideMask" && name != "queryMask" &&
+                    return name != "type" && name != "layerBits" && name != "collideMask" && name != "queryMask" &&
                            name != "ignoreLayers" && name != "physicsActorHandle" &&
                            name != "flipNormals" && name != "doubleSidedQueries" && name != "validate" &&
                            name != "shiftVertices" && name != "vertexLimit";
