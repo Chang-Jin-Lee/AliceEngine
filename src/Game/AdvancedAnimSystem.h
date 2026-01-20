@@ -105,22 +105,90 @@ namespace Alice
                 // === Locals 평가 ===
                 const int clipA = FindClip(rt, comp->base.clipA);
                 const int clipB = FindClip(rt, comp->base.clipB);
+                
+                // ★ 핵심: clipA가 없으면 바인드 포즈를 사용 (언리얼처럼 Entry -> Idle 전환 전 바인드 포즈)
                 if (clipA < 0)
+                {
+                    // 바인드 포즈를 localsFinal에 직접 적용
+                    rt.localsFinal = rt.bindLocals;
+                    BuildGlobalsFromLocals(rt.localsFinal, rt.parentIndex, rt.globals);
+                    BuildPalette(*mesh->sourceModel, rt.globals, rt.palette);
+                    TransposePalette(rt.palette);
+                    
+                    // SkinnedAnimationComponent에 결과 연결
+                    auto* animComp = world.GetComponent<SkinnedAnimationComponent>(entityId);
+                    if (!animComp)
+                        animComp = &world.AddComponent<SkinnedAnimationComponent>(entityId);
+                    animComp->palette = rt.palette;
+                    
+                    if (auto* skinnedWrite = world.GetComponent<SkinnedMeshComponent>(entityId))
+                    {
+                        skinnedWrite->boneMatrices = animComp->palette.data();
+                        skinnedWrite->boneCount = static_cast<std::uint32_t>(animComp->palette.size());
+                    }
+                    
+                    // 소켓 갱신
+                    UpdateSockets(world, entityId, rt);
                     continue;
+                }
 
                 const double fadeDt = comp->playing ? dtSec : 0.0;
                 const float baseBlend01 = UpdateCrossFade(comp->base, clipA, clipB, fadeDt,
                     rt, rt.timeBaseA, rt.timeBaseB, rt.baseFade);
 
+                // ★ 핵심: 애니메이션 평가 (Translation 키가 없으면 바인드 포즈 Translation 사용)
                 rt.anim.EvaluateLocalsAt(clipA, WrapTime(rt.timeBaseA, clipA, comp->base.loopA, rt),
                     rt.localsA, &rt.hasA);
+                
+                // ★ 핵심: 채널이 없는 본은 바인드 포즈로 채움
                 FillMissingFromBind(rt.bindLocals, rt.localsA, rt.hasA);
+                
+                // ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용 (본이 뭉치는 현상 방지)
+                EnsureBindPoseTranslation(rt.bindLocals, rt.localsA, rt.hasA);
+
+                // ★ 30초짜리 원인 확정 디버그: bindLocals와 localsA의 translation 길이 확인
+                #ifdef _DEBUG
+                {
+                    auto dbgLen = [](const DirectX::XMFLOAT3& v) { 
+                        return sqrtf(v.x*v.x + v.y*v.y + v.z*v.z); 
+                    };
+                    // Spine 또는 Chest 본 찾기
+                    const std::vector<std::string> testBones = { "Spine", "Chest", "Spine1", "Spine2", "Hips", "Root" };
+                    for (const auto& boneName : testBones)
+                    {
+                        auto it = mesh->sourceModel->GetNodeIndexOfName().find(boneName);
+                        if (it != mesh->sourceModel->GetNodeIndexOfName().end())
+                        {
+                            int idx = it->second;
+                            if (idx >= 0 && (size_t)idx < rt.localsA.size() && (size_t)idx < rt.bindLocals.size())
+                            {
+                                float bindT = dbgLen(rt.bindLocals[idx].translation);
+                                float localA = dbgLen(rt.localsA[idx].translation);
+                                
+                                // 둘 다 0이면 "분해가 깨져서 오프셋이 날아감" 확정
+                                if (bindT < 0.001f || localA < 0.001f)
+                                {
+                                    ALICE_LOG_ERRORF("[AdvancedAnim] Bone '%s' (idx=%d): bindT=%.6f localA=%.6f (CRITICAL: translation is zero!)",
+                                        boneName.c_str(), idx, bindT, localA);
+                                }
+                                else
+                                {
+                                    ALICE_LOG_INFO("[AdvancedAnim] Bone '%s' (idx=%d): bindT=%.6f localA=%.6f (OK)",
+                                        boneName.c_str(), idx, bindT, localA);
+                                }
+                            }
+                        }
+                    }
+                }
+                #endif
 
                 if (comp->base.enabled && clipB >= 0)
                 {
                     rt.anim.EvaluateLocalsAt(clipB, WrapTime(rt.timeBaseB, clipB, comp->base.loopB, rt),
                         rt.localsB, &rt.hasB);
                     FillMissingFromBind(rt.bindLocals, rt.localsB, rt.hasB);
+                    // ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용
+                    EnsureBindPoseTranslation(rt.bindLocals, rt.localsB, rt.hasB);
                     BlendLocals(rt.localsA, rt.localsB, rt.baseBlended, baseBlend01);
                 }
                 else
@@ -143,12 +211,16 @@ namespace Alice
                         rt.anim.EvaluateLocalsAt(upperA, WrapTime(rt.timeUpperA, upperA, comp->upper.loopA, rt),
                             rt.localsUpperA, &rt.hasUpperA);
                         FillMissingFromBind(rt.bindLocals, rt.localsUpperA, rt.hasUpperA);
+                        // ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용
+                        EnsureBindPoseTranslation(rt.bindLocals, rt.localsUpperA, rt.hasUpperA);
 
                         if (upperB >= 0)
                         {
                             rt.anim.EvaluateLocalsAt(upperB, WrapTime(rt.timeUpperB, upperB, comp->upper.loopB, rt),
                                 rt.localsUpperB, &rt.hasUpperB);
                             FillMissingFromBind(rt.bindLocals, rt.localsUpperB, rt.hasUpperB);
+                            // ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용
+                            EnsureBindPoseTranslation(rt.bindLocals, rt.localsUpperB, rt.hasUpperB);
                             BlendLocals(rt.localsUpperA, rt.localsUpperB, rt.upperBlended, upperBlend01);
                             BlendHasChannel(rt.hasUpperA, rt.hasUpperB, rt.hasUpperBlend);
                         }
@@ -173,10 +245,14 @@ namespace Alice
                         rt.anim.EvaluateLocalsAt(addClip, WrapTime(rt.timeAdd, addClip, comp->additive.loop, rt),
                             rt.localsAdd, &rt.hasAdd);
                         FillMissingFromBind(rt.bindLocals, rt.localsAdd, rt.hasAdd);
+                        // ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용
+                        EnsureBindPoseTranslation(rt.bindLocals, rt.localsAdd, rt.hasAdd);
                         if (refClip >= 0)
                         {
                             rt.anim.EvaluateLocalsAt(refClip, comp->additive.refTime, rt.localsRef, &rt.hasRef);
                             FillMissingFromBind(rt.bindLocals, rt.localsRef, rt.hasRef);
+                            // ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용
+                            EnsureBindPoseTranslation(rt.bindLocals, rt.localsRef, rt.hasRef);
                         }
 
                         ApplyAdditiveLayer(comp->additive, rt.localsAdd, rt.hasAdd, rt.localsRef, rt.localsFinal);
@@ -190,9 +266,114 @@ namespace Alice
                 }
 
                 // === Globals / Palette ===
+                // 디버그: 특정 본의 translation 길이 확인 (문제 재현 시 원인 파악용)
+                #ifdef _DEBUG
+                {
+                    auto dbgLen = [](const DirectX::XMFLOAT3& v) { 
+                        return sqrtf(v.x*v.x + v.y*v.y + v.z*v.z); 
+                    };
+                    // Spine 또는 Chest 본 찾기
+                    const std::vector<std::string> testBones = { "Spine", "Chest", "Spine1", "Spine2" };
+                    for (const auto& boneName : testBones)
+                    {
+                        auto it = mesh->sourceModel->GetNodeIndexOfName().find(boneName);
+                        if (it != mesh->sourceModel->GetNodeIndexOfName().end())
+                        {
+                            int idx = it->second;
+                            if (idx >= 0 && (size_t)idx < rt.localsFinal.size() && (size_t)idx < rt.bindLocals.size())
+                            {
+                                float localT = dbgLen(rt.localsFinal[idx].translation);
+                                float bindT = dbgLen(rt.bindLocals[idx].translation);
+                                if (localT < 0.001f || bindT < 0.001f)
+                                {
+                                    ALICE_LOG_WARN("[AdvancedAnim] Bone '%s' (idx=%d): localT=%.6f bindT=%.6f (WARNING: translation too small!)",
+                                        boneName.c_str(), idx, localT, bindT);
+                                }
+                            }
+                        }
+                    }
+                }
+                #endif
+
                 BuildGlobalsFromLocals(rt.localsFinal, rt.parentIndex, rt.globals);
-                BuildPalette(*mesh->sourceModel, rt.globals, rt.palette);
-                TransposePalette(rt.palette);
+
+                // ★ 디버그: Advanced globals vs FbxAnimation ref globals 비교 (가장 확실)
+                #ifdef _DEBUG
+                {
+                    const int clipA = FindClip(rt, comp->base.clipA);
+                    if (clipA >= 0)
+                    {
+                        std::vector<DirectX::XMFLOAT4X4> refGlobal;
+                        rt.anim.EvaluateGlobalsAt(clipA, WrapTime(rt.timeBaseA, clipA, comp->base.loopA, rt), refGlobal);
+
+                        auto Check = [&](const char* n)
+                        {
+                            auto it = mesh->sourceModel->GetNodeIndexOfName().find(n);
+                            if (it == mesh->sourceModel->GetNodeIndexOfName().end()) return;
+                            int idx = it->second;
+                            if (idx < 0 || (size_t)idx >= rt.globals.size() || (size_t)idx >= refGlobal.size()) return;
+
+                            auto L = [](const DirectX::XMFLOAT4X4& m)
+                            {
+                                return sqrtf(m._41*m._41 + m._42*m._42 + m._43*m._43);
+                            };
+
+                            float advLen = L(rt.globals[idx]);
+                            float refLen = L(refGlobal[idx]);
+                            
+                            if (std::abs(advLen - refLen) > 0.1f)
+                            {
+                                ALICE_LOG_ERRORF("[AdvancedAnim] Globals mismatch '%s' (idx=%d): adv=%.4f ref=%.4f (DIFF=%.4f)",
+                                    n, idx, advLen, refLen, std::abs(advLen - refLen));
+                            }
+                            else if (advLen < 0.001f && refLen > 0.001f)
+                            {
+                                ALICE_LOG_ERRORF("[AdvancedAnim] Globals CRITICAL '%s' (idx=%d): adv=%.4f ref=%.4f (Advanced is zero but ref is OK!)",
+                                    n, idx, advLen, refLen);
+                            }
+                            else if (advLen < 0.001f && refLen < 0.001f)
+                            {
+                                // 둘 다 0이면 정상일 수 있음 (root 등)
+                            }
+                        };
+
+                        Check("Hips");
+                        Check("Spine");
+                        Check("Spine1");
+                        Check("Spine2");
+                        Check("Chest");
+                        Check("Head");
+                        Check("Root");
+                    }
+                }
+                #endif
+
+                // ★ 원인 분리용: Advanced 계산을 건너뛰고 ref 팔레트를 그대로 사용 (디버그용)
+                // 이 스위치를 true로 하면 Advanced의 locals/globals 계산을 전부 무시하고
+                // FbxAnimation의 BuildPaletteAt 결과를 그대로 사용합니다.
+                // - true로 했을 때 정상: Advanced의 locals/globals 조립 문제
+                // - true로 했을 때도 뭉침: GPU 업로드/CB/셰이더 mul 컨벤션 문제
+                const bool USE_REF_PALETTE_FORCE = false; // 디버그용: true로 설정하면 ref 팔레트 강제 사용
+                
+                if (USE_REF_PALETTE_FORCE)
+                {
+                    const int clipA = FindClip(rt, comp->base.clipA);
+                    if (clipA >= 0)
+                    {
+                        rt.anim.BuildPaletteAt(clipA, WrapTime(rt.timeBaseA, clipA, comp->base.loopA, rt), rt.palette);
+                        TransposePalette(rt.palette);
+                    }
+                    else
+                    {
+                        BuildPalette(*mesh->sourceModel, rt.globals, rt.palette);
+                        TransposePalette(rt.palette);
+                    }
+                }
+                else
+                {
+                    BuildPalette(*mesh->sourceModel, rt.globals, rt.palette);
+                    TransposePalette(rt.palette);
+                }
 
                 // SkinnedAnimationComponent에 결과 연결
                 auto* animComp = world.GetComponent<SkinnedAnimationComponent>(entityId);
@@ -315,17 +496,15 @@ namespace Alice
 
         static void DecomposeAiMatrixLocal(const aiMatrix4x4& m, FbxLocalSRT& out)
         {
-            DirectX::XMFLOAT4X4 lm;
-            lm._11 = (float)m.a1; lm._12 = (float)m.a2; lm._13 = (float)m.a3; lm._14 = (float)m.a4;
-            lm._21 = (float)m.b1; lm._22 = (float)m.b2; lm._23 = (float)m.b3; lm._24 = (float)m.b4;
-            lm._31 = (float)m.c1; lm._32 = (float)m.c2; lm._33 = (float)m.c3; lm._34 = (float)m.c4;
-            lm._41 = (float)m.d1; lm._42 = (float)m.d2; lm._43 = (float)m.d3; lm._44 = (float)m.d4;
+            // ★ 핵심: XMMatrixDecompose 대신 Assimp의 Decompose 사용
+            // FBX 노드 변환(프리/포스트 회전, 피벗 베이크, 축 변환 포함)에서 정확함
+            aiVector3D s, t;
+            aiQuaternion r;
+            m.Decompose(s, r, t);
 
-            DirectX::XMVECTOR S, R, T;
-            DirectX::XMMatrixDecompose(&S, &R, &T, DirectX::XMLoadFloat4x4(&lm));
-            DirectX::XMStoreFloat3(&out.scale, S);
-            DirectX::XMStoreFloat4(&out.rotation, R);
-            DirectX::XMStoreFloat3(&out.translation, T);
+            out.scale = { (float)s.x, (float)s.y, (float)s.z };
+            out.translation = { (float)t.x, (float)t.y, (float)t.z };
+            out.rotation = { (float)r.x, (float)r.y, (float)r.z, (float)r.w }; // (x,y,z,w)
         }
 
         static void BuildBindLocals(const aiScene* scene,
@@ -345,7 +524,13 @@ namespace Alice
                 {
                     const int idx = it->second;
                     if (idx >= 0 && (size_t)idx < out.size())
+                    {
                         DecomposeAiMatrixLocal(node->mTransformation, out[(size_t)idx]);
+                        // ★ 핵심: Scale 기본값을 (1, 1, 1)로 보장 (0이면 본이 사라짐)
+                        if (out[(size_t)idx].scale.x < 0.001f) out[(size_t)idx].scale.x = 1.0f;
+                        if (out[(size_t)idx].scale.y < 0.001f) out[(size_t)idx].scale.y = 1.0f;
+                        if (out[(size_t)idx].scale.z < 0.001f) out[(size_t)idx].scale.z = 1.0f;
+                    }
                 }
 
                 for (unsigned i = 0; i < node->mNumChildren; ++i)
@@ -499,6 +684,11 @@ namespace Alice
                 DirectX::XMStoreFloat3(&out[i].scale, S);
                 DirectX::XMStoreFloat3(&out[i].translation, T);
                 DirectX::XMStoreFloat4(&out[i].rotation, R);
+
+                // ★ 핵심: 블렌드 후에도 Scale이 0이 되지 않도록 보장
+                if (out[i].scale.x < 0.001f) out[i].scale.x = 1.0f;
+                if (out[i].scale.y < 0.001f) out[i].scale.y = 1.0f;
+                if (out[i].scale.z < 0.001f) out[i].scale.z = 1.0f;
             }
         }
 
@@ -512,7 +702,43 @@ namespace Alice
             for (size_t i = 0; i < pose.size(); ++i)
             {
                 if (i < hasChannel.size() && hasChannel[i] == 0)
+                {
                     pose[i] = bindLocals[i];
+                    // ★ 핵심: bindLocals에서 복사한 후에도 Scale 기본값 보장
+                    if (pose[i].scale.x < 0.001f) pose[i].scale.x = 1.0f;
+                    if (pose[i].scale.y < 0.001f) pose[i].scale.y = 1.0f;
+                    if (pose[i].scale.z < 0.001f) pose[i].scale.z = 1.0f;
+                }
+            }
+        }
+
+        // ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용 (본이 뭉치는 현상 방지)
+        static void EnsureBindPoseTranslation(const std::vector<FbxLocalSRT>& bindLocals,
+            std::vector<FbxLocalSRT>& pose,
+            const std::vector<std::uint8_t>& hasChannel)
+        {
+            if (bindLocals.size() != pose.size())
+                return;
+
+            for (size_t i = 0; i < pose.size() && i < bindLocals.size(); ++i)
+            {
+                // Translation 길이 계산
+                const float localTlen = sqrtf(pose[i].translation.x * pose[i].translation.x +
+                    pose[i].translation.y * pose[i].translation.y +
+                    pose[i].translation.z * pose[i].translation.z);
+                const float bindTlen = sqrtf(bindLocals[i].translation.x * bindLocals[i].translation.x +
+                    bindLocals[i].translation.y * bindLocals[i].translation.y +
+                    bindLocals[i].translation.z * bindLocals[i].translation.z);
+                
+                // 채널이 있는데 Translation이 0에 가깝고 바인드 포즈 Translation이 유의미하면 바인드 포즈 사용
+                // (애니메이션에 Translation 키가 없을 때 바인드 포즈 Translation 사용)
+                if (hasChannel.empty() || (i < hasChannel.size() && hasChannel[i] != 0))
+                {
+                    if (localTlen < 0.001f && bindTlen > 0.001f)
+                    {
+                        pose[i].translation = bindLocals[i].translation;
+                    }
+                }
             }
         }
 
@@ -602,6 +828,11 @@ namespace Alice
                 DirectX::XMStoreFloat3(&base[i].scale, S);
                 DirectX::XMStoreFloat3(&base[i].translation, T);
                 DirectX::XMStoreFloat4(&base[i].rotation, R);
+
+                // ★ 핵심: 상하체 레이어 적용 후에도 Scale이 0이 되지 않도록 보장
+                if (base[i].scale.x < 0.001f) base[i].scale.x = 1.0f;
+                if (base[i].scale.y < 0.001f) base[i].scale.y = 1.0f;
+                if (base[i].scale.z < 0.001f) base[i].scale.z = 1.0f;
             }
         }
 
@@ -651,6 +882,11 @@ namespace Alice
                 DirectX::XMStoreFloat3(&base[i].translation, Tfinal);
                 DirectX::XMStoreFloat3(&base[i].scale, Sfinal);
                 DirectX::XMStoreFloat4(&base[i].rotation, Rfinal);
+
+                // ★ 핵심: Additive 레이어 적용 후에도 Scale이 0이 되지 않도록 보장
+                if (base[i].scale.x < 0.001f) base[i].scale.x = 1.0f;
+                if (base[i].scale.y < 0.001f) base[i].scale.y = 1.0f;
+                if (base[i].scale.z < 0.001f) base[i].scale.z = 1.0f;
             }
         }
 
@@ -658,43 +894,37 @@ namespace Alice
             const std::vector<int>& parentIndex,
             std::vector<DirectX::XMFLOAT4X4>& outGlobals)
         {
+            using namespace DirectX;
+
             const size_t count = locals.size();
-            outGlobals.assign(count, DirectX::XMFLOAT4X4(
-                1,0,0,0,
-                0,1,0,0,
-                0,0,1,0,
-                0,0,0,1));
+            outGlobals.resize(count);
 
-            std::vector<std::uint8_t> done(count, 0);
-
-            auto computeNode = [&](auto&& self, size_t idx) -> void
-            {
-                if (idx >= count || done[idx])
-                    return;
-
-                const int p = (idx < parentIndex.size()) ? parentIndex[idx] : -1;
-                if (p >= 0) self(self, (size_t)p);
-
-                const DirectX::XMVECTOR S = DirectX::XMLoadFloat3(&locals[idx].scale);
-                const DirectX::XMVECTOR R = DirectX::XMLoadFloat4(&locals[idx].rotation);
-                const DirectX::XMVECTOR T = DirectX::XMLoadFloat3(&locals[idx].translation);
-
-                const DirectX::XMMATRIX L =
-                    DirectX::XMMatrixTranslationFromVector(T) *
-                    DirectX::XMMatrixRotationQuaternion(R) *
-                    DirectX::XMMatrixScalingFromVector(S);
-
-                DirectX::XMMATRIX parentM = DirectX::XMMatrixIdentity();
-                if (p >= 0)
-                    parentM = DirectX::XMLoadFloat4x4(&outGlobals[(size_t)p]);
-
-                DirectX::XMMATRIX G = parentM * L;
-                DirectX::XMStoreFloat4x4(&outGlobals[idx], G);
-                done[idx] = 1;
-            };
-
+            // 부모 인덱스 < 자식 인덱스 특성을 이용해 순차 처리
             for (size_t i = 0; i < count; ++i)
-                computeNode(computeNode, i);
+            {
+                // ★ 핵심: Scale이 0이 되지 않도록 보장 (행렬 조립 전에 확인)
+                DirectX::XMFLOAT3 safeScale = locals[i].scale;
+                if (safeScale.x < 0.001f) safeScale.x = 1.0f;
+                if (safeScale.y < 0.001f) safeScale.y = 1.0f;
+                if (safeScale.z < 0.001f) safeScale.z = 1.0f;
+
+                DirectX::XMVECTOR S = XMLoadFloat3(&safeScale);
+                DirectX::XMVECTOR R = XMQuaternionNormalize(XMLoadFloat4(&locals[i].rotation));
+                DirectX::XMVECTOR T = XMLoadFloat3(&locals[i].translation);
+
+                // ★ 핵심: FbxAnimation::EvaluateGlobals와 동일한 조립 순서로 통일 (T*R*S)
+                // 엔진 전체에서 행렬 조립 순서를 통일하여 일관성 유지
+                const DirectX::XMMATRIX L =
+                    XMMatrixTranslationFromVector(T) *
+                    XMMatrixRotationQuaternion(R) *
+                    XMMatrixScalingFromVector(S);
+
+                const int p = (i < parentIndex.size()) ? parentIndex[i] : -1;
+                const DirectX::XMMATRIX P = (p >= 0) ? XMLoadFloat4x4(&outGlobals[p]) : XMMatrixIdentity();
+
+                // 기존 코드 흐름 유지: parent * local
+                XMStoreFloat4x4(&outGlobals[i], XMMatrixMultiply(P, L));
+            }
         }
 
         static void BuildPalette(const FbxModel& model,

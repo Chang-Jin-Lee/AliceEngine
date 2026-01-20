@@ -1,4 +1,4 @@
-﻿#include "FbxModel.h"
+#include "FbxModel.h"
 #include "FbxMaterial.h"
 #include "FbxGeometry.h"
 #include "FbxSkeleton.h"
