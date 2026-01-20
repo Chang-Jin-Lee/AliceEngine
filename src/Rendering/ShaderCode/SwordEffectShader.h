@@ -8,12 +8,13 @@ namespace Alice
 		inline static const char* g_SwordEffectVS = R"(
 cbuffer CBPerSwordEffectVS : register(b0)
 {
-    float4x4 gViewProj;
-    float4x4 gWorld;    // 게임오브젝트의 월드 행렬
-    float2   gUV;       // 기본 UV (선택적)
+    float4x4 gViewProj;     // View * Projection 행렬
+    float3   gCameraPos;    // 카메라 위치 (월드 좌표)
+    float    padding0;
     float    gCurrentTime;
     float    gFadeDuration;
-    float    gWidth;    // 트레일의 기본 폭
+    float    gWidth;        // 트레일의 기본 폭
+    float    padding1;
 };
 
 struct VSInput
@@ -34,9 +35,11 @@ struct VSOutput
 VSOutput main(VSInput input)
 {
     VSOutput output;
-    // 월드 행렬을 사용하여 로컬 위치를 월드 좌표로 변환
-    float4 worldPos = mul(float4(input.Position, 1.0f), gWorld);
+    // 버텍스 위치는 이미 월드 좌표로 저장되어 있음
+    float4 worldPos = float4(input.Position, 1.0f);
     output.WorldPos = worldPos.xyz;
+    
+    // World → View → Projection 연쇄 변환
     output.Position = mul(worldPos, gViewProj);
     
     // Age 기반 계산

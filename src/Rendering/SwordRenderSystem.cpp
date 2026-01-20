@@ -94,6 +94,7 @@ namespace Alice
 		XMMATRIX view = camera.GetViewMatrix();
 		XMMATRIX proj = camera.GetProjectionMatrix();
 		XMMATRIX viewProj = view * proj;
+		XMFLOAT3 cameraPos = camera.GetPosition();
 
 		// 파이프라인 설정
 		m_context->IASetInputLayout(m_inputLayout.Get());
@@ -134,7 +135,10 @@ namespace Alice
 				totalLength = std::max(totalLength, 0.01f); // 0으로 나누기 방지
 			}
 
-			// Triangle Strip 생성: 각 샘플마다 루트/팁 쌍 생성
+			// Triangle Strip 생성: 각 샘플마다 카메라 기준 폭축으로 좌/우 버텍스 생성
+			float halfWidth = 0.25f; // 기본 폭의 절반
+			XMVECTOR camPosVec = XMLoadFloat3(&cameraPos);
+
 			for (size_t i = 0; i < samples.size(); ++i)
 			{
 				const auto& sample = samples[i];
@@ -142,19 +146,79 @@ namespace Alice
 				// UV 계산 (길이 누적 기반)
 				float u = (totalLength > 0.0f) ? (sample.length / totalLength) : (static_cast<float>(i) / static_cast<float>(samples.size()));
 
-				// 루트 버텍스 (v=0)
-				TrailVertex rootVertex;
-				rootVertex.position = sample.rootPos;
-				rootVertex.texCoord = DirectX::XMFLOAT2(u, 0.0f);
-				rootVertex.birthTime = sample.birthTime;
-				vertices.push_back(rootVertex);
+				// 샘플 중심점 계산
+				XMVECTOR rootVec = XMLoadFloat3(&sample.rootPos);
+				XMVECTOR tipVec = XMLoadFloat3(&sample.tipPos);
+				XMVECTOR center = XMVectorMultiply(XMVectorAdd(rootVec, tipVec), XMVectorSet(0.5f, 0.5f, 0.5f, 0.5f));
 
-				// 팁 버텍스 (v=1)
-				TrailVertex tipVertex;
-				tipVertex.position = sample.tipPos;
-				tipVertex.texCoord = DirectX::XMFLOAT2(u, 1.0f);
-				tipVertex.birthTime = sample.birthTime;
-				vertices.push_back(tipVertex);
+				// 진행 방향(탄젠트) 계산
+				XMVECTOR tangent;
+				if (i > 0)
+				{
+					const auto& prevSample = samples[i - 1];
+					XMVECTOR prevRoot = XMLoadFloat3(&prevSample.rootPos);
+					XMVECTOR prevTip = XMLoadFloat3(&prevSample.tipPos);
+					XMVECTOR prevCenter = XMVectorMultiply(XMVectorAdd(prevRoot, prevTip), XMVectorSet(0.5f, 0.5f, 0.5f, 0.5f));
+					XMVECTOR dir = XMVectorSubtract(center, prevCenter);
+					tangent = XMVector3Normalize(dir);
+				}
+				else if (i < samples.size() - 1)
+				{
+					const auto& nextSample = samples[i + 1];
+					XMVECTOR nextRoot = XMLoadFloat3(&nextSample.rootPos);
+					XMVECTOR nextTip = XMLoadFloat3(&nextSample.tipPos);
+					XMVECTOR nextCenter = XMVectorMultiply(XMVectorAdd(nextRoot, nextTip), XMVectorSet(0.5f, 0.5f, 0.5f, 0.5f));
+					XMVECTOR dir = XMVectorSubtract(nextCenter, center);
+					tangent = XMVector3Normalize(dir);
+				}
+				else
+				{
+					// 단일 샘플인 경우 기본 방향 사용
+					XMVECTOR dir = XMVectorSubtract(tipVec, rootVec);
+					tangent = XMVector3Normalize(dir);
+				}
+
+				// 카메라 방향 벡터 계산
+				XMVECTOR toCamera = XMVectorSubtract(camPosVec, center);
+				XMVECTOR viewDir = XMVector3Normalize(toCamera);
+
+				// 폭축(Binormal) 계산: cross(tangent, viewDir)
+				XMVECTOR binormal = XMVector3Cross(tangent, viewDir);
+				float binormalLen = XMVectorGetX(XMVector3Length(binormal));
+				
+				if (binormalLen < 1e-6f)
+				{
+					// Fallback: 카메라 right 벡터 사용
+					XMMATRIX viewInv = XMMatrixInverse(nullptr, view);
+					binormal = viewInv.r[0]; // 카메라 right 벡터
+					binormal = XMVectorSetW(binormal, 0.0f);
+					binormal = XMVector3Normalize(binormal);
+				}
+				else
+				{
+					binormal = XMVector3Normalize(binormal);
+				}
+
+				// 좌/우 버텍스 생성
+				XMVECTOR leftOffset = XMVectorScale(binormal, -halfWidth);
+				XMVECTOR rightOffset = XMVectorScale(binormal, halfWidth);
+				
+				XMVECTOR leftPos = XMVectorAdd(center, leftOffset);
+				XMVECTOR rightPos = XMVectorAdd(center, rightOffset);
+
+				// 루트 버텍스 (v=0, 왼쪽)
+				TrailVertex leftVertex;
+				XMStoreFloat3(&leftVertex.position, leftPos);
+				leftVertex.texCoord = DirectX::XMFLOAT2(u, 0.0f);
+				leftVertex.birthTime = sample.birthTime;
+				vertices.push_back(leftVertex);
+
+				// 팁 버텍스 (v=1, 오른쪽)
+				TrailVertex rightVertex;
+				XMStoreFloat3(&rightVertex.position, rightPos);
+				rightVertex.texCoord = DirectX::XMFLOAT2(u, 1.0f);
+				rightVertex.birthTime = sample.birthTime;
+				vertices.push_back(rightVertex);
 			}
 
 			if (vertices.empty()) continue;
@@ -167,19 +231,10 @@ namespace Alice
 			std::memcpy(mapped.pData, vertices.data(), vertices.size() * sizeof(TrailVertex));
 			m_context->Unmap(m_vertexBuffer.Get(), 0);
 
-			// 엔티티의 TransformComponent 가져오기 (월드 행렬 계산용)
-			const TransformComponent* transform = world.GetComponent<TransformComponent>(entityId);
-			XMMATRIX worldMatrix = XMMatrixIdentity();
-			if (transform)
-			{
-				worldMatrix = BuildWorldMatrix(*transform);
-			}
-
 			// VS 상수 버퍼 업데이트
 			CBPerSwordEffectVS cbVS;
 			cbVS.viewProj = XMMatrixTranspose(viewProj);
-			cbVS.world = XMMatrixTranspose(worldMatrix);
-			cbVS.uv = XMFLOAT2(0.0f, 0.0f); // 기본 UV
+			cbVS.cameraPos = cameraPos;
 			cbVS.currentTime = swordEffectComp.currentTime;
 			cbVS.fadeDuration = swordEffectComp.fadeDuration;
 			cbVS.width = 0.5f; // 기본 폭
@@ -255,16 +310,4 @@ namespace Alice
 		return true;
 	}
 
-	XMMATRIX SwordRenderSystem::BuildWorldMatrix(const TransformComponent& transform) const
-	{
-		XMVECTOR scale = XMLoadFloat3(&transform.scale);
-		XMVECTOR rotation = XMLoadFloat3(&transform.rotation);
-		XMVECTOR translation = XMLoadFloat3(&transform.position);
-
-		XMMATRIX S = XMMatrixScalingFromVector(scale);
-		XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(rotation);
-		XMMATRIX T = XMMatrixTranslationFromVector(translation);
-
-		return S * R * T;
-	}
 }

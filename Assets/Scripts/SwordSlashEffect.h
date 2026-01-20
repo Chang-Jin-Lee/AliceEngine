@@ -39,5 +39,6 @@ namespace Alice
         float m_lastSampleTime;       // 마지막 샘플링 시간
         bool m_isActive;              // 활성화 여부
         bool m_hasStarted;            // 시작 여부
+        DirectX::XMFLOAT3 m_prevPosition;  // 이전 프레임의 위치 (이동량 계산용)
     };
 }

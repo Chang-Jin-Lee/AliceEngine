@@ -54,6 +54,9 @@ namespace Alice
         m_lastSampleTime = -effect->sampleInterval; // 첫 샘플을 바로 추가하도록
         m_isActive = true;
         m_hasStarted = false;
+        
+        // 초기 위치 저장
+        m_prevPosition = transform->position;
 
         AddTrailSample(effect, m_rootPoint, m_tipPoint, m_currentTime);
         ALICE_LOG_INFO("[SwordSlashEffect] 트레일 기반 검기 효과 초기화 완료");
@@ -83,30 +86,32 @@ namespace Alice
         // 샘플링 간격에 따라 새 샘플 추가
         if (m_currentTime - m_lastSampleTime >= effect->sampleInterval)
         {
-			DirectX::XMFLOAT3 rootPos = m_rootPoint;
-            DirectX::XMFLOAT3 tipPos = m_tipPoint;
-            DirectX::XMFLOAT3 ownerPos = GetTransform()->position;
-            // 자동 이동 시뮬레이션 (테스트용)
-            //if (m_autoMove)
-            //{
-            //    float angle = m_currentTime * m_moveSpeed;
-            //    float radius = 2.0f;
-            //    rootPos = DirectX::XMFLOAT3(
-            //        std::cos(angle) * radius,
-            //        1.5f + std::sin(angle * 0.5f) * 0.5f,
-            //        std::sin(angle) * radius
-            //    );
-            //    tipPos = DirectX::XMFLOAT3(
-            //        std::cos(angle + 0.3f) * (radius + 0.5f),
-            //        rootPos.y + 0.3f,
-            //        std::sin(angle + 0.3f) * (radius + 0.5f)
-            //    );
-            //}
+            auto* transform = this->transform();
+            if (!transform) return;
 
-			rootPos = DirectX::XMFLOAT3(ownerPos.x, ownerPos.y, ownerPos.z);
-            tipPos = DirectX::XMFLOAT3(rootPos.x + 0.3f, rootPos.y + 0.3f, rootPos.z + 0.3f);
+            // 현재 위치와 이전 위치의 차이 (이동량)
+            DirectX::XMFLOAT3 currPosition = transform->position;
+            DirectX::XMFLOAT3 deltaPos;
+            deltaPos.x = currPosition.x - m_prevPosition.x;
+            deltaPos.y = currPosition.y - m_prevPosition.y;
+            deltaPos.z = currPosition.z - m_prevPosition.z;
+
+            // 이동량만큼 트레일 생성 (이전 위치에서 현재 위치로)
+            DirectX::XMFLOAT3 rootPos = DirectX::XMFLOAT3(
+                m_prevPosition.x + m_rootPoint.x,
+                m_prevPosition.y + m_rootPoint.y,
+                m_prevPosition.z + m_rootPoint.z
+            );
+            DirectX::XMFLOAT3 tipPos = DirectX::XMFLOAT3(
+                currPosition.x + m_tipPoint.x,
+                currPosition.y + m_tipPoint.y,
+                currPosition.z + m_tipPoint.z
+            );
 
             AddTrailSample(effect, rootPos, tipPos, m_currentTime);
+            
+            // 현재 위치를 이전 위치로 저장
+            m_prevPosition = currPosition;
             m_lastSampleTime = m_currentTime;
         }
 
@@ -169,7 +174,7 @@ namespace Alice
             UpdateTrailLength(effect);
         }
     }
-
+   
     void SwordSlashEffect::UpdateTrailLength(SwordEffectComponent* effect)
     {
         if (!effect || effect->trailSamples.empty()) 
