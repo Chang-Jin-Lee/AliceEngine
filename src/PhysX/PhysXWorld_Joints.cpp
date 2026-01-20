@@ -163,10 +163,10 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateRevoluteJoint(const IPhysicsAct
 	// Drive (motor)
 	j->setRevoluteJointFlag(PxRevoluteJointFlag::eDRIVE_ENABLED, desc.enableDrive);
 	j->setRevoluteJointFlag(PxRevoluteJointFlag::eDRIVE_FREESPIN, desc.driveFreeSpin);
-	j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
 
 	if (desc.enableDrive)
 	{
+		j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
 		j->setDriveVelocity(desc.driveVelocity, true);
 		j->setDriveForceLimit((desc.driveForceLimit > 0.0f) ? desc.driveForceLimit : PX_MAX_F32);
 	}
@@ -288,7 +288,6 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateD6Joint(const IPhysicsActor& a,
 	if (!j) return {};
 
 	ApplyBreakAndFlags(*j, desc.collideConnected, desc.breakForce, desc.breakTorque, desc.userData);
-	j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
 
 	// Motions
 	j->setMotion(PxD6Axis::eX, ToPxD6Motion(desc.motionX));
@@ -336,6 +335,7 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateD6Joint(const IPhysicsActor& a,
 	}
 
 	// Drives
+	j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
 	j->setDrive(PxD6Drive::eX, MakeD6Drive(desc.driveX));
 	j->setDrive(PxD6Drive::eY, MakeD6Drive(desc.driveY));
 	j->setDrive(PxD6Drive::eZ, MakeD6Drive(desc.driveZ));

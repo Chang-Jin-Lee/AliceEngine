@@ -11,6 +11,7 @@
 #include <cmath>
 #include <bit>
 #include <cstring>
+#include <cassert>
 
 using namespace DirectX;
 using namespace Alice;
@@ -249,42 +250,27 @@ PhysicsSystem::~PhysicsSystem()
 void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
 {
 	ThreadSafety::AssertMainThread();
-	IPhysicsWorld* oldWorld = m_physicsWorld;
 	
-	// shared_ptr로 보관하여 수명 안전성 확보
-	// raw pointer만 받되, World에서 shared_ptr을 가져와서 보관
+	// 1) old world를 shared_ptr로 먼저 잡아둬서 teardown 동안 수명 보장
+	auto oldShared = std::move(m_physicsWorldShared);
+	IPhysicsWorld* oldWorld = oldShared.get();
+	
+	// 2) new world shared 보관
 	if (physicsWorld != nullptr)
 	{
-		// World에서 shared_ptr을 가져옴
 		auto shared = m_world.GetPhysicsWorldShared();
-		if (shared.get() == physicsWorld)
-		{
-			m_physicsWorldShared = shared;
-		}
-		else
-		{
-			// World에 등록되지 않은 외부 월드인 경우 (일반적이지 않지만 방어적 처리)
-			// 외부 소유는 가정하지 않고, 약한 참조로만 처리
-			m_physicsWorldShared = std::shared_ptr<IPhysicsWorld>(physicsWorld, [](IPhysicsWorld*) { /* 외부 소유, 해제하지 않음 */ });
-		}
+		// 이 함수는 World가 가진 physicsWorld만 받는다 (수명 보장을 위해)
+		assert(shared.get() == physicsWorld && "SetPhysicsWorld must receive World-owned physics world");
+		m_physicsWorldShared = shared;
 	}
 	else
 	{
-		// old world 정리 전에 shared_ptr 유지하여 안전한 정리 보장
-		// oldShared가 스코프를 벗어날 때까지 oldWorld는 살아있음
-		auto oldShared = std::move(m_physicsWorldShared);
 		m_physicsWorldShared.reset();
-		
-		// oldWorld 정리는 oldShared가 유지하는 동안 수행 (수명 보장)
-		if (oldWorld != nullptr)
-		{
-			oldWorld->Flush();
-		}
 	}
 	
 	m_physicsWorld = physicsWorld;
 
-    // 기존 액터들 정리
+    // 3) 기존 액터들 정리
     std::vector<EntityId> entityIds;
     entityIds.reserve(m_entityToActor.size());
     for (const auto& [entityId, handle] : m_entityToActor)
@@ -324,7 +310,10 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
     m_entityToJoint.clear();
     m_lastJoints.clear();
 
-	// oldWorld->Flush()는 위에서 이미 호출됨 (shared_ptr 유지 중에 안전하게 호출)
+	// 4) teardown 끝난 뒤 oldWorld flush (누수/잔존 방지)
+	if (oldWorld)
+		oldWorld->Flush();
+	
 	m_lastFilterRevision = 0xFFFFFFFFu; // 강제로 다음 Update에서 1회 갱신
 
 }
