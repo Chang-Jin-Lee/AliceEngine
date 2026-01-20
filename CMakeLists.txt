@@ -122,7 +122,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.cpp
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
-    ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
+    ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.cpp
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
     
     #PhysX
