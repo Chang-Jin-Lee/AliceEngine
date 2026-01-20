@@ -2263,7 +2263,7 @@
                     "z": 1.0
                 }
             },
-            "id": 36,
+            "id": 30,
             "name": "PhyMananger"
         },
         {
@@ -2316,18 +2316,18 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
-                    "x": -4.194684982299805,
-                    "y": 11.2319917678833,
-                    "z": 23.877197265625
+                    "x": -4.1945037841796875,
+                    "y": 0.9999945163726807,
+                    "z": 23.876996994018555
                 },
                 "rotation": {
-                    "x": -3.7644971939698735e-07,
-                    "y": 2.9294815063476563,
-                    "z": 1.3901594684284646e-05
+                    "x": -1.6657372725603636e-07,
+                    "y": 2.929530143737793,
+                    "z": 1.3541137377615087e-05
                 },
                 "scale": {
                     "x": 0.9999998807907104,
@@ -2335,7 +2335,7 @@
                     "z": 0.9999974370002747
                 }
             },
-            "id": 37,
+            "id": 31,
             "name": "DropBox"
         },
         {
@@ -2364,11 +2364,11 @@
             "Transform": {
                 "position": {
                     "x": 0.0,
-                    "y": 0.0,
+                    "y": -1.0,
                     "z": 0.0
                 },
                 "rotation": {
-                    "x": 0.0,
+                    "x": -0.0,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -2378,8 +2378,8 @@
                     "z": 1.0
                 }
             },
-            "id": 38,
-            "name": "Base"
+            "id": 32,
+            "name": "legacy"
         },
         {
             "Material": {
@@ -2392,6 +2392,43 @@
                 },
                 "metalness": 0.0,
                 "roughness": 0.5
+            },
+            "MeshCollider": {
+                "collideMask": 4294967295,
+                "doubleSidedQueries": false,
+                "dynamicFriction": 0.5,
+                "flipNormals": false,
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 1,
+                "meshAssetPath": "",
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "shiftVertices": true,
+                "staticFriction": 0.5,
+                "type": "Convex",
+                "validate": false,
+                "vertexLimit": 255
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2408,7 +2445,7 @@
                 "position": {
                     "x": 0.0,
                     "y": 10.0,
-                    "z": 10.0
+                    "z": 0.0
                 },
                 "rotation": {
                     "x": 0.0,
@@ -2421,8 +2458,8 @@
                     "z": 1.0
                 }
             },
-            "id": 39,
-            "name": "PartsA"
+            "id": 33,
+            "name": "parts_A"
         },
         {
             "Material": {
@@ -2435,6 +2472,43 @@
                 },
                 "metalness": 0.0,
                 "roughness": 0.5
+            },
+            "MeshCollider": {
+                "collideMask": 4294967295,
+                "doubleSidedQueries": false,
+                "dynamicFriction": 0.5,
+                "flipNormals": false,
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 1,
+                "meshAssetPath": "",
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "shiftVertices": true,
+                "staticFriction": 0.5,
+                "type": "Convex",
+                "validate": false,
+                "vertexLimit": 255
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2451,7 +2525,7 @@
                 "position": {
                     "x": 0.0,
                     "y": 10.0,
-                    "z": 10.0
+                    "z": 0.0
                 },
                 "rotation": {
                     "x": 0.0,
@@ -2464,8 +2538,8 @@
                     "z": 1.0
                 }
             },
-            "id": 40,
-            "name": "PartsB"
+            "id": 34,
+            "name": "parts_B"
         },
         {
             "Material": {
@@ -2478,6 +2552,43 @@
                 },
                 "metalness": 0.0,
                 "roughness": 0.5
+            },
+            "MeshCollider": {
+                "collideMask": 4294967295,
+                "doubleSidedQueries": false,
+                "dynamicFriction": 0.5,
+                "flipNormals": false,
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 1,
+                "meshAssetPath": "",
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "shiftVertices": true,
+                "staticFriction": 0.5,
+                "type": "Convex",
+                "validate": false,
+                "vertexLimit": 255
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2494,7 +2605,7 @@
                 "position": {
                     "x": 0.0,
                     "y": 10.0,
-                    "z": 10.0
+                    "z": 0.0
                 },
                 "rotation": {
                     "x": 0.0,
@@ -2507,8 +2618,8 @@
                     "z": 1.0
                 }
             },
-            "id": 41,
-            "name": "PartsC"
+            "id": 35,
+            "name": "parts_C"
         },
         {
             "Material": {
@@ -2521,6 +2632,43 @@
                 },
                 "metalness": 0.0,
                 "roughness": 0.5
+            },
+            "MeshCollider": {
+                "collideMask": 4294967295,
+                "doubleSidedQueries": false,
+                "dynamicFriction": 0.5,
+                "flipNormals": false,
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 1,
+                "meshAssetPath": "",
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "shiftVertices": true,
+                "staticFriction": 0.5,
+                "type": "Convex",
+                "validate": false,
+                "vertexLimit": 255
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2537,7 +2685,7 @@
                 "position": {
                     "x": 0.0,
                     "y": 10.0,
-                    "z": 10.0
+                    "z": 0.0
                 },
                 "rotation": {
                     "x": 0.0,
@@ -2550,8 +2698,8 @@
                     "z": 1.0
                 }
             },
-            "id": 42,
-            "name": "PartsD"
+            "id": 36,
+            "name": "parts_D"
         },
         {
             "Material": {
@@ -2564,6 +2712,43 @@
                 },
                 "metalness": 0.0,
                 "roughness": 0.5
+            },
+            "MeshCollider": {
+                "collideMask": 4294967295,
+                "doubleSidedQueries": false,
+                "dynamicFriction": 0.5,
+                "flipNormals": false,
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 1,
+                "meshAssetPath": "",
+                "queryMask": 4294967295,
+                "restitution": 0.0,
+                "shiftVertices": true,
+                "staticFriction": 0.5,
+                "type": "Convex",
+                "validate": false,
+                "vertexLimit": 255
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": true,
+                "isKinematic": false,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2580,10 +2765,10 @@
                 "position": {
                     "x": 0.0,
                     "y": 10.0,
-                    "z": 10.0
+                    "z": 0.0
                 },
                 "rotation": {
-                    "x": -0.0,
+                    "x": 0.0,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -2593,8 +2778,8 @@
                     "z": 1.0
                 }
             },
-            "id": 43,
-            "name": "PartsE"
+            "id": 37,
+            "name": "parts_E"
         }
     ],
     "version": 1

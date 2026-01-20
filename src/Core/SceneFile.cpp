@@ -255,7 +255,7 @@ namespace Alice
         static bool WriteEntity(JsonRttr::json& outEntity, const World& world, EntityId id)
         {
             outEntity = JsonRttr::json::object();
-            outEntity["id"] = static_cast<std::uint32_t>(id);
+            // 엔티티 id는 저장하지 않음 (로드 시 재사용되지 않으므로 혼란 방지)
 
             const std::string name = world.GetEntityName(id);
             if (!name.empty())

@@ -398,4 +398,17 @@ private:
     mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithRigidBody;
     mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithMeshCollider;
     mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithJoint;
+
+    // 런타임 마스크 캐시 (레이어 매트릭스 반영 결과)
+    // 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고,
+    // 실제 적용되는 필터는 이 캐시에서 관리
+    struct RuntimeMasks
+    {
+        uint32_t collideMask = 0xFFFFFFFFu;
+        uint32_t queryMask = 0xFFFFFFFFu;
+    };
+    std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeColliderMasks;
+    std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeMeshColliderMasks;
+    std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeTerrainMasks;
+    std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeCCTMasks;
 };
