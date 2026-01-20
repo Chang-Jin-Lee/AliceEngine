@@ -1914,9 +1914,11 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 return;
             }
 
-            if (meshCollider->type == MeshColliderType::Triangle)
+            // Triangle mesh는 키네마틱이 아닌 동적 RigidBody와 함께 사용할 수 없음
+            // 키네마틱 플랫폼/문 같은 경우는 Triangle mesh 사용 가능
+            if (meshCollider->type == MeshColliderType::Triangle && rb && !rb->isKinematic)
             {
-                ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic RigidBody (entity: %llu).",
+                ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic (non-kinematic) RigidBody (entity: %llu).",
                     (unsigned long long)entityId);
                 return;
             }
@@ -1928,7 +1930,7 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
             convexDesc.scale = scale;
             convexDesc.shiftVertices = meshCollider->shiftVertices;
-            convexDesc.vertexLimit = meshCollider->vertexLimit;
+            convexDesc.vertexLimit = std::min(meshCollider->vertexLimit, 255u); // PhysX 제한: 최대 255
             convexDesc.validate = meshCollider->validate;
 
             convexDesc.staticFriction = meshCollider->staticFriction;
@@ -2131,7 +2133,7 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
             convexDesc.scale = scale;
             convexDesc.shiftVertices = meshCollider->shiftVertices;
-            convexDesc.vertexLimit = meshCollider->vertexLimit;
+            convexDesc.vertexLimit = std::min(meshCollider->vertexLimit, 255u); // PhysX 제한: 최대 255
             convexDesc.validate = meshCollider->validate;
 
             convexDesc.staticFriction = meshCollider->staticFriction;
@@ -2576,12 +2578,18 @@ void PhysicsSystem::RebuildMeshShapes(EntityId entityId)
         return;
     }
 
+    // Triangle mesh는 키네마틱이 아닌 동적 RigidBody와 함께 사용할 수 없음
+    // 키네마틱 플랫폼/문 같은 경우는 Triangle mesh 사용 가능
     if (meshCollider->type == MeshColliderType::Triangle && handle.GetRigidBody())
     {
-        ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic RigidBody (entity: %llu).",
-            (unsigned long long)entityId);
-        actor->ClearShapes();
-        return;
+        auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+        if (rb && !rb->isKinematic)
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic (non-kinematic) RigidBody (entity: %llu).",
+                (unsigned long long)entityId);
+            actor->ClearShapes();
+            return;
+        }
     }
 
     Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
@@ -2621,7 +2629,7 @@ void PhysicsSystem::RebuildMeshShapes(EntityId entityId)
         convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
         convexDesc.scale = scale;
         convexDesc.shiftVertices = meshCollider->shiftVertices;
-        convexDesc.vertexLimit = meshCollider->vertexLimit;
+        convexDesc.vertexLimit = std::min(meshCollider->vertexLimit, 255u); // PhysX 제한: 최대 255
         convexDesc.validate = meshCollider->validate;
 
         convexDesc.staticFriction = meshCollider->staticFriction;

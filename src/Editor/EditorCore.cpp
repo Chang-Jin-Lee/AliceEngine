@@ -11,12 +11,14 @@
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
 #include "Core/ResourceManager.h"
+#include "Core/GameObject.h"
 #include "Game/FbxImporter.h"
 #include "3Dmodel/FbxModel.h"
 #include "Core/Logger.h"
 #include "Core/ReflectionUI.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/JsonRttr.h"
+#include <set>
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
@@ -3331,8 +3333,90 @@ namespace Alice
                 ImGui::Separator();
                 ImGui::TextUnformatted("Mesh Options");
 
-                if (meshCollider->meshAssetPath.empty())
-                    ImGui::TextUnformatted("Mesh Asset: (empty) -> uses SkinnedMeshComponent if present");
+                // Mesh Asset 선택 (ComboBox로 이미 로드된 메시 목록 표시)
+                ImGui::Text("Mesh Asset");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 메시 경로
+                    std::string currentPath = meshCollider->meshAssetPath;
+                    
+                    // 동일 엔티티의 SkinnedMeshComponent 확인
+                    const auto* skinned = world.GetComponent<SkinnedMeshComponent>(_selectedEntity);
+                    bool useSkinnedMesh = currentPath.empty() && skinned && !skinned->meshAssetPath.empty();
+                    
+                    if (useSkinnedMesh)
+                        currentPath = skinned->meshAssetPath;
+
+                    // Preview 텍스트
+                    std::string preview = "Auto (Use SkinnedMeshComponent)";
+                    if (!currentPath.empty())
+                        preview = currentPath;
+
+                    if (ImGui::BeginCombo("##MeshAssetPath", preview.c_str()))
+                    {
+                        // Auto 옵션 (SkinnedMeshComponent 사용)
+                        bool isAuto = meshCollider->meshAssetPath.empty();
+                        if (ImGui::Selectable("Auto (Use SkinnedMeshComponent)", isAuto))
+                        {
+                            meshCollider->meshAssetPath.clear();
+                            changed = true;
+                        }
+                        if (isAuto)
+                            ImGui::SetItemDefaultFocus();
+
+                        // 이미 로드된 메시 목록 표시 (SkinnedMeshRegistry에서)
+                        if (m_skinnedRegistry)
+                        {
+                            // SkinnedMeshComponent가 있는 모든 엔티티를 순회하여 등록된 메시 수집
+                            std::set<std::string> registeredMeshes;
+                            auto skinnedComps = world.GetComponents<SkinnedMeshComponent>();
+                            for (const auto& [eid, comp] : skinnedComps)
+                            {
+                                if (!comp.meshAssetPath.empty())
+                                {
+                                    // 레지스트리에 실제로 등록되어 있는지 확인
+                                    if (m_skinnedRegistry->Find(comp.meshAssetPath))
+                                        registeredMeshes.insert(comp.meshAssetPath);
+                                }
+                            }
+
+                            // 등록된 메시 목록 표시
+                            for (const auto& meshPath : registeredMeshes)
+                            {
+                                bool isSelected = (currentPath == meshPath);
+                                if (ImGui::Selectable(meshPath.c_str(), isSelected))
+                                {
+                                    meshCollider->meshAssetPath = meshPath;
+                                    changed = true;
+                                }
+                                if (isSelected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        else
+                        {
+                            ImGui::TextDisabled("(SkinnedMeshRegistry not available)");
+                        }
+
+                        ImGui::EndCombo();
+                    }
+
+                    // 현재 상태 표시
+                    if (meshCollider->meshAssetPath.empty())
+                    {
+                        if (skinned && !skinned->meshAssetPath.empty())
+                        {
+                            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 
+                                "Using: %s", skinned->meshAssetPath.c_str());
+                        }
+                        else
+                        {
+                            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), 
+                                "No SkinnedMeshComponent found on this entity");
+                        }
+                    }
+                }
+                ImGui::Unindent();
 
                 if (meshCollider->type == MeshColliderType::Triangle)
                 {
@@ -3884,13 +3968,67 @@ namespace Alice
                     changed = true;
                 }
 
-                char targetBuf[256]{};
-                strncpy_s(targetBuf, joint->targetName.c_str(), sizeof(targetBuf) - 1);
-                if (ImGui::InputText("Target Name", targetBuf, sizeof(targetBuf)))
+                // Target Entity 선택 (ComboBox)
+                ImGui::Text("Target Entity");
+                ImGui::Indent();
                 {
-                    joint->targetName = targetBuf;
-                    changed = true;
+                    // 현재 타겟 엔티티 찾기
+                    EntityId currentTargetId = Alice::InvalidEntityId;
+                    std::string currentTargetName = joint->targetName;
+                    if (!currentTargetName.empty())
+                    {
+                        GameObject targetGo = world.FindGameObject(currentTargetName);
+                        if (targetGo.IsValid())
+                            currentTargetId = targetGo.id();
+                    }
+
+                    // Preview 텍스트 생성
+                    std::string preview = "None";
+                    if (currentTargetId != Alice::InvalidEntityId)
+                    {
+                        std::string name = world.GetEntityName(currentTargetId);
+                        if (name.empty())
+                            name = "Entity " + std::to_string((uint32_t)currentTargetId);
+                        preview = name;
+                    }
+                    else if (!currentTargetName.empty())
+                    {
+                        preview = currentTargetName + " (not found)";
+                    }
+
+                    if (ImGui::BeginCombo("##JointTarget", preview.c_str()))
+                    {
+                        // None 옵션
+                        if (ImGui::Selectable("None", currentTargetId == Alice::InvalidEntityId))
+                        {
+                            joint->targetName.clear();
+                            changed = true;
+                        }
+                        if (currentTargetId == Alice::InvalidEntityId)
+                            ImGui::SetItemDefaultFocus();
+
+                        // 모든 엔티티 나열
+                        auto transforms = world.GetComponents<TransformComponent>();
+                        for (const auto& [entityId, transform] : transforms)
+                        {
+                            std::string name = world.GetEntityName(entityId);
+                            if (name.empty())
+                                name = "Entity " + std::to_string((uint32_t)entityId);
+
+                            bool isSelected = (currentTargetId == entityId);
+                            if (ImGui::Selectable(name.c_str(), isSelected))
+                            {
+                                joint->targetName = name;
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+
+                        ImGui::EndCombo();
+                    }
                 }
+                ImGui::Unindent();
 
                 ImGui::Separator();
                 ImGui::Text("Common");

@@ -1088,10 +1088,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (it != triMeshCache.end()) return it->second;
 		}
 
-		PxTriangleMeshDesc desc{};
-		desc.points.count = mesh.vertexCount;
-		desc.points.stride = sizeof(PxVec3);
-		desc.points.data = mesh.vertices;
+	PxTriangleMeshDesc desc{};
+	desc.points.count = mesh.vertexCount;
+	desc.points.stride = sizeof(Vec3); // Vec3의 실제 크기 사용 (PxVec3와 레이아웃이 다를 수 있음)
+	desc.points.data = mesh.vertices;
 
 		if (mesh.indices32)
 		{
@@ -1149,10 +1149,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (it != convexMeshCache.end()) return it->second;
 		}
 
-		PxConvexMeshDesc desc{};
-		desc.points.count = mesh.vertexCount;
-		desc.points.stride = sizeof(PxVec3);
-		desc.points.data = mesh.vertices;
+	PxConvexMeshDesc desc{};
+	desc.points.count = mesh.vertexCount;
+	desc.points.stride = sizeof(Vec3); // Vec3의 실제 크기 사용 (PxVec3와 레이아웃이 다를 수 있음)
+	desc.points.data = mesh.vertices;
 		desc.flags |= PxConvexFlag::eCOMPUTE_CONVEX;
 		if (mesh.shiftVertices)
 			desc.flags |= PxConvexFlag::eSHIFT_VERTICES;
