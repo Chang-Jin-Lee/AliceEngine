@@ -20,8 +20,7 @@
 #include "Components/CameraShakeComponent.h"
 #include "Components/CameraBlendComponent.h"
 #include "Components/CameraInputComponent.h"
-#include "3Dmodel/SkinnedMeshComponent.h"
-#include "3Dmodel/SkinnedAnimationComponent.h"
+
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
