@@ -357,6 +357,20 @@ namespace Alice
 		// Editor: 프로젝트 루트 기준, Game: 실행 파일 기준
 		pImpl->m_resourceManager.Configure(!pImpl->m_editorMode, exeDir);
 
+		// 게임 모드일 때 데이터 무결성 검증 수행
+		if (!pImpl->m_editorMode)
+		{
+			if (!pImpl->m_resourceManager.ValidateGameData())
+			{
+				MessageBoxW(nullptr,
+					L"Critical Error: Game Data is corrupted or missing.\nPlease reinstall the game.",
+					L"Integrity Check Failed",
+					MB_OK | MB_ICONERROR);
+				ALICE_LOG_ERRORF("[Engine] Initialize FAILED: Data integrity check failed.");
+				return false; // 초기화 실패 -> 앱 종료
+			}
+		}
+
 		//===============================================================
 		// PVD 설정 로드 (물리 초기화 전에 실행)
 		LoadPvdSettings(exeDir, pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort);

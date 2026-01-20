@@ -95,6 +95,12 @@ namespace Alice
                                       const std::filesystem::path& cookedDirAbs,
                                       std::size_t chunkBytes = 256 * 1024) const;
 
+        /// 게임 실행 시 필수 데이터(청크)가 모두 존재하는지 검증합니다.
+        /// Manifest.alice 파일을 읽어 실제 파일 존재 여부를 확인합니다.
+        /// - 게임 모드에서만 호출해야 합니다.
+        /// - 하나라도 파일이 없으면 false를 반환합니다.
+        bool ValidateGameData() const;
+
         /// -----------------------------------------------------------------------
         /// [템플릿 로드 함수]
         /// 사용법: auto srv = ResourceManager::Get().Load<ID3D11ShaderResourceView>("Path", device);
@@ -170,7 +176,7 @@ namespace Alice
                                ID3D11Device* device); 
     };
 
-    // std::string (텍스트 파일) 특수화
+    // std::string 텍스트 파일 특수화
     template <>
     struct ResourceLoader<std::string>
     {
@@ -179,7 +185,7 @@ namespace Alice
                                const std::filesystem::path& path);
     };
 
-    // nlohmann::json (JSON 파일) 특수화
+    // nlohmann::json JSON 파일 특수화
     template <>
     struct ResourceLoader<nlohmann::json>
     {
