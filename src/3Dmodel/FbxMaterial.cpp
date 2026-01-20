@@ -1,5 +1,6 @@
-﻿#include "FbxMaterial.h"
+#include "FbxMaterial.h"
 #include "../Core/Helper.h"
+#include "../Core/ResourceManager.h"
 
 #include <directxtk/WICTextureLoader.h>
 #include <directxtk/DDSTextureLoader.h>
@@ -319,6 +320,160 @@ static ID3D11ShaderResourceView* LoadTextureFromMaterial(
 	}
 
 	return result;
+}
+
+// ResourceManager 기반 텍스처 경로 생성 헬퍼
+static std::filesystem::path MakeLogicalTexturePath(Alice::ResourceManager& rm,
+                                                    const std::filesystem::path& fbxLogicalPath,
+                                                    const char* assimpTex)
+{
+	namespace fs = std::filesystem;
+	fs::path p = assimpTex;
+	if (p.empty())
+		return {};
+
+	if (p.is_absolute())
+	{
+		// 절대 경로를 논리 경로로 정규화
+		return Alice::ResourceManager::NormalizeResourcePathAbsoluteToLogical(p);
+	}
+
+	// 상대 경로면 fbxLogicalPath 기준
+	fs::path base = fbxLogicalPath.parent_path();
+	fs::path out = (base / p).lexically_normal();
+	return out;
+}
+
+// ResourceManager 기반 텍스처 로더
+static ID3D11ShaderResourceView* LoadTextureFromMaterialRM(
+	ID3D11Device* device,
+	const aiScene* scene,
+	aiMaterial* mat,
+	aiTextureType texType,
+	const std::filesystem::path& fbxLogicalPath,
+	Alice::ResourceManager& rm,
+	std::unordered_map<std::string, ID3D11ShaderResourceView*>& cache,
+	ID3D11ShaderResourceView* fallback)
+{
+	if (!device || !scene || !mat) return nullptr;
+
+	aiString texPath;
+	ID3D11ShaderResourceView* result = nullptr;
+
+	// 1. 텍스처 경로 획득 및 임베디드 확인
+	if (mat->GetTexture(texType, 0, &texPath) == AI_SUCCESS)
+	{
+		std::string texPathStr = texPath.C_Str();
+
+		// 임베디드 텍스처를 확인하고 처리 (가장 빠른 경로)
+		if (!texPathStr.empty())
+		{
+			const aiTexture* at = scene->GetEmbeddedTexture(texPathStr.c_str());
+			if (at)
+			{
+				result = CreateSRVFromEmbedded(device, at);
+			}
+		}
+
+		// 임베디드 처리에 실패했거나 외부 파일인 경우, ResourceManager로 로드
+		if (!result)
+		{
+			std::filesystem::path logicalTex = MakeLogicalTexturePath(rm, fbxLogicalPath, texPathStr.c_str());
+			if (!logicalTex.empty())
+			{
+				// 캐시 키는 논리 경로 문자열
+				std::string cacheKey = logicalTex.generic_string();
+				auto it = cache.find(cacheKey);
+				if (it != cache.end())
+				{
+					result = it->second;
+					if (result) result->AddRef();
+				}
+				else
+				{
+					// ResourceManager를 통해 로드
+					auto srv = rm.Load<ID3D11ShaderResourceView>(logicalTex, device);
+					if (srv)
+					{
+						result = srv.Get();
+						result->AddRef();
+						cache[cacheKey] = result;
+					}
+				}
+			}
+		}
+	}
+
+	if (!result && fallback)
+	{
+		fallback->AddRef();
+		result = fallback;
+	}
+
+	return result;
+}
+
+bool FbxMaterialLoader::Load(ID3D11Device* device, const aiScene* scene, const std::filesystem::path& fbxLogicalPath, Alice::ResourceManager& rm)
+{
+	if (!device || !scene) return false;
+	Clear();
+
+	// 1x1 화이트/블랙 텍스처 생성 (폴백 및 기본값)
+	CreateSolidColorSRV(device, 0xFFFFFFFF, &m_->white);   // RGBA(1,1,1,1)
+	CreateSolidColorSRV(device, 0x000000FF, &m_->black);   // RGBA(0,0,0,1)
+	// 1x1 flat normal (R,G,B,A)=(0.5,0.5,1,1) => (128,128,255,255)
+	CreateSolidColorSRV(device, 0xFFFF8080, &m_->flatNormal);
+
+	const size_t matCount = scene->mNumMaterials;
+	m_->baseColorSRVs.assign(matCount, nullptr);
+	m_->normalSRVs.assign(matCount, nullptr);
+	m_->metallicSRVs.assign(matCount, nullptr);
+	m_->roughnessSRVs.assign(matCount, nullptr);
+
+	// 논리 경로 기반 캐시 (문자열 키)
+	std::unordered_map<std::string, ID3D11ShaderResourceView*> logicalCache;
+
+	for (unsigned m = 0; m < scene->mNumMaterials; ++m)
+	{
+		aiMaterial* mat = scene->mMaterials[m];
+
+		// BaseColor / Diffuse
+		m_->baseColorSRVs[m] = LoadTextureFromMaterialRM(
+			device, scene, mat,
+			aiTextureType_DIFFUSE,          // BaseColor
+			fbxLogicalPath,
+			rm,
+			logicalCache,
+			m_->white);
+
+		// Normal map
+		m_->normalSRVs[m] = LoadTextureFromMaterialRM(
+			device, scene, mat,
+			aiTextureType_NORMALS,
+			fbxLogicalPath,
+			rm,
+			logicalCache,
+			m_->flatNormal);
+
+		// Metallic / Roughness (Assimp PBR 텍스처 타입 사용)
+		m_->metallicSRVs[m] = LoadTextureFromMaterialRM(
+			device, scene, mat,
+			aiTextureType_METALNESS,
+			fbxLogicalPath,
+			rm,
+			logicalCache,
+			m_->black);
+
+		m_->roughnessSRVs[m] = LoadTextureFromMaterialRM(
+			device, scene, mat,
+			aiTextureType_DIFFUSE_ROUGHNESS,
+			fbxLogicalPath,
+			rm,
+			logicalCache,
+			m_->white);
+	}
+
+	return true;
 }
 
 bool FbxMaterialLoader::Load(ID3D11Device* device, const aiScene* scene, const std::wstring& baseDir)
