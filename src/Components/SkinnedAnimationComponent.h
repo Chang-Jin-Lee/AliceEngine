@@ -1,4 +1,6 @@
-﻿#include <vector>
+#pragma once
+
+#include <vector>
 #include <DirectXMath.h>
 
 namespace Alice {

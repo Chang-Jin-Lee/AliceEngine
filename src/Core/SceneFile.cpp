@@ -154,6 +154,58 @@ namespace Alice
                 outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* ab = world.GetComponent<AnimBlueprintComponent>(id); ab)
+            {
+                AnimBlueprintComponent copy = *ab;
+                copy.blueprintPath = NormalizePathToRelative(copy.blueprintPath);
+                rttr::instance inst = copy;
+                outEntity["AnimBlueprint"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* adv = world.GetComponent<AdvancedAnimComponent>(id); adv)
+            {
+                rttr::instance inst = const_cast<AdvancedAnimComponent&>(*adv);
+                outEntity["AdvancedAnim"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* sockets = world.GetComponent<SocketComponent>(id); sockets)
+            {
+                JsonRttr::json arr = JsonRttr::json::array();
+                for (const auto& s : sockets->sockets)
+                {
+                    JsonRttr::json js;
+                    js["name"] = s.name;
+                    js["parentBone"] = s.parentBone;
+                    js["position"] = { s.position.x, s.position.y, s.position.z };
+                    js["rotation"] = { s.rotation.x, s.rotation.y, s.rotation.z };
+                    js["scale"] = { s.scale.x, s.scale.y, s.scale.z };
+                    arr.push_back(js);
+                }
+                outEntity["Sockets"] = arr;
+            }
+
+            if (const auto* audio = world.GetComponent<AudioSourceComponent>(id); audio)
+            {
+                AudioSourceComponent copy = *audio;
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
+                rttr::instance inst = copy;
+                outEntity["AudioSource"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* listener = world.GetComponent<AudioListenerComponent>(id); listener)
+            {
+                rttr::instance inst = const_cast<AudioListenerComponent&>(*listener);
+                outEntity["AudioListener"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* sb = world.GetComponent<SoundBoxComponent>(id); sb)
+            {
+                SoundBoxComponent copy = *sb;
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
+                rttr::instance inst = copy;
+                outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
             {
                 rttr::instance inst = const_cast<CameraComponent&>(*cam);
@@ -310,6 +362,57 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
             }
 
+            // AnimBlueprint (선택)
+            auto itAB = e.find("AnimBlueprint");
+            if (itAB != e.end() && itAB->is_object())
+            {
+                AnimBlueprintComponent& ab = world.AddComponent<AnimBlueprintComponent>(id);
+                rttr::instance inst = ab;
+                if (!JsonRttr::FromJsonObject(inst, *itAB)) return false;
+            }
+
+            // AdvancedAnim (선택)
+            auto itAdv = e.find("AdvancedAnim");
+            if (itAdv != e.end() && itAdv->is_object())
+            {
+                AdvancedAnimComponent& adv = world.AddComponent<AdvancedAnimComponent>(id);
+                rttr::instance inst = adv;
+                if (!JsonRttr::FromJsonObject(inst, *itAdv)) return false;
+            }
+
+            // Sockets (선택)
+            auto itSock = e.find("Sockets");
+            if (itSock != e.end() && itSock->is_array())
+            {
+                SocketComponent& sc = world.AddComponent<SocketComponent>(id);
+                for (const auto& js : *itSock)
+                {
+                    if (!js.is_object()) continue;
+                    SocketDef s;
+                    s.name = js.value("name", "");
+                    s.parentBone = js.value("parentBone", "");
+                    if (js.contains("position") && js["position"].is_array() && js["position"].size() >= 3)
+                    {
+                        s.position.x = js["position"][0].get<float>();
+                        s.position.y = js["position"][1].get<float>();
+                        s.position.z = js["position"][2].get<float>();
+                    }
+                    if (js.contains("rotation") && js["rotation"].is_array() && js["rotation"].size() >= 3)
+                    {
+                        s.rotation.x = js["rotation"][0].get<float>();
+                        s.rotation.y = js["rotation"][1].get<float>();
+                        s.rotation.z = js["rotation"][2].get<float>();
+                    }
+                    if (js.contains("scale") && js["scale"].is_array() && js["scale"].size() >= 3)
+                    {
+                        s.scale.x = js["scale"][0].get<float>();
+                        s.scale.y = js["scale"][1].get<float>();
+                        s.scale.z = js["scale"][2].get<float>();
+                    }
+                    sc.sockets.push_back(std::move(s));
+                }
+            }
+
             // Camera (선택)
             auto itC = e.find("Camera");
             if (itC != e.end() && itC->is_object())
@@ -398,6 +501,33 @@ namespace Alice
                 RectLightComponent& rl = world.AddComponent<RectLightComponent>(id);
                 rttr::instance inst = rl;
                 if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
+            }
+
+            // AudioSource (선택)
+            auto itAS = e.find("AudioSource");
+            if (itAS != e.end() && itAS->is_object())
+            {
+                AudioSourceComponent& asc = world.AddComponent<AudioSourceComponent>(id);
+                rttr::instance inst = asc;
+                if (!JsonRttr::FromJsonObject(inst, *itAS)) return false;
+            }
+
+            // AudioListener (선택)
+            auto itAL = e.find("AudioListener");
+            if (itAL != e.end() && itAL->is_object())
+            {
+                AudioListenerComponent& alc = world.AddComponent<AudioListenerComponent>(id);
+                rttr::instance inst = alc;
+                if (!JsonRttr::FromJsonObject(inst, *itAL)) return false;
+            }
+
+            // SoundBox (선택)
+            auto itSB = e.find("SoundBox");
+            if (itSB != e.end() && itSB->is_object())
+            {
+                SoundBoxComponent& sb = world.AddComponent<SoundBoxComponent>(id);
+                rttr::instance inst = sb;
+                if (!JsonRttr::FromJsonObject(inst, *itSB)) return false;
             }
 
             return true;

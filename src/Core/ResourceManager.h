@@ -7,7 +7,10 @@
 #include <unordered_map>
 #include <mutex>
 #include <memory>
+#include <utility>
+#include <cassert>
 #include <wrl/client.h>
+#include "Core/Singleton.h"
 
 // D3D11 타입 전방 선언 (헤더에 d3d11.h 포함 방지)
 struct ID3D11Device;
@@ -22,10 +25,14 @@ namespace Alice
 
     /// - 이후 텍스처/메시/셰이더 등을 캐싱/스트리밍하는 쪽으로 확장할 수 있습니다.
     /// - 현재는 "암호화/복호화된 바이너리 파일 입출력" 만 담당합니다.
-    class ResourceManager
+    class ResourceManager : public Singleton<ResourceManager>
     {
     public:
-        ResourceManager()  = default;
+        ResourceManager()
+        {
+            assert(s_instance == nullptr && "Double creation of ResourceManager!");
+            s_instance = this;
+        }
         ~ResourceManager() = default;
 
         /// GameMode(배포용 실행)인지 여부에 따라, Assets/Resource/Cooked 루트 해석 기준을 설정합니다.

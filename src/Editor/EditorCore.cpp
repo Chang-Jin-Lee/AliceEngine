@@ -886,6 +886,8 @@ namespace Alice
 
         // 애니메이션 블루프린트 에디터 초기화
         g_AnimBlueprintEditor.Init();
+        g_AnimBlueprintEditor.SetResourceManager(m_resources);
+        g_AnimBlueprintEditor.SetDevice(d3dDevice);
 
         m_initialized = true;
         return true;
@@ -1532,12 +1534,25 @@ namespace Alice
                 DrawInspectorRectLight(world, selectedEntity);
                 ImGui::Separator();
 
-                // 4. Skinned Mesh (Condensed)
+                // 4. Skinned Mesh / 소켓 프리뷰 (간단 뷰)
                 if (auto* skinned =
                     world.GetComponent<SkinnedMeshComponent>(selectedEntity)) {
                     ImGui::Separator();
                     ImGui::Text("Skinned Mesh: %s", skinned->meshAssetPath.c_str());
-                    // Details omitted for brevity
+
+                    // 본 목록 미니 뷰 (이름 확인용)
+                    if (m_skinnedRegistry) {
+                        auto mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+                        if (mesh && mesh->sourceModel) {
+                            const auto& bones = mesh->sourceModel->GetBoneNames();
+                            if (ImGui::TreeNode("Bones")) {
+                                for (size_t i = 0; i < bones.size(); ++i) {
+                                    ImGui::Text("%zu: %s", i, bones[i].c_str());
+                                }
+                                ImGui::TreePop();
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2450,6 +2465,12 @@ namespace Alice
                     } else if (typeName == "RectLightComponent") {
                         world.AddComponent<RectLightComponent>(_selectedEntity);
                         added = true;
+                    } else if (typeName == "SkinnedMeshComponent") {
+                        world.AddComponent<SkinnedMeshComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "AdvancedAnimComponent") {
+                        world.AddComponent<AdvancedAnimComponent>(_selectedEntity);
+                        added = true;
                     }
                     
                     if (added) {
@@ -2529,6 +2550,34 @@ namespace Alice
                 DrawEngineComponent("RectLightComponent",
                     world.GetComponent<RectLightComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
+            } else if (typeName == "SkinnedMeshComponent") {
+                DrawEngineComponent("SkinnedMeshComponent",
+                    world.GetComponent<SkinnedMeshComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<SkinnedMeshComponent>(_selectedEntity); });
+            } else if (typeName == "AdvancedAnimComponent") {
+                DrawEngineComponent("AdvancedAnimComponent",
+                    world.GetComponent<AdvancedAnimComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<AdvancedAnimComponent>(_selectedEntity); });
+            } else if (typeName == "AnimBlueprintComponent") {
+                DrawEngineComponent("AnimBlueprintComponent",
+                    world.GetComponent<AnimBlueprintComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<AnimBlueprintComponent>(_selectedEntity); });
+            } else if (typeName == "SocketComponent") {
+                DrawEngineComponent("SocketComponent",
+                    world.GetComponent<SocketComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<SocketComponent>(_selectedEntity); });
+            } else if (typeName == "AudioSourceComponent") {
+                DrawEngineComponent("AudioSourceComponent",
+                    world.GetComponent<AudioSourceComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<AudioSourceComponent>(_selectedEntity); });
+            } else if (typeName == "AudioListenerComponent") {
+                DrawEngineComponent("AudioListenerComponent",
+                    world.GetComponent<AudioListenerComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<AudioListenerComponent>(_selectedEntity); });
+            } else if (typeName == "SoundBoxComponent") {
+                DrawEngineComponent("SoundBoxComponent",
+                    world.GetComponent<SoundBoxComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<SoundBoxComponent>(_selectedEntity); });
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }

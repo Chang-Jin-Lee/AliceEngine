@@ -38,6 +38,10 @@
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
+#include "Game/AnimBlueprintSystem.h"
+#include "Game/AdvancedAnimSystem.h"
+#include "Audio/AudioSystem.h"
+#include "Audio/SoundManager.h"
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 
@@ -130,6 +134,9 @@ namespace Alice
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		AnimBlueprintSystem m_animBlueprintSystem{ m_skinnedMeshRegistry };
+		AdvancedAnimSystem m_advancedAnimSystem{ m_skinnedMeshRegistry };
+		AudioSystem m_audioSystem;
 		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
 	};
 	namespace
@@ -229,6 +236,7 @@ namespace Alice
 	{
 		pImpl->m_physics.ShutdownContext();
 		pImpl->m_editorCore.Shutdown();
+		Sound::Shutdown();
 	}
 
 	bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
@@ -275,6 +283,13 @@ namespace Alice
 
 			if (!pImpl->m_editorCore.Initialize(pImpl->m_hWnd, *pImpl->m_renderDevice)) return false;
 		}
+
+		// 시스템에 ResourceManager 바인딩
+		pImpl->m_animBlueprintSystem.SetResourceManager(&pImpl->m_resourceManager);
+		pImpl->m_audioSystem.SetResourceManager(&pImpl->m_resourceManager);
+
+		// 사운드 초기화
+		Sound::Initialize();
 
 		// ============================================= 렌더 시스템 =============================================
 		// Forward 렌더러 및 디버그 드로우 설정
@@ -777,14 +792,82 @@ namespace Alice
 
 					AddBoxLines(worldCorners, col);
 				}
+
+				// === Socket / SoundBox 기즈모 ===
+				// Socket: AnimBlueprintSystem 이 계산한 소켓 world 행렬을 작은 XYZ 축으로 시각화
+				for (const auto& [entityId, socketComp] : pImpl->m_world.GetComponents<SocketComponent>())
+				{
+					for (const auto& s : socketComp.sockets)
+					{
+						DirectX::XMFLOAT3 o{
+							s.world._41, s.world._42, s.world._43
+						};
+						// 축 길이
+						const float len = 0.2f;
+						DirectX::XMFLOAT3 xEnd{
+							o.x + s.world._11 * len,
+							o.y + s.world._12 * len,
+							o.z + s.world._13 * len
+						};
+						DirectX::XMFLOAT3 yEnd{
+							o.x + s.world._21 * len,
+							o.y + s.world._22 * len,
+							o.z + s.world._23 * len
+						};
+						DirectX::XMFLOAT3 zEnd{
+							o.x + s.world._31 * len,
+							o.y + s.world._32 * len,
+							o.z + s.world._33 * len
+						};
+
+						dbg->AddLine(o, xEnd, { 1.f, 0.f, 0.f, 1.f });
+						dbg->AddLine(o, yEnd, { 0.f, 1.f, 0.f, 1.f });
+						dbg->AddLine(o, zEnd, { 0.f, 0.f, 1.f, 1.f });
+					}
+				}
+
+				// SoundBox: 월드 기준 AABB 를 박스로 시각화
+				for (const auto& [entityId, box] : pImpl->m_world.GetComponents<SoundBoxComponent>())
+				{
+					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
+					DirectX::XMFLOAT3 p = t ? t->position : DirectX::XMFLOAT3(0, 0, 0);
+					DirectX::XMFLOAT3 s = t ? t->scale : DirectX::XMFLOAT3(1, 1, 1);
+
+					DirectX::XMFLOAT3 mn{
+						box.boundsMin.x * s.x + p.x,
+						box.boundsMin.y * s.y + p.y,
+						box.boundsMin.z * s.z + p.z
+					};
+					DirectX::XMFLOAT3 mx{
+						box.boundsMax.x * s.x + p.x,
+						box.boundsMax.y * s.y + p.y,
+						box.boundsMax.z * s.z + p.z
+					};
+
+					DirectX::XMFLOAT3 corners[8] = {
+						{mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mn.y, mx.z}, {mn.x, mn.y, mx.z},
+						{mn.x, mx.y, mn.z}, {mx.x, mx.y, mn.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
+					};
+
+					const DirectX::XMFLOAT4 col = (entityId == pImpl->m_selectedEntity)
+						? DirectX::XMFLOAT4(0.f, 1.f, 1.f, 1.f)
+						: DirectX::XMFLOAT4(0.f, 0.5f, 1.f, 1.f);
+
+					AddBoxLines(corners, col);
+				}
 			}
 		}
 
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
 		// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
+		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		pImpl->m_animBlueprintSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
+
+		// 오디오 업데이트
+		pImpl->m_audioSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 
 	// ============================================= 렌더링 =============================================
 	// Forward/Deferred 렌더링 모드에 따라 분기

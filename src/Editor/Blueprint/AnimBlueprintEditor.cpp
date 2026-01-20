@@ -8,6 +8,12 @@
 #include <cstdio>
 #include <algorithm>
 #include <cfloat>
+#include <filesystem>
+
+#include "Core/ResourceManager.h"
+#include "Core/Helper.h"
+#include "Core/Logger.h"
+#include "3Dmodel/FbxModel.h"
 
 using json = nlohmann::json;
 
@@ -444,12 +450,10 @@ namespace Alice
         if (m_InspectState)
         {
             char nbuf[128]{};
-            char cbuf[128]{};
             std::snprintf(nbuf, sizeof(nbuf), "%s", m_InspectState->name.c_str());
-            std::snprintf(cbuf, sizeof(cbuf), "%s", m_InspectState->clip.c_str());
 
             if (ImGui::InputText("Name", nbuf, sizeof(nbuf))) m_InspectState->name = nbuf;
-            if (ImGui::InputText("Clip", cbuf, sizeof(cbuf))) m_InspectState->clip = cbuf;
+            DrawClipSelector("Clip", m_InspectState->clip);
             ImGui::DragFloat("PlayRate", &m_InspectState->playRate, 0.01f, 0.1f, 3.0f);
 
             if (ImGui::Button("Open Graph"))
@@ -622,23 +626,69 @@ namespace Alice
         HandleCreateFsm();
         HandleDeleteFsm();
 
-        if (ed::ShowBackgroundContextMenu())
-            ImGui::OpenPopup("fsm_bg");
+        //const bool openFsmMenu = ed::ShowBackgroundContextMenu();
 
-        if (ImGui::BeginPopup("fsm_bg"))
+        //ed::End();
+
+        //ed::Suspend();
+        //if (openFsmMenu)
+        //{
+        //    ImGui::SetNextWindowPos(ImGui::GetMousePos(), ImGuiCond_Appearing);
+        //    ImGui::OpenPopup("fsm_bg");
+        //}
+        //if (ImGui::BeginPopup("fsm_bg"))
+        //{
+        //    if (ImGui::MenuItem("Add State"))
+        //    {
+        //        auto& s = AddState("State");
+        //        QueuePlaceFsm(s.id, true);
+        //    }
+        //    if (ImGui::MenuItem("Delete Selected")) DeleteSelectedFsm();
+        //    ImGui::EndPopup();
+        //}
+        //ed::Resume();
+
+        //// 더블클릭은 End 이후에 처리 (이 버전은 hovered API 없음)
+        //HandleDoubleClickOpenPostEnd();
+
+        //ImGui::EndChild();
+
+        // 우클릭 감지 (NodeEditor가 알려줌)
+        const bool openFsmMenu = ed::ShowBackgroundContextMenu();
+
+        // 팝업은 Begin~End 사이에서 Suspend/Resume로 감싸서 그린다
+        ed::Suspend();
         {
-            if (ImGui::MenuItem("Add State"))
+            if (openFsmMenu)
             {
-                auto& s = AddState("State");
-                QueuePlaceFsm(s.id, true);
+                m_FsmPopupPos = ImGui::GetMousePos();
+                m_FsmPopupVp = ImGui::GetIO().MouseHoveredViewport; // 마우스가 있는 뷰포트
+                ImGui::OpenPopup("fsm_bg");
             }
-            if (ImGui::MenuItem("Delete Selected")) DeleteSelectedFsm();
-            ImGui::EndPopup();
+
+            if (ImGui::BeginPopup("fsm_bg"))
+            {
+                // 팝업 위치/뷰포트는 "열린 프레임"에만 세팅해도 되는데
+                // ImGui가 이미 잡아준 pos가 틀어지는 케이스가 있어서, 그냥 항상 고정해도 안전합니다.
+                if (m_FsmPopupVp) ImGui::SetNextWindowViewport(m_FsmPopupVp);
+                ImGui::SetNextWindowPos(m_FsmPopupPos, ImGuiCond_Always);
+
+                if (ImGui::MenuItem("Add State"))
+                {
+                    auto& s = AddState("State");
+                    QueuePlaceFsm(s.id, true);
+                }
+                if (ImGui::MenuItem("Delete Selected"))
+                    DeleteSelectedFsm();
+
+                ImGui::EndPopup();
+            }
         }
+        ed::Resume();
 
         ed::End();
 
-        // 더블클릭은 End 이후에 처리 (이 버전은 hovered API 없음)
+        // 더블클릭 처리는 End() 이후 유지
         HandleDoubleClickOpenPostEnd();
 
         ImGui::EndChild();
@@ -890,9 +940,7 @@ namespace Alice
         ImGui::Text("Node: %s", g.inspect->name.c_str());
         if (g.inspect->type == BlendNodeType::Clip)
         {
-            char buf[128]{};
-            std::snprintf(buf, sizeof(buf), "%s", g.inspect->clip.c_str());
-            if (ImGui::InputText("Clip", buf, sizeof(buf))) g.inspect->clip = buf;
+            DrawClipSelector("Clip", g.inspect->clip);
         }
 
         ImGui::Separator();
@@ -950,9 +998,16 @@ namespace Alice
         HandleCreateBlend(g);
         HandleDeleteBlend(g);
 
-        if (ed::ShowBackgroundContextMenu())
-            ImGui::OpenPopup("blend_bg");
+        /*const bool openBlendMenu = ed::ShowBackgroundContextMenu();
 
+        ed::End();
+
+        ed::Suspend();
+        if (openBlendMenu)
+        {
+            ImGui::SetNextWindowPos(ImGui::GetMousePos(), ImGuiCond_Appearing);
+            ImGui::OpenPopup("blend_bg");
+        }
         if (ImGui::BeginPopup("blend_bg"))
         {
             if (ImGui::MenuItem("Add Clip"))  AddClipNode(g);
@@ -960,8 +1015,40 @@ namespace Alice
             if (ImGui::MenuItem("Delete Selected")) DeleteSelectedBlend(g);
             ImGui::EndPopup();
         }
+        ed::Resume();*/
+        //ImGui::EndChild();
 
+        const bool openBlendMenu = ed::ShowBackgroundContextMenu();
+        if (openBlendMenu)
+        {
+            m_BlendPopupPos = ImGui::GetMousePos();
+            ImGui::OpenPopup("blend_bg");
+        }
+
+        ed::Suspend();
+        {
+            if (openBlendMenu)
+            {
+                m_BlendPopupPos = ImGui::GetMousePos();
+                m_BlendPopupVp = ImGui::GetIO().MouseHoveredViewport;
+                ImGui::OpenPopup("blend_bg");
+            }
+
+            if (ImGui::BeginPopup("blend_bg"))
+            {
+                if (m_BlendPopupVp) ImGui::SetNextWindowViewport(m_BlendPopupVp);
+                ImGui::SetNextWindowPos(m_BlendPopupPos, ImGuiCond_Always);
+
+                if (ImGui::MenuItem("Add Clip"))  AddClipNode(g);
+                if (ImGui::MenuItem("Add Blend")) AddBlendNode(g);
+                if (ImGui::MenuItem("Delete Selected")) DeleteSelectedBlend(g);
+
+                ImGui::EndPopup();
+            }
+        }
+        ed::Resume();
         ed::End();
+
         ImGui::EndChild();
     }
 
@@ -1033,6 +1120,10 @@ namespace Alice
         j["fsm"]["openState"] = m_OpenState ? ToU64(m_OpenState) : 0;
         ed::SetCurrentEditor(nullptr);
 
+        // ---------------- Target Mesh ----------------
+        if (m_TargetMesh[0] != '\0')
+            j["targetMesh"] = std::string(m_TargetMesh);
+
         // ---------------- BlendGraphs ----------------
         for (auto& kv : m_Graphs)
         {
@@ -1073,13 +1164,26 @@ namespace Alice
             j["blendGraphs"].push_back(gg);
         }
 
-        std::ofstream ofs(path);
+        std::filesystem::path filename = path;
+        filename.replace_extension(".json");
+        std::filesystem::path logicalOrRelative = std::filesystem::path("Assets/Anim") / filename;
+        std::filesystem::path result = ResourceManager::Get().Resolve(logicalOrRelative);
+
+        if (auto parent = result.parent_path(); !parent.empty())
+            std::filesystem::create_directories(parent);
+
+        std::ofstream ofs(result);
         if (ofs.is_open()) ofs << j.dump(2);
     }
 
     bool AnimBlueprintEditor::LoadJson(const char* path)
     {
-        std::ifstream ifs(path);
+        std::filesystem::path filename = path;
+        filename.replace_extension(".json");
+        std::filesystem::path logicalOrRelative = std::filesystem::path("Assets/Anim") / filename;
+        std::filesystem::path result = ResourceManager::Get().Resolve(logicalOrRelative);
+
+        std::ifstream ifs(result);
         if (!ifs.is_open()) return false;
 
         json j;
@@ -1096,6 +1200,8 @@ namespace Alice
         m_InspectTrans = nullptr;
         m_OpenState = {};
         m_NextId = 1;
+        m_TargetMesh[0] = '\0';
+        m_TargetClips.clear();
 
         // FSM ctx 재생성
         ed::Config cfg;
@@ -1116,6 +1222,13 @@ namespace Alice
                 p.trigger = jp.value("trigger", false);
                 m_Params.push_back(p);
             }
+        }
+
+        if (j.contains("targetMesh"))
+        {
+            std::string tm = j.value("targetMesh", std::string{});
+            std::snprintf(m_TargetMesh, sizeof(m_TargetMesh), "%s", tm.c_str());
+            LoadTargetClips();
         }
 
         // ---------------- FSM states ----------------
@@ -1266,6 +1379,96 @@ namespace Alice
             auto& s = AddState("State");
             QueuePlaceFsm(s.id, false);
         }
+
+        DrawTargetMeshToolbar();
+    }
+
+    void AnimBlueprintEditor::DrawTargetMeshToolbar()
+    {
+        ImGui::Separator();
+        ImGui::SetNextItemWidth(320);
+        ImGui::InputText("Target Mesh", m_TargetMesh, sizeof(m_TargetMesh));
+
+        ImGui::SameLine();
+        if (ImGui::Button("Load Clips"))
+        {
+            if (!LoadTargetClips())
+            {
+                ALICE_LOG_WARN("AnimBlueprint: Failed to load clips for Target Mesh.");
+            }
+        }
+
+        if (!m_TargetClips.empty())
+        {
+            ImGui::SameLine();
+            ImGui::Text("Clips: %d", (int)m_TargetClips.size());
+        }
+    }
+
+    void AnimBlueprintEditor::DrawClipSelector(const char* label, std::string& value)
+    {
+        if (m_TargetClips.empty())
+        {
+            char buf[128] = {};
+            std::snprintf(buf, sizeof(buf), "%s", value.c_str());
+            if (ImGui::InputText(label, buf, sizeof(buf)))
+                value = buf;
+            return;
+        }
+
+        int current = -1;
+        for (int i = 0; i < (int)m_TargetClips.size(); ++i)
+        {
+            if (m_TargetClips[(size_t)i] == value)
+            {
+                current = i;
+                break;
+            }
+        }
+
+        if (ImGui::BeginCombo(label, (current >= 0) ? m_TargetClips[(size_t)current].c_str() : value.c_str()))
+        {
+            for (int i = 0; i < (int)m_TargetClips.size(); ++i)
+            {
+                bool selected = (i == current);
+                if (ImGui::Selectable(m_TargetClips[(size_t)i].c_str(), selected))
+                    value = m_TargetClips[(size_t)i];
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    }
+
+    bool AnimBlueprintEditor::LoadTargetClips()
+    {
+        if (!m_resources || !m_device)
+            return false;
+        if (m_TargetMesh[0] == '\0')
+            return false;
+
+        const std::filesystem::path logicalPath = m_TargetMesh;
+        const std::filesystem::path resolved = m_resources->Resolve(logicalPath);
+
+        FbxModel model;
+        bool ok = false;
+
+        if (resolved.extension() == ".alice")
+        {
+            auto sp = m_resources->LoadSharedBinaryAuto(logicalPath);
+            if (!sp) return false;
+            ok = model.LoadFromMemory(m_device, sp->data(), sp->size(),
+                                      logicalPath.filename().string(),
+                                      L"");
+        }
+        else
+        {
+            ok = model.Load(m_device, resolved.wstring());
+        }
+
+        if (!ok) return false;
+
+        m_TargetClips = model.GetAnimationNames();
+        return !m_TargetClips.empty();
     }
 
     void AnimBlueprintEditor::Draw(bool* pOpen)
