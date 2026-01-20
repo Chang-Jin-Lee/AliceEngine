@@ -10,6 +10,8 @@ namespace Alice
 	{
 		DirectX::XMFLOAT3 rootPos;    // 루트 위치 (무기 날 시작점)
 		DirectX::XMFLOAT3 tipPos;     // 팁 위치 (무기 날 끝점)
+		DirectX::XMMATRIX rootMat;	  // 루트 매트릭스 (무기 날 시작, 회전 적용}
+		DirectX::XMMATRIX tipMat;	  // 루트 매트릭스 (무기 날 시작, 회전 적용}
 		float birthTime;              // 생성 시간 (페이드 계산용)
 		float length;                 // 이전 샘플까지의 누적 길이 (UV 계산용)
 	};

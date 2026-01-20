@@ -41,15 +41,15 @@ namespace Alice
 
 		struct CBPerSwordEffectVS
 		{
-			DirectX::XMMATRIX viewProj;
-			DirectX::XMMATRIX world;       // 게임오브젝트의 월드 행렬
-			DirectX::XMFLOAT2 uv;           // 기본 UV
+			DirectX::XMMATRIX viewProj;     // View * Projection 행렬
+			DirectX::XMFLOAT3 cameraPos;    // 카메라 위치 (월드 좌표)
+			float padding0;
 			float currentTime;
 			float fadeDuration;
-			float width;                   // 트레일의 기본 폭
+			float width;                    // 트레일의 기본 폭
+			float padding1;
 		};
 
-		DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
 
 		struct CBPerSwordEffectPS
 		{
