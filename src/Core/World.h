@@ -38,6 +38,7 @@
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "PhysX/Components/Phy_CCTComponent.h"
+#include "PhysX/Components/Phy_JointComponent.h"
 
 class IPhysicsWorld; // 물리 인터페이스 전방선언
 

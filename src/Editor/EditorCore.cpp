@@ -2614,6 +2614,9 @@ namespace Alice
                     } else if (typeName == "Phy_SettingsComponent") {
                         world.AddComponent<Phy_SettingsComponent>(_selectedEntity);
                         added = true;
+                    } else if (typeName == "Phy_JointComponent") {
+                        world.AddComponent<Phy_JointComponent>(_selectedEntity);
+                        added = true;
                     }
                     
                     if (added) {
@@ -2705,6 +2708,8 @@ namespace Alice
                 DrawInspectorTerrainHeightField(world, _selectedEntity);
             } else if (typeName == "Phy_SettingsComponent") {
                 DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
+            } else if (typeName == "Phy_JointComponent") {
+                DrawInspectorJoint(world, _selectedEntity);
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }
@@ -3634,6 +3639,248 @@ namespace Alice
                 changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", terrain->ignoreLayers, layerNames);
                 ImGui::Unindent();
                 
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorJoint(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* joint = world.GetComponent<Phy_JointComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Joint", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_JointComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                const char* typeLabels[] = { "Fixed", "Revolute", "Prismatic", "Distance", "Spherical", "D6" };
+                int typeIndex = static_cast<int>(joint->type);
+                if (ImGui::Combo("Type", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                {
+                    joint->type = static_cast<Phy_JointType>(typeIndex);
+                    changed = true;
+                }
+
+                char targetBuf[256]{};
+                strncpy_s(targetBuf, joint->targetName.c_str(), sizeof(targetBuf) - 1);
+                if (ImGui::InputText("Target Name", targetBuf, sizeof(targetBuf)))
+                {
+                    joint->targetName = targetBuf;
+                    changed = true;
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Common");
+                changed |= ImGui::Checkbox("Collide Connected", &joint->collideConnected);
+                changed |= ImGui::DragFloat("Break Force", &joint->breakForce, 1.0f, 0.0f);
+                changed |= ImGui::DragFloat("Break Torque", &joint->breakTorque, 1.0f, 0.0f);
+
+                auto drawFrame = [&](const char* label, Phy_JointFrame& frame)
+                {
+                    if (ImGui::TreeNode(label))
+                    {
+                        changed |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
+                        changed |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
+                        ImGui::TreePop();
+                    }
+                };
+
+                drawFrame("Frame A", joint->frameA);
+                drawFrame("Frame B", joint->frameB);
+
+                ImGui::Separator();
+                switch (joint->type)
+                {
+                case Phy_JointType::Fixed:
+                    ImGui::Text("Fixed Joint: no extra settings");
+                    break;
+                case Phy_JointType::Revolute:
+                {
+                    if (ImGui::TreeNode("Revolute Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->revolute.enableLimit);
+                        changed |= ImGui::DragFloat("Lower Limit", &joint->revolute.lowerLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Limit", &joint->revolute.upperLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->revolute.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->revolute.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->revolute.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->revolute.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    if (ImGui::TreeNode("Revolute Drive"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Drive", &joint->revolute.enableDrive);
+                        changed |= ImGui::DragFloat("Drive Velocity", &joint->revolute.driveVelocity, 0.01f);
+                        changed |= ImGui::DragFloat("Force Limit", &joint->revolute.driveForceLimit, 1.0f, 0.0f);
+                        changed |= ImGui::Checkbox("Free Spin", &joint->revolute.driveFreeSpin);
+                        changed |= ImGui::Checkbox("Drive Limits Are Forces", &joint->revolute.driveLimitsAreForces);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Prismatic:
+                {
+                    if (ImGui::TreeNode("Prismatic Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->prismatic.enableLimit);
+                        changed |= ImGui::DragFloat("Lower Limit", &joint->prismatic.lowerLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Limit", &joint->prismatic.upperLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->prismatic.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->prismatic.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->prismatic.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->prismatic.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Distance:
+                {
+                    if (ImGui::TreeNode("Distance"))
+                    {
+                        changed |= ImGui::DragFloat("Min Distance", &joint->distance.minDistance, 0.01f);
+                        changed |= ImGui::DragFloat("Max Distance", &joint->distance.maxDistance, 0.01f);
+                        changed |= ImGui::DragFloat("Tolerance", &joint->distance.tolerance, 0.01f);
+                        changed |= ImGui::Checkbox("Enable Min", &joint->distance.enableMinDistance);
+                        changed |= ImGui::Checkbox("Enable Max", &joint->distance.enableMaxDistance);
+                        changed |= ImGui::Checkbox("Enable Spring", &joint->distance.enableSpring);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->distance.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->distance.damping, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Spherical:
+                {
+                    if (ImGui::TreeNode("Spherical Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->spherical.enableLimit);
+                        changed |= ImGui::DragFloat("Y Limit Angle", &joint->spherical.yLimitAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Z Limit Angle", &joint->spherical.zLimitAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->spherical.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->spherical.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->spherical.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->spherical.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::D6:
+                {
+                    const char* motionLabels[] = { "Locked", "Limited", "Free" };
+                    auto drawMotion = [&](const char* label, Phy_D6Motion& m)
+                    {
+                        int idx = static_cast<int>(m);
+                        if (ImGui::Combo(label, &idx, motionLabels, IM_ARRAYSIZE(motionLabels)))
+                        {
+                            m = static_cast<Phy_D6Motion>(idx);
+                            changed = true;
+                        }
+                    };
+
+                    if (ImGui::TreeNode("Motions"))
+                    {
+                        drawMotion("Motion X", joint->d6.motionX);
+                        drawMotion("Motion Y", joint->d6.motionY);
+                        drawMotion("Motion Z", joint->d6.motionZ);
+                        drawMotion("Motion Twist", joint->d6.motionTwist);
+                        drawMotion("Motion Swing1", joint->d6.motionSwing1);
+                        drawMotion("Motion Swing2", joint->d6.motionSwing2);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Linear Limits"))
+                    {
+                        ImGui::Text("X");
+                        changed |= ImGui::DragFloat("Lower X", &joint->d6.linearLimitX.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper X", &joint->d6.linearLimitX.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness X", &joint->d6.linearLimitX.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping X", &joint->d6.linearLimitX.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution X", &joint->d6.linearLimitX.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold X", &joint->d6.linearLimitX.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Y");
+                        changed |= ImGui::DragFloat("Lower Y", &joint->d6.linearLimitY.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Y", &joint->d6.linearLimitY.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Y", &joint->d6.linearLimitY.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Y", &joint->d6.linearLimitY.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Y", &joint->d6.linearLimitY.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Y", &joint->d6.linearLimitY.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Z");
+                        changed |= ImGui::DragFloat("Lower Z", &joint->d6.linearLimitZ.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Z", &joint->d6.linearLimitZ.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Z", &joint->d6.linearLimitZ.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Z", &joint->d6.linearLimitZ.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Z", &joint->d6.linearLimitZ.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Z", &joint->d6.linearLimitZ.bounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Angular Limits"))
+                    {
+                        ImGui::Text("Twist");
+                        changed |= ImGui::DragFloat("Lower Twist", &joint->d6.twistLimit.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Twist", &joint->d6.twistLimit.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Twist", &joint->d6.twistLimit.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Twist", &joint->d6.twistLimit.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Twist", &joint->d6.twistLimit.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Twist", &joint->d6.twistLimit.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Swing");
+                        changed |= ImGui::DragFloat("Swing Y", &joint->d6.swingLimit.yAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Swing Z", &joint->d6.swingLimit.zAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Swing", &joint->d6.swingLimit.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Swing", &joint->d6.swingLimit.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Swing", &joint->d6.swingLimit.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Swing", &joint->d6.swingLimit.bounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Drives"))
+                    {
+                        changed |= ImGui::Checkbox("Drive Limits Are Forces", &joint->d6.driveLimitsAreForces);
+
+                        auto drawDrive = [&](const char* label, Phy_D6JointDriveSettings& d)
+                        {
+                            if (ImGui::TreeNode(label))
+                            {
+                                changed |= ImGui::DragFloat("Stiffness", &d.stiffness, 0.01f);
+                                changed |= ImGui::DragFloat("Damping", &d.damping, 0.01f);
+                                changed |= ImGui::DragFloat("Force Limit", &d.forceLimit, 1.0f, 0.0f);
+                                changed |= ImGui::Checkbox("Acceleration", &d.isAcceleration);
+                                ImGui::TreePop();
+                            }
+                        };
+
+                        drawDrive("Drive X", joint->d6.driveX);
+                        drawDrive("Drive Y", joint->d6.driveY);
+                        drawDrive("Drive Z", joint->d6.driveZ);
+                        drawDrive("Drive Swing", joint->d6.driveSwing);
+                        drawDrive("Drive Twist", joint->d6.driveTwist);
+                        drawDrive("Drive Slerp", joint->d6.driveSlerp);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Drive Target"))
+                    {
+                        drawFrame("Drive Pose", joint->d6.drivePose);
+                        changed |= ImGui::DragFloat3("Drive Linear Vel", &joint->d6.driveLinearVelocity.x, 0.01f);
+                        changed |= ImGui::DragFloat3("Drive Angular Vel", &joint->d6.driveAngularVelocity.x, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                }
+
                 if (changed) g_SceneDirty = true;
             }
         }

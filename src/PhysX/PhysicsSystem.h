@@ -6,6 +6,7 @@
 #include "Components/Phy_TerrainHeightFieldComponent.h"
 #include "Components/Phy_CCTComponent.h"
 #include "Components/Phy_SettingsComponent.h"
+#include "Components/Phy_JointComponent.h"
 #include <Core/World.h>
 #include <DirectXMath.h>
 #include <unordered_map>
@@ -308,6 +309,16 @@ private:
 
     // Collider/Scale 변경 시 Shape 재구성
     void RebuildShapes(Alice::EntityId entityId);
+
+    // Joint 관리
+    struct JointState
+    {
+        Phy_JointComponent snapshot{};
+        Alice::EntityId targetId = Alice::InvalidEntityId;
+    };
+    std::unordered_map<Alice::EntityId, std::unique_ptr<IPhysicsJoint>> m_entityToJoint;
+    std::unordered_map<Alice::EntityId, JointState> m_lastJoints;
+    void DestroyJoint(Alice::EntityId entityId);
 
     // 이벤트 콜백
     EventCallback m_eventCallback = nullptr;
