@@ -1,6 +1,9 @@
 #include "Rendering/SwordRenderSystem.h"
 #include "Components/SwordEffectComponent.h"
 #include "Rendering/ShaderCode/SwordEffectShader.h"
+#include "Core/ResourceManager.h"
+#include "Components/TransformComponent.h"
+#include "Core/Logger.h"
 
 #include <d3dcompiler.h>
 #include <cmath>
@@ -25,9 +28,13 @@ namespace Alice
 		if (!m_device || !m_context) return false;
 		if (!CreateShadersAndInputLayout()) return false;
 
-		// PerSwordEffect 상수 버퍼 생성
-		D3D11_BUFFER_DESC desc = { sizeof(CBPerSwordEffect), D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 };
-		if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbPerSwordEffect.ReleaseAndGetAddressOf()))) return false;
+		// PerSwordEffect VS 상수 버퍼 생성
+		D3D11_BUFFER_DESC descVS = { sizeof(CBPerSwordEffectVS), D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 };
+		if (FAILED(m_device->CreateBuffer(&descVS, nullptr, m_cbPerSwordEffectVS.ReleaseAndGetAddressOf()))) return false;
+
+		// PerSwordEffect PS 상수 버퍼 생성
+		D3D11_BUFFER_DESC descPS = { sizeof(CBPerSwordEffectPS), D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 };
+		if (FAILED(m_device->CreateBuffer(&descPS, nullptr, m_cbPerSwordEffectPS.ReleaseAndGetAddressOf()))) return false;
 
 		// 알파 블렌딩용 블렌드 스테이트 생성
 		D3D11_BLEND_DESC blendDesc = {};
@@ -41,6 +48,42 @@ namespace Alice
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		if (FAILED(m_device->CreateBlendState(&blendDesc, m_blendState.ReleaseAndGetAddressOf()))) return false;
 
+		// 샘플러 스테이트 생성
+		D3D11_SAMPLER_DESC samplerDesc = {};
+		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.MipLODBias = 0.0f;
+		samplerDesc.MaxAnisotropy = 1;
+		samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+		samplerDesc.BorderColor[0] = 0.0f;
+		samplerDesc.BorderColor[1] = 0.0f;
+		samplerDesc.BorderColor[2] = 0.0f;
+		samplerDesc.BorderColor[3] = 0.0f;
+		samplerDesc.MinLOD = 0.0f;
+		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+		if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_samplerState.ReleaseAndGetAddressOf()))) return false;
+
+		// 텍스처 로드
+		if (!LoadTexture()) return false;
+
+		return true;
+	}
+
+	bool SwordRenderSystem::LoadTexture()
+	{
+		if (!m_resources || !m_device) return false;
+
+		auto srv = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Image/Hanako.png", m_device.Get());
+		if (!srv)
+		{
+			ALICE_LOG_WARN("[SwordRenderSystem] Failed to load texture: Resource/Image/Hanako.png");
+			return false;
+		}
+
+		m_textureSRV = srv;
+		ALICE_LOG_INFO("[SwordRenderSystem] Texture loaded: Resource/Image/Hanako.png");
 		return true;
 	}
 
@@ -124,19 +167,43 @@ namespace Alice
 			std::memcpy(mapped.pData, vertices.data(), vertices.size() * sizeof(TrailVertex));
 			m_context->Unmap(m_vertexBuffer.Get(), 0);
 
-			// 상수 버퍼 업데이트 (현재 시간 포함)
-			CBPerSwordEffect cb;
-			cb.viewProj = XMMatrixTranspose(viewProj);
-			cb.color = swordEffectComp.color;
-			cb.currentTime = swordEffectComp.currentTime; // 스크립트와 동일한 시간 기준 사용
-			cb.fadeDuration = swordEffectComp.fadeDuration;
-			m_context->UpdateSubresource(m_cbPerSwordEffect.Get(), 0, nullptr, &cb, 0, 0);
+			// 엔티티의 TransformComponent 가져오기 (월드 행렬 계산용)
+			const TransformComponent* transform = world.GetComponent<TransformComponent>(entityId);
+			XMMATRIX worldMatrix = XMMatrixIdentity();
+			if (transform)
+			{
+				worldMatrix = BuildWorldMatrix(*transform);
+			}
+
+			// VS 상수 버퍼 업데이트
+			CBPerSwordEffectVS cbVS;
+			cbVS.viewProj = XMMatrixTranspose(viewProj);
+			cbVS.world = XMMatrixTranspose(worldMatrix);
+			cbVS.uv = XMFLOAT2(0.0f, 0.0f); // 기본 UV
+			cbVS.currentTime = swordEffectComp.currentTime;
+			cbVS.fadeDuration = swordEffectComp.fadeDuration;
+			cbVS.width = 0.5f; // 기본 폭
+			m_context->UpdateSubresource(m_cbPerSwordEffectVS.Get(), 0, nullptr, &cbVS, 0, 0);
+
+			// PS 상수 버퍼 업데이트
+			CBPerSwordEffectPS cbPS;
+			cbPS.color = swordEffectComp.color;
+			cbPS.fadeDuration = swordEffectComp.fadeDuration;
+			cbPS.width = 0.5f; // 기본 폭
+			m_context->UpdateSubresource(m_cbPerSwordEffectPS.Get(), 0, nullptr, &cbPS, 0, 0);
+
+			// 텍스처 및 샘플러 바인딩 (register(t20))
+			ID3D11ShaderResourceView* textureSRV = m_textureSRV.Get();
+			m_context->PSSetShaderResources(20, 1, &textureSRV);
+			ID3D11SamplerState* sampler = m_samplerState.Get();
+			m_context->PSSetSamplers(0, 1, &sampler);
 
 			// Vertex Buffer 바인딩
 			UINT stride = sizeof(TrailVertex), offset = 0;
 			ID3D11Buffer* vb = m_vertexBuffer.Get();
 			m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
-			m_context->VSSetConstantBuffers(0, 1, m_cbPerSwordEffect.GetAddressOf());
+			m_context->VSSetConstantBuffers(0, 1, m_cbPerSwordEffectVS.GetAddressOf());
+			m_context->PSSetConstantBuffers(1, 1, m_cbPerSwordEffectPS.GetAddressOf());
 
 			// 렌더링 (Triangle Strip: vertexCount - 2 개의 삼각형)
 			m_context->Draw((UINT)vertices.size(), 0);
@@ -186,5 +253,18 @@ namespace Alice
 
 		m_vertexCapacity = vertexCount;
 		return true;
+	}
+
+	XMMATRIX SwordRenderSystem::BuildWorldMatrix(const TransformComponent& transform) const
+	{
+		XMVECTOR scale = XMLoadFloat3(&transform.scale);
+		XMVECTOR rotation = XMLoadFloat3(&transform.rotation);
+		XMVECTOR translation = XMLoadFloat3(&transform.position);
+
+		XMMATRIX S = XMMatrixScalingFromVector(scale);
+		XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(rotation);
+		XMMATRIX T = XMMatrixTranslationFromVector(translation);
+
+		return S * R * T;
 	}
 }
