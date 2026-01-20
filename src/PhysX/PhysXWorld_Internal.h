@@ -1277,35 +1277,6 @@ static inline PxForceMode::Enum ToPxForceMode(ForceMode m)
 	}
 }
 
-static void ApplyRbDesc(PxRigidDynamic& body, const RigidBodyDesc& rb)
-{
-	body.userData = rb.userData;
-
-	body.setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !rb.gravityEnabled);
-
-	body.setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, rb.isKinematic);
-	body.setLinearDamping(rb.linearDamping);
-	body.setAngularDamping(rb.angularDamping);
-
-	if (rb.maxLinearVelocity > 0.0f)  body.setMaxLinearVelocity(rb.maxLinearVelocity);
-	if (rb.maxAngularVelocity > 0.0f) body.setMaxAngularVelocity(rb.maxAngularVelocity);
-
-	body.setSolverIterationCounts(
-		static_cast<PxU32>(std::max(1u, rb.solverPositionIterations)),
-		static_cast<PxU32>(std::max(1u, rb.solverVelocityIterations)));
-
-	if (rb.sleepThreshold >= 0.0f) body.setSleepThreshold(rb.sleepThreshold);
-	if (rb.stabilizationThreshold >= 0.0f) body.setStabilizationThreshold(rb.stabilizationThreshold);
-
-	body.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, rb.enableCCD);
-	body.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_SPECULATIVE_CCD, rb.enableSpeculativeCCD);
-
-	body.setRigidDynamicLockFlags(ToPxLockFlags(rb.lockFlags));
-
-	if (!rb.startAwake)
-		body.putToSleep();
-}
-
 static void ApplyMass(PxRigidDynamic& body, const RigidBodyDesc& rb)
 {
 	if (rb.isKinematic)

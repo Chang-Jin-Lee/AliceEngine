@@ -48,13 +48,14 @@ public:
     // 레이어 마스크 유틸리티
     static constexpr uint32_t kMaxLayers = MAX_PHYSICS_LAYERS;
     using LayerMaskArray = std::array<uint32_t, kMaxLayers>;
-    
+
     static constexpr uint32_t AllLayersMask() noexcept
-    {
-        if constexpr (kMaxLayers >= 32) return 0xFFFFFFFFu;
-        else return (1u << kMaxLayers) - 1u;
-    }
-    
+	{
+		constexpr uint32_t W = std::numeric_limits<uint32_t>::digits; // 보통 32
+		constexpr uint32_t n = (kMaxLayers > W ? W : kMaxLayers);      // 0..W로 클램프
+		return static_cast<uint32_t>((1ull << n) - 1ull);
+	}
+
     static LayerMaskArray MakeAllMaskArray() noexcept;
 
 private:
