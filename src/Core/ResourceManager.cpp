@@ -9,7 +9,9 @@
 #include <system_error>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include "Core/Logger.h"
+#include "json/json.hpp" // JSON 구현부 포함
 
 namespace
 {
@@ -809,6 +811,23 @@ namespace Alice
         return data.size() >= 4 && data[0] == 'D' && data[1] == 'D' && data[2] == 'S' && data[3] == ' ';
     }
 
+    // TGA 파일 시그니처 체크 (Footer "TRUEVISION-XFILE")
+    // TGA는 헤더 매직넘버가 없어서 Footer를 확인해야 함
+    // WIC가 지원하지 않으므로 경고용으로만 사용
+    static bool IsTGA(const std::vector<std::uint8_t>& data)
+    {
+        if (data.size() < 18) return false;
+        const char* signature = "TRUEVISION-XFILE";
+        const size_t sigLen = 16;
+        if (data.size() < sigLen + 2) return false;
+        
+        // 파일 끝에서 18바이트 앞부터 시그니처가 있는지 확인
+        const size_t offset = data.size() - 18;
+        if (offset + sigLen > data.size()) return false;
+        
+        return std::memcmp(data.data() + offset, signature, sigLen) == 0;
+    }
+
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> 
     ResourceLoader<ID3D11ShaderResourceView>::Load(const ResourceManager& rm, 
                                                    const std::filesystem::path& path, 
@@ -830,9 +849,10 @@ namespace Alice
             return nullptr;
         }
 
-        // 2. 바이트 시그니처로 DDS 판별 (확장자 기반이 아닌 실제 파일 포맷 확인)
+        // 2. 바이트 시그니처로 포맷 판별 (확장자 기반이 아닌 실제 파일 포맷 확인)
         //    .alice 파일로 감싸진 경우도 올바르게 처리하기 위함
         HRESULT hr = E_FAIL;
+        
         if (IsDDS(data))
         {
             // DDS 파일인 경우
@@ -840,30 +860,80 @@ namespace Alice
                 device,
                 data.data(),
                 static_cast<size_t>(data.size()),
-                nullptr, // texture resource 필요시 인자 추가
+                nullptr,
                 outSrv.GetAddressOf()
             );
         }
+        else if (IsTGA(data) || path.extension() == ".tga" || path.extension() == ".TGA")
+        {
+            // TGA는 DirectXTK WIC 로더가 지원하지 않습니다.
+            ALICE_LOG_ERRORF("[ResourceManager] Load<SRV> Error: .tga is NOT supported by runtime loader (WIC limitation). Use .dds or .png! \"%s\"", 
+                path.string().c_str());
+            return nullptr;
+        }
         else
         {
-            // WIC로 로드 시도 (JPG, PNG, TGA 등)
+            // WIC로 로드 시도 (PNG, JPG, BMP 등)
             hr = DirectX::CreateWICTextureFromMemory(
                 device,
                 data.data(),
                 static_cast<size_t>(data.size()),
-                nullptr, // texture resource 필요시 인자 추가
+                nullptr,
                 outSrv.GetAddressOf()
             );
         }
 
         if (FAILED(hr))
         {
-            ALICE_LOG_ERRORF("ResourceLoader<SRV>: Failed to create texture from memory. \"%s\" HRESULT=0x%08X", 
-                path.string().c_str(), static_cast<unsigned int>(hr));
+            ALICE_LOG_ERRORF("[ResourceManager] Load<SRV> Error: CreateTextureFromMemory failed. HRESULT=0x%08X path=\"%s\"", 
+                static_cast<unsigned int>(hr), path.string().c_str());
             return nullptr;
         }
 
         return outSrv;
+    }
+
+    // std::string 로더 구현 (텍스트 파일)
+    std::shared_ptr<std::string>
+    ResourceLoader<std::string>::Load(const ResourceManager& rm, 
+                                      const std::filesystem::path& path)
+    {
+        std::vector<std::uint8_t> data;
+        if (!rm.LoadBinaryAuto(path, data) || data.empty())
+        {
+            ALICE_LOG_ERRORF("[ResourceManager] Load<string> Failed: File not found or empty. \"%s\"", 
+                path.string().c_str());
+            return nullptr;
+        }
+
+        // null terminator 처리를 위해 string 생성
+        return std::make_shared<std::string>(data.begin(), data.end());
+    }
+
+    // nlohmann::json 로더 구현 (JSON 파일)
+    std::shared_ptr<nlohmann::json>
+    ResourceLoader<nlohmann::json>::Load(const ResourceManager& rm, 
+                                         const std::filesystem::path& path)
+    {
+        std::vector<std::uint8_t> data;
+        if (!rm.LoadBinaryAuto(path, data) || data.empty())
+        {
+            ALICE_LOG_ERRORF("[ResourceManager] Load<json> Failed: File not found or empty. \"%s\"", 
+                path.string().c_str());
+            return nullptr;
+        }
+
+        try
+        {
+            auto j = std::make_shared<nlohmann::json>(nlohmann::json::parse(data.begin(), data.end()));
+            return j;
+        }
+        catch (const std::exception& e)
+        {
+            ALICE_LOG_ERRORF("[ResourceManager] Load<json> Error: Parse failed \"%s\" (%s)", 
+                path.string().c_str(), e.what());
+            return nullptr;
+        }
     }
 }
 

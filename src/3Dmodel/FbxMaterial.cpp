@@ -323,7 +323,7 @@ static ID3D11ShaderResourceView* LoadTextureFromMaterial(
 }
 
 // ResourceManager 기반 텍스처 경로 생성 헬퍼
-static std::filesystem::path MakeLogicalTexturePath(Alice::ResourceManager& rm,
+static std::filesystem::path MakeLogicalTexturePath([[maybe_unused]] Alice::ResourceManager& rm,
                                                     const std::filesystem::path& fbxLogicalPath,
                                                     const char* assimpTex)
 {
