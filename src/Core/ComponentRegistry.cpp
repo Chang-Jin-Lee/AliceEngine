@@ -43,6 +43,18 @@ namespace Alice
             .property("_43", &XMFLOAT4X4::_43)
             .property("_44", &XMFLOAT4X4::_44);
 
+        rttr::registration::enumeration<AudioType>("AudioType")
+        (
+            rttr::value("BGM", AudioType::BGM),
+            rttr::value("SFX", AudioType::SFX)
+        );
+
+        rttr::registration::enumeration<SoundBoxType>("SoundBoxType")
+        (
+            rttr::value("BGM", SoundBoxType::BGM),
+            rttr::value("SFX", SoundBoxType::SFX)
+        );
+
         // === TransformComponent 등록 ===
         rttr::registration::class_<TransformComponent>("TransformComponent")
             .constructor<>()
@@ -76,6 +88,103 @@ namespace Alice
             .property("timeSec", &SkinnedAnimationComponent::timeSec);
         
         // palette는 팔레트를 나타내는 프로퍼티
+
+        // === AnimBlueprintComponent 등록 ===
+        rttr::registration::class_<AnimBlueprintComponent>("AnimBlueprintComponent")
+            .constructor<>()
+            .property("blueprintPath", &AnimBlueprintComponent::blueprintPath)
+            .property("playing", &AnimBlueprintComponent::playing)
+            .property("speed", &AnimBlueprintComponent::speed);
+
+        // === AdvancedAnimComponent 등록 ===
+        rttr::registration::class_<AdvancedAnimLayer>("AdvancedAnimLayer")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimLayer::enabled)
+            .property("clipA", &AdvancedAnimLayer::clipA)
+            .property("clipB", &AdvancedAnimLayer::clipB)
+            .property("blend01", &AdvancedAnimLayer::blend01)
+            .property("alpha", &AdvancedAnimLayer::alpha)
+            .property("speedA", &AdvancedAnimLayer::speedA)
+            .property("speedB", &AdvancedAnimLayer::speedB)
+            .property("loopA", &AdvancedAnimLayer::loopA)
+            .property("loopB", &AdvancedAnimLayer::loopB)
+            .property("useCrossFade", &AdvancedAnimLayer::useCrossFade)
+            .property("fadeDuration", &AdvancedAnimLayer::fadeDuration)
+            .property("useExitTime", &AdvancedAnimLayer::useExitTime)
+            .property("exitNorm", &AdvancedAnimLayer::exitNorm)
+            .property("entryNorm", &AdvancedAnimLayer::entryNorm)
+            .property("smoothStep", &AdvancedAnimLayer::smoothStep);
+
+        rttr::registration::class_<AdvancedAnimAdditive>("AdvancedAnimAdditive")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimAdditive::enabled)
+            .property("clip", &AdvancedAnimAdditive::clip)
+            .property("refClip", &AdvancedAnimAdditive::refClip)
+            .property("weight", &AdvancedAnimAdditive::weight)
+            .property("speed", &AdvancedAnimAdditive::speed)
+            .property("loop", &AdvancedAnimAdditive::loop)
+            .property("refTime", &AdvancedAnimAdditive::refTime);
+
+        rttr::registration::class_<AdvancedAnimIK>("AdvancedAnimIK")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimIK::enabled)
+            .property("tipBone", &AdvancedAnimIK::tipBone)
+            .property("chainLength", &AdvancedAnimIK::chainLength)
+            .property("iterations", &AdvancedAnimIK::iterations)
+            .property("weight", &AdvancedAnimIK::weight)
+            .property("targetWorld", &AdvancedAnimIK::targetWorld);
+
+        rttr::registration::class_<AdvancedAnimComponent>("AdvancedAnimComponent")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimComponent::enabled)
+            .property("playing", &AdvancedAnimComponent::playing)
+            .property("globalSpeed", &AdvancedAnimComponent::globalSpeed)
+            .property("base", &AdvancedAnimComponent::base)
+            .property("upperUseMask", &AdvancedAnimComponent::upperUseMask)
+            .property("upperMaskKeywords", &AdvancedAnimComponent::upperMaskKeywords)
+            .property("upper", &AdvancedAnimComponent::upper)
+            .property("additive", &AdvancedAnimComponent::additive)
+            .property("ik", &AdvancedAnimComponent::ik);
+
+        // === SocketComponent 등록 ===
+        rttr::registration::class_<SocketComponent>("SocketComponent")
+            .constructor<>();
+
+        // === AudioSourceComponent 등록 ===
+        rttr::registration::class_<AudioSourceComponent>("AudioSourceComponent")
+            .constructor<>()
+            .property("soundKey", &AudioSourceComponent::soundKey)
+            .property("soundPath", &AudioSourceComponent::soundPath)
+            .property("type", &AudioSourceComponent::type)
+            .property("is3D", &AudioSourceComponent::is3D)
+            .property("loop", &AudioSourceComponent::loop)
+            .property("playOnStart", &AudioSourceComponent::playOnStart)
+            .property("volume", &AudioSourceComponent::volume)
+            .property("pitch", &AudioSourceComponent::pitch)
+            .property("minDistance", &AudioSourceComponent::minDistance)
+            .property("maxDistance", &AudioSourceComponent::maxDistance);
+
+        // === AudioListenerComponent 등록 ===
+        rttr::registration::class_<AudioListenerComponent>("AudioListenerComponent")
+            .constructor<>()
+            .property("primary", &AudioListenerComponent::primary);
+
+        // === SoundBoxComponent 등록 ===
+        rttr::registration::class_<SoundBoxComponent>("SoundBoxComponent")
+            .constructor<>()
+            .property("soundKey", &SoundBoxComponent::soundKey)
+            .property("soundPath", &SoundBoxComponent::soundPath)
+            .property("type", &SoundBoxComponent::type)
+            .property("loop", &SoundBoxComponent::loop)
+            .property("playOnEnter", &SoundBoxComponent::playOnEnter)
+            .property("stopOnExit", &SoundBoxComponent::stopOnExit)
+            .property("boundsMin", &SoundBoxComponent::boundsMin)
+            .property("boundsMax", &SoundBoxComponent::boundsMax)
+            .property("edgeVolume", &SoundBoxComponent::edgeVolume)
+            .property("centerVolume", &SoundBoxComponent::centerVolume)
+            .property("curve", &SoundBoxComponent::curve)
+            .property("minDistance", &SoundBoxComponent::minDistance)
+            .property("maxDistance", &SoundBoxComponent::maxDistance);
 
         // === CameraComponent 등록 ===
         rttr::registration::class_<CameraComponent>("CameraComponent")

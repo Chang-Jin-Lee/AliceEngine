@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <unordered_map>
 #include <string>
@@ -10,6 +10,7 @@
 #include "3Dmodel/FbxModel.h"
 #include "3Dmodel/FbxAnimation.h"
 #include "Core/Logger.h"
+#include "Components/AnimBlueprintComponent.h"
 
 namespace Alice
 {
@@ -32,6 +33,11 @@ namespace Alice
             for (const auto& [entityId, skinned] : skinnedMap)
             {
                 if (skinned.meshAssetPath.empty())
+                    continue;
+
+                // AnimBlueprint / AdvancedAnim이 있으면 이 시스템은 건너뜀
+                if (world.GetComponent<AnimBlueprintComponent>(entityId) ||
+                    world.GetComponent<AdvancedAnimComponent>(entityId))
                     continue;
 
                 const auto mesh = m_registry.Find(skinned.meshAssetPath);

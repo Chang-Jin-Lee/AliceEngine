@@ -7,8 +7,10 @@
 #include <imgui.h>
 #include "imgui_node_editor.h"
 
+struct ID3D11Device;
 namespace Alice
 {
+   class ResourceManager;
    namespace ed = ax::NodeEditor;
    class AnimBlueprintEditor
    {
@@ -16,6 +18,9 @@ namespace Alice
        void Init();
        void Shutdown();
        void Draw(bool* pOpen = nullptr);
+
+       void SetResourceManager(class ResourceManager* resources) { m_resources = resources; }
+       void SetDevice(struct ID3D11Device* device) { m_device = device; }
 
        // =========================================================
        // [Params] (RTTR 기반)
@@ -138,7 +143,12 @@ namespace Alice
        State* m_InspectState = nullptr;
        Transition* m_InspectTrans = nullptr;
 
-       char m_File[260] = "AnimBlueprint.json";
+       char m_File[260] = "AnimationBlueprintJsonFile";
+       char m_TargetMesh[260] = "";
+       std::vector<std::string> m_TargetClips;
+
+       ResourceManager* m_resources = nullptr;
+       ID3D11Device* m_device = nullptr;
 
    private:
        // =========================================================
@@ -222,6 +232,10 @@ namespace Alice
 
        // UI
        void DrawToolbar();
+       void DrawTargetMeshToolbar();
+       void DrawClipSelector(const char* label, std::string& value);
+
+       bool LoadTargetClips();
 
        // Selection helpers (이전 NodeEditor 버전 호환)
        static void GetSelectedNodesVec(std::vector<ed::NodeId>& out);
@@ -234,6 +248,11 @@ namespace Alice
        // Pending node placement
        ed::NodeId m_PendingPlaceFsm{};
        bool m_PendingPlaceFsmUseMouse = false;
+
+       ImVec2 m_FsmPopupPos = ImVec2(0, 0);
+       ImVec2 m_BlendPopupPos = ImVec2(0, 0);
+       ImGuiID m_FsmPopupVp = 0;
+       ImGuiID m_BlendPopupVp = 0;
    };
 }
 

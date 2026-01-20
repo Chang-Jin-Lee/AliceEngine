@@ -56,6 +56,7 @@ set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
 set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
 set(IMGUI_NODE_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/imgui-node-editor")
 set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
+set(FMOD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/FMOD")
 
 # ==========================================
 # [설정] RTTR 라이브러리 (Engine에 통합)
@@ -112,12 +113,19 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
     ${ALICE_SRC_DIR}/Core/Input.cpp
 
+    # Audio
+    ${ALICE_SRC_DIR}/Audio/AudioSystem.cpp
+    ${ALICE_SRC_DIR}/Audio/SoundManager.cpp
+
     # FBX/3D 모델 로더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxModel.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxGeometry.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxAnimation.cpp
+
+    # AnimBlueprint
+    ${ALICE_SRC_DIR}/Game/AnimBlueprintAsset.cpp
 
     # 렌더링 계층
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
@@ -185,6 +193,10 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Vertex.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
+
+    # Audio
+    ${ALICE_SRC_DIR}/Audio/AudioSystem.h
+    ${ALICE_SRC_DIR}/Audio/SoundManager.h
     
     #컴포넌트들
     ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h
@@ -194,6 +206,12 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/CameraLookAtComponent.h
     ${ALICE_SRC_DIR}/Components/CameraShakeComponent.h
     ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
+    ${ALICE_SRC_DIR}/Components/AnimBlueprintComponent.h
+    ${ALICE_SRC_DIR}/Components/AdvancedAnimComponent.h
+    ${ALICE_SRC_DIR}/Components/SocketComponent.h
+    ${ALICE_SRC_DIR}/Components/AudioSourceComponent.h
+    ${ALICE_SRC_DIR}/Components/AudioListenerComponent.h
+    ${ALICE_SRC_DIR}/Components/SoundBoxComponent.h
     ${ALICE_SRC_DIR}/Components/MaterialComponent.h
     ${ALICE_SRC_DIR}/Components/PointLightComponent.h
     ${ALICE_SRC_DIR}/Components/RectLightComponent.h
@@ -226,6 +244,11 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
+
+    # AnimBlueprint
+    ${ALICE_SRC_DIR}/Game/AnimBlueprintAsset.h
+    ${ALICE_SRC_DIR}/Game/AnimBlueprintSystem.h
+    ${ALICE_SRC_DIR}/Game/AdvancedAnimSystem.h
 
     #PhysX 물리
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
@@ -314,6 +337,11 @@ target_include_directories(Engine
         ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR 헤더 경로
 )
 
+# FMOD include
+if(EXISTS "${FMOD_DIR}/inc")
+    target_include_directories(Engine PRIVATE "${FMOD_DIR}/inc")
+endif()
+
 # ImGui 정적 라이브러리
 add_library(imgui STATIC
     ${IMGUI_DIR}/imconfig.h
@@ -347,6 +375,10 @@ foreach(target Launch AlicePlayer)
             ${IMGUI_DIR}
             ${IMGUI_DIR}/backends
     )
+    if(EXISTS "${FMOD_DIR}/inc")
+        target_include_directories(${target} PRIVATE "${FMOD_DIR}/inc")
+        target_link_directories(${target} PRIVATE "${FMOD_DIR}/64x")
+    endif()
 endforeach()
 
 # ==========================================
@@ -437,7 +469,7 @@ target_link_libraries(Engine PUBLIC imgui_node_editor)
 # ==========================================
 if(MSVC)
     # 경고 레벨
-    target_compile_options(Engine      PRIVATE /W4 /permissive-)
+    target_compile_options(Engine      PRIVATE /W4 /permissive- /bigobj)
     target_compile_options(Launch      PRIVATE /W4 /permissive-)
     target_compile_options(AlicePlayer PRIVATE /W4 /permissive-)
 
@@ -489,6 +521,8 @@ foreach(target Launch AlicePlayer)
             directxtex
             $<$<CONFIG:Debug>:assimp-vc143-mtd>
             $<$<CONFIG:Release>:assimp-vc143-mt>
+            $<$<CONFIG:Debug>:fmodL_vc>
+            $<$<CONFIG:Release>:fmod_vc>
     )
 endforeach()
 
@@ -576,4 +610,32 @@ if(MSVC)
                 "$<TARGET_FILE_DIR:${target}>/PhysXCooking_64.dll"
         )
     endforeach()
+endif()
+
+
+
+# ==========================================
+# [Post-Build] FMOD DLL 복사
+# ==========================================
+if(WIN32)
+  set(FMOD_BIN_DIR "${FMOD_DIR}/64x")
+
+  if(NOT EXISTS "${FMOD_BIN_DIR}/fmod.dll")
+    message(FATAL_ERROR "[FMOD] not found: ${FMOD_BIN_DIR}/fmod.dll")
+  endif()
+  if(NOT EXISTS "${FMOD_BIN_DIR}/fmodL.dll")
+    message(FATAL_ERROR "[FMOD] not found: ${FMOD_BIN_DIR}/fmodL.dll")
+  endif()
+
+  foreach(t Launch AlicePlayer)
+    add_custom_command(TARGET ${t} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${FMOD_BIN_DIR}/fmod.dll"
+              "$<TARGET_FILE_DIR:${t}>/fmod.dll"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${FMOD_BIN_DIR}/fmodL.dll"
+              "$<TARGET_FILE_DIR:${t}>/fmodL.dll"
+      VERBATIM
+    )
+  endforeach()
 endif()
