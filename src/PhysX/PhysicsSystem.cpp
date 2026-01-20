@@ -1914,8 +1914,8 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 return;
             }
 
-            // Triangle mesh는 키네마틱이 아닌 동적 RigidBody와 함께 사용할 수 없음
-            // 키네마틱 플랫폼/문 같은 경우는 Triangle mesh 사용 가능
+            // Triangle mesh는 RigidBody와 함께 사용할 수 없음 (PhysX 제약)
+            // RigidBody가 있으면 Convex mesh로 자동 전환됨
             if (meshCollider->type == MeshColliderType::Triangle && rb && !rb->isKinematic)
             {
                 ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic (non-kinematic) RigidBody (entity: %llu).",
@@ -2578,8 +2578,8 @@ void PhysicsSystem::RebuildMeshShapes(EntityId entityId)
         return;
     }
 
-    // Triangle mesh는 키네마틱이 아닌 동적 RigidBody와 함께 사용할 수 없음
-    // 키네마틱 플랫폼/문 같은 경우는 Triangle mesh 사용 가능
+    // Triangle mesh는 RigidBody와 함께 사용할 수 없음 (PhysX 제약)
+    // RigidBody가 있으면 Convex mesh로 자동 전환됨
     if (meshCollider->type == MeshColliderType::Triangle && handle.GetRigidBody())
     {
         auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);

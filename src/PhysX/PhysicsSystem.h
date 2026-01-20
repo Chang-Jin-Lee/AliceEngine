@@ -14,6 +14,7 @@
 #include <memory>
 #include <array>
 #include <string>
+#include <limits>
 
 namespace Alice { class SkinnedMeshRegistry; }
 
