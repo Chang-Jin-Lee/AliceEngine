@@ -29,6 +29,8 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/EffectComponent.h"
+#include "Components/SwordEffectComponent.h"
 
 
 // 물리 컴포넌트들

@@ -16,8 +16,10 @@
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include "Components/SwordEffectComponent.h"
 #include "Rendering/ShaderCode/CommonShaderCode.h"
 #include "Rendering/ShaderCode/DeferredShader.h"
+#include "Rendering/SwordRenderSystem.h"
 #include <fstream>
 #include <sstream>
 
@@ -1116,8 +1118,14 @@ namespace Alice
         // G-Buffer 패스
         PassGBuffer(world, camera, skinnedCommands, cameraEntities, editorMode, isPlaying);
 
-        // Deferred Light 패스
+        // Deferred Light 패스 (IBL 포함)
         PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
+
+        // SwordRenderSystem 렌더링 (IBL 패스 이후)
+        if (m_swordRenderSystem)
+        {
+            m_swordRenderSystem->Render(world, camera);
+        }
 
         // 스카이박스 렌더링
         if (m_skyboxEnabled)

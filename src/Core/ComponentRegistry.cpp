@@ -10,6 +10,8 @@
 #include "PhysX/Components/ColliderComponent.h"
 #include "PhysX/Components/TerrainHeightFieldComponent.h"
 #include "PhysX/IPhysicsWorld.h"
+#include "Components/EffectComponent.h"
+#include "Components/SwordEffectComponent.h"
 
 using namespace DirectX;
 
@@ -297,6 +299,25 @@ namespace Alice
             .property("collideMask", &TerrainHeightFieldComponent::collideMask)
             .property("queryMask", &TerrainHeightFieldComponent::queryMask);
 
+        // === EffectComponent 등록 ===
+        rttr::registration::class_<EffectComponent>("EffectComponent")
+            .constructor<>()
+            .property("color", &EffectComponent::color)
+            .property("size", &EffectComponent::size)
+            .property("enabled", &EffectComponent::enabled)
+            .property("alpha", &EffectComponent::alpha);
+
+        // === SwordEffectComponent 등록 (splinePoints는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<SwordEffectComponent>("SwordEffectComponent")
+            .constructor<>()
+            .property("color", &SwordEffectComponent::color)
+            .property("alpha", &SwordEffectComponent::alpha)
+            .property("enabled", &SwordEffectComponent::enabled)
+            .property("startPoint", &SwordEffectComponent::startPoint)
+            .property("endPoint", &SwordEffectComponent::endPoint)
+            .property("controlPoint1", &SwordEffectComponent::controlPoint1)
+            .property("controlPoint2", &SwordEffectComponent::controlPoint2)
+            .property("segmentCount", &SwordEffectComponent::segmentCount);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();
