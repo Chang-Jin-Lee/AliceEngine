@@ -107,9 +107,17 @@ static bool BuildMeshBuffers(const SkinnedMeshRegistry* registry,
 	return !outVertices.empty() && !outIndices.empty();
 }
 
+// Float 비교를 위한 epsilon (일반적으로 1e-5 정도)
+static constexpr float kFloatEpsilon = 1e-5f;
+
+static bool FloatEqual(float a, float b) noexcept
+{
+	return std::abs(a - b) < kFloatEpsilon;
+}
+
 static bool Float3Equal(const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) noexcept
 {
-	return a.x == b.x && a.y == b.y && a.z == b.z;
+	return FloatEqual(a.x, b.x) && FloatEqual(a.y, b.y) && FloatEqual(a.z, b.z);
 }
 
 static bool JointFrameEqual(const Phy_JointFrame& a, const Phy_JointFrame& b) noexcept
@@ -122,12 +130,12 @@ static bool RevoluteEqual(const Phy_RevoluteJointSettings& a, const Phy_Revolute
 	// 구조적 설정만 비교 (재생성 트리거)
 	// driveVelocity, driveForceLimit는 런타임 제어값이므로 재생성 트리거에서 제외
 	return a.enableLimit == b.enableLimit &&
-		a.lowerLimit == b.lowerLimit &&
-		a.upperLimit == b.upperLimit &&
-		a.limitStiffness == b.limitStiffness &&
-		a.limitDamping == b.limitDamping &&
-		a.limitRestitution == b.limitRestitution &&
-		a.limitBounceThreshold == b.limitBounceThreshold &&
+		FloatEqual(a.lowerLimit, b.lowerLimit) &&
+		FloatEqual(a.upperLimit, b.upperLimit) &&
+		FloatEqual(a.limitStiffness, b.limitStiffness) &&
+		FloatEqual(a.limitDamping, b.limitDamping) &&
+		FloatEqual(a.limitRestitution, b.limitRestitution) &&
+		FloatEqual(a.limitBounceThreshold, b.limitBounceThreshold) &&
 		a.enableDrive == b.enableDrive &&
 		// driveVelocity, driveForceLimit는 런타임 제어이므로 제외
 		a.driveFreeSpin == b.driveFreeSpin &&
@@ -137,73 +145,73 @@ static bool RevoluteEqual(const Phy_RevoluteJointSettings& a, const Phy_Revolute
 static bool PrismaticEqual(const Phy_PrismaticJointSettings& a, const Phy_PrismaticJointSettings& b) noexcept
 {
 	return a.enableLimit == b.enableLimit &&
-		a.lowerLimit == b.lowerLimit &&
-		a.upperLimit == b.upperLimit &&
-		a.limitStiffness == b.limitStiffness &&
-		a.limitDamping == b.limitDamping &&
-		a.limitRestitution == b.limitRestitution &&
-		a.limitBounceThreshold == b.limitBounceThreshold;
+		FloatEqual(a.lowerLimit, b.lowerLimit) &&
+		FloatEqual(a.upperLimit, b.upperLimit) &&
+		FloatEqual(a.limitStiffness, b.limitStiffness) &&
+		FloatEqual(a.limitDamping, b.limitDamping) &&
+		FloatEqual(a.limitRestitution, b.limitRestitution) &&
+		FloatEqual(a.limitBounceThreshold, b.limitBounceThreshold);
 }
 
 static bool DistanceEqual(const Phy_DistanceJointSettings& a, const Phy_DistanceJointSettings& b) noexcept
 {
-	return a.minDistance == b.minDistance &&
-		a.maxDistance == b.maxDistance &&
-		a.tolerance == b.tolerance &&
+	return FloatEqual(a.minDistance, b.minDistance) &&
+		FloatEqual(a.maxDistance, b.maxDistance) &&
+		FloatEqual(a.tolerance, b.tolerance) &&
 		a.enableMinDistance == b.enableMinDistance &&
 		a.enableMaxDistance == b.enableMaxDistance &&
 		a.enableSpring == b.enableSpring &&
-		a.stiffness == b.stiffness &&
-		a.damping == b.damping;
+		FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping);
 }
 
 static bool SphericalEqual(const Phy_SphericalJointSettings& a, const Phy_SphericalJointSettings& b) noexcept
 {
 	return a.enableLimit == b.enableLimit &&
-		a.yLimitAngle == b.yLimitAngle &&
-		a.zLimitAngle == b.zLimitAngle &&
-		a.limitStiffness == b.limitStiffness &&
-		a.limitDamping == b.limitDamping &&
-		a.limitRestitution == b.limitRestitution &&
-		a.limitBounceThreshold == b.limitBounceThreshold;
+		FloatEqual(a.yLimitAngle, b.yLimitAngle) &&
+		FloatEqual(a.zLimitAngle, b.zLimitAngle) &&
+		FloatEqual(a.limitStiffness, b.limitStiffness) &&
+		FloatEqual(a.limitDamping, b.limitDamping) &&
+		FloatEqual(a.limitRestitution, b.limitRestitution) &&
+		FloatEqual(a.limitBounceThreshold, b.limitBounceThreshold);
 }
 
 static bool D6DriveEqual(const Phy_D6JointDriveSettings& a, const Phy_D6JointDriveSettings& b) noexcept
 {
-	return a.stiffness == b.stiffness &&
-		a.damping == b.damping &&
-		a.forceLimit == b.forceLimit &&
+	return FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping) &&
+		FloatEqual(a.forceLimit, b.forceLimit) &&
 		a.isAcceleration == b.isAcceleration;
 }
 
 static bool D6LinearEqual(const Phy_D6LinearLimitSettings& a, const Phy_D6LinearLimitSettings& b) noexcept
 {
-	return a.lower == b.lower &&
-		a.upper == b.upper &&
-		a.stiffness == b.stiffness &&
-		a.damping == b.damping &&
-		a.restitution == b.restitution &&
-		a.bounceThreshold == b.bounceThreshold;
+	return FloatEqual(a.lower, b.lower) &&
+		FloatEqual(a.upper, b.upper) &&
+		FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping) &&
+		FloatEqual(a.restitution, b.restitution) &&
+		FloatEqual(a.bounceThreshold, b.bounceThreshold);
 }
 
 static bool D6TwistEqual(const Phy_D6TwistLimitSettings& a, const Phy_D6TwistLimitSettings& b) noexcept
 {
-	return a.lower == b.lower &&
-		a.upper == b.upper &&
-		a.stiffness == b.stiffness &&
-		a.damping == b.damping &&
-		a.restitution == b.restitution &&
-		a.bounceThreshold == b.bounceThreshold;
+	return FloatEqual(a.lower, b.lower) &&
+		FloatEqual(a.upper, b.upper) &&
+		FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping) &&
+		FloatEqual(a.restitution, b.restitution) &&
+		FloatEqual(a.bounceThreshold, b.bounceThreshold);
 }
 
 static bool D6SwingEqual(const Phy_D6SwingLimitSettings& a, const Phy_D6SwingLimitSettings& b) noexcept
 {
-	return a.yAngle == b.yAngle &&
-		a.zAngle == b.zAngle &&
-		a.stiffness == b.stiffness &&
-		a.damping == b.damping &&
-		a.restitution == b.restitution &&
-		a.bounceThreshold == b.bounceThreshold;
+	return FloatEqual(a.yAngle, b.yAngle) &&
+		FloatEqual(a.zAngle, b.zAngle) &&
+		FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping) &&
+		FloatEqual(a.restitution, b.restitution) &&
+		FloatEqual(a.bounceThreshold, b.bounceThreshold);
 }
 
 static bool D6Equal(const Phy_D6JointSettings& a, const Phy_D6JointSettings& b) noexcept
@@ -241,8 +249,8 @@ static bool JointSnapshotEqual(const Phy_JointComponent& a, const Phy_JointCompo
 		JointFrameEqual(a.frameA, b.frameA) &&
 		JointFrameEqual(a.frameB, b.frameB) &&
 		a.collideConnected == b.collideConnected &&
-		a.breakForce == b.breakForce &&
-		a.breakTorque == b.breakTorque &&
+		FloatEqual(a.breakForce, b.breakForce) &&
+		FloatEqual(a.breakTorque, b.breakTorque) &&
 		RevoluteEqual(a.revolute, b.revolute) &&
 		PrismaticEqual(a.prismatic, b.prismatic) &&
 		DistanceEqual(a.distance, b.distance) &&
@@ -654,9 +662,9 @@ void PhysicsSystem::Update(float deltaTime)
 			const bool needRebuild =
 				!m_groundPlaneActor ||
 				cur.enabled != m_lastGroundPlane.enabled ||
-				cur.staticFriction != m_lastGroundPlane.staticFriction ||
-				cur.dynamicFriction != m_lastGroundPlane.dynamicFriction ||
-				cur.restitution != m_lastGroundPlane.restitution ||
+				!FloatEqual(cur.staticFriction, m_lastGroundPlane.staticFriction) ||
+				!FloatEqual(cur.dynamicFriction, m_lastGroundPlane.dynamicFriction) ||
+				!FloatEqual(cur.restitution, m_lastGroundPlane.restitution) ||
 				cur.layerBits != m_lastGroundPlane.layerBits ||
 				cur.collideMask != m_lastGroundPlane.collideMask ||
 				cur.queryMask != m_lastGroundPlane.queryMask ||
@@ -697,12 +705,14 @@ void PhysicsSystem::Update(float deltaTime)
 
     // 1. 컴포넌트 변경 감지 및 물리 액터 생성/삭제
     {
-        auto rigidBodies = m_world.GetComponents<Phy_RigidBodyComponent>();
-        std::unordered_set<EntityId> entitiesWithRigidBody;
+        // 성능 최적화: 멤버 변수 재사용 (할당/리해시 비용 절감)
+        m_tempEntitiesWithRigidBody.clear();
+        m_tempEntitiesWithMeshCollider.clear();
         
+        auto rigidBodies = m_world.GetComponents<Phy_RigidBodyComponent>();
         for (const auto& [entityId, rb] : rigidBodies)
         {
-            entitiesWithRigidBody.insert(entityId);
+            m_tempEntitiesWithRigidBody.insert(entityId);
             
             if (rb.physicsActorHandle == nullptr)
             {
@@ -711,12 +721,11 @@ void PhysicsSystem::Update(float deltaTime)
         }
 
         auto meshColliders = m_world.GetComponents<Phy_MeshColliderComponent>();
-        std::unordered_set<EntityId> entitiesWithMeshCollider;
         for (const auto& [entityId, mc] : meshColliders)
         {
-            entitiesWithMeshCollider.insert(entityId);
+            m_tempEntitiesWithMeshCollider.insert(entityId);
 
-            const bool hasRB = (entitiesWithRigidBody.find(entityId) != entitiesWithRigidBody.end());
+            const bool hasRB = (m_tempEntitiesWithRigidBody.find(entityId) != m_tempEntitiesWithRigidBody.end());
             if (!hasRB)
             {
                 if (mc.physicsActorHandle == nullptr)
@@ -742,8 +751,8 @@ void PhysicsSystem::Update(float deltaTime)
         auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
         for (const auto& [entityId, collider] : colliders)
         {
-            const bool hasRB = (entitiesWithRigidBody.find(entityId) != entitiesWithRigidBody.end());
-            const bool hasMesh = (entitiesWithMeshCollider.find(entityId) != entitiesWithMeshCollider.end());
+            const bool hasRB = (m_tempEntitiesWithRigidBody.find(entityId) != m_tempEntitiesWithRigidBody.end());
+            const bool hasMesh = (m_tempEntitiesWithMeshCollider.find(entityId) != m_tempEntitiesWithMeshCollider.end());
 
             if (hasMesh)
             {
@@ -814,8 +823,10 @@ void PhysicsSystem::Update(float deltaTime)
 
         // Joint 생성/삭제 및 변경 감지
         {
+            // 성능 최적화: 멤버 변수 재사용
+            m_tempEntitiesWithJoint.clear();
+            
             auto joints = m_world.GetComponents<Phy_JointComponent>();
-            std::unordered_set<EntityId> entitiesWithJoint;
 
             auto getActor = [&](EntityId id) -> IPhysicsActor*
             {
@@ -845,7 +856,7 @@ void PhysicsSystem::Update(float deltaTime)
 
             for (const auto& [entityId, jointComp] : joints)
             {
-                entitiesWithJoint.insert(entityId);
+                m_tempEntitiesWithJoint.insert(entityId);
                 auto* joint = m_world.GetComponent<Phy_JointComponent>(entityId);
                 if (!joint) continue;
 
@@ -927,6 +938,7 @@ void PhysicsSystem::Update(float deltaTime)
                 // In-place 업데이트 (breakForce/collideConnected)
                 if (needsInPlaceUpdate && !needsRebuild && itJoint->second && itJoint->second->IsValid())
                 {
+                    //원래 이거 접근할 때, 씬 락 걸어야하는데 싱글 스레드 루프라 괜찮음 - 그래서 놔둠
                     itJoint->second->SetBreakForce(joint->breakForce, joint->breakTorque);
                     itJoint->second->SetCollideConnected(joint->collideConnected);
                     // 스냅샷 업데이트 (다음 프레임 재업데이트 방지)
@@ -1130,7 +1142,7 @@ void PhysicsSystem::Update(float deltaTime)
             std::vector<EntityId> jointToRemove;
             for (const auto& [entityId, handle] : m_entityToJoint)
             {
-                if (entitiesWithJoint.find(entityId) == entitiesWithJoint.end())
+                if (m_tempEntitiesWithJoint.find(entityId) == m_tempEntitiesWithJoint.end())
                     jointToRemove.push_back(entityId);
             }
             for (auto eid : jointToRemove)
@@ -1243,14 +1255,14 @@ void PhysicsSystem::Update(float deltaTime)
 				}
 
                 if (collider.type != last.type ||
-                    collider.halfExtents.x != last.halfExtents.x || collider.halfExtents.y != last.halfExtents.y || collider.halfExtents.z != last.halfExtents.z ||
-                    collider.radius != last.radius ||
-                    collider.capsuleRadius != last.capsuleRadius ||
-                    collider.capsuleHalfHeight != last.capsuleHalfHeight ||
+                    !FloatEqual(collider.halfExtents.x, last.halfExtents.x) || !FloatEqual(collider.halfExtents.y, last.halfExtents.y) || !FloatEqual(collider.halfExtents.z, last.halfExtents.z) ||
+                    !FloatEqual(collider.radius, last.radius) ||
+                    !FloatEqual(collider.capsuleRadius, last.capsuleRadius) ||
+                    !FloatEqual(collider.capsuleHalfHeight, last.capsuleHalfHeight) ||
                     collider.capsuleAlignYAxis != last.capsuleAlignYAxis ||
-                    collider.staticFriction != last.staticFriction ||
-                    collider.dynamicFriction != last.dynamicFriction ||
-                    collider.restitution != last.restitution ||
+                    !FloatEqual(collider.staticFriction, last.staticFriction) ||
+                    !FloatEqual(collider.dynamicFriction, last.dynamicFriction) ||
+                    !FloatEqual(collider.restitution, last.restitution) ||
                     collider.isTrigger != last.isTrigger)
                 {
                     changed = true;
@@ -1262,9 +1274,9 @@ void PhysicsSystem::Update(float deltaTime)
 				}
 
                 // Scale 변경
-                if (transform->scale.x != last.scale.x || 
-                    transform->scale.y != last.scale.y || 
-                    transform->scale.z != last.scale.z)
+                if (!FloatEqual(transform->scale.x, last.scale.x) || 
+                    !FloatEqual(transform->scale.y, last.scale.y) || 
+                    !FloatEqual(transform->scale.z, last.scale.z))
                 {
                     changed = true;
                 }
@@ -1402,9 +1414,9 @@ void PhysicsSystem::Update(float deltaTime)
 
                 if (mc.type != last.type ||
                     resolvedPath != last.meshAssetPath ||
-                    mc.staticFriction != last.staticFriction ||
-                    mc.dynamicFriction != last.dynamicFriction ||
-                    mc.restitution != last.restitution ||
+                    !FloatEqual(mc.staticFriction, last.staticFriction) ||
+                    !FloatEqual(mc.dynamicFriction, last.dynamicFriction) ||
+                    !FloatEqual(mc.restitution, last.restitution) ||
                     mc.isTrigger != last.isTrigger ||
                     mc.flipNormals != last.flipNormals ||
                     mc.doubleSidedQueries != last.doubleSidedQueries ||
@@ -1420,9 +1432,9 @@ void PhysicsSystem::Update(float deltaTime)
                     if (!maskOnlyChanged) maskOnlyChanged = true;
                 }
 
-                if (transform->scale.x != last.scale.x ||
-                    transform->scale.y != last.scale.y ||
-                    transform->scale.z != last.scale.z)
+                if (!FloatEqual(transform->scale.x, last.scale.x) ||
+                    !FloatEqual(transform->scale.y, last.scale.y) ||
+                    !FloatEqual(transform->scale.z, last.scale.z))
                 {
                     changed = true;
                 }
@@ -1545,23 +1557,23 @@ void PhysicsSystem::Update(float deltaTime)
 
             if (cur.lockFlags != prev.lockFlags) body->SetLockFlags(cur.lockFlags);
 
-            if (cur.linearDamping != prev.linearDamping || cur.angularDamping != prev.angularDamping)
+            if (!FloatEqual(cur.linearDamping, prev.linearDamping) || !FloatEqual(cur.angularDamping, prev.angularDamping))
                 body->SetDamping(cur.linearDamping, cur.angularDamping);
 
-            if (cur.maxLinearVelocity != prev.maxLinearVelocity || cur.maxAngularVelocity != prev.maxAngularVelocity)
+            if (!FloatEqual(cur.maxLinearVelocity, prev.maxLinearVelocity) || !FloatEqual(cur.maxAngularVelocity, prev.maxAngularVelocity))
                 body->SetMaxVelocities(cur.maxLinearVelocity, cur.maxAngularVelocity);
 
-            if (cur.density != prev.density || cur.massOverride != prev.massOverride)
+            if (!FloatEqual(cur.density, prev.density) || !FloatEqual(cur.massOverride, prev.massOverride))
                 body->SetMassProperties(cur.density, cur.massOverride);
 
             if (cur.solverPositionIterations != prev.solverPositionIterations ||
                 cur.solverVelocityIterations != prev.solverVelocityIterations)
                 body->SetSolverIterations(cur.solverPositionIterations, cur.solverVelocityIterations);
 
-            if (cur.sleepThreshold != prev.sleepThreshold)
+            if (!FloatEqual(cur.sleepThreshold, prev.sleepThreshold))
                 body->SetSleepThreshold(cur.sleepThreshold);
 
-            if (cur.stabilizationThreshold != prev.stabilizationThreshold)
+            if (!FloatEqual(cur.stabilizationThreshold, prev.stabilizationThreshold))
                 body->SetStabilizationThreshold(cur.stabilizationThreshold);
 
             if (cur.startAwake != prev.startAwake)
