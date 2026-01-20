@@ -8,10 +8,10 @@
 namespace Alice
 {
     class SwordEffectComponent;
-    /// 쉐이더 기반 Catmull-Rom 스플라인 검기 이펙트 스크립트
-    /// - 하나의 빈 오브젝트만 사용
-    /// - 쉐이더를 통해 스플라인 기반 검기 렌더링
-    /// - 검기 생성 후 점차 사라지는 효과
+    /// 트레일/리본 기반 검기 이펙트 스크립트
+    /// - 무기의 루트/팁 지점을 시간에 따라 샘플링
+    /// - Triangle Strip으로 리본 메쉬 생성
+    /// - Age 기반 페이드 아웃 효과
     class SwordSlashEffect : public IScript
     {
         ALICE_BODY(SwordSlashEffect);
@@ -23,23 +23,21 @@ namespace Alice
         void OnDestroy() override;
 
         // Inspector 속성
-        ALICE_PROPERTY(DirectX::XMFLOAT3, m_startPoint, DirectX::XMFLOAT3(-2.0f, 1.5f, 0.0f));
-        ALICE_PROPERTY(DirectX::XMFLOAT3, m_endPoint, DirectX::XMFLOAT3(2.0f, 1.5f, 0.0f));
-        ALICE_PROPERTY(DirectX::XMFLOAT3, m_controlPoint1, DirectX::XMFLOAT3(-1.0f, 1.5f, -0.5f));
-        ALICE_PROPERTY(DirectX::XMFLOAT3, m_controlPoint2, DirectX::XMFLOAT3(1.0f, 1.5f, 0.5f));
-        ALICE_PROPERTY(float, m_speed, 2.0f);              // 검기 이동 속도
-        ALICE_PROPERTY(bool, m_loop, false);               // 반복할지 여부
-        ALICE_PROPERTY(float, m_fadeDuration, 1.0f);      // 페이드 아웃 시간 (초)
-        ALICE_PROPERTY(int, m_segmentCount, 64);          // 스플라인 세그먼트 수
+        ALICE_PROPERTY(DirectX::XMFLOAT3, m_rootPoint, DirectX::XMFLOAT3(-1.0f, 1.5f, 0.0f));      // 무기 루트 위치
+        ALICE_PROPERTY(DirectX::XMFLOAT3, m_tipPoint, DirectX::XMFLOAT3(1.0f, 1.5f, 0.0f));       // 무기 팁 위치
+        ALICE_PROPERTY(float, m_sampleInterval, 0.016f);    // 샘플링 간격 (초, 기본 60fps)
+        ALICE_PROPERTY(int, m_maxSamples, 60);              // 최대 샘플 수 (링 버퍼 크기)
+        ALICE_PROPERTY(float, m_fadeDuration, 1.0f);        // 페이드 아웃 시간 (초)
+        ALICE_PROPERTY(bool, m_autoMove, true);             // 자동 이동 시뮬레이션 (테스트용)
+        ALICE_PROPERTY(float, m_moveSpeed, 2.0f);           // 자동 이동 속도
 
     private:
-        void CalculateSplinePoints(SwordEffectComponent* effect);
-        DirectX::XMFLOAT3 CalculateCatmullRomSpline(float t, SwordEffectComponent* effect);
+        void AddTrailSample(SwordEffectComponent* effect, const DirectX::XMFLOAT3& rootPos, const DirectX::XMFLOAT3& tipPos, float currentTime);
+        void UpdateTrailLength(SwordEffectComponent* effect);
 
-        float m_currentProgress;     // 현재 진행도 (0.0 ~ 1.0)
-        float m_currentAlpha;        // 현재 알파 값 (1.0 ~ 0.0)
-        float m_elapsedTime;         // 경과 시간
-        bool m_isActive;             // 활성화 여부
-        bool m_hasStarted;           // 시작 여부
+        float m_currentTime;          // 현재 시간 (초)
+        float m_lastSampleTime;       // 마지막 샘플링 시간
+        bool m_isActive;              // 활성화 여부
+        bool m_hasStarted;            // 시작 여부
     };
 }

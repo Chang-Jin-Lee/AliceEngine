@@ -21,11 +21,9 @@ namespace Alice
             effect->color = DirectX::XMFLOAT3(0.8f, 0.2f, 0.9f);
             effect->alpha = 1.0f;
             effect->enabled = true;
-            effect->startPoint = Get_m_startPoint();
-            effect->endPoint = Get_m_endPoint();
-            effect->controlPoint1 = Get_m_controlPoint1();
-            effect->controlPoint2 = Get_m_controlPoint2();
-            effect->segmentCount = Get_m_segmentCount();
+            effect->maxSamples = m_maxSamples;
+            effect->sampleInterval = m_sampleInterval;
+            effect->fadeDuration = m_fadeDuration;
         }
     }
 
@@ -40,26 +38,25 @@ namespace Alice
 
         // SwordEffectComponent가 없으면 추가 (Awake에서 추가되지 않은 경우 대비)
         auto* effect = GetComponent<SwordEffectComponent>();
-        if (!effect)
-        {
-            effect = &AddComponent<SwordEffectComponent>();
-            effect->color = DirectX::XMFLOAT3(0.8f, 0.2f, 0.9f);
-            effect->alpha = 1.0f;
-            effect->enabled = true;
-            effect->startPoint = Get_m_startPoint();
-            effect->endPoint = Get_m_endPoint();
-            effect->controlPoint1 = Get_m_controlPoint1();
-            effect->controlPoint2 = Get_m_controlPoint2();
-            effect->segmentCount = Get_m_segmentCount();
-        }
+		if (!effect)
+		{
+			effect = &AddComponent<SwordEffectComponent>();
+			effect->color = DirectX::XMFLOAT3(0.8f, 0.2f, 0.9f);
+			effect->alpha = 1.0f;
+			effect->enabled = true;
+			effect->maxSamples = m_maxSamples;
+			effect->sampleInterval = m_sampleInterval;
+			effect->fadeDuration = m_fadeDuration;
+		}
 
-        m_currentProgress = 0.0f;
-        m_currentAlpha = 1.0f;
-        m_elapsedTime = 0.0f;
+        // 시간 초기화 (deltaTime 누적 방식)
+        m_currentTime = 0.0f;
+        m_lastSampleTime = -effect->sampleInterval; // 첫 샘플을 바로 추가하도록
         m_isActive = true;
         m_hasStarted = false;
 
-        ALICE_LOG_INFO("[SwordSlashEffect] SwordEffectComponent 기반 검기 효과 초기화 완료");
+        AddTrailSample(effect, m_rootPoint, m_tipPoint, m_currentTime);
+        ALICE_LOG_INFO("[SwordSlashEffect] 트레일 기반 검기 효과 초기화 완료");
     }
 
     void SwordSlashEffect::Update(float deltaTime)
@@ -67,74 +64,60 @@ namespace Alice
         auto* effect = GetComponent<SwordEffectComponent>();
         if (!effect) return;
 
-        // Inspector에서 변경된 제어점들을 컴포넌트에 동기화
-        effect->startPoint = Get_m_startPoint();
-        effect->endPoint = Get_m_endPoint();
-        effect->controlPoint1 = Get_m_controlPoint1();
-        effect->controlPoint2 = Get_m_controlPoint2();
-        effect->segmentCount = Get_m_segmentCount();
+        // Inspector 속성 동기화
+		effect->maxSamples = m_maxSamples;
+        effect->sampleInterval = m_sampleInterval;
+        effect->fadeDuration = m_fadeDuration;
 
-        if (!m_isActive && !Get_m_loop()) 
+        if (!m_isActive)
         {
             effect->enabled = false;
             return;
         }
 
-        m_elapsedTime += deltaTime;
+        // deltaTime 누적하여 현재 시간 계산
+        m_currentTime += deltaTime;
+        effect->currentTime = m_currentTime; // 렌더 시스템에서 사용할 수 있도록 동기화
+        m_hasStarted = true;
 
-        // 스플라인 점 계산 및 컴포넌트에 저장
-        CalculateSplinePoints(effect);
-
-        // 진행도 업데이트
-        m_currentProgress += Get_m_speed() * deltaTime;
-
-        if (m_currentProgress >= 1.0f)
+        // 샘플링 간격에 따라 새 샘플 추가
+        if (m_currentTime - m_lastSampleTime >= effect->sampleInterval)
         {
-            if (Get_m_loop())
-            {
-                // 반복 모드: 처음부터 다시 시작
-                m_currentProgress = 0.0f;
-                m_currentAlpha = 1.0f;
-                m_elapsedTime = 0.0f;
-            }
-            else
-            {
-                // 한 번만 실행: 페이드 아웃 시작
-                m_currentProgress = 1.0f;
-                m_hasStarted = true;
-            }
-        }
-        else
-        {
-            m_hasStarted = true;
-        }
+			DirectX::XMFLOAT3 rootPos = m_rootPoint;
+            DirectX::XMFLOAT3 tipPos = m_tipPoint;
 
-        // 알파 값 계산 (페이드 아웃)
-        if (m_hasStarted)
-        {
-            float fadeStartTime = 1.0f / Get_m_speed(); // 스플라인 완료 시간
-            float fadeElapsed = m_elapsedTime - fadeStartTime;
-            
-            if (fadeElapsed > 0.0f)
+            // 자동 이동 시뮬레이션 (테스트용)
+            if (m_autoMove)
             {
-                float fadeRatio = fadeElapsed / Get_m_fadeDuration();
-                m_currentAlpha = std::max(0.0f, 1.0f - fadeRatio);
-                
-                if (m_currentAlpha <= 0.0f && !Get_m_loop())
-                {
-                    m_isActive = false;
-                    effect->enabled = false;
-                }
-            }
-            else
-            {
-                m_currentAlpha = 1.0f;
+                float angle = m_currentTime * m_moveSpeed;
+                float radius = 2.0f;
+                rootPos = DirectX::XMFLOAT3(
+                    std::cos(angle) * radius,
+                    1.5f + std::sin(angle * 0.5f) * 0.5f,
+                    std::sin(angle) * radius
+                );
+                tipPos = DirectX::XMFLOAT3(
+                    std::cos(angle + 0.3f) * (radius + 0.5f),
+                    rootPos.y + 0.3f,
+                    std::sin(angle + 0.3f) * (radius + 0.5f)
+                );
             }
 
-            // SwordEffectComponent의 alpha 업데이트
-            effect->alpha = m_currentAlpha;
-            effect->enabled = m_isActive;
+            AddTrailSample(effect, rootPos, tipPos, m_currentTime);
+            m_lastSampleTime = m_currentTime;
         }
+
+        // 오래된 샘플 제거 (age 기반)
+        float fadeStartTime = m_currentTime - effect->fadeDuration;
+        auto& samples = effect->trailSamples;
+        samples.erase(
+            std::remove_if(samples.begin(), samples.end(),
+                [fadeStartTime](const TrailSample& s) { return s.birthTime < fadeStartTime; }),
+            samples.end()
+        );
+
+        // 트레일 길이 업데이트
+        UpdateTrailLength(effect);
     }
 
     void SwordSlashEffect::OnDestroy()
@@ -142,59 +125,74 @@ namespace Alice
         auto* effect = GetComponent<SwordEffectComponent>();
         if (effect)
         {
-            effect->splinePoints.clear();
+            effect->trailSamples.clear();
+            effect->totalLength = 0.0f;
         }
     }
 
-    void SwordSlashEffect::CalculateSplinePoints(SwordEffectComponent* effect)
+    void SwordSlashEffect::AddTrailSample(SwordEffectComponent* effect, const DirectX::XMFLOAT3& rootPos, const DirectX::XMFLOAT3& tipPos, float currentTime)
     {
         if (!effect) return;
 
-        effect->splinePoints.clear();
-        effect->splinePoints.reserve(effect->segmentCount + 1);
-
-        for (int i = 0; i <= effect->segmentCount; ++i)
+        TrailSample sample;
+        sample.rootPos = rootPos;
+        sample.tipPos = tipPos;
+        sample.birthTime = currentTime;
+        
+        // 누적 길이 계산
+        auto& samples = effect->trailSamples;
+        if (samples.empty())
         {
-            float t = static_cast<float>(i) / static_cast<float>(effect->segmentCount);
-            DirectX::XMFLOAT3 point = CalculateCatmullRomSpline(t, effect);
-            effect->splinePoints.push_back(point);
+            sample.length = 0.0f;
+        }
+        else
+        {
+            const auto& lastSample = samples.back();
+            using namespace DirectX;
+            XMVECTOR v0 = XMLoadFloat3(&lastSample.tipPos);
+            XMVECTOR v1 = XMLoadFloat3(&tipPos);
+            XMVECTOR diff = XMVectorSubtract(v1, v0);
+            float segmentLength = XMVectorGetX(XMVector3Length(diff));
+            sample.length = lastSample.length + segmentLength;
+        }
+
+        samples.push_back(sample);
+
+        // 링 버퍼: 최대 샘플 수 초과 시 오래된 샘플 제거
+        if (samples.size() > static_cast<size_t>(effect->maxSamples))
+        {
+            samples.erase(samples.begin());
+            // 제거 후 길이 재계산 필요 (간단하게 전체 재계산)
+            UpdateTrailLength(effect);
         }
     }
 
-    DirectX::XMFLOAT3 SwordSlashEffect::CalculateCatmullRomSpline(float t, SwordEffectComponent* effect)
+    void SwordSlashEffect::UpdateTrailLength(SwordEffectComponent* effect)
     {
-        using namespace DirectX;
-
-        if (!effect)
+        if (!effect || effect->trailSamples.empty()) 
         {
-            // 폴백: 스크립트 속성 사용
-            XMFLOAT3 p0 = Get_m_startPoint();
-            XMFLOAT3 p1 = Get_m_controlPoint1();
-            XMFLOAT3 p2 = Get_m_controlPoint2();
-            XMFLOAT3 p3 = Get_m_endPoint();
-
-            XMVECTOR v0 = XMLoadFloat3(&p0);
-            XMVECTOR v1 = XMLoadFloat3(&p1);
-            XMVECTOR v2 = XMLoadFloat3(&p2);
-            XMVECTOR v3 = XMLoadFloat3(&p3);
-
-            XMVECTOR result = XMVectorCatmullRom(v0, v1, v2, v3, t);
-
-            XMFLOAT3 resultFloat3;
-            XMStoreFloat3(&resultFloat3, result);
-            return resultFloat3;
+            effect->totalLength = 0.0f;
+            return;
         }
 
-        // 컴포넌트의 제어점 사용
-        XMVECTOR v0 = XMLoadFloat3(&effect->startPoint);
-        XMVECTOR v1 = XMLoadFloat3(&effect->controlPoint1);
-        XMVECTOR v2 = XMLoadFloat3(&effect->controlPoint2);
-        XMVECTOR v3 = XMLoadFloat3(&effect->endPoint);
-
-        XMVECTOR result = XMVectorCatmullRom(v0, v1, v2, v3, t);
-
-        XMFLOAT3 resultFloat3;
-        XMStoreFloat3(&resultFloat3, result);
-        return resultFloat3;
+        // 전체 길이는 마지막 샘플의 누적 길이
+        effect->totalLength = effect->trailSamples.back().length;
+        
+        // 길이 기반으로 각 샘플의 누적 길이 재계산 (링 버퍼로 인한 제거 후)
+        if (effect->trailSamples.size() > 1)
+        {
+            auto& samples = effect->trailSamples;
+            samples[0].length = 0.0f;
+            for (size_t i = 1; i < samples.size(); ++i)
+            {
+                using namespace DirectX;
+                XMVECTOR v0 = XMLoadFloat3(&samples[i - 1].tipPos);
+                XMVECTOR v1 = XMLoadFloat3(&samples[i].tipPos);
+                XMVECTOR diff = XMVectorSubtract(v1, v0);
+                float segmentLength = XMVectorGetX(XMVector3Length(diff));
+                samples[i].length = samples[i - 1].length + segmentLength;
+            }
+            effect->totalLength = samples.back().length;
+        }
     }
 }

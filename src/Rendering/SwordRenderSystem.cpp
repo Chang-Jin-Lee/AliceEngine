@@ -1,61 +1,17 @@
 #include "Rendering/SwordRenderSystem.h"
 #include "Components/SwordEffectComponent.h"
+#include "Rendering/ShaderCode/SwordEffectShader.h"
 
 #include <d3dcompiler.h>
 #include <cmath>
 #include <algorithm>
+#include <Windows.h>
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
 
 namespace Alice
 {
-	namespace
-	{
-		// 검기 스플라인 렌더링용 셰이더
-		const char* g_SwordEffectVS = R"(
-cbuffer CBPerSwordEffect : register(b0)
-{
-    float4x4 gViewProj;
-    float3   gColor;
-};
-
-struct VSInput
-{
-    float3 Position : POSITION;
-    float  Alpha    : COLOR0;
-};
-
-struct VSOutput
-{
-    float4 Position : SV_POSITION;
-    float4 Color    : COLOR0;
-};
-
-VSOutput main(VSInput input)
-{
-    VSOutput output;
-    float4 worldPos = float4(input.Position, 1.0f);
-    output.Position = mul(worldPos, gViewProj);
-    output.Color = float4(gColor, input.Alpha);
-    return output;
-}
-)";
-
-		const char* g_SwordEffectPS = R"(
-struct PSInput
-{
-    float4 Position : SV_POSITION;
-    float4 Color    : COLOR0;
-};
-
-float4 main(PSInput input) : SV_TARGET
-{
-    return input.Color;
-}
-)";
-	}
-
 	SwordRenderSystem::SwordRenderSystem(ID3D11RenderDevice& renderDevice)
 		: m_renderDevice(renderDevice)
 	{
@@ -98,7 +54,7 @@ float4 main(PSInput input) : SV_TARGET
 
 		// 파이프라인 설정
 		m_context->IASetInputLayout(m_inputLayout.Get());
-		m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP);
+		m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 		m_context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
 		m_context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
 
@@ -112,18 +68,50 @@ float4 main(PSInput input) : SV_TARGET
 		{
 			if (!swordEffectComp.enabled) continue;
 
-			// 스플라인 점들이 비어있으면 스킵
-			if (swordEffectComp.splinePoints.empty()) continue;
+			// 트레일 샘플이 2개 미만이면 스킵 (Triangle Strip 최소 요구)
+			if (swordEffectComp.trailSamples.size() < 2) continue;
 
-			// 버텍스 데이터 생성
-			std::vector<SplineVertex> vertices;
-			vertices.reserve(swordEffectComp.splinePoints.size());
-			for (const auto& point : swordEffectComp.splinePoints)
+			// 버텍스 데이터 생성 (Triangle Strip)
+			std::vector<TrailVertex> vertices;
+			const auto& samples = swordEffectComp.trailSamples;
+			vertices.reserve(samples.size() * 2); // 각 샘플마다 루트/팁 2개 버텍스
+
+			float totalLength = swordEffectComp.totalLength;
+			if (totalLength <= 0.0f)
 			{
-				SplineVertex v;
-				v.position = point;
-				v.alpha = swordEffectComp.alpha;
-				vertices.push_back(v);
+				// 길이를 다시 계산 (fallback)
+				totalLength = 0.0f;
+				for (size_t i = 1; i < samples.size(); ++i)
+				{
+					XMVECTOR v0 = XMLoadFloat3(&samples[i - 1].tipPos);
+					XMVECTOR v1 = XMLoadFloat3(&samples[i].tipPos);
+					XMVECTOR diff = XMVectorSubtract(v1, v0);
+					totalLength += XMVectorGetX(XMVector3Length(diff));
+				}
+				totalLength = std::max(totalLength, 0.01f); // 0으로 나누기 방지
+			}
+
+			// Triangle Strip 생성: 각 샘플마다 루트/팁 쌍 생성
+			for (size_t i = 0; i < samples.size(); ++i)
+			{
+				const auto& sample = samples[i];
+				
+				// UV 계산 (길이 누적 기반)
+				float u = (totalLength > 0.0f) ? (sample.length / totalLength) : (static_cast<float>(i) / static_cast<float>(samples.size()));
+
+				// 루트 버텍스 (v=0)
+				TrailVertex rootVertex;
+				rootVertex.position = sample.rootPos;
+				rootVertex.texCoord = DirectX::XMFLOAT2(u, 0.0f);
+				rootVertex.birthTime = sample.birthTime;
+				vertices.push_back(rootVertex);
+
+				// 팁 버텍스 (v=1)
+				TrailVertex tipVertex;
+				tipVertex.position = sample.tipPos;
+				tipVertex.texCoord = DirectX::XMFLOAT2(u, 1.0f);
+				tipVertex.birthTime = sample.birthTime;
+				vertices.push_back(tipVertex);
 			}
 
 			if (vertices.empty()) continue;
@@ -133,22 +121,24 @@ float4 main(PSInput input) : SV_TARGET
 
 			D3D11_MAPPED_SUBRESOURCE mapped;
 			if (FAILED(m_context->Map(m_vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) continue;
-			std::memcpy(mapped.pData, vertices.data(), vertices.size() * sizeof(SplineVertex));
+			std::memcpy(mapped.pData, vertices.data(), vertices.size() * sizeof(TrailVertex));
 			m_context->Unmap(m_vertexBuffer.Get(), 0);
 
-			// 상수 버퍼 업데이트
+			// 상수 버퍼 업데이트 (현재 시간 포함)
 			CBPerSwordEffect cb;
 			cb.viewProj = XMMatrixTranspose(viewProj);
 			cb.color = swordEffectComp.color;
+			cb.currentTime = swordEffectComp.currentTime; // 스크립트와 동일한 시간 기준 사용
+			cb.fadeDuration = swordEffectComp.fadeDuration;
 			m_context->UpdateSubresource(m_cbPerSwordEffect.Get(), 0, nullptr, &cb, 0, 0);
 
 			// Vertex Buffer 바인딩
-			UINT stride = sizeof(SplineVertex), offset = 0;
+			UINT stride = sizeof(TrailVertex), offset = 0;
 			ID3D11Buffer* vb = m_vertexBuffer.Get();
 			m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
 			m_context->VSSetConstantBuffers(0, 1, m_cbPerSwordEffect.GetAddressOf());
 
-			// 렌더링
+			// 렌더링 (Triangle Strip: vertexCount - 2 개의 삼각형)
 			m_context->Draw((UINT)vertices.size(), 0);
 		}
 
@@ -161,16 +151,17 @@ float4 main(PSInput input) : SV_TARGET
 		ComPtr<ID3DBlob> vsBlob, psBlob;
 
 		// 1. VS 컴파일 및 생성
-		if (FAILED(D3DCompile(g_SwordEffectVS, std::strlen(g_SwordEffectVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
+		if (FAILED(D3DCompile(SwordEffectShader::g_SwordEffectVS, std::strlen(SwordEffectShader::g_SwordEffectVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
 		if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vertexShader.ReleaseAndGetAddressOf()))) return false;
 
 		// 2. PS 컴파일 및 생성
-		if (FAILED(D3DCompile(g_SwordEffectPS, std::strlen(g_SwordEffectPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
+		if (FAILED(D3DCompile(SwordEffectShader::g_SwordEffectPS, std::strlen(SwordEffectShader::g_SwordEffectPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
 		if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_pixelShader.ReleaseAndGetAddressOf()))) return false;
 
 		// 3. Input Layout 생성
 		D3D11_INPUT_ELEMENT_DESC desc[] = {
 			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,                            D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,      0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "COLOR",    0, DXGI_FORMAT_R32_FLOAT,         0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		};
 
@@ -186,7 +177,7 @@ float4 main(PSInput input) : SV_TARGET
 		m_vertexBuffer.Reset();
 
 		D3D11_BUFFER_DESC desc = {};
-		desc.ByteWidth = (UINT)(vertexCount * sizeof(SplineVertex));
+		desc.ByteWidth = (UINT)(vertexCount * sizeof(TrailVertex));
 		desc.Usage = D3D11_USAGE_DYNAMIC;
 		desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 		desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;

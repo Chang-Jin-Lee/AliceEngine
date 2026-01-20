@@ -143,6 +143,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
 	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/SwordEffectShader.cpp
 )
 
 set(ENGINE_HEADERS
@@ -252,6 +253,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
 	${ALICE_SRC_DIR}/PhysX/Components/CharacterControllerComponent.h
 	${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/SwordEffectShader.h
 )
 
 # [변경] AliceEngine -> Engine
