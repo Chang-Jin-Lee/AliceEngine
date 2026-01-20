@@ -1,5 +1,6 @@
 #include "PhysicsSystem.h"
 #include "Core/World.h"
+#include "Core/GameObject.h"
 #include "Components/TransformComponent.h"
 #include "Components/Phy_SettingsComponent.h"
 #include "Core/Logger.h"
@@ -56,6 +57,152 @@ static uint64_t MakeTerrainGeomKey(const Phy_TerrainHeightFieldComponent& t) noe
 	return key;
 }
 
+static bool Float3Equal(const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) noexcept
+{
+	return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
+static bool JointFrameEqual(const Phy_JointFrame& a, const Phy_JointFrame& b) noexcept
+{
+	return Float3Equal(a.position, b.position) && Float3Equal(a.rotation, b.rotation);
+}
+
+static bool RevoluteEqual(const Phy_RevoluteJointSettings& a, const Phy_RevoluteJointSettings& b) noexcept
+{
+	return a.enableLimit == b.enableLimit &&
+		a.lowerLimit == b.lowerLimit &&
+		a.upperLimit == b.upperLimit &&
+		a.limitStiffness == b.limitStiffness &&
+		a.limitDamping == b.limitDamping &&
+		a.limitRestitution == b.limitRestitution &&
+		a.limitBounceThreshold == b.limitBounceThreshold &&
+		a.enableDrive == b.enableDrive &&
+		a.driveVelocity == b.driveVelocity &&
+		a.driveForceLimit == b.driveForceLimit &&
+		a.driveFreeSpin == b.driveFreeSpin &&
+		a.driveLimitsAreForces == b.driveLimitsAreForces;
+}
+
+static bool PrismaticEqual(const Phy_PrismaticJointSettings& a, const Phy_PrismaticJointSettings& b) noexcept
+{
+	return a.enableLimit == b.enableLimit &&
+		a.lowerLimit == b.lowerLimit &&
+		a.upperLimit == b.upperLimit &&
+		a.limitStiffness == b.limitStiffness &&
+		a.limitDamping == b.limitDamping &&
+		a.limitRestitution == b.limitRestitution &&
+		a.limitBounceThreshold == b.limitBounceThreshold;
+}
+
+static bool DistanceEqual(const Phy_DistanceJointSettings& a, const Phy_DistanceJointSettings& b) noexcept
+{
+	return a.minDistance == b.minDistance &&
+		a.maxDistance == b.maxDistance &&
+		a.tolerance == b.tolerance &&
+		a.enableMinDistance == b.enableMinDistance &&
+		a.enableMaxDistance == b.enableMaxDistance &&
+		a.enableSpring == b.enableSpring &&
+		a.stiffness == b.stiffness &&
+		a.damping == b.damping;
+}
+
+static bool SphericalEqual(const Phy_SphericalJointSettings& a, const Phy_SphericalJointSettings& b) noexcept
+{
+	return a.enableLimit == b.enableLimit &&
+		a.yLimitAngle == b.yLimitAngle &&
+		a.zLimitAngle == b.zLimitAngle &&
+		a.limitStiffness == b.limitStiffness &&
+		a.limitDamping == b.limitDamping &&
+		a.limitRestitution == b.limitRestitution &&
+		a.limitBounceThreshold == b.limitBounceThreshold;
+}
+
+static bool D6DriveEqual(const Phy_D6JointDriveSettings& a, const Phy_D6JointDriveSettings& b) noexcept
+{
+	return a.stiffness == b.stiffness &&
+		a.damping == b.damping &&
+		a.forceLimit == b.forceLimit &&
+		a.isAcceleration == b.isAcceleration;
+}
+
+static bool D6LinearEqual(const Phy_D6LinearLimitSettings& a, const Phy_D6LinearLimitSettings& b) noexcept
+{
+	return a.lower == b.lower &&
+		a.upper == b.upper &&
+		a.stiffness == b.stiffness &&
+		a.damping == b.damping &&
+		a.restitution == b.restitution &&
+		a.bounceThreshold == b.bounceThreshold;
+}
+
+static bool D6TwistEqual(const Phy_D6TwistLimitSettings& a, const Phy_D6TwistLimitSettings& b) noexcept
+{
+	return a.lower == b.lower &&
+		a.upper == b.upper &&
+		a.stiffness == b.stiffness &&
+		a.damping == b.damping &&
+		a.restitution == b.restitution &&
+		a.bounceThreshold == b.bounceThreshold;
+}
+
+static bool D6SwingEqual(const Phy_D6SwingLimitSettings& a, const Phy_D6SwingLimitSettings& b) noexcept
+{
+	return a.yAngle == b.yAngle &&
+		a.zAngle == b.zAngle &&
+		a.stiffness == b.stiffness &&
+		a.damping == b.damping &&
+		a.restitution == b.restitution &&
+		a.bounceThreshold == b.bounceThreshold;
+}
+
+static bool D6Equal(const Phy_D6JointSettings& a, const Phy_D6JointSettings& b) noexcept
+{
+	return a.driveLimitsAreForces == b.driveLimitsAreForces &&
+		a.motionX == b.motionX &&
+		a.motionY == b.motionY &&
+		a.motionZ == b.motionZ &&
+		a.motionTwist == b.motionTwist &&
+		a.motionSwing1 == b.motionSwing1 &&
+		a.motionSwing2 == b.motionSwing2 &&
+		D6LinearEqual(a.linearLimitX, b.linearLimitX) &&
+		D6LinearEqual(a.linearLimitY, b.linearLimitY) &&
+		D6LinearEqual(a.linearLimitZ, b.linearLimitZ) &&
+		D6TwistEqual(a.twistLimit, b.twistLimit) &&
+		D6SwingEqual(a.swingLimit, b.swingLimit) &&
+		D6DriveEqual(a.driveX, b.driveX) &&
+		D6DriveEqual(a.driveY, b.driveY) &&
+		D6DriveEqual(a.driveZ, b.driveZ) &&
+		D6DriveEqual(a.driveSwing, b.driveSwing) &&
+		D6DriveEqual(a.driveTwist, b.driveTwist) &&
+		D6DriveEqual(a.driveSlerp, b.driveSlerp) &&
+		JointFrameEqual(a.drivePose, b.drivePose) &&
+		Float3Equal(a.driveLinearVelocity, b.driveLinearVelocity) &&
+		Float3Equal(a.driveAngularVelocity, b.driveAngularVelocity);
+}
+
+static bool JointSnapshotEqual(const Phy_JointComponent& a, const Phy_JointComponent& b) noexcept
+{
+	return a.type == b.type &&
+		a.targetName == b.targetName &&
+		JointFrameEqual(a.frameA, b.frameA) &&
+		JointFrameEqual(a.frameB, b.frameB) &&
+		a.collideConnected == b.collideConnected &&
+		a.breakForce == b.breakForce &&
+		a.breakTorque == b.breakTorque &&
+		RevoluteEqual(a.revolute, b.revolute) &&
+		PrismaticEqual(a.prismatic, b.prismatic) &&
+		DistanceEqual(a.distance, b.distance) &&
+		SphericalEqual(a.spherical, b.spherical) &&
+		D6Equal(a.d6, b.d6);
+}
+
+static Phy_JointComponent MakeJointSnapshot(const Phy_JointComponent& src)
+{
+	Phy_JointComponent snap = src;
+	snap.jointHandle = nullptr;
+	return snap;
+}
+
 PhysicsSystem::LayerMaskArray PhysicsSystem::MakeAllMaskArray() noexcept
 {
 	LayerMaskArray a{};
@@ -90,6 +237,9 @@ PhysicsSystem::~PhysicsSystem()
         handle.Destroy();
     }
     m_entityToCCT.clear();
+
+    m_entityToJoint.clear();
+    m_lastJoints.clear();
 }
 
 void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
@@ -132,6 +282,16 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
     }
     m_entityToCCT.clear();
     m_lastCCTs.clear();
+
+    // Joint 정리
+    for (auto& [entityId, joint] : m_entityToJoint)
+    {
+        (void)joint;
+        if (auto* comp = m_world.GetComponent<Phy_JointComponent>(entityId))
+            comp->jointHandle = nullptr;
+    }
+    m_entityToJoint.clear();
+    m_lastJoints.clear();
 
 	if (oldWorld != nullptr)
 	{
@@ -403,6 +563,283 @@ void PhysicsSystem::Update(float deltaTime)
             }
             for (auto eid : cctToRemove)
                 DestroyCharacterController(eid);
+        }
+
+        // Joint 생성/삭제 및 변경 감지
+        {
+            auto joints = m_world.GetComponents<Phy_JointComponent>();
+            std::unordered_set<EntityId> entitiesWithJoint;
+
+            auto getActor = [&](EntityId id) -> IPhysicsActor*
+            {
+                auto it = m_entityToActor.find(id);
+                if (it == m_entityToActor.end()) return nullptr;
+                if (!it->second.IsValid()) return nullptr;
+                return it->second.GetActor();
+            };
+
+            auto toJointFrame = [&](const Phy_JointFrame& f) -> JointFrame
+            {
+                JointFrame jf{};
+                jf.position = ToVec3(f.position);
+                jf.rotation = ToQuat(f.rotation);
+                return jf;
+            };
+
+            auto toD6Motion = [](Phy_D6Motion m) -> D6Motion
+            {
+                switch (m)
+                {
+                case Phy_D6Motion::Limited: return D6Motion::Limited;
+                case Phy_D6Motion::Free: return D6Motion::Free;
+                default: return D6Motion::Locked;
+                }
+            };
+
+            for (const auto& [entityId, jointComp] : joints)
+            {
+                entitiesWithJoint.insert(entityId);
+                auto* joint = m_world.GetComponent<Phy_JointComponent>(entityId);
+                if (!joint) continue;
+
+                if (joint->targetName.empty())
+                {
+                    DestroyJoint(entityId);
+                    continue;
+                }
+
+                GameObject targetGo = m_world.FindGameObject(joint->targetName);
+                if (!targetGo.IsValid())
+                {
+                    DestroyJoint(entityId);
+                    continue;
+                }
+
+                const EntityId targetId = targetGo.id();
+                IPhysicsActor* actorA = getActor(entityId);
+                IPhysicsActor* actorB = getActor(targetId);
+                if (!actorA || !actorB)
+                {
+                    DestroyJoint(entityId);
+                    continue;
+                }
+
+                const Phy_JointComponent snapshot = MakeJointSnapshot(*joint);
+                const JointState newState{ snapshot, targetId };
+
+                bool hasJoint = false;
+                auto itJoint = m_entityToJoint.find(entityId);
+                if (itJoint != m_entityToJoint.end() && itJoint->second && itJoint->second->IsValid())
+                    hasJoint = true;
+
+                bool needsRebuild = !hasJoint;
+                auto itState = m_lastJoints.find(entityId);
+                if (itState == m_lastJoints.end())
+                {
+                    needsRebuild = true;
+                }
+                else
+                {
+                    const JointState& prev = itState->second;
+                    if (prev.targetId != newState.targetId || !JointSnapshotEqual(prev.snapshot, newState.snapshot))
+                        needsRebuild = true;
+                }
+
+                if (!needsRebuild)
+                {
+                    joint->jointHandle = itJoint->second.get();
+                    continue;
+                }
+
+                DestroyJoint(entityId);
+
+                std::unique_ptr<IPhysicsJoint> created{};
+                void* userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+                switch (joint->type)
+                {
+                case Phy_JointType::Fixed:
+                {
+                    FixedJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+                    created = m_physicsWorld->CreateFixedJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::Revolute:
+                {
+                    RevoluteJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.enableLimit = joint->revolute.enableLimit;
+                    desc.lowerLimit = joint->revolute.lowerLimit;
+                    desc.upperLimit = joint->revolute.upperLimit;
+                    desc.limitStiffness = joint->revolute.limitStiffness;
+                    desc.limitDamping = joint->revolute.limitDamping;
+                    desc.limitRestitution = joint->revolute.limitRestitution;
+                    desc.limitBounceThreshold = joint->revolute.limitBounceThreshold;
+                    desc.enableDrive = joint->revolute.enableDrive;
+                    desc.driveVelocity = joint->revolute.driveVelocity;
+                    desc.driveForceLimit = joint->revolute.driveForceLimit;
+                    desc.driveFreeSpin = joint->revolute.driveFreeSpin;
+                    desc.driveLimitsAreForces = joint->revolute.driveLimitsAreForces;
+
+                    created = m_physicsWorld->CreateRevoluteJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::Prismatic:
+                {
+                    PrismaticJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.enableLimit = joint->prismatic.enableLimit;
+                    desc.lowerLimit = joint->prismatic.lowerLimit;
+                    desc.upperLimit = joint->prismatic.upperLimit;
+                    desc.limitStiffness = joint->prismatic.limitStiffness;
+                    desc.limitDamping = joint->prismatic.limitDamping;
+                    desc.limitRestitution = joint->prismatic.limitRestitution;
+                    desc.limitBounceThreshold = joint->prismatic.limitBounceThreshold;
+
+                    created = m_physicsWorld->CreatePrismaticJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::Distance:
+                {
+                    DistanceJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.minDistance = joint->distance.minDistance;
+                    desc.maxDistance = joint->distance.maxDistance;
+                    desc.tolerance = joint->distance.tolerance;
+                    desc.enableMinDistance = joint->distance.enableMinDistance;
+                    desc.enableMaxDistance = joint->distance.enableMaxDistance;
+                    desc.enableSpring = joint->distance.enableSpring;
+                    desc.stiffness = joint->distance.stiffness;
+                    desc.damping = joint->distance.damping;
+
+                    created = m_physicsWorld->CreateDistanceJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::Spherical:
+                {
+                    SphericalJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.enableLimit = joint->spherical.enableLimit;
+                    desc.yLimitAngle = joint->spherical.yLimitAngle;
+                    desc.zLimitAngle = joint->spherical.zLimitAngle;
+                    desc.limitStiffness = joint->spherical.limitStiffness;
+                    desc.limitDamping = joint->spherical.limitDamping;
+                    desc.limitRestitution = joint->spherical.limitRestitution;
+                    desc.limitBounceThreshold = joint->spherical.limitBounceThreshold;
+
+                    created = m_physicsWorld->CreateSphericalJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::D6:
+                {
+                    D6JointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.driveLimitsAreForces = joint->d6.driveLimitsAreForces;
+                    desc.motionX = toD6Motion(joint->d6.motionX);
+                    desc.motionY = toD6Motion(joint->d6.motionY);
+                    desc.motionZ = toD6Motion(joint->d6.motionZ);
+                    desc.motionTwist = toD6Motion(joint->d6.motionTwist);
+                    desc.motionSwing1 = toD6Motion(joint->d6.motionSwing1);
+                    desc.motionSwing2 = toD6Motion(joint->d6.motionSwing2);
+
+                    desc.linearLimitX = { joint->d6.linearLimitX.lower, joint->d6.linearLimitX.upper,
+                                          joint->d6.linearLimitX.stiffness, joint->d6.linearLimitX.damping,
+                                          joint->d6.linearLimitX.restitution, joint->d6.linearLimitX.bounceThreshold };
+                    desc.linearLimitY = { joint->d6.linearLimitY.lower, joint->d6.linearLimitY.upper,
+                                          joint->d6.linearLimitY.stiffness, joint->d6.linearLimitY.damping,
+                                          joint->d6.linearLimitY.restitution, joint->d6.linearLimitY.bounceThreshold };
+                    desc.linearLimitZ = { joint->d6.linearLimitZ.lower, joint->d6.linearLimitZ.upper,
+                                          joint->d6.linearLimitZ.stiffness, joint->d6.linearLimitZ.damping,
+                                          joint->d6.linearLimitZ.restitution, joint->d6.linearLimitZ.bounceThreshold };
+
+                    desc.twistLimit = { joint->d6.twistLimit.lower, joint->d6.twistLimit.upper,
+                                        joint->d6.twistLimit.stiffness, joint->d6.twistLimit.damping,
+                                        joint->d6.twistLimit.restitution, joint->d6.twistLimit.bounceThreshold };
+
+                    desc.swingLimit = { joint->d6.swingLimit.yAngle, joint->d6.swingLimit.zAngle,
+                                        joint->d6.swingLimit.stiffness, joint->d6.swingLimit.damping,
+                                        joint->d6.swingLimit.restitution, joint->d6.swingLimit.bounceThreshold };
+
+                    desc.driveX = { joint->d6.driveX.stiffness, joint->d6.driveX.damping,
+                                    joint->d6.driveX.forceLimit, joint->d6.driveX.isAcceleration };
+                    desc.driveY = { joint->d6.driveY.stiffness, joint->d6.driveY.damping,
+                                    joint->d6.driveY.forceLimit, joint->d6.driveY.isAcceleration };
+                    desc.driveZ = { joint->d6.driveZ.stiffness, joint->d6.driveZ.damping,
+                                    joint->d6.driveZ.forceLimit, joint->d6.driveZ.isAcceleration };
+                    desc.driveSwing = { joint->d6.driveSwing.stiffness, joint->d6.driveSwing.damping,
+                                        joint->d6.driveSwing.forceLimit, joint->d6.driveSwing.isAcceleration };
+                    desc.driveTwist = { joint->d6.driveTwist.stiffness, joint->d6.driveTwist.damping,
+                                        joint->d6.driveTwist.forceLimit, joint->d6.driveTwist.isAcceleration };
+                    desc.driveSlerp = { joint->d6.driveSlerp.stiffness, joint->d6.driveSlerp.damping,
+                                        joint->d6.driveSlerp.forceLimit, joint->d6.driveSlerp.isAcceleration };
+
+                    desc.drivePose = toJointFrame(joint->d6.drivePose);
+                    desc.driveLinearVelocity = ToVec3(joint->d6.driveLinearVelocity);
+                    desc.driveAngularVelocity = ToVec3(joint->d6.driveAngularVelocity);
+
+                    created = m_physicsWorld->CreateD6Joint(*actorA, *actorB, desc);
+                    break;
+                }
+                }
+
+                if (created)
+                {
+                    IPhysicsJoint* raw = created.get();
+                    m_entityToJoint[entityId] = std::move(created);
+                    m_lastJoints[entityId] = newState;
+                    joint->jointHandle = raw;
+                }
+                else
+                {
+                    joint->jointHandle = nullptr;
+                    m_lastJoints.erase(entityId);
+                }
+            }
+
+            std::vector<EntityId> jointToRemove;
+            for (const auto& [entityId, handle] : m_entityToJoint)
+            {
+                if (entitiesWithJoint.find(entityId) == entitiesWithJoint.end())
+                    jointToRemove.push_back(entityId);
+            }
+            for (auto eid : jointToRemove)
+                DestroyJoint(eid);
         }
     }
 
@@ -1246,6 +1683,21 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     m_lastTransforms.erase(entityId);
     m_lastColliders.erase(entityId);
     m_lastRigidBodies.erase(entityId);
+}
+
+void PhysicsSystem::DestroyJoint(EntityId entityId)
+{
+    auto it = m_entityToJoint.find(entityId);
+    if (it != m_entityToJoint.end())
+    {
+        it->second.reset();
+        m_entityToJoint.erase(it);
+    }
+
+    m_lastJoints.erase(entityId);
+
+    if (auto* joint = m_world.GetComponent<Phy_JointComponent>(entityId))
+        joint->jointHandle = nullptr;
 }
 
 void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
