@@ -217,7 +217,7 @@ static bool D6SwingEqual(const Phy_D6SwingLimitSettings& a, const Phy_D6SwingLim
 static bool D6Equal(const Phy_D6JointSettings& a, const Phy_D6JointSettings& b) noexcept
 {
 	// 구조적 설정만 비교 (재생성 트리거)
-	// drivePose, driveLinearVelocity, driveAngularVelocity는 런타임 제어값이므로 재생성 트리거에서 제외
+	// drivePose, driveLinearVelocity, driveAngularVelocity도 구조 설정으로 취급 (런타임 갱신 API가 없으므로)
 	return a.driveLimitsAreForces == b.driveLimitsAreForces &&
 		a.motionX == b.motionX &&
 		a.motionY == b.motionY &&
@@ -235,22 +235,20 @@ static bool D6Equal(const Phy_D6JointSettings& a, const Phy_D6JointSettings& b) 
 		D6DriveEqual(a.driveZ, b.driveZ) &&
 		D6DriveEqual(a.driveSwing, b.driveSwing) &&
 		D6DriveEqual(a.driveTwist, b.driveTwist) &&
-		D6DriveEqual(a.driveSlerp, b.driveSlerp);
-		// drivePose, driveLinearVelocity, driveAngularVelocity는 런타임 제어이므로 제외
+		D6DriveEqual(a.driveSlerp, b.driveSlerp) &&
+		JointFrameEqual(a.drivePose, b.drivePose) &&
+		Float3Equal(a.driveLinearVelocity, b.driveLinearVelocity) &&
+		Float3Equal(a.driveAngularVelocity, b.driveAngularVelocity);
 }
 
 static bool JointSnapshotEqual(const Phy_JointComponent& a, const Phy_JointComponent& b) noexcept
 {
 	// 구조적 설정만 비교 (재생성 트리거)
-	// breakForce, breakTorque, collideConnected는 런타임 제어 가능하지만
-	// 구조 변경으로 간주하여 재생성 트리거에 포함 (나중에 in-place 업데이트로 개선 가능)
+	// breakForce, breakTorque, collideConnected는 in-place 업데이트 가능하므로 비교에서 제외
 	return a.type == b.type &&
 		a.targetName == b.targetName &&
 		JointFrameEqual(a.frameA, b.frameA) &&
 		JointFrameEqual(a.frameB, b.frameB) &&
-		a.collideConnected == b.collideConnected &&
-		FloatEqual(a.breakForce, b.breakForce) &&
-		FloatEqual(a.breakTorque, b.breakTorque) &&
 		RevoluteEqual(a.revolute, b.revolute) &&
 		PrismaticEqual(a.prismatic, b.prismatic) &&
 		DistanceEqual(a.distance, b.distance) &&
@@ -431,6 +429,27 @@ void PhysicsSystem::Update(float deltaTime)
 			// filterRevision 변경 감지: 전역 매트릭스가 변경되었는지 확인
 			bool filterMatrixChanged = (s.filterRevision != m_lastFilterRevision);
 
+			// 런타임 마스크 계산 헬퍼 함수
+			auto ComputeRuntimeMasks = [&](uint32_t layerBits, uint32_t ignoreLayers) -> RuntimeMasks
+			{
+				RuntimeMasks masks{};
+				int li = FirstLayerIndex(layerBits);
+				if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+				{
+					masks.collideMask = collideByLayer[li];
+					masks.queryMask = queryByLayer[li];
+					masks.collideMask &= ~ignoreLayers;
+					masks.queryMask &= ~ignoreLayers;
+				}
+				else
+				{
+					// 레이어가 유효하지 않으면 기본값
+					masks.collideMask = 0xFFFFFFFFu;
+					masks.queryMask = 0xFFFFFFFFu;
+				}
+				return masks;
+			};
+
 			// 매 프레임 collideByLayer/queryByLayer 계산 (성능 부담 거의 없음)
 			// collide: row 기반 (layerCollideMatrix[i][j] = true면 레이어 i와 j가 충돌)
 			for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
@@ -461,6 +480,7 @@ void PhysicsSystem::Update(float deltaTime)
 				m_lastFilterRevision = s.filterRevision;
 
 				// Collider들에 적용 (전역 매트릭스 변경 시에만 전체 재계산)
+				// 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고, 런타임 마스크는 캐시에서 관리
 				auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
 				for (auto&& [id, col] : colliders)
 				{
@@ -473,15 +493,16 @@ void PhysicsSystem::Update(float deltaTime)
 					newCollide &= ~col.ignoreLayers;
 					newQuery &= ~col.ignoreLayers;
 
+					RuntimeMasks& runtime = m_runtimeColliderMasks[id];
 					bool maskChanged = false;
-					if (col.collideMask != newCollide)
+					if (runtime.collideMask != newCollide)
 					{
-						col.collideMask = newCollide;
+						runtime.collideMask = newCollide;
 						maskChanged = true;
 					}
-					if (col.queryMask != newQuery)
+					if (runtime.queryMask != newQuery)
 					{
-						col.queryMask = newQuery;
+						runtime.queryMask = newQuery;
 						maskChanged = true;
 					}
 
@@ -493,17 +514,14 @@ void PhysicsSystem::Update(float deltaTime)
 							ActorHandle& handle = it->second;
 							if (handle.IsValid() && handle.GetActor())
 							{
-								auto* collider = m_world.GetComponent<Phy_ColliderComponent>(id);
-								if (collider)
-								{
-									handle.GetActor()->SetLayerMasks(col.layerBits, col.collideMask, col.queryMask);
-								}
+								handle.GetActor()->SetLayerMasks(col.layerBits, runtime.collideMask, runtime.queryMask);
 							}
 						}
 					}
 				}
 
 				// MeshCollider에 적용 (전역 매트릭스 변경 시에만)
+				// 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고, 런타임 마스크는 캐시에서 관리
 				auto meshColliders = m_world.GetComponents<Phy_MeshColliderComponent>();
 				for (auto&& [id, mc] : meshColliders)
 				{
@@ -516,15 +534,16 @@ void PhysicsSystem::Update(float deltaTime)
 					newCollide &= ~mc.ignoreLayers;
 					newQuery &= ~mc.ignoreLayers;
 
+					RuntimeMasks& runtime = m_runtimeMeshColliderMasks[id];
 					bool maskChanged = false;
-					if (mc.collideMask != newCollide)
+					if (runtime.collideMask != newCollide)
 					{
-						mc.collideMask = newCollide;
+						runtime.collideMask = newCollide;
 						maskChanged = true;
 					}
-					if (mc.queryMask != newQuery)
+					if (runtime.queryMask != newQuery)
 					{
-						mc.queryMask = newQuery;
+						runtime.queryMask = newQuery;
 						maskChanged = true;
 					}
 
@@ -536,13 +555,14 @@ void PhysicsSystem::Update(float deltaTime)
 							ActorHandle& handle = it->second;
 							if (handle.IsValid() && handle.GetActor())
 							{
-								handle.GetActor()->SetLayerMasks(mc.layerBits, mc.collideMask, mc.queryMask);
+								handle.GetActor()->SetLayerMasks(mc.layerBits, runtime.collideMask, runtime.queryMask);
 							}
 						}
 					}
 				}
 
 				// Terrain에 적용 (전역 매트릭스 변경 시에만)
+				// 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고, 런타임 마스크는 캐시에서 관리
 				auto terrains = m_world.GetComponents<Phy_TerrainHeightFieldComponent>();
 				for (auto&& [id, terrain] : terrains)
 				{
@@ -555,15 +575,16 @@ void PhysicsSystem::Update(float deltaTime)
 					newCollide &= ~terrain.ignoreLayers;
 					newQuery &= ~terrain.ignoreLayers;
 
+					RuntimeMasks& runtime = m_runtimeTerrainMasks[id];
 					bool maskChanged = false;
-					if (terrain.collideMask != newCollide)
+					if (runtime.collideMask != newCollide)
 					{
-						terrain.collideMask = newCollide;
+						runtime.collideMask = newCollide;
 						maskChanged = true;
 					}
-					if (terrain.queryMask != newQuery)
+					if (runtime.queryMask != newQuery)
 					{
-						terrain.queryMask = newQuery;
+						runtime.queryMask = newQuery;
 						maskChanged = true;
 					}
 
@@ -573,12 +594,13 @@ void PhysicsSystem::Update(float deltaTime)
 						auto itA = m_entityToActor.find(id);
 						if (itA != m_entityToActor.end() && itA->second.IsValid() && itA->second.GetActor())
 						{
-							itA->second.GetActor()->SetLayerMasks(terrain.layerBits, terrain.collideMask, terrain.queryMask);
+							itA->second.GetActor()->SetLayerMasks(terrain.layerBits, runtime.collideMask, runtime.queryMask);
 						}
 					}
 				}
 
 				// CCT에 적용 (전역 매트릭스 변경 시에만)
+				// 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고, 런타임 마스크는 캐시에서 관리
 				auto ccts = m_world.GetComponents<Phy_CCTComponent>();
 				for (auto&& [id, cct] : ccts)
         {
@@ -591,15 +613,16 @@ void PhysicsSystem::Update(float deltaTime)
 					newCollide &= ~cct.ignoreLayers;
 					newQuery &= ~cct.ignoreLayers;
 
+					RuntimeMasks& runtime = m_runtimeCCTMasks[id];
 					bool maskChanged = false;
-					if (cct.collideMask != newCollide)
+					if (runtime.collideMask != newCollide)
 					{
-						cct.collideMask = newCollide;
+						runtime.collideMask = newCollide;
 						maskChanged = true;
 					}
-					if (cct.queryMask != newQuery)
+					if (runtime.queryMask != newQuery)
 					{
-						cct.queryMask = newQuery;
+						runtime.queryMask = newQuery;
 						maskChanged = true;
 					}
 
@@ -608,7 +631,7 @@ void PhysicsSystem::Update(float deltaTime)
 						auto itCCT = m_entityToCCT.find(id);
 						if (itCCT != m_entityToCCT.end() && itCCT->second.IsValid())
 						{
-							itCCT->second.cct->SetLayerMasks(cct.layerBits, cct.collideMask, cct.queryMask);
+							itCCT->second.cct->SetLayerMasks(cct.layerBits, runtime.collideMask, runtime.queryMask);
         }
     }
 				}
@@ -1248,9 +1271,14 @@ void PhysicsSystem::Update(float deltaTime)
 						newCollide &= ~collider.ignoreLayers;
 						newQuery &= ~collider.ignoreLayers;
 						
-						collider.collideMask = newCollide;
-						collider.queryMask = newQuery;
-						maskOnlyChanged = true;
+						// 런타임 마스크 캐시 업데이트 (컴포넌트는 authoring 데이터로 유지)
+						RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+						if (runtime.collideMask != newCollide || runtime.queryMask != newQuery)
+						{
+							runtime.collideMask = newCollide;
+							runtime.queryMask = newQuery;
+							maskOnlyChanged = true;
+						}
 					}
 				}
 
@@ -1268,6 +1296,7 @@ void PhysicsSystem::Update(float deltaTime)
                     changed = true;
                 }
 
+				// authoring 데이터 변경 감지 (사용자가 직접 설정한 경우)
 				if (collider.collideMask != last.collideMask || collider.queryMask != last.queryMask)
 				{
 					if (!maskOnlyChanged) maskOnlyChanged = true;
@@ -1289,7 +1318,9 @@ void PhysicsSystem::Update(float deltaTime)
 						ActorHandle& handle = itActor->second;
 						if (handle.IsValid() && handle.GetActor())
 						{
-							handle.GetActor()->SetLayerMasks(collider.layerBits, collider.collideMask, collider.queryMask);
+							// 런타임 마스크 사용
+							RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+							handle.GetActor()->SetLayerMasks(collider.layerBits, runtime.collideMask, runtime.queryMask);
 						}
 					}
 				}
@@ -1406,9 +1437,14 @@ void PhysicsSystem::Update(float deltaTime)
                         newCollide &= ~mc.ignoreLayers;
                         newQuery &= ~mc.ignoreLayers;
 
-                        mc.collideMask = newCollide;
-                        mc.queryMask = newQuery;
-                        maskOnlyChanged = true;
+                        // 런타임 마스크 캐시 업데이트 (컴포넌트는 authoring 데이터로 유지)
+                        RuntimeMasks& runtime = m_runtimeMeshColliderMasks[entityId];
+                        if (runtime.collideMask != newCollide || runtime.queryMask != newQuery)
+                        {
+                            runtime.collideMask = newCollide;
+                            runtime.queryMask = newQuery;
+                            maskOnlyChanged = true;
+                        }
                     }
                 }
 
@@ -1427,6 +1463,7 @@ void PhysicsSystem::Update(float deltaTime)
                     changed = true;
                 }
 
+                // authoring 데이터 변경 감지 (사용자가 직접 설정한 경우)
                 if (mc.collideMask != last.collideMask || mc.queryMask != last.queryMask)
                 {
                     if (!maskOnlyChanged) maskOnlyChanged = true;
@@ -1447,7 +1484,9 @@ void PhysicsSystem::Update(float deltaTime)
                         ActorHandle& handle = itActor->second;
                         if (handle.IsValid() && handle.GetActor())
                         {
-                            handle.GetActor()->SetLayerMasks(mc.layerBits, mc.collideMask, mc.queryMask);
+                            // 런타임 마스크 사용
+                            RuntimeMasks& runtime = m_runtimeMeshColliderMasks[entityId];
+                            handle.GetActor()->SetLayerMasks(mc.layerBits, runtime.collideMask, runtime.queryMask);
                         }
                     }
                 }
@@ -1603,8 +1642,10 @@ void PhysicsSystem::Update(float deltaTime)
             newCollide &= ~terrain.ignoreLayers;
             newQuery &= ~terrain.ignoreLayers;
 
-            terrain.collideMask = newCollide;
-            terrain.queryMask = newQuery;
+            // 런타임 마스크 캐시 업데이트 (컴포넌트는 authoring 데이터로 유지)
+            RuntimeMasks& runtime = m_runtimeTerrainMasks[entityId];
+            runtime.collideMask = newCollide;
+            runtime.queryMask = newQuery;
 
             if (terrain.heightSamples.empty() && terrain.numRows >= 2 && terrain.numCols >= 2)
             {
@@ -1723,8 +1764,10 @@ void PhysicsSystem::Update(float deltaTime)
 						newCollide &= ~ccc.ignoreLayers;
 						newQuery &= ~ccc.ignoreLayers;
 						
-						ccc.collideMask = newCollide;
-						ccc.queryMask = newQuery;
+						// 런타임 마스크 캐시 업데이트 (컴포넌트는 authoring 데이터로 유지)
+						RuntimeMasks& runtime = m_runtimeCCTMasks[entityId];
+						runtime.collideMask = newCollide;
+						runtime.queryMask = newQuery;
 						cur.OverrideMasks(newCollide, newQuery);
                     }
 				}
@@ -1819,7 +1862,9 @@ void PhysicsSystem::Update(float deltaTime)
                 ccc.teleport = false;
             }
 
-            CharacterControllerState st0 = ctrl->GetState(ccc.collideMask, ccc.layerBits, 0.2f, ccc.hitTriggers);
+            // 런타임 마스크 사용
+            RuntimeMasks& runtime = m_runtimeCCTMasks[entityId];
+            CharacterControllerState st0 = ctrl->GetState(runtime.collideMask, ccc.layerBits, 0.2f, ccc.hitTriggers);
             const bool wasGrounded = st0.onGround;
 
             if (ccc.jumpRequested && wasGrounded)
@@ -1842,11 +1887,11 @@ void PhysicsSystem::Update(float deltaTime)
             CCTCollisionFlags cf = ctrl->Move(
                 disp,
                 deltaTime,
-                ccc.collideMask,
+                runtime.collideMask,
 				ccc.layerBits,
                 ccc.hitTriggers);
 
-            CharacterControllerState st = ctrl->GetState(ccc.collideMask, ccc.layerBits, 0.2f, ccc.hitTriggers);
+            CharacterControllerState st = ctrl->GetState(runtime.collideMask, ccc.layerBits, 0.2f, ccc.hitTriggers);
             ccc.onGround = st.onGround;
             ccc.groundNormal = ToXMFLOAT3(st.groundNormal);
             ccc.groundDistance = st.groundDistance;
@@ -1868,6 +1913,45 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
     auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
     auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
     auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
+
+    // 런타임 마스크 계산 헬퍼 (레이어 매트릭스 기반)
+    auto ComputeRuntimeMasks = [this](uint32_t layerBits, uint32_t ignoreLayers) -> RuntimeMasks
+    {
+        RuntimeMasks masks{};
+        const auto& settingsMap = m_world.GetComponents<Phy_SettingsComponent>();
+        if (!settingsMap.empty())
+        {
+            const auto& s = settingsMap.begin()->second;
+            int li = FirstLayerIndex(layerBits);
+            if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+            {
+                // collide: row 기반
+                uint32_t collideMask = 0;
+                for (int j = 0; j < MAX_PHYSICS_LAYERS; ++j)
+                    if (s.layerCollideMatrix[li][j]) collideMask |= (1u << j);
+                
+                // query: column 기반
+                uint32_t queryMask = 0;
+                for (int querier = 0; querier < MAX_PHYSICS_LAYERS; ++querier)
+                    if (s.layerQueryMatrix[querier][li]) queryMask |= (1u << querier);
+                
+                masks.collideMask = collideMask & ~ignoreLayers;
+                masks.queryMask = queryMask & ~ignoreLayers;
+            }
+            else
+            {
+                masks.collideMask = 0xFFFFFFFFu;
+                masks.queryMask = 0xFFFFFFFFu;
+            }
+        }
+        else
+        {
+            // 매트릭스가 없으면 기본값
+            masks.collideMask = 0xFFFFFFFFu;
+            masks.queryMask = 0xFFFFFFFFu;
+        }
+        return masks;
+    };
 
     if (!rb && !collider && !meshCollider) return;
     if (terrain)
@@ -1992,8 +2076,15 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 boxDesc.dynamicFriction = collider->dynamicFriction;
                 boxDesc.restitution = collider->restitution;
                 boxDesc.layerBits = collider->layerBits;
-                boxDesc.collideMask = collider->collideMask;
-                boxDesc.queryMask = collider->queryMask;
+                // 런타임 마스크 사용
+                RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+                if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+                {
+                    // 아직 계산되지 않았으면 계산
+                    runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+                }
+                boxDesc.collideMask = runtime.collideMask;
+                boxDesc.queryMask = runtime.queryMask;
 				boxDesc.isTrigger = collider->isTrigger;
 				boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
@@ -2019,8 +2110,15 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 sphereDesc.dynamicFriction = collider->dynamicFriction;
                 sphereDesc.restitution = collider->restitution;
                 sphereDesc.layerBits = collider->layerBits;
-                sphereDesc.collideMask = collider->collideMask;
-				sphereDesc.queryMask = collider->queryMask;
+                // 런타임 마스크 사용
+                RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+                if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+                {
+                    // 아직 계산되지 않았으면 계산
+                    runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+                }
+                sphereDesc.collideMask = runtime.collideMask;
+				sphereDesc.queryMask = runtime.queryMask;
 				sphereDesc.isTrigger = collider->isTrigger;
 				sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
@@ -2057,8 +2155,15 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 capsuleDesc.dynamicFriction = collider->dynamicFriction;
                 capsuleDesc.restitution = collider->restitution;
                 capsuleDesc.layerBits = collider->layerBits;
-                capsuleDesc.collideMask = collider->collideMask;
-				capsuleDesc.queryMask = collider->queryMask;
+                // 런타임 마스크 사용
+                RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+                if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+                {
+                    // 아직 계산되지 않았으면 계산
+                    runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+                }
+                capsuleDesc.collideMask = runtime.collideMask;
+				capsuleDesc.queryMask = runtime.queryMask;
 				capsuleDesc.isTrigger = collider->isTrigger;
 				capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
@@ -2206,8 +2311,14 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             boxDesc.dynamicFriction = collider->dynamicFriction;
             boxDesc.restitution = collider->restitution;
             boxDesc.layerBits = collider->layerBits;
-            boxDesc.collideMask = collider->collideMask;
-            boxDesc.queryMask = collider->queryMask;
+            // 런타임 마스크 사용
+            RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+            if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+            {
+                runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+            }
+            boxDesc.collideMask = runtime.collideMask;
+            boxDesc.queryMask = runtime.queryMask;
             boxDesc.isTrigger = collider->isTrigger;
             boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
@@ -2232,8 +2343,14 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             sphereDesc.dynamicFriction = collider->dynamicFriction;
             sphereDesc.restitution = collider->restitution;
             sphereDesc.layerBits = collider->layerBits;
-            sphereDesc.collideMask = collider->collideMask;
-            sphereDesc.queryMask = collider->queryMask;
+            // 런타임 마스크 사용
+            RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+            if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+            {
+                runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+            }
+            sphereDesc.collideMask = runtime.collideMask;
+            sphereDesc.queryMask = runtime.queryMask;
             sphereDesc.isTrigger = collider->isTrigger;
             sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
@@ -2269,8 +2386,14 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             capsuleDesc.dynamicFriction = collider->dynamicFriction;
             capsuleDesc.restitution = collider->restitution;
             capsuleDesc.layerBits = collider->layerBits;
-            capsuleDesc.collideMask = collider->collideMask;
-            capsuleDesc.queryMask = collider->queryMask;
+            // 런타임 마스크 사용
+            RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+            if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+            {
+                runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+            }
+            capsuleDesc.collideMask = runtime.collideMask;
+            capsuleDesc.queryMask = runtime.queryMask;
             capsuleDesc.isTrigger = collider->isTrigger;
             capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
