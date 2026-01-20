@@ -1,9 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <filesystem>
 
 // DirectX 수학 타입(XMFLOAT4X4 등)을 사용
 #include <DirectXMath.h>
@@ -15,6 +16,7 @@ struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct ID3D11Buffer;
 struct ID3D11ShaderResourceView;
+namespace Alice { class ResourceManager; }
 
 // High-level FBX model loader composed of sub-systems (materials, geometry, skeleton, animation)
 // API intentionally mirrors existing FbxManager to ease migration
@@ -27,6 +29,11 @@ public:
 	~FbxModel();
 
 	bool Load(ID3D11Device* device, const std::wstring& pathW);
+	
+	/// ResourceManager 기반 로드 (권장)
+	/// - fbxLogicalPath: FBX 파일의 논리 경로 (예: "Resource/fbx/char/char.fbx")
+	bool Load(ID3D11Device* device, Alice::ResourceManager& rm, const std::filesystem::path& fbxLogicalPath);
+	
 	// Cooked/Chunks 에서 복호화된 FBX 바이트를 임시파일 없이 바로 로드합니다.
 	// - virtualNameUtf8: 확장자 힌트(예: "Rapi.fbx") 용
 	// - baseDirW: 외부 텍스처 상대 경로 해석용(없으면 L"")
@@ -35,6 +42,15 @@ public:
 	                    size_t size,
 	                    const std::string& virtualNameUtf8,
 	                    const std::wstring& baseDirW);
+	
+	/// ResourceManager 기반 메모리 로드 (권장)
+	/// - fbxLogicalPath: FBX 파일의 논리 경로 (예: "Resource/fbx/char/char.fbx")
+	bool LoadFromMemory(ID3D11Device* device,
+						Alice::ResourceManager& rm,
+	                    const std::filesystem::path& fbxLogicalPath,
+	                    const void* data,
+	                    size_t size,
+	                    const std::string& virtualNameUtf8);
 	void Release();
 
 	// Mesh
