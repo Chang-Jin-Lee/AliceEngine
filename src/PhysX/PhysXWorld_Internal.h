@@ -764,6 +764,19 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 		}
 
+		// !!!주의!!!주의!!!주의!!! DEADLOCK WARNING: ContactModify 콜백은 PhysX 시뮬레이션 스레드에서 호출될 수 있습니다.
+		// Step()이 scene write lock을 잡은 채로 simulate~fetch 사이에 실행되므로,
+		// 이 콜백 내에서 Raycast(), Overlap() 등 scene lock이 필요한 함수를 호출하면 데드락이 발생할 수 있습니다.
+		// 
+		// 안전한 사용:
+		//   - ContactModifyPair의 데이터만 읽고 수정
+		//   - 로컬 변수/메모리만 접근
+		//   - scene lock이 필요 없는 작업만 수행
+		//
+		// !!!위험!!!위험!!!위험!!!위험한 사용 (데드락 위험):
+		//   - world->Raycast(), world->Overlap() 등 쿼리 함수 호출
+		//   - scene에 접근하는 모든 함수 호출
+		//   - 다른 스레드와의 동기화가 필요한 작업
 		void onContactModify(PxContactModifyPair* const pairs, PxU32 count) override
 		{
 			auto s = owner.lock();
@@ -810,6 +823,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 					dst.maxImpulse = cs.getMaxImpulse(c);
 				}
 
+				// !!! 사용자 콜백 호출: 이 콜백 내에서 scene lock이 필요한 함수를 호출하지 마세요!
 				cb(pair, user);
 
 				if (pair.ignorePair)
@@ -1635,7 +1649,7 @@ public:
 		if (capsule.alignYAxis)
 		{
 			Quat align = FromPx(CapsuleAlignQuatPx());
-			q = align * q;
+			q = q * align; // 쿼리 쪽(q = q * align)과 순서 통일
 		}
 		return AddShapeCommon(geom, capsule, localPos, q);
 	}
