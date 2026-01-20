@@ -13,6 +13,9 @@
 struct ID3D11Device;
 struct ID3D11ShaderResourceView;
 
+// JSON 전방 선언 (json은 typedef이므로 json_fwd.hpp 사용)
+#include "json/json_fwd.hpp"
+
 namespace Alice
 {
     // [템플릿 확장을 위한 로더 구조체 선언]
@@ -165,6 +168,24 @@ namespace Alice
         static ReturnType Load(const ResourceManager& rm, 
                                const std::filesystem::path& path, 
                                ID3D11Device* device); 
+    };
+
+    // std::string (텍스트 파일) 특수화
+    template <>
+    struct ResourceLoader<std::string>
+    {
+        using ReturnType = std::shared_ptr<std::string>;
+        static ReturnType Load(const ResourceManager& rm, 
+                               const std::filesystem::path& path);
+    };
+
+    // nlohmann::json (JSON 파일) 특수화
+    template <>
+    struct ResourceLoader<nlohmann::json>
+    {
+        using ReturnType = std::shared_ptr<nlohmann::json>;
+        static ReturnType Load(const ResourceManager& rm, 
+                               const std::filesystem::path& path);
     };
 }
 
