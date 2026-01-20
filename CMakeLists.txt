@@ -124,6 +124,8 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/SwordRenderSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/SwordRenderSystem.h
     
     #PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -140,6 +142,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
+	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
 )
 
 set(ENGINE_HEADERS
@@ -181,6 +184,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Vertex.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
+	${ALICE_SRC_DIR}/Core/EffectSystem.h
     
     #컴포넌트들
     ${ALICE_SRC_DIR}/Components/ComponentStorage.h
@@ -199,6 +203,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
     ${ALICE_SRC_DIR}/Components/SpotLightComponent.h
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
+    ${ALICE_SRC_DIR}/Components/SwordEffectComponent.h
+    ${ALICE_SRC_DIR}/Components/EffectComponent.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
@@ -218,6 +224,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
     ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
+    ${ALICE_SRC_DIR}/Rendering/SwordRenderSystem.h
     
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
@@ -244,6 +251,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
 	${ALICE_SRC_DIR}/PhysX/Components/CharacterControllerComponent.h
+	${ALICE_SRC_DIR}/Rendering/EffectSystem.h
 )
 
 # [변경] AliceEngine -> Engine

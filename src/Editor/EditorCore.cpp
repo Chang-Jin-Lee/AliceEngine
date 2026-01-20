@@ -2524,6 +2524,12 @@ namespace Alice
                     } else if (typeName == "RectLightComponent") {
                         world.AddComponent<RectLightComponent>(_selectedEntity);
                         added = true;
+                    } else if (typeName == "EffectComponent") {
+                        world.AddComponent<EffectComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "SwordEffectComponent") {
+                        world.AddComponent<SwordEffectComponent>(_selectedEntity);
+                        added = true;
                     }
                     
                     if (added) {
@@ -2603,6 +2609,14 @@ namespace Alice
                 DrawEngineComponent("RectLightComponent",
                     world.GetComponent<RectLightComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
+            } else if (typeName == "EffectComponent") {
+                DrawEngineComponent("EffectComponent",
+                    world.GetComponent<EffectComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<EffectComponent>(_selectedEntity); });
+            } else if (typeName == "SwordEffectComponent") {
+                DrawEngineComponent("SwordEffectComponent",
+                    world.GetComponent<SwordEffectComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<SwordEffectComponent>(_selectedEntity); });
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }

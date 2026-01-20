@@ -19,10 +19,12 @@
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Rendering/RenderTypes.h"
 
+
+
 namespace Alice
 {
     class ResourceManager;
-    
+    class SwordRenderSystem;
     /// 디퍼드 렌더링 시스템입니다.
     /// - G-Buffer 패스: 지오메트리 정보를 G-Buffer에 렌더링
     /// - Deferred Light 패스: G-Buffer를 읽어서 조명 계산
@@ -97,6 +99,8 @@ namespace Alice
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }
         const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
 
+        void SetSwordRenderSystem(SwordRenderSystem* pSwordRenderSystem) { m_swordRenderSystem = pSwordRenderSystem; }
+
     private:
 
         /// 백버퍼로 렌더 타겟을 복귀시킵니다 (ImGui 등 후처리를 위해).
@@ -142,6 +146,7 @@ namespace Alice
         // 라이트 패스 이후 Forward-Style 패스로 별도 렌더링합니다.
         void PassTransparentForward(const Camera& camera,
                                     const std::vector<SkinnedDrawCommand>& skinnedCommands);
+        void RenderSwordEffects(const World& world, const Camera& camera);
         
         // 상수 버퍼 업데이트
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
@@ -168,11 +173,11 @@ namespace Alice
         // 텍스처 로딩
         ID3D11ShaderResourceView* GetOrCreateTexture(const std::string& path);
         
-
     private:
         ID3D11RenderDevice& m_renderDevice;
         ResourceManager*     m_resources { nullptr };
         SkinnedMeshRegistry* m_skinnedRegistry { nullptr };
+        class SwordRenderSystem* m_swordRenderSystem { nullptr };
 
         Microsoft::WRL::ComPtr<ID3D11Device>           m_device;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext>    m_context;
