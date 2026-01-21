@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <memory>
 #include <string>
@@ -45,6 +45,9 @@ namespace Alice
         std::shared_ptr<FbxModel> sourceModel;
     };
 
+    class ResourceManager;
+    class FbxImporter;
+
     /// FBX 로부터 만들어진 스키닝 메시 자산을
     /// 문자열 키(논리 경로)로 보관하는 레지스트리입니다.
     /// - 엔진(Rendering 계층)의 일부로, 게임/에디터 양쪽에서 공유합니다.
@@ -64,6 +67,22 @@ namespace Alice
                 return nullptr;
             return it->second;
         }
+
+        /// meshKey가 레지스트리에 있는지 확인합니다.
+        bool Has(const std::string& assetPath) const
+        {
+            return m_meshes.find(assetPath) != m_meshes.end();
+        }
+
+        /// fbxasset 파일로부터 메시를 온디맨드 로딩하고 레지스트리에 등록합니다.
+        /// - 씬/빌드에서 meshKey가 없을 때 호출됩니다.
+        /// - ResourceManager를 통해 fbxasset을 읽고, FbxImporter로 메시를 로드합니다.
+        /// @return 로딩 성공 여부
+        bool LoadFromFbxAsset(const std::string& meshKey,
+                              const std::string& instanceAssetPath,
+                              ResourceManager& resources,
+                              FbxImporter& importer,
+                              ID3D11Device* device);
 
     private:
         std::unordered_map<std::string, std::shared_ptr<SkinnedMeshGPU>> m_meshes;

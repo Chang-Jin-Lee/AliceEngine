@@ -1,8 +1,8 @@
-#include "TerrainHeightFieldComponent.h"
+#include "Phy_TerrainHeightFieldComponent.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 #include "Core/GameObject.h"
-#include "PhysX/Components/TerrainHeightFieldComponent.h"
+#include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "Components/TransformComponent.h"
 #include <cmath>
 #include <algorithm>
@@ -32,13 +32,13 @@ namespace Alice
             ALICE_LOG_INFO("[TerrainHeightFieldTest] TransformComponent added.");
         }
 
-        // TerrainHeightFieldComponent 확인
-        auto* terrain = go.GetComponent<TerrainHeightFieldComponent>();
+        // Phy_TerrainHeightFieldComponent 확인
+        auto* terrain = go.GetComponent<Phy_TerrainHeightFieldComponent>();
         if (!terrain)
         {
             // 컴포넌트가 없으면 추가
-            terrain = &go.AddComponent<TerrainHeightFieldComponent>();
-            ALICE_LOG_INFO("[TerrainHeightFieldTest] TerrainHeightFieldComponent added.");
+            terrain = &go.AddComponent<Phy_TerrainHeightFieldComponent>();
+            ALICE_LOG_INFO("[TerrainHeightFieldTest] Phy_TerrainHeightFieldComponent added.");
         }
 
         // 높이맵 생성
@@ -47,16 +47,20 @@ namespace Alice
 
     void TerrainHeightFieldTest::Start()
     {
-        ALICE_LOG_INFO("[TerrainHeightFieldTest] Start called. Terrain should be ready.");
-        
         auto go = gameObject();
         if (!go.IsValid()) return;
 
-        auto* terrain = go.GetComponent<TerrainHeightFieldComponent>();
-        if (terrain)
+        auto* terrain = go.GetComponent<Phy_TerrainHeightFieldComponent>();
+        if (!terrain) return;
+
+        // 씬 파일에서 로드된 경우 heightSamples가 비어있을 수 있음
+        // numRows와 numCols가 설정되어 있으면 플랫 지형 자동 생성
+        if (terrain->numRows >= 2 && terrain->numCols >= 2 && terrain->heightSamples.empty())
         {
-            ALICE_LOG_INFO("[TerrainHeightFieldTest] Terrain: %u x %u, samples: %zu", 
-                terrain->numRows, terrain->numCols, terrain->heightSamples.size());
+            const size_t expectedSamples = static_cast<size_t>(terrain->numRows) * static_cast<size_t>(terrain->numCols);
+            terrain->heightSamples.resize(expectedSamples, 0.0f);
+            ALICE_LOG_INFO("[TerrainHeightFieldTest] Auto-generated flat terrain: %u x %u", 
+                terrain->numRows, terrain->numCols);
         }
     }
 
@@ -71,10 +75,10 @@ namespace Alice
         auto go = gameObject();
         if (!go.IsValid()) return;
 
-        auto* terrain = go.GetComponent<TerrainHeightFieldComponent>();
+        auto* terrain = go.GetComponent<Phy_TerrainHeightFieldComponent>();
         if (!terrain)
         {
-            ALICE_LOG_ERRORF("[TerrainHeightFieldTest] TerrainHeightFieldComponent not found!");
+            ALICE_LOG_ERRORF("[TerrainHeightFieldTest] Phy_TerrainHeightFieldComponent not found!");
             return;
         }
 

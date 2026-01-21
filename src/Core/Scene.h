@@ -3,86 +3,95 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <optional>
+#include <filesystem>
 
 #include "Core/Entity.h"
 #include "Core/World.h"
 
 namespace Alice
 {
-    class ResourceManager;
+	class ResourceManager;
 
-    /// 모든 씬이 공통으로 구현해야 하는 최소 인터페이스입니다.
-    class IScene
-    {
-    public:
-        virtual ~IScene() = default;
+	/// 모든 씬이 공통으로 구현해야 하는 최소 인터페이스입니다.
+	class IScene
+	{
+	public:
+		virtual ~IScene() = default;
 
-        /// 이 씬의 이름(디버깅/리플렉션용) 입니다.
-        virtual const char* GetName() const = 0;
+		virtual const char* GetName() const = 0;
+		virtual void OnEnter(World& world, ResourceManager& resources) { (void)world; (void)resources; }
+		virtual void OnExit(World& world, ResourceManager& resources) { (void)world; (void)resources; }
+		virtual void Update(World& world, ResourceManager& resources, float deltaTime) = 0;
 
-        /// 씬이 활성화될 때 한 번 호출됩니다.
-        virtual void OnEnter(World& world, ResourceManager& resources) { (void)world; (void)resources; }
+		virtual EntityId GetPrimaryRenderableEntity() const { return InvalidEntityId; }
+	};
 
-        /// 씬이 비활성화되기 직전에 한 번 호출됩니다.
-        virtual void OnExit(World& world, ResourceManager& resources) { (void)world; (void)resources; }
+	using SceneCreateFunc = IScene * (*)();
 
-        /// 매 프레임 씬 로직을 갱신합니다.
-        virtual void Update(World& world, ResourceManager& resources, float deltaTime) = 0;
+	class SceneFactory
+	{
+	public:
+		static void Register(const char* name, SceneCreateFunc func);
+		static std::unique_ptr<IScene> Create(const char* name);
+	};
 
-        /// Forward 렌더링에 사용할 대표 엔티티 ID를 돌려줍니다.
-        /// (필요 없으면 InvalidEntityId 반환)
-        virtual EntityId GetPrimaryRenderableEntity() const { return InvalidEntityId; }
-    };
+	template <typename TScene>
+	class SceneRegistrar
+	{
+	public:
+		explicit SceneRegistrar(const char* name)
+		{
+			SceneFactory::Register(name, []() -> IScene*
+				{
+					return new TScene();
+				});
+		}
+	};
 
-    // ==== 씬 리플렉션/팩토리 ====
+	/// 현재 활성 씬 한 개를 관리하는 간단한 매니저입니다.
+	/// 핵심 규칙:
+	/// - 게임 루프 도중(특히 Script Tick 안)에는 "즉시 전환"을 하지 않는다.
+	/// - SwitchTo/LoadSceneFileRequest 로 "요청"만 걸어두고,
+	/// - Engine::Update 안전 지점에서 CommitPendingSceneChange 로 커밋한다.
+	class SceneManager
+	{
+	public:
+		SceneManager(World& world, ResourceManager& resources);
 
-    using SceneCreateFunc = IScene* (*)();
+		/// (즉시 전환) 엔진 초기화/안전 지점에서만 쓰는 함수
+		bool SwitchToImmediate(const char* sceneName);
 
-    class SceneFactory
-    {
-    public:
-        static void Register(const char* name, SceneCreateFunc func);
-        static std::unique_ptr<IScene> Create(const char* name);
-    };
+		/// (지연 전환 요청) 스크립트/게임플레이에서 호출해도 안전
+		bool SwitchTo(const char* sceneName);
 
-    template <typename TScene>
-    class SceneRegistrar
-    {
-    public:
-        explicit SceneRegistrar(const char* name)
-        {
-            SceneFactory::Register(name, []() -> IScene*
-            {
-                return new TScene();
-            });
-        }
-    };
+		/// (지연 전환 요청) .scene 파일 로드도 지연 커밋으로 처리
+		bool LoadSceneFileRequest(const std::filesystem::path& logicalScenePath);
 
-    /// 현재 활성 씬 한 개를 관리하는 간단한 매니저입니다.
-    class SceneManager
-    {
-    public:
-        SceneManager(World& world, ResourceManager& resources);
+		/// 현재 씬 업데이트
+		void Update(float deltaTime);
 
-        /// 이름으로 씬을 생성/전환합니다.
-        bool SwitchTo(const char* sceneName);
+		/// 현재 씬의 대표 렌더링 엔티티 ID
+		EntityId GetPrimaryRenderableEntity() const;
 
-        /// 현재 씬 업데이트
-        void Update(float deltaTime);
+		/// 엔진이 확인용으로 쓰는 API
+		bool HasPendingSceneChange() const;
 
-        /// 현재 씬의 대표 렌더링 엔티티 ID
-        EntityId GetPrimaryRenderableEntity() const;
+		/// 엔진이 "프레임 경계"에서만 호출해야 하는 커밋 API
+		/// 성공 시 true
+		bool CommitPendingSceneChange(World& world);
 
-    private:
-        World&          m_world;
-        ResourceManager& m_resources;
-        std::unique_ptr<IScene> m_currentScene;
-    };
+	private:
+		World& m_world;
+		ResourceManager& m_resources;
 
-    // 매크로로 간단하게 씬 등록을 할 수 있게 합니다.
-    #define REGISTER_SCENE(SceneType) \
+		std::unique_ptr<IScene> m_currentScene;
+
+		// pending(지연) 전환 요청
+		std::unique_ptr<IScene> m_pendingScene;
+		std::optional<std::filesystem::path> m_pendingSceneFile;
+	};
+
+#define REGISTER_SCENE(SceneType) \
         static Alice::SceneRegistrar<SceneType> s_scene_registrar_##SceneType(#SceneType);
 }
-
-
-

@@ -7,6 +7,7 @@
 #include "Core/JsonRttr.h"
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
+#include "Core/ThreadSafety.h"
 
 #include <fstream>
 #include <string>
@@ -16,6 +17,7 @@
 
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
+#include "PhysX/Components/Phy_SettingsComponent.h"
 #include <wrl/client.h>
 #include <dxgi.h>
 #include <dxgi1_3.h>
@@ -83,6 +85,133 @@ namespace Alice
             }
 
             return path;
+        }
+
+        // Phy_SettingsComponent 수동 직렬화
+        static JsonRttr::json WritePhysicsSceneSettings(const Phy_SettingsComponent& settings)
+        {
+            JsonRttr::json j = JsonRttr::json::object();
+            
+            // 기본 프로퍼티
+            j["enablePhysics"] = settings.enablePhysics;
+            j["gravity"] = JsonRttr::json::array({ settings.gravity.x, settings.gravity.y, settings.gravity.z });
+            j["fixedDt"] = settings.fixedDt;
+            j["maxSubsteps"] = settings.maxSubsteps;
+            j["filterRevision"] = settings.filterRevision;
+            
+            // layerCollideMatrix: 32x32 bool 배열
+            j["layerCollideMatrix"] = JsonRttr::json::array();
+            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+            {
+                JsonRttr::json row = JsonRttr::json::array();
+                for (int j = 0; j < MAX_PHYSICS_LAYERS; ++j)
+                {
+                    row.push_back(settings.layerCollideMatrix[i][j]);
+                }
+                j["layerCollideMatrix"].push_back(row);
+            }
+            
+            // layerQueryMatrix: 32x32 bool 배열
+            j["layerQueryMatrix"] = JsonRttr::json::array();
+            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+            {
+                JsonRttr::json row = JsonRttr::json::array();
+                for (int j = 0; j < MAX_PHYSICS_LAYERS; ++j)
+                {
+                    row.push_back(settings.layerQueryMatrix[i][j]);
+                }
+                j["layerQueryMatrix"].push_back(row);
+            }
+            
+            // layerNames: 32개 string 배열
+            j["layerNames"] = JsonRttr::json::array();
+            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+            {
+                j["layerNames"].push_back(settings.layerNames[i]);
+            }
+            
+            return j;
+        }
+        
+        // Phy_SettingsComponent 수동 역직렬화
+        static bool LoadPhysicsSceneSettings(Phy_SettingsComponent& settings, const JsonRttr::json& j)
+        {
+            if (!j.is_object()) return false;
+            
+            // 기본 프로퍼티
+            if (j.contains("enablePhysics") && j["enablePhysics"].is_boolean())
+                settings.enablePhysics = j["enablePhysics"].get<bool>();
+            
+            if (j.contains("gravity") && j["gravity"].is_array() && j["gravity"].size() == 3)
+            {
+                settings.gravity.x = j["gravity"][0].get<float>();
+                settings.gravity.y = j["gravity"][1].get<float>();
+                settings.gravity.z = j["gravity"][2].get<float>();
+            }
+            
+            if (j.contains("fixedDt") && j["fixedDt"].is_number())
+                settings.fixedDt = j["fixedDt"].get<float>();
+            
+            if (j.contains("maxSubsteps") && j["maxSubsteps"].is_number_integer())
+                settings.maxSubsteps = j["maxSubsteps"].get<int>();
+            
+            if (j.contains("filterRevision") && j["filterRevision"].is_number_unsigned())
+                settings.filterRevision = j["filterRevision"].get<uint32_t>();
+            
+            // layerCollideMatrix: 32x32 bool 배열
+            if (j.contains("layerCollideMatrix") && j["layerCollideMatrix"].is_array())
+            {
+                const auto& matrix = j["layerCollideMatrix"];
+                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(matrix.size()); ++i)
+                {
+                    if (matrix[i].is_array())
+                    {
+                        const auto& row = matrix[i];
+                        for (int j = 0; j < MAX_PHYSICS_LAYERS && j < static_cast<int>(row.size()); ++j)
+                        {
+                            // bool 또는 0/1 정수 모두 처리
+                            if (row[j].is_boolean())
+                                settings.layerCollideMatrix[i][j] = row[j].get<bool>();
+                            else if (row[j].is_number_integer())
+                                settings.layerCollideMatrix[i][j] = (row[j].get<int>() != 0);
+                        }
+                    }
+                }
+            }
+            
+            // layerQueryMatrix: 32x32 bool 배열
+            if (j.contains("layerQueryMatrix") && j["layerQueryMatrix"].is_array())
+            {
+                const auto& matrix = j["layerQueryMatrix"];
+                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(matrix.size()); ++i)
+                {
+                    if (matrix[i].is_array())
+                    {
+                        const auto& row = matrix[i];
+                        for (int j = 0; j < MAX_PHYSICS_LAYERS && j < static_cast<int>(row.size()); ++j)
+                        {
+                            // bool 또는 0/1 정수 모두 처리
+                            if (row[j].is_boolean())
+                                settings.layerQueryMatrix[i][j] = row[j].get<bool>();
+                            else if (row[j].is_number_integer())
+                                settings.layerQueryMatrix[i][j] = (row[j].get<int>() != 0);
+                        }
+                    }
+                }
+            }
+            
+            // layerNames: 32개 string 배열
+            if (j.contains("layerNames") && j["layerNames"].is_array())
+            {
+                const auto& names = j["layerNames"];
+                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(names.size()); ++i)
+                {
+                    if (names[i].is_string())
+                        settings.layerNames[i] = names[i].get<std::string>();
+                }
+            }
+            
+            return true;
         }
 
         static bool WriteEntity(JsonRttr::json& outEntity, const World& world, EntityId id)
@@ -212,6 +341,37 @@ namespace Alice
             {
                 rttr::instance inst = const_cast<RectLightComponent&>(*rect);
                 outEntity["RectLight"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            // PhysX Components
+            if (const auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(id); rigidBody)
+            {
+                rttr::instance inst = const_cast<Phy_RigidBodyComponent&>(*rigidBody);
+                outEntity["RigidBody"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* collider = world.GetComponent<Phy_ColliderComponent>(id); collider)
+            {
+                rttr::instance inst = const_cast<Phy_ColliderComponent&>(*collider);
+                outEntity["Collider"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* cct = world.GetComponent<Phy_CCTComponent>(id); cct)
+            {
+                rttr::instance inst = const_cast<Phy_CCTComponent&>(*cct);
+                outEntity["CharacterController"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* terrain = world.GetComponent<Phy_TerrainHeightFieldComponent>(id); terrain)
+            {
+                rttr::instance inst = const_cast<Phy_TerrainHeightFieldComponent&>(*terrain);
+                outEntity["TerrainHeightField"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* physicsSettings = world.GetComponent<Phy_SettingsComponent>(id); physicsSettings)
+            {
+                // 수동 직렬화 사용 (중첩 배열 보장)
+                outEntity["PhysicsSceneSettings"] = WritePhysicsSceneSettings(*physicsSettings);
             }
 
             return true;
@@ -400,6 +560,47 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
             }
 
+            // PhysX Components
+            auto itRB = e.find("RigidBody");
+            if (itRB != e.end() && itRB->is_object())
+            {
+                Phy_RigidBodyComponent& rb = world.AddComponent<Phy_RigidBodyComponent>(id);
+                rttr::instance inst = rb;
+                if (!JsonRttr::FromJsonObject(inst, *itRB)) return false;
+            }
+
+            auto itCollider = e.find("Collider");
+            if (itCollider != e.end() && itCollider->is_object())
+            {
+                Phy_ColliderComponent& col = world.AddComponent<Phy_ColliderComponent>(id);
+                rttr::instance inst = col;
+                if (!JsonRttr::FromJsonObject(inst, *itCollider)) return false;
+            }
+
+            auto itCCT = e.find("CharacterController");
+            if (itCCT != e.end() && itCCT->is_object())
+            {
+                Phy_CCTComponent& cct = world.AddComponent<Phy_CCTComponent>(id);
+                rttr::instance inst = cct;
+                if (!JsonRttr::FromJsonObject(inst, *itCCT)) return false;
+            }
+
+            auto itTerrain = e.find("TerrainHeightField");
+            if (itTerrain != e.end() && itTerrain->is_object())
+            {
+                Phy_TerrainHeightFieldComponent& terrain = world.AddComponent<Phy_TerrainHeightFieldComponent>(id);
+                rttr::instance inst = terrain;
+                if (!JsonRttr::FromJsonObject(inst, *itTerrain)) return false;
+            }
+
+            auto itPhysicsSettings = e.find("PhysicsSceneSettings");
+            if (itPhysicsSettings != e.end() && itPhysicsSettings->is_object())
+            {
+                Phy_SettingsComponent& ps = world.AddComponent<Phy_SettingsComponent>(id);
+                // 수동 역직렬화 사용 (중첩 배열 보장)
+                if (!LoadPhysicsSceneSettings(ps, *itPhysicsSettings)) return false;
+            }
+
             return true;
         }
 
@@ -468,6 +669,7 @@ namespace Alice
 
         bool Load(World& world, const std::filesystem::path& path)
         {
+            ThreadSafety::AssertMainThread();
             // 레거시 빈 씬(텍스트 헤더만 존재) 자동 처리:
             // - 예전 포맷으로 생성된 "# AliceRenderer scene" 파일은 JSON이 아니므로 파싱에 실패합니다.
             // - 이 경우 기본 엔티티 1개를 넣어 JSON 씬으로 즉시 업그레이드합니다.

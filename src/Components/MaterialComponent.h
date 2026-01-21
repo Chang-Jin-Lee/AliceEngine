@@ -12,6 +12,7 @@ namespace Alice {
         DirectX::XMFLOAT3 color{ 0.7f, 0.7f, 0.7f }; // 베이스 색상 (albedo)
         float roughness{ 0.5f };                     // 0~1 러프니스 (PBR)
         float metalness{ 0.0f };                     // 0~1 메탈니스 (PBR)
+        int shadingMode{ -1 };                       // -1: 전역, 0~5: 개별 셰이딩 모드
         std::string assetPath;                     // 선택된 머티리얼 에셋 경로 (옵션)
         std::string albedoTexturePath; // 알베도 텍스처 경로 (.alice 또는 원본)
     };
