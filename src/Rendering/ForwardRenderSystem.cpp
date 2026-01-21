@@ -13,6 +13,7 @@
 
 #include <Core/ResourceManager.h>
 #include <Core/Logger.h>
+#include <Core/World.h>
 #include "Rendering/ShaderCode/CommonShaderCode.h"
 #include "Rendering/ShaderCode/ForwardShader.h"
 
@@ -920,6 +921,37 @@ namespace Alice
         return S * R * T;
     }
 
+    XMMATRIX ForwardRenderSystem::BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const
+    {
+        // 부모 Transform 적용
+        EntityId parentId = transform.parent;
+        XMMATRIX parentMatrix = XMMatrixIdentity();
+        
+        // 부모가 있으면 부모의 World Matrix를 재귀적으로 계산
+        if (parentId != InvalidEntityId)
+        {
+            const TransformComponent* parentTransform = world.GetComponent<TransformComponent>(parentId);
+            if (parentTransform)
+            {
+                parentMatrix = BuildWorldMatrix(world, parentId, *parentTransform);
+            }
+        }
+        
+        // 현재 Transform 계산
+        XMVECTOR scale = XMLoadFloat3(&transform.scale);
+        XMVECTOR rotation = XMLoadFloat3(&transform.rotation);
+        XMVECTOR translation = XMLoadFloat3(&transform.position);
+
+        XMMATRIX S = XMMatrixScalingFromVector(scale);
+        XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(rotation);
+        XMMATRIX T = XMMatrixTranslationFromVector(translation);
+        
+        XMMATRIX localMatrix = S * R * T;
+        
+        // 부모 행렬 적용
+        return localMatrix * parentMatrix;
+    }
+
     XMMATRIX ForwardRenderSystem::RenderShadowPass(const World& world, const std::vector<SkinnedDrawCommand>& skinnedCommands, const std::unordered_set<EntityId>& cameraEntities)
     {
         if (!m_sceneRTV || !m_sceneDSV) return XMMatrixIdentity();
@@ -1024,7 +1056,7 @@ namespace Alice
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
                 if (!transform.enabled) continue;
 
-                XMMATRIX worldM = BuildWorldMatrix(transform);
+                XMMATRIX worldM = BuildWorldMatrix(world, id, transform);
 
                 // 그림자 맵은 보통 Back-Face Culling을 하거나, Peter Panning 방지를 위해 Front-Face Culling을 하기도 함
                 // 설정에 따라 상태 변경
@@ -1127,7 +1159,7 @@ namespace Alice
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue; // 스키닝 메시는 제외
             if (!transform.enabled) continue;
 
-            XMMATRIX worldM = BuildWorldMatrix(transform);
+            XMMATRIX worldM = BuildWorldMatrix(world, id, transform);
 
             // Material 설정
             XMFLOAT4 color = { m_lightingParameters.baseColor.x, m_lightingParameters.baseColor.y, m_lightingParameters.baseColor.z, 1.0f };

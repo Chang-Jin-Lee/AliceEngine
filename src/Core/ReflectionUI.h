@@ -13,6 +13,9 @@
 #include <string>
 #include <functional>
 #include <unordered_map>
+#include <filesystem>
+#include <algorithm>
+#include "Core/ResourceManager.h"
 
 namespace Alice
 {
@@ -88,10 +91,48 @@ namespace Alice
                     std::string val = value.to_string();
                     char buffer[512] = {};
                     strncpy_s(buffer, val.c_str(), sizeof(buffer) - 1);
+                    
+                    // InputText 렌더링
                     if (ImGui::InputText(displayName.c_str(), buffer, sizeof(buffer)))
                     {
                         prop.set_value(obj, std::string(buffer));
                         changed = true;
+                    }
+                    
+                    // 드래그앤드롭 지원: 파일 경로 필드에 드롭 타겟 추가
+                    // 프로퍼티 이름에 "Path", "path", "Asset", "asset", "File", "file" 등이 포함된 경우
+                    std::string propNameLower = propName;
+                    std::transform(propNameLower.begin(), propNameLower.end(), propNameLower.begin(), ::tolower);
+                    bool isPathField = propNameLower.find("path") != std::string::npos ||
+                                       propNameLower.find("asset") != std::string::npos ||
+                                       propNameLower.find("file") != std::string::npos;
+                    
+                    if (isPathField && ImGui::BeginDragDropTarget())
+                    {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
+                        {
+                            const char* pathStr = static_cast<const char*>(payload->Data);
+                            std::filesystem::path droppedPath(pathStr);
+                            
+                            // 논리 경로로 변환 시도 (ResourceManager 사용)
+                            std::string logicalPath = droppedPath.string();
+                            try {
+                                // ResourceManager 싱글톤 사용
+                                auto& rm = ResourceManager::Get();
+                                std::filesystem::path logical = rm.NormalizeResourcePathAbsoluteToLogical(droppedPath);
+                                if (!logical.empty() && !logical.is_absolute())
+                                {
+                                    logicalPath = logical.string();
+                                }
+                            }
+                            catch (...) {
+                                // ResourceManager 접근 실패 시 원본 경로 사용
+                            }
+                            
+                            prop.set_value(obj, logicalPath);
+                            changed = true;
+                        }
+                        ImGui::EndDragDropTarget();
                     }
                 }
                 else if (propType.is_class())

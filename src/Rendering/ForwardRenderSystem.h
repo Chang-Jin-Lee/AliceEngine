@@ -99,6 +99,7 @@ namespace Alice
                            std::uint32_t boneCount);
 
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
+        DirectX::XMMATRIX BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const;
 
         //void GetSceneBounds(const World& world, DirectX::XMVECTOR& outFocus, float& outRadius);
        // void SetCullState(DirectX::CXMMATRIX worldM, bool isShadowPass);

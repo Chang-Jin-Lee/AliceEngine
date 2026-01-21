@@ -78,6 +78,22 @@ namespace Alice {
 		// 지연 파괴 예약이 있으면 제거
 		m_delayedDestructions.erase(id);
 
+		// 부모-자식 관계 정리: 자식들의 부모를 해제
+		auto* transform = GetComponent<TransformComponent>(id);
+		if (transform)
+		{
+			// 이 엔티티를 부모로 가지는 자식들을 찾아 부모 해제
+			std::vector<EntityId> children = GetChildren(id);
+			for (EntityId child : children)
+			{
+				auto* childTransform = GetComponent<TransformComponent>(child);
+				if (childTransform)
+				{
+					childTransform->parent = InvalidEntityId;
+				}
+			}
+		}
+
 		// SlotMap: 엔티티가 파괴될 때 generation을 증가시켜 이전 참조를 무효화합니다.
 		auto genIt = m_entityGenerations.find(id);
 		if (genIt != m_entityGenerations.end())
@@ -348,6 +364,63 @@ namespace Alice {
 	IPhysicsWorld* World::GetPhysicsWorld() { return m_physicsWorld.get(); }
 	const IPhysicsWorld* World::GetPhysicsWorld() const { return m_physicsWorld.get(); }
 	//========================================================
+
+	// 부모-자식 관계 관리
+	void World::SetParent(EntityId child, EntityId parent)
+	{
+		if (child == InvalidEntityId)
+			return;
+		
+		// 순환 참조 방지: parent가 child의 자식인지 확인
+		if (parent != InvalidEntityId)
+		{
+			EntityId checkParent = parent;
+			while (checkParent != InvalidEntityId)
+			{
+				if (checkParent == child)
+					return; // 순환 참조 감지, 무시
+				
+				auto* checkTransform = GetComponent<TransformComponent>(checkParent);
+				if (!checkTransform)
+					break;
+				checkParent = checkTransform->parent;
+			}
+		}
+		
+		auto* childTransform = GetComponent<TransformComponent>(child);
+		if (!childTransform)
+			return;
+		
+		// 새 부모 설정
+		childTransform->parent = parent;
+	}
+
+	EntityId World::GetParent(EntityId child) const
+	{
+		const auto* transform = GetComponent<TransformComponent>(child);
+		if (!transform)
+			return InvalidEntityId;
+		return transform->parent;
+	}
+
+	std::vector<EntityId> World::GetChildren(EntityId parent) const
+	{
+		std::vector<EntityId> children;
+		const auto& transforms = GetComponents<TransformComponent>();
+		for (const auto& [entityId, transform] : transforms)
+		{
+			if (transform.parent == parent)
+			{
+				children.push_back(entityId);
+			}
+		}
+		return children;
+	}
+
+	std::vector<EntityId> World::GetRootEntities() const
+	{
+		return GetChildren(InvalidEntityId);
+	}
 
 
 } // namespace Alice
