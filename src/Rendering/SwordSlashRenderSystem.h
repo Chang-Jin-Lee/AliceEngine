@@ -12,7 +12,7 @@
 namespace Alice
 {
 	/// 쉐이더 기반 검기 렌더링 시스템
-	/// - SwordSlashEffect 스크립트와 연동
+	/// - TrailEffect 스크립트와 연동
 	/// - Catmull-Rom 스플라인을 라인 스트립으로 렌더링
 	class SwordSlashRenderSystem
 	{

@@ -1,9 +1,9 @@
 #pragma once
 
-// SwordEffectShader header
+// TrailEffectShader header
 namespace Alice
 {
-	class SwordEffectShader {
+	class TrailEffectShader {
 	public:
 		inline static const char* g_SwordEffectVS = R"(
 cbuffer CBPerSwordEffectVS : register(b0)
