@@ -63,6 +63,7 @@ namespace Alice
                     //               static_cast<unsigned>(entityId));
                     continue;
                 }
+                if (!t->enabled) continue;
 
                 // ?붾뱶 ?됰젹 援ъ꽦 (S * R * T)
                 using namespace DirectX;
