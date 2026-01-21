@@ -1178,6 +1178,8 @@ void PhysicsSystem::Update(float deltaTime)
         auto transforms = m_world.GetComponents<TransformComponent>();
         for (const auto& [entityId, transform] : transforms)
         {
+            if (!transform.enabled) continue;
+            
             auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
             auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
             auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
@@ -1226,7 +1228,7 @@ void PhysicsSystem::Update(float deltaTime)
         for (const auto& [entityId, collider] : colliders)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-            if (!transform) continue;
+            if (!transform || !transform->enabled) continue;
             if (m_world.GetComponent<Phy_MeshColliderComponent>(entityId))
                 continue;
 
@@ -1391,7 +1393,7 @@ void PhysicsSystem::Update(float deltaTime)
         for (const auto& [entityId, mc] : meshColliders)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-            if (!transform) continue;
+            if (!transform || !transform->enabled) continue;
 
             const std::string resolvedPath = ResolveMeshAssetPath(m_world, entityId, mc);
 
@@ -1554,6 +1556,9 @@ void PhysicsSystem::Update(float deltaTime)
         auto rigidBodies = m_world.GetComponents<Phy_RigidBodyComponent>();
         for (const auto& [entityId, rb] : rigidBodies)
         {
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform || !transform->enabled) continue;
+            
             IRigidBody* body = nullptr;
             auto it = m_entityToActor.find(entityId);
             if (it != m_entityToActor.end())
@@ -1631,7 +1636,7 @@ void PhysicsSystem::Update(float deltaTime)
         for (const auto& [entityId, terrain] : terrains)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-            if (!transform) continue;
+            if (!transform || !transform->enabled) continue;
 
             int li = FirstLayerIndex(terrain.layerBits);
             if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
@@ -1728,7 +1733,7 @@ void PhysicsSystem::Update(float deltaTime)
         for (const auto& [entityId, ccc] : ccts)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-            if (!transform) continue;
+            if (!transform || !transform->enabled) continue;
 
             auto itCCT = m_entityToCCT.find(entityId);
             
@@ -1907,7 +1912,7 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
     if (!m_physicsWorld) return;
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-    if (!transform) return;
+    if (!transform || !transform->enabled) return;
 
     auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
     auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
