@@ -88,7 +88,8 @@ namespace Alice
                                const float& roughness,
                                const float& metalness,
                                const bool& useTexture,
-                               const bool& enableNormalMap);
+                               const bool& enableNormalMap,
+                               int shadingMode);
 
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
@@ -233,7 +234,11 @@ namespace Alice
     public:
         /// 스키닝 메시를 렌더링합니다.
         /// - AliceGame 의 SkinnedMeshSystem 이 만들어 준 DrawCommand 리스트를 사용합니다.
-        void RenderSkinnedMeshes(const Camera& camera, const std::vector<SkinnedDrawCommand>& commands);
+        void RenderSkinnedMeshes(const Camera& camera,
+                                 const std::vector<SkinnedDrawCommand>& commands,
+                                 int shadingMode,
+                                 bool enableFillLight,
+                                 DirectX::CXMMATRIX lightViewProj);
 
         /// 현재 조명 파라미터(색상, 강도, Shininess 등)를 반환합니다.
         /// ImGui 등에서 이 값을 직접 수정해도 됩니다.

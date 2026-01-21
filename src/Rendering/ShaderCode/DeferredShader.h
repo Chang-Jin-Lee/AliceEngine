@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace Alice
 {
@@ -18,6 +18,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 struct VSInput
@@ -72,6 +74,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 cbuffer CBBones : register(b2)
@@ -146,6 +150,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 struct VertexOut
@@ -207,11 +213,14 @@ GBufferOut main(VertexOut pIn)
     float metalness = saturate(gMetalness);
     float roughness = saturate(gRoughness);
     
+    // Normal을 [0,1] 범위로 인코딩하여 저장 (LightPS에서 디코딩)
+    float3 normalEncoded = N * 0.5f + 0.5f;
+    
     gOut.PositionWS = float4(pIn.WorldPos, 1.0f);
-    gOut.NormalWS   = float4(N, 1.0f);
+    gOut.NormalWS   = float4(normalEncoded, 1.0f);
     gOut.Metalness  = float4(metalness, 0, 0, 1);
     gOut.Roughness  = float4(roughness, 0, 0, 1);
-    gOut.BaseColor  = float4(baseColor, 1.0f);
+    gOut.BaseColor  = float4(baseColor, saturate((float)gShadingMode / 5.0f));
     
     return gOut;
 }
@@ -455,6 +464,44 @@ float3 EvaluatePBRLight(float3 N, float3 V, float3 L, float3 albedoPBR, float me
     return (diffuse + specular) * lightColor * NdotL;
 }
 
+float ToonLevel(float n)
+{
+    if (n > 0.95f) return 1.0f;
+    if (n > 0.5f)  return 0.7f;
+    if (n > 0.2f)  return 0.4f;
+    return 0.1f;
+}
+
+void AccumulateLegacy(float3 N, float3 V, float3 L, float3 lightColor, float atten, int mode, float shininess,
+                      inout float3 outDiffuse, inout float3 outSpecular)
+{
+    float NdotL = max(dot(N, L), 0.0f);
+    if (mode == 3)
+    {
+        float level = ToonLevel(NdotL);
+        outDiffuse += level * lightColor * atten;
+        return;
+    }
+
+    outDiffuse += NdotL * lightColor * atten;
+
+    if (mode == 0 || NdotL <= 0.0f)
+        return;
+
+    float specTerm = 0.0f;
+    if (mode == 2) // Blinn-Phong
+    {
+        float3 H = normalize(L + V);
+        specTerm = pow(max(dot(N, H), 0.0f), shininess);
+    }
+    else // Phong
+    {
+        float3 R = reflect(-L, N);
+        specTerm = pow(max(dot(R, V), 0.0f), shininess);
+    }
+    outSpecular += specTerm * lightColor * atten;
+}
+
 float4 main(PS_INPUT_QUAD pIn) : SV_Target
 {
     // G-Buffer 가져오기
@@ -469,23 +516,77 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
 
     // 데이터 복원
     float3 posW = positionWS.xyz;
-    float3 N = normalize(normalWS_packed.xyz);
+    // Normal을 [0,1]에서 [-1,1]로 디코딩
+    float3 N = normalize(normalWS_packed.xyz * 2.0f - 1.0f);
     float metalness = metalness_packed.r;
     float roughness = max(roughness_packed.r, 0.04f);
     float3 albedo = baseColor.rgb;
     float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
     
+    int shadingMode = (int)floor(baseColor.a * 5.0f + 0.5f);
+    shadingMode = clamp(shadingMode, 0, 5);
+
     // 라이팅 벡터 계산
     float3 L = normalize(-g_LightDirection.xyz);
     float3 V = normalize(g_EyePosW - posW);
-    float3 H = normalize(L + V);
     
-    float NdotL = dot(N, L);
-    float theta = saturate(NdotL);
     float NdotV = saturate(dot(N, V));
-    float NdotH = saturate(dot(N, H));
-    float VdotH = saturate(dot(V, H));
-    
+
+    const bool usePbr = (shadingMode == 4 || shadingMode == 5);
+    const bool toonPbr = (shadingMode == 5);
+
+    float shadowVis = CalcShadowFactorDeferred(posW, g_ShadowMap, g_ShadowSampler);
+
+    if (!usePbr)
+    {
+        float3 totalDiffuse = float3(0.0f, 0.0f, 0.0f);
+        float3 totalSpecular = float3(0.0f, 0.0f, 0.0f);
+        float shininess = max(g_Material_specular.a, 1.0f);
+        float3 lightColorDir = g_LightColor.rgb * g_intensity;
+
+        AccumulateLegacy(N, V, L, lightColorDir, shadowVis, shadingMode, shininess, totalDiffuse, totalSpecular);
+
+        [loop] for (int i = 0; i < g_PointLightCount; ++i)
+        {
+            PointLight pl = g_PointLights[i];
+            float3 toLight = pl.position - posW;
+            float dist = length(toLight);
+            float3 Lp = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+            float atten = ComputeAttenuation(dist, pl.range);
+            float3 lc = pl.color * pl.intensity * atten;
+            AccumulateLegacy(N, V, Lp, lc, 1.0f, shadingMode, shininess, totalDiffuse, totalSpecular);
+        }
+
+        [loop] for (int i = 0; i < g_SpotLightCount; ++i)
+        {
+            SpotLight sl = g_SpotLights[i];
+            float3 toLight = sl.position - posW;
+            float dist = length(toLight);
+            float3 Ls = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+            float atten = ComputeAttenuation(dist, sl.range);
+            float spot = ComputeSpotFactor(Ls, sl.direction, sl.innerCos, sl.outerCos);
+            float3 lc = sl.color * sl.intensity * atten * spot;
+            AccumulateLegacy(N, V, Ls, lc, 1.0f, shadingMode, shininess, totalDiffuse, totalSpecular);
+        }
+
+        [loop] for (int i = 0; i < g_RectLightCount; ++i)
+        {
+            RectLight rl = g_RectLights[i];
+            float3 toLight = rl.position - posW;
+            float dist = length(toLight);
+            float3 Lr = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
+            float atten = ComputeAttenuation(dist, rl.range);
+            float facing = ComputeRectFactor(Lr, rl.direction);
+            float areaScale = max(rl.width * rl.height, 0.01f);
+            float3 lc = rl.color * rl.intensity * atten * facing * areaScale;
+            AccumulateLegacy(N, V, Lr, lc, 1.0f, shadingMode, shininess, totalDiffuse, totalSpecular);
+        }
+
+        float3 ambient = g_DirLight_ambient.rgb * albedoLinear;
+        float3 color = ambient + totalDiffuse * albedoLinear + totalSpecular * g_Material_specular.rgb;
+        return float4(color, 1.0f);
+    }
+
     // PBR 연산
     float3 albedoPBR = albedoLinear;
     roughness = max(roughness, 0.04f);
@@ -498,9 +599,18 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 kD = (1.0f - kS_IBL) * (1.0f - metalness);
     
     // Direct Light (Directional + Extra Lights)
-    float shadowVis = CalcShadowFactorDeferred(posW, g_ShadowMap, g_ShadowSampler);
     float3 lightColorDir = g_LightColor.rgb * g_intensity * PI;
-    float3 directLighting = EvaluatePBRLight(N, V, L, albedoPBR, metalness, roughness, lightColorDir) * shadowVis * ao;
+    float3 directLighting = 0.0f;
+    {
+        float3 lit = EvaluatePBRLight(N, V, L, albedoPBR, metalness, roughness, lightColorDir);
+        float ndotl = max(dot(N, L), 0.0f);
+        if (toonPbr && ndotl > 0.0f)
+        {
+            float level = ToonLevel(ndotl);
+            lit *= level / max(ndotl, 1e-4f);
+        }
+        directLighting += lit * shadowVis * ao;
+    }
 
     float3 extraLighting = float3(0.0f, 0.0f, 0.0f);
 
@@ -512,7 +622,14 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float3 Lp = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
         float atten = ComputeAttenuation(dist, pl.range);
         float3 lc = pl.color * pl.intensity * atten * PI;
-        extraLighting += EvaluatePBRLight(N, V, Lp, albedoPBR, metalness, roughness, lc) * ao;
+        float3 lit = EvaluatePBRLight(N, V, Lp, albedoPBR, metalness, roughness, lc);
+        float ndotl = max(dot(N, Lp), 0.0f);
+        if (toonPbr && ndotl > 0.0f)
+        {
+            float level = ToonLevel(ndotl);
+            lit *= level / max(ndotl, 1e-4f);
+        }
+        extraLighting += lit * ao;
     }
 
     [loop] for (int i = 0; i < g_SpotLightCount; ++i)
@@ -524,7 +641,14 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float atten = ComputeAttenuation(dist, sl.range);
         float spot = ComputeSpotFactor(Ls, sl.direction, sl.innerCos, sl.outerCos);
         float3 lc = sl.color * sl.intensity * atten * spot * PI;
-        extraLighting += EvaluatePBRLight(N, V, Ls, albedoPBR, metalness, roughness, lc) * ao;
+        float3 lit = EvaluatePBRLight(N, V, Ls, albedoPBR, metalness, roughness, lc);
+        float ndotl = max(dot(N, Ls), 0.0f);
+        if (toonPbr && ndotl > 0.0f)
+        {
+            float level = ToonLevel(ndotl);
+            lit *= level / max(ndotl, 1e-4f);
+        }
+        extraLighting += lit * ao;
     }
 
     [loop] for (int i = 0; i < g_RectLightCount; ++i)
@@ -537,7 +661,14 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float facing = ComputeRectFactor(Lr, rl.direction);
         float areaScale = max(rl.width * rl.height, 0.01f);
         float3 lc = rl.color * rl.intensity * atten * facing * areaScale * PI;
-        extraLighting += EvaluatePBRLight(N, V, Lr, albedoPBR, metalness, roughness, lc) * ao;
+        float3 lit = EvaluatePBRLight(N, V, Lr, albedoPBR, metalness, roughness, lc);
+        float ndotl = max(dot(N, Lr), 0.0f);
+        if (toonPbr && ndotl > 0.0f)
+        {
+            float level = ToonLevel(ndotl);
+            lit *= level / max(ndotl, 1e-4f);
+        }
+        extraLighting += lit * ao;
     }
     
     // Indirect Light (IBL)
@@ -570,6 +701,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 cbuffer CBBones : register(b2)
@@ -685,6 +818,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 cbuffer CBTransparentLight : register(b1)
@@ -799,6 +934,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 struct VSInput
@@ -832,6 +969,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 cbuffer CBBones : register(b2)

@@ -1,4 +1,4 @@
-﻿#include "Game/FbxImporter.h"
+#include "Game/FbxImporter.h"
 
 #include <algorithm>
 #include <system_error>
@@ -92,193 +92,99 @@ namespace Alice
                 AppendSkeletonText(nodes, child, depth + 1, text);
         }
 
-        static void ExtractTexture_FileMode(const aiScene* scene,
-                                            aiMaterial* mat,
-                                            aiTextureType type,
-                                            const char* tag,
-                                            const std::filesystem::path& fbxDir,
-                                            const std::filesystem::path& fbmDir,
-                                            const std::string& baseName,
-                                            std::vector<std::filesystem::path>& extractedTextures)
+        // 텍스처를 Resource/Textures/<ModelName>/ 에 저장하고 논리 경로를 반환
+        // 쿠킹은 하지 않음 (전역 빌드 프로세스가 청크로 변환)
+        static std::string ProcessTexture(ResourceManager& rm,
+                                         const aiScene* scene,
+                                         const aiMaterial* mat,
+                                         aiTextureType type,
+                                         const std::filesystem::path& fbxPath,
+                                         const std::string& modelName,
+                                         const std::string& typeSuffix,
+                                         int& embeddedCounter)
         {
             namespace fs = std::filesystem;
 
             if (!scene || !mat)
-                return;
+                return {};
 
             aiString texPath;
             if (mat->GetTexture(type, 0, &texPath) != AI_SUCCESS)
-                return;
+                return {};
 
-            if (std::strlen(texPath.C_Str()) == 0)
-                return;
+            const std::string rawPath = texPath.C_Str();
+            if (rawPath.empty())
+                return {};
 
-            const std::string t = texPath.C_Str();
-
-            // fbmDir이 유효한지 확인
+            // 목적지 디렉터리: Resource/Textures/<ModelName>
+            fs::path destDir = fs::path("Resource") / "Textures" / modelName;
             std::error_code ec;
-            if (!fs::exists(fbmDir, ec) || !fs::is_directory(fbmDir, ec))
-            {
-                ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: fbmDir does not exist or is not a directory: \"%s\"", fbmDir.string().c_str());
-                return;
-            }
+            fs::path destDirAbs = rm.Resolve(destDir);
+            fs::create_directories(destDirAbs, ec);
 
-            // 임베디드 텍스처
-            const aiTexture* at = scene->GetEmbeddedTexture(t.c_str());
-            if (at)
-            {
-                static int embeddedIndex = 0;
+            // 목적지 파일명 결정
+            std::string destFilename;
+            const aiTexture* embedded = scene->GetEmbeddedTexture(rawPath.c_str());
 
-                std::string ext = at->achFormatHint;
+            if (embedded)
+            {
+                // 임베디드: <Model>_<Suffix>_<Index>.<Ext> 형식
+                std::string ext = embedded->achFormatHint;
                 if (ext.empty())
-                    ext = (at->mHeight == 0) ? "bin" : "dds";
-
-                try
-                {
-                    fs::path outPath = fbmDir / (baseName + "_" + tag + "_embedded" + std::to_string(embeddedIndex++) + "." + ext);
-                    std::ofstream ofs(outPath, std::ios::binary);
-                    if (!ofs.is_open())
-                    {
-                        ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: failed to open output file: \"%s\"", outPath.string().c_str());
-                        return;
-                    }
-
-                    if (at->mHeight == 0)
-                    {
-                        if (at->mWidth > 0)
-                            ofs.write(reinterpret_cast<const char*>(at->pcData), static_cast<std::streamsize>(at->mWidth));
-                    }
-                    else
-                    {
-                        const std::size_t dataSize = static_cast<std::size_t>(at->mWidth) * static_cast<std::size_t>(at->mHeight) * sizeof(aiTexel);
-                        if (dataSize > 0)
-                            ofs.write(reinterpret_cast<const char*>(at->pcData), static_cast<std::streamsize>(dataSize));
-                    }
-
-                    if (ofs.good())
-                        extractedTextures.push_back(outPath);
-                }
-                catch (const std::exception& e)
-                {
-                    ALICE_LOG_ERRORF("[FbxImporter] ExtractTexture_FileMode: exception while writing embedded texture: %s", e.what());
-                }
-                return;
+                    ext = (embedded->mHeight == 0) ? "png" : "dds";
+                if (ext.empty())
+                    ext = "png"; // 폴백
+                destFilename = modelName + "_" + typeSuffix + "_" + std::to_string(embeddedCounter++) + "." + ext;
             }
-
-            // 외부 파일 텍스처 → .fbm 으로 복사
-            try
+            else
             {
-                fs::path srcTex = t;
-                if (!srcTex.is_absolute())
+                // 외부 파일: 원본 파일명 유지
+                destFilename = fs::path(rawPath).filename().string();
+            }
+
+            fs::path finalAbsPath = destDirAbs / destFilename;
+
+            // 저장 또는 복사
+            if (embedded)
+            {
+                // 임베디드 데이터를 Resource/Textures/... 에 직접 저장
+                std::ofstream ofs(finalAbsPath, std::ios::binary);
+                if (ofs.is_open())
                 {
-                    // fbxDir이 유효한지 확인
-                    if (fbxDir.empty() || !fs::exists(fbxDir, ec) || !fs::is_directory(fbxDir, ec))
+                    size_t size = (embedded->mHeight == 0) 
+                        ? embedded->mWidth 
+                        : (static_cast<size_t>(embedded->mWidth) * static_cast<size_t>(embedded->mHeight) * sizeof(aiTexel));
+                    if (size > 0)
                     {
-                        ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: invalid fbxDir: \"%s\"", fbxDir.string().c_str());
-                        return;
+                        ofs.write(reinterpret_cast<const char*>(embedded->pcData), static_cast<std::streamsize>(size));
                     }
-                    srcTex = fbxDir / srcTex;
-                }
-
-                // srcTex 정규화해봄 (.. 또는 . 제거)
-                srcTex = srcTex.lexically_normal();
-
-                if (!fs::exists(srcTex, ec))
-                {
-                    ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: source texture does not exist: \"%s\"", srcTex.string().c_str());
-                    return;
-                }
-
-                if (!fs::is_regular_file(srcTex, ec))
-                {
-                    ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: source is not a regular file: \"%s\"", srcTex.string().c_str());
-                    return;
-                }
-
-                fs::path dstTex = fbmDir / srcTex.filename();
-                ec.clear();
-                fs::copy_file(srcTex, dstTex, fs::copy_options::overwrite_existing, ec);
-                if (!ec)
-                {
-                    extractedTextures.push_back(dstTex);
-                }
-                else
-                {
-                    ALICE_LOG_WARN("[FbxImporter] ExtractTexture_FileMode: failed to copy texture \"%s\" -> \"%s\": %s", 
-                                   srcTex.string().c_str(), dstTex.string().c_str(), ec.message().c_str());
                 }
             }
-            catch (const std::exception& e)
+            else
             {
-                ALICE_LOG_ERRORF("[FbxImporter] ExtractTexture_FileMode: exception while copying texture: %s", e.what());
-            }
-        }
+                // 외부 파일 복사 (존재하지 않을 때만)
+                fs::path srcAbsPath = rawPath;
+                if (!srcAbsPath.is_absolute())
+                {
+                    srcAbsPath = fbxPath.parent_path() / rawPath;
+                    srcAbsPath = srcAbsPath.lexically_normal();
+                }
 
-        static void ExtractTexture_NoFileMode(ResourceManager& resources,
-                                              const aiScene* scene,
-                                              aiMaterial* mat,
-                                              aiTextureType type,
-                                              const char* tag,
-                                              const std::filesystem::path& fbxPath,
-                                              const std::string& baseName,
-                                              std::vector<std::filesystem::path>& cookedTextures)
-        {
-            namespace fs = std::filesystem;
-
-            if (!scene || !mat)
-                return;
-
-            aiString texPath;
-            if (mat->GetTexture(type, 0, &texPath) != AI_SUCCESS)
-                return;
-
-            if (std::strlen(texPath.C_Str()) == 0)
-                return;
-
-            const std::string t = texPath.C_Str();
-
-            const aiTexture* at = scene->GetEmbeddedTexture(t.c_str());
-            if (at)
-            {
-                // 배포 모드에서는 평문 파일 생성 없이 메모리에서 바로 Cooked 저장
-                if (at->mHeight != 0)
-                    return;
-
-                static int embeddedIndex = 0;
-                const std::string texStem = baseName + "_" + tag + "_embedded" + std::to_string(embeddedIndex++);
-
-                fs::path cooked = "Cooked/Textures";
-                cooked /= baseName;
-                cooked /= texStem + ".alice";
-                const fs::path cookedAbs = resources.Resolve(cooked);
-
-                std::vector<std::uint8_t> bytes;
-                bytes.resize(at->mWidth);
-                std::memcpy(bytes.data(), at->pcData, at->mWidth);
-                resources.CookAndSaveBytes(bytes, cookedAbs);
-                cookedTextures.push_back(cooked);
-                return;
+                if (fs::exists(srcAbsPath) && !fs::exists(finalAbsPath))
+                {
+                    fs::copy_file(srcAbsPath, finalAbsPath, fs::copy_options::overwrite_existing, ec);
+                    if (ec)
+                    {
+                        ALICE_LOG_WARN("[FbxImporter] ProcessTexture: failed to copy \"%s\" -> \"%s\": %s",
+                            srcAbsPath.string().c_str(), finalAbsPath.string().c_str(), ec.message().c_str());
+                        return {};
+                    }
+                }
             }
 
-            fs::path srcTex = t;
-            if (!srcTex.is_absolute())
-            {
-                const std::string logicalFbx = NormalizeToResourceLogical(fbxPath);
-                const fs::path fbxParent = fs::path(logicalFbx).parent_path();
-                srcTex = fbxParent / srcTex;
-            }
-
-            auto texBytes = resources.LoadSharedBinaryAuto(srcTex);
-            if (!texBytes || texBytes->empty())
-                return;
-
-            const std::string texStem = fs::path(t).stem().string();
-            fs::path cooked = "Cooked/Textures";
-            cooked /= baseName;
-            cooked /= texStem + ".alice";
-            const fs::path cookedAbs = resources.Resolve(cooked);
-            resources.CookAndSaveBytes(*texBytes, cookedAbs);
-            cookedTextures.push_back(cooked);
+            // 논리 경로 반환 (엔진에서 사용, 청크는 이 경로로 매핑됨)
+            fs::path logical = fs::path("Resource/Textures") / modelName / destFilename;
+            return logical.generic_string();
         }
     }
 
@@ -303,25 +209,35 @@ namespace Alice
         // - 없으면(Resource/Cooked/Chunks) 메모리에서 복호화된 바이트를 받아 Assimp ReadFileFromMemory 로 로드
         namespace fs = std::filesystem;
 
-        const bool fileExists = !fbxPath.empty() && fs::exists(fbxPath);
+        //const bool fileExists = !fbxPath.empty() && fs::exists(fbxPath);
+		const fs::path resolved = m_resources.Resolve(fbxPath);
+        const bool isChunk = (resolved.extension() == ".alice");   // Cooked/Chunks/.../*.alice
+		const bool fileExists = !isChunk && fs::exists(resolved);
 
         // 키/생성물 이름은 항상 원래 요청된 fbxPath 기준(stem)으로 고정함
         // C:/Models/Robot/robot_01.fbx -> 	robot_01
         std::string baseName = std::filesystem::path(fbxPath).stem().string();
 
+        // 논리 경로 정규화 (ResourceManager가 처리할 수 있도록)
         std::filesystem::path resolvedLogical = fbxPath;
+        if (resolvedLogical.is_absolute())
+        {
+            // 절대 경로를 논리 경로로 변환
+            resolvedLogical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(resolvedLogical);
+        }
 
         if (fileExists)
         {
-            const fs::path absFbxPath = fs::absolute(fbxPath);
-            if (!model->Load(device, absFbxPath.wstring()))
+            // 파일이 존재하는 경우: 새로운 ResourceManager 기반 Load 사용
+            if (!model->Load(device, m_resources, resolvedLogical))
             {
-                ALICE_LOG_ERRORF("[FbxImporter] FbxModel::Load FAILED for \"%s\"\n", absFbxPath.string().c_str());
+                ALICE_LOG_ERRORF("[FbxImporter] FbxModel::Load FAILED for \"%s\"\n", resolved.string().c_str());
                 return result;
             }
         }
         else
         {
+            // 청크/메모리 로드: ResourceManager 기반 LoadFromMemory 사용
             auto sp = m_resources.LoadSharedBinaryAuto(resolvedLogical);
             if (!sp || sp->empty())
             {
@@ -330,8 +246,7 @@ namespace Alice
                 return result;
             }
 
-            // baseDirW는 외부 텍스처 상대경로 해석용인데, 배포 빌드에선 파일이 없을 수 있어 빈 값으로 둡니다.
-            if (!model->LoadFromMemory(device, sp->data(), sp->size(), baseName + ".fbx", L""))
+            if (!model->LoadFromMemory(device, m_resources, resolvedLogical, sp->data(), sp->size(), baseName + ".fbx"))
             {
                 ALICE_LOG_ERRORF("[FbxImporter] FbxModel::LoadFromMemory FAILED for \"%s\" (bytes=%zu)\n", resolvedLogical.string().c_str(), sp->size());
                 return result;
@@ -404,86 +319,54 @@ namespace Alice
                 gpu->materialSRVs.size());
         }
 
-        // 1) 텍스처는 "평문 파일로 추출"하지 않습니다.
-        //    - 임베디드 텍스처: 메모리 바이트를 바로 Cooked/.../.alice 로 암호화 저장
-        //    - 외부 텍스처: 원본 파일을 바로 읽어 Cooked 로 암호화 저장 (중간 파일 없음)
+        // 3) 텍스처 처리: Resource/Textures/<ModelName>/ 에 저장
+        //    쿠킹은 하지 않음 (전역 빌드 프로세스가 Resource 폴더를 청크로 변환)
+        //    텍스처는 FBX 파일의 실제 위치를 기준으로 찾아야 하므로 resolved 경로 사용
+        int embeddedCounter = 0;
+        std::vector<std::string> textureLogicalPaths;
 
-        std::vector<fs::path> cookedTextures;
-
-        // (A) 에디터에서 FBX 파일을 직접 로드한 경우: 예전 방식대로 <fbx>.fbm 폴더를 만들고
-        //     외부 텍스처는 거기에 복사, 임베디드 텍스처는 거기에 추출합니다.
-        //     그런 다음 추출/복사한 파일들을 Cooked/Textures/.../.alice 로 암호화 저장합니다.
-        if (fileExists)
+        // 각 머티리얼에서 텍스처 추출 및 저장
+        for (unsigned mi = 0; mi < scene->mNumMaterials; ++mi)
         {
-            const fs::path absFbxPath = fs::absolute(fbxPath);
-            const fs::path fbxDir     = absFbxPath.parent_path();
-            const fs::path fbmDir     = fbxDir / (baseName + ".fbm");
-            {
-                std::error_code ec;
-                fs::create_directories(fbmDir, ec);
-            }
-
-            std::vector<fs::path> extractedTextures;
-
-            for (unsigned mi = 0; mi < scene->mNumMaterials; ++mi)
-            {
-                aiMaterial* mat = scene->mMaterials[mi];
-                ExtractTexture_FileMode(scene, mat, aiTextureType_BASE_COLOR, "Base", fbxDir, fbmDir, baseName, extractedTextures);
-                ExtractTexture_FileMode(scene, mat, aiTextureType_DIFFUSE, "Diffuse", fbxDir, fbmDir, baseName, extractedTextures);
-                ExtractTexture_FileMode(scene, mat, aiTextureType_NORMALS, "Normal", fbxDir, fbmDir, baseName, extractedTextures);
-                ExtractTexture_FileMode(scene, mat, aiTextureType_METALNESS, "Metallic", fbxDir, fbmDir, baseName, extractedTextures);
-                ExtractTexture_FileMode(scene, mat, aiTextureType_DIFFUSE_ROUGHNESS, "Roughness", fbxDir, fbmDir, baseName, extractedTextures);
-            }
-
-            // extractedTextures → Cooked/Textures/<fbxName>/<texStem>.alice
-            for (const auto& texPath : extractedTextures)
-            {
-                fs::path cooked = "Cooked/Textures";
-                cooked /= baseName;
-                cooked /= texPath.stem().string() + ".alice";
-                const fs::path cookedAbs = m_resources.Resolve(cooked);
-                if (m_resources.CookAndSave(texPath, cookedAbs))
-                    cookedTextures.push_back(cooked);
-            }
-        }
-        // (B) 게임/배포 또는 원본 파일이 없는 경우: 기존 방식(메모리/원본 자동 로드 → Cooked 저장)
-        else
-        {
-            for (unsigned mi = 0; mi < scene->mNumMaterials; ++mi)
-            {
-                aiMaterial* mat = scene->mMaterials[mi];
-                ExtractTexture_NoFileMode(m_resources, scene, mat, aiTextureType_BASE_COLOR, "Base", fbxPath, baseName, cookedTextures);
-                ExtractTexture_NoFileMode(m_resources, scene, mat, aiTextureType_DIFFUSE, "Diffuse", fbxPath, baseName, cookedTextures);
-                ExtractTexture_NoFileMode(m_resources, scene, mat, aiTextureType_NORMALS, "Normal", fbxPath, baseName, cookedTextures);
-                ExtractTexture_NoFileMode(m_resources, scene, mat, aiTextureType_METALNESS, "Metallic", fbxPath, baseName, cookedTextures);
-                ExtractTexture_NoFileMode(m_resources, scene, mat, aiTextureType_DIFFUSE_ROUGHNESS, "Roughness", fbxPath, baseName, cookedTextures);
-            }
+            aiMaterial* mat = scene->mMaterials[mi];
+            
+            // Diffuse/BaseColor 텍스처 (우선순위: DIFFUSE > BASE_COLOR)
+            // fbxPath는 원본 경로(절대 또는 논리), resolved는 실제 파일 위치
+            std::string albedoPath = ProcessTexture(m_resources, scene, mat, aiTextureType_DIFFUSE, resolved, baseName, "D", embeddedCounter);
+            if (albedoPath.empty())
+                albedoPath = ProcessTexture(m_resources, scene, mat, aiTextureType_BASE_COLOR, resolved, baseName, "D", embeddedCounter);
+            
+            if (!albedoPath.empty())
+                textureLogicalPaths.push_back(albedoPath);
         }
 
-        // 4) 간단한 .mat 파일 생성
-        //    - 현재는 추출된 텍스처 개수만큼 기본 머티리얼을 만들어 둡니다.
-        for (std::size_t i = 0; i < cookedTextures.size(); ++i)
-        {
-            fs::path matDir  = m_resources.Resolve("Assets/Materials");
-            std::error_code ec;
-            fs::create_directories(matDir, ec);
+        // 4) .mat 파일 생성 (서브셋 개수만큼)
+        const auto& subsets = model->GetSubsets();
+        const size_t matCount = subsets.empty() ? 1 : subsets.size();
+        
+        fs::path matDir = m_resources.Resolve("Assets/Materials");
+        std::error_code ec;
+        fs::create_directories(matDir, ec);
 
-            // 예: Hero_0.mat, Hero_1.mat ...
+        for (std::size_t i = 0; i < matCount; ++i)
+        {
             fs::path matPath = matDir / (baseName + "_" + std::to_string(i) + ".mat");
 
             MaterialComponent matComp;
-            matComp.color     = DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
+            matComp.color = DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
             matComp.roughness = 0.5f;
             matComp.metalness = 0.0f;
             matComp.assetPath = matPath.string();
-            if (i < cookedTextures.size())
+            
+            // 첫 번째 텍스처를 albedo로 사용 (서브셋별로 매핑 가능하지만 현재는 단순화)
+            if (i < textureLogicalPaths.size())
             {
-                matComp.albedoTexturePath = cookedTextures[i].string();
+                matComp.albedoTexturePath = textureLogicalPaths[i];
             }
 
             MaterialFile::Save(matPath, matComp);
 
-            // 상대 경로로 변환하여 저장 D:\\Github\\AliceRenderer\\Assets\\Materials\\ -> (Assets/Materials/... 형식)
+            // 상대 경로로 변환하여 저장
             fs::path matPathRelative = fs::path("Assets/Materials") / (baseName + "_" + std::to_string(i) + ".mat");
             result.materialAssetPaths.push_back(matPathRelative.generic_string());
         }
