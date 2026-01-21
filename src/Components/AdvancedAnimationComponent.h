@@ -3,11 +3,22 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <functional>
+#include <unordered_map>
 
 #include <DirectXMath.h>
 
 namespace Alice
 {
+    // ---------------------------
+    // Anim Notify (언리얼 엔진 스타일)
+    // ---------------------------
+    struct AnimNotify
+    {
+        float timeSec;
+        std::function<void()> callback;
+    };
+
     // ---------------------------
     // Advanced animation data
     // ---------------------------
@@ -101,6 +112,40 @@ namespace Alice
 
         // CPU palette for rendering (auto-filled by AdvancedAnimSystem)
         std::vector<DirectX::XMFLOAT4X4> palette;
+
+        // --------------------------------------------------------
+        // Anim Montage & Notify System (언리얼 엔진 스타일)
+        // --------------------------------------------------------
+        using NotifyMap = std::unordered_map<std::string, std::vector<AnimNotify>>;
+        NotifyMap notifies;
+
+        // 노티파이 등록 (어떤 클립의, 몇 초에, 무슨 함수를 실행할지)
+        void AddNotify(const std::string& clipName, float time, std::function<void()> func)
+        {
+            notifies[clipName].push_back({ time, func });
+        }
+
+        // 시스템에서 호출: 시간 범위 내의 노티파이 실행
+        void CheckAndFireNotifies(const std::string& clipName, float prevTime, float currTime)
+        {
+            if (clipName.empty()) return;
+            auto it = notifies.find(clipName);
+            if (it == notifies.end()) return;
+
+            for (const auto& notify : it->second)
+            {
+                // 시간 구간 사이에 노티파이가 있는지 확인
+                // (일반 재생: prev < notify <= curr)
+                // (역재생: prev > notify >= curr)
+                bool forwardPass = (prevTime < notify.timeSec && currTime >= notify.timeSec);
+                bool backwardPass = (prevTime > notify.timeSec && currTime <= notify.timeSec);
+                
+                if (forwardPass || backwardPass)
+                {
+                    if (notify.callback) notify.callback();
+                }
+            }
+        }
 
         // Helper: add/update a socket definition
         void SetSocketSRT(const std::string& name,
