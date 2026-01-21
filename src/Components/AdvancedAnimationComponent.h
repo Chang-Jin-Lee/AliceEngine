@@ -105,7 +105,14 @@ namespace Alice
         AdvancedAnimLayer upper;
         AdvancedAnimAdditive additive;
         AdvancedAnimProcedural procedural;
+        
+        // 단일 IK -> 다중 IK 리스트 (발 IK 등 여러 개 동시 지원)
+        // 예: 0: 왼발, 1: 오른발, 2: 왼손...
+        std::vector<AdvancedAnimIK> ikChains;
+        
+        // 기존 코드를 위해 단일 IK 접근 유지 (ikChains[0]과 동기화)
         AdvancedAnimIK ik;
+        
         AdvancedAnimAim aim;
 
         std::vector<AdvancedAnimSocket> sockets;
@@ -184,6 +191,41 @@ namespace Alice
                     return DirectX::XMLoadFloat4x4(&s.worldMatrix);
             }
             return DirectX::XMMatrixIdentity();
+        }
+
+        // IK 체인 설정 헬퍼 함수
+        void SetIK(int index, const std::string& boneName, int length, const DirectX::XMFLOAT3& target, float weight = 1.0f)
+        {
+            if (index < 0)
+                return;
+            if (index >= (int)ikChains.size())
+                ikChains.resize(index + 1);
+            ikChains[index].enabled = true;
+            ikChains[index].tipBone = boneName;
+            ikChains[index].chainLength = length;
+            ikChains[index].targetMS = target;
+            ikChains[index].weight = weight;
+            
+            // index 0이면 기존 ik 변수도 업데이트
+            if (index == 0)
+            {
+                ik = ikChains[0];
+            }
+        }
+
+        // IK 끄기
+        void DisableIK(int index)
+        {
+            if (index >= 0 && index < (int)ikChains.size())
+            {
+                ikChains[index].enabled = false;
+                
+                // index 0이면 기존 ik 변수도 업데이트
+                if (index == 0)
+                {
+                    ik.enabled = false;
+                }
+            }
         }
     };
 }
