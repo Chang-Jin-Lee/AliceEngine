@@ -15,12 +15,12 @@ namespace Alice
 	class ResourceManager;
 	
 	/// 검기 이펙트 시스템 (트레일 리본 렌더링)
-	class SwordRenderSystem
+	class TrailEffectRenderSystem
 	{
 	public:
-		SwordRenderSystem() = default;
-		explicit SwordRenderSystem(ID3D11RenderDevice& renderDevice);
-		~SwordRenderSystem() = default;
+		TrailEffectRenderSystem() = default;
+		explicit TrailEffectRenderSystem(ID3D11RenderDevice& renderDevice);
+		~TrailEffectRenderSystem() = default;
 
 		/// 셰이더, 버퍼 등을 초기화합니다.
 		bool Initialize();

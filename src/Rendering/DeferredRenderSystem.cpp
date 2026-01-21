@@ -1121,10 +1121,10 @@ namespace Alice
         // Deferred Light 패스 (IBL 포함)
         PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
 
-        // SwordRenderSystem 렌더링 (IBL 패스 이후)
-        if (m_swordRenderSystem)
+        // TrailEffectRenderSystem 렌더링 (IBL 패스 이후)
+        if (m_trailRenderSystem)
         {
-            m_swordRenderSystem->Render(world, camera);
+            m_trailRenderSystem->Render(world, camera);
         }
 
         // 스카이박스 렌더링
