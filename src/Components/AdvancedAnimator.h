@@ -775,20 +775,34 @@ namespace Alice
                 }
             }
 
+            // 기존에 재귀돌던 부분 반복문으로 교체 (스택 오버플로우 방지)
+            // Assimp는 부모 노드가 항상 자식보다 인덱스가 작거나 같도록 저장되므로
+            // 순차적으로 계산하면 부모의 행렬이 이미 계산되어 있음이 보장됩니다.
             m_GlobalMatrices.assign(nodeCount, XMMatrixIdentity());
-            std::vector<std::uint8_t> done(nodeCount, 0);
-            auto computeNode = [&](auto&& self, int idx) -> void
+            
+            for (size_t i = 0; i < nodeCount; ++i)
             {
-                if (idx < 0 || (size_t)idx >= nodeCount) return;
-                if (done[(size_t)idx]) return;
-                const int pi = m_NodeParents[(size_t)idx];
-                if (pi >= 0) self(self, pi);
-                const XMMATRIX parent = (pi >= 0 && (size_t)pi < nodeCount) ? m_GlobalMatrices[(size_t)pi] : XMMatrixIdentity();
-                m_GlobalMatrices[(size_t)idx] = parent * locals[(size_t)idx];
-                done[(size_t)idx] = 1;
-            };
-            for (int i = 0; i < (int)nodeCount; ++i)
-                computeNode(computeNode, i);
+                int parentIdx = m_NodeParents[i];
+                
+                XMMATRIX parentGlobal = XMMatrixIdentity();
+                
+                // 부모가 유효한 범위 내에 있고, 이미 계산된 경우
+                if (parentIdx >= 0 && (size_t)parentIdx < i)
+                {
+                    // 부모가 이미 계산되었으므로 가져옴
+                    parentGlobal = m_GlobalMatrices[(size_t)parentIdx];
+                }
+                else if (parentIdx >= (int)i && parentIdx < (int)nodeCount)
+                {
+                    // 데이터 오류: 부모 인덱스가 자식보다 크거나 같으면 순환/비정렬 가능성
+                    // Identity로 처리하여 크래시 방지
+                    // (일반적으로는 발생하지 않지만 안전장치)
+                }
+                // parentIdx < 0이면 루트 노드이므로 Identity 유지
+                
+                // 글로벌 행렬 계산: 부모 * 로컬
+                m_GlobalMatrices[i] = parentGlobal * locals[i];
+            }
         }
 
         void BuildNodeHierarchy(const aiNode* node, int parentIdx)

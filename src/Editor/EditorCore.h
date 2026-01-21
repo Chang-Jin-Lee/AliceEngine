@@ -67,6 +67,7 @@ namespace Alice
                           int& pvdPort);
 
         void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorAnimationStatus(World& world, const EntityId& _selectedEntity);
         void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
         void DrawEngineComponent(const char* label, auto* comp, auto removeFn);
         void DrawInspectorMaterial(World& world, const EntityId& _selectedEntity);

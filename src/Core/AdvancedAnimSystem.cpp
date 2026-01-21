@@ -87,10 +87,16 @@ namespace Alice
     void AdvancedAnimSystem::Update(World& world, double dtSec)
     {
         // ------------------------------
-        // 1) Advanced animation path
+        // Advanced Animation Only
         // ------------------------------
+        // 고급 애니메이션 컴포넌트가 있는 엔티티만 처리합니다.
+        // 일반 애니메이션(SkinnedAnimationComponent)은 엔진의 기본 시스템이 담당합니다.
         for (auto [entityId, animComp] : world.GetComponents<AdvancedAnimationComponent>())
         {
+            // 비활성화 상태면 스킵
+            if (!animComp.enabled)
+                continue;
+
             auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId);
             if (!skinned || skinned->meshAssetPath.empty())
                 continue;
@@ -107,8 +113,12 @@ namespace Alice
         // ------------------------------
         for (auto [entityId, animComp] : world.GetComponents<SkinnedAnimationComponent>())
         {
-            if (world.GetComponent<AdvancedAnimationComponent>(entityId))
-                continue;
+            // AdvancedAnimationComponent가 있고 enabled이면 건너뛰기
+            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(entityId))
+            {
+                if (advAnim->enabled)
+                    continue;
+            }
 
             auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId);
             if (!skinned || skinned->meshAssetPath.empty())
@@ -354,12 +364,28 @@ namespace Alice
         // ------------------------------
         // Palette output
         // ------------------------------
+        // AdvancedAnimator의 finalTransforms는 Column-Major 형식이므로
+        // Row-Major로 변환하여 저장 (렌더링 시스템에서 GPU 업로드 시 다시 전치됨)
         const auto& finals = rt.animator->GetFinalTransforms();
+        if (finals.empty())
+        {
+            // 본 행렬이 없으면 bind pose (identity) 사용
+            static DirectX::XMFLOAT4X4 s_identityBone = DirectX::XMFLOAT4X4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
+            skinned.boneMatrices = &s_identityBone;
+            skinned.boneCount = 1;
+            return;
+        }
+
         animComp.palette.resize(finals.size());
         for (size_t i = 0; i < finals.size(); ++i)
-            DirectX::XMStoreFloat4x4(&animComp.palette[i], finals[i]);
+        {
+            // AdvancedAnimator는 Column-Major 행렬을 생성하므로
+            // Row-Major로 변환하여 저장 (렌더링 시스템에서 GPU 업로드 시 전치 적용)
+            DirectX::XMMATRIX rowMajor = DirectX::XMMatrixTranspose(finals[i]);
+            DirectX::XMStoreFloat4x4(&animComp.palette[i], rowMajor);
+        }
 
-        skinned.boneMatrices = animComp.palette.empty() ? nullptr : animComp.palette.data();
+        skinned.boneMatrices = animComp.palette.data();
         skinned.boneCount = static_cast<std::uint32_t>(animComp.palette.size());
 
         // ------------------------------
@@ -383,11 +409,14 @@ namespace Alice
                                            const std::shared_ptr<SkinnedMeshGPU>& mesh,
                                            double dtSec)
     {
-        (void)world;
+        (void)world; // 미사용 파라미터 경고 방지
+
+        // 1. 런타임 초기화 확인
         Runtime& rt = m_runtime[id];
         if (!EnsureRuntime(rt, skinned, mesh))
             return;
 
+        // 2. 애니메이션 클립 유효성 확인
         const aiScene* scene = mesh->sourceModel->GetScenePtr();
         if (!scene || scene->mNumAnimations == 0)
             return;
@@ -397,35 +426,66 @@ namespace Alice
             clipIdx = 0;
         if ((unsigned)clipIdx >= scene->mNumAnimations)
             clipIdx = (int)scene->mNumAnimations - 1;
-        if (clipIdx != animComp.clipIndex)
-            animComp.clipIndex = clipIdx;
+        
+        // 인덱스 갱신
+        animComp.clipIndex = clipIdx;
 
         const aiAnimation* anim = scene->mAnimations[clipIdx];
+        if (!anim)
+            return;
+
+        // 3. 시간 업데이트 (재생 중일 때만)
         if (animComp.playing)
         {
             const float dur = GetClipDurationSec(anim);
             float time = static_cast<float>(animComp.timeSec);
-            AdvanceTime(time, (float)dtSec, animComp.speed, dur, true);
+            AdvanceTime(time, (float)dtSec, animComp.speed, dur, true); // Loop true
             animComp.timeSec = static_cast<double>(time);
         }
 
+        // 4. 애니메이터 업데이트 (Simple Mode)
+        // AdvancedAnimator 내부에서 EvaluateLikeFbxAnimation을 호출하도록 유도
+        // (blend01 = 0.0f, animA == animB 이면 내부적으로 단일 클립 평가로 빠짐)
         AdvancedAnimator::UpdateDesc d{};
         d.dt = (float)dtSec;
         d.base.enabled = true;
         d.base.animA = anim;
         d.base.timeA = (float)animComp.timeSec;
-        d.base.animB = anim;
+        d.base.animB = anim;               // A와 B를 같게 설정
         d.base.timeB = (float)animComp.timeSec;
-        d.base.blend01 = 0.0f;
+        d.base.blend01 = 0.0f;             // 블렌딩 없음
 
         rt.animator->Update(d);
 
+        // 5. 결과 행렬 가져오기
         const auto& finals = rt.animator->GetFinalTransforms();
-        animComp.palette.resize(finals.size());
-        for (size_t i = 0; i < finals.size(); ++i)
-            DirectX::XMStoreFloat4x4(&animComp.palette[i], finals[i]);
+        
+        // 본 데이터가 없는 경우 (Bone이 없는 노드 애니메이션 등)
+        if (finals.empty())
+        {
+            static DirectX::XMFLOAT4X4 s_identityBone(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
+            skinned.boneMatrices = &s_identityBone;
+            skinned.boneCount = 1;
+            return;
+        }
 
-        skinned.boneMatrices = animComp.palette.empty() ? nullptr : animComp.palette.data();
+        // 6. GPU 전송을 위해 포맷 변환 (Column-Major -> Row-Major)
+        // 메모리 재할당 최소화
+        if (animComp.palette.size() != finals.size())
+        {
+            animComp.palette.resize(finals.size());
+        }
+
+        // 람다 없이 직접 루프 사용
+        size_t count = finals.size();
+        for (size_t i = 0; i < count; ++i)
+        {
+            DirectX::XMMATRIX rowMajor = DirectX::XMMatrixTranspose(finals[i]);
+            DirectX::XMStoreFloat4x4(&animComp.palette[i], rowMajor);
+        }
+
+        // 컴포넌트에 데이터 연결
+        skinned.boneMatrices = animComp.palette.data();
         skinned.boneCount = static_cast<std::uint32_t>(animComp.palette.size());
     }
 }
