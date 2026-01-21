@@ -25,6 +25,9 @@ namespace Alice
 	class ResourceManager;
 	class SkinnedMeshRegistry;
 	class DeferredRenderSystem;
+	
+	// Undo/Redo 시스템 전방 선언 (EditorCore.cpp에서 정의됨)
+	struct ICommand;
 
 	/// ImGui 컨텍스트 수명과 기본 에디터 유틸(도킹, 디렉터리 뷰, 에디터 패널 등)을 관리하는
 	/// 간단한 코어 클래스입니다.
@@ -102,6 +105,9 @@ namespace Alice
 		void EnsureSkinnedMeshesRegistered(World& world);
 		void SaveScene(World&);
 		void LoadScene(World&);
+		
+		// Undo 시스템
+		void PushCommand(std::unique_ptr<struct ICommand> cmd);
 
 	private:
 		bool               m_initialized = false;

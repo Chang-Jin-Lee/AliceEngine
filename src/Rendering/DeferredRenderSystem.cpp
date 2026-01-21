@@ -13,6 +13,7 @@
 
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
+#include "Core/World.h"
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
@@ -1052,7 +1053,7 @@ namespace Alice
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
                 if (!tr.enabled) continue;
 
-                XMMATRIX worldM = BuildWorldMatrix(tr);
+                XMMATRIX worldM = BuildWorldMatrix(world, id, tr);
 
                 const bool flipped = XMVectorGetX(XMMatrixDeterminant(worldM)) < 0.0f;
                 if (flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
@@ -1211,7 +1212,7 @@ namespace Alice
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
             if (!transform.enabled) continue;
 
-            XMMATRIX worldM = BuildWorldMatrix(transform);
+            XMMATRIX worldM = BuildWorldMatrix(world, id, transform);
             
             // 재질 정보 가져오기
             XMFLOAT4 color = { 1, 1, 1, 1 };
@@ -1938,6 +1939,37 @@ namespace Alice
         XMMATRIX T = XMMatrixTranslationFromVector(translation);
         
         return S * R * T;
+    }
+
+    DirectX::XMMATRIX DeferredRenderSystem::BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const
+    {
+        // 부모 Transform 적용
+        EntityId parentId = transform.parent;
+        XMMATRIX parentMatrix = XMMatrixIdentity();
+        
+        // 부모가 있으면 부모의 World Matrix를 재귀적으로 계산
+        if (parentId != InvalidEntityId)
+        {
+            const TransformComponent* parentTransform = world.GetComponent<TransformComponent>(parentId);
+            if (parentTransform)
+            {
+                parentMatrix = BuildWorldMatrix(world, parentId, *parentTransform);
+            }
+        }
+        
+        // 현재 Transform 계산
+        XMVECTOR scale = XMLoadFloat3(&transform.scale);
+        XMVECTOR rotation = XMLoadFloat3(&transform.rotation);
+        XMVECTOR translation = XMLoadFloat3(&transform.position);
+
+        XMMATRIX S = XMMatrixScalingFromVector(scale);
+        XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(rotation);
+        XMMATRIX T = XMMatrixTranslationFromVector(translation);
+        
+        XMMATRIX localMatrix = S * R * T;
+        
+        // 부모 행렬 적용
+        return localMatrix * parentMatrix;
     }
 
     ID3D11ShaderResourceView* DeferredRenderSystem::GetOrCreateTexture(const std::string& path)

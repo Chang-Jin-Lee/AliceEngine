@@ -167,6 +167,7 @@ namespace Alice
         
         // 월드 행렬 구성
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
+        DirectX::XMMATRIX BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const;
         
         // 텍스처 로딩
         ID3D11ShaderResourceView* GetOrCreateTexture(const std::string& path);

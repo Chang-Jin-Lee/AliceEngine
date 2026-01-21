@@ -60,6 +60,16 @@ namespace Alice
         GameObject FindGameObject(const std::string& name);
         void SetEntityName(EntityId id, const std::string& name);
         std::string GetEntityName(EntityId id) const;
+        
+        // ==== 부모-자식 관계 관리 ====
+        /// 엔티티의 부모를 설정합니다. 순환 참조를 방지합니다.
+        void SetParent(EntityId child, EntityId parent);
+        /// 엔티티의 부모를 가져옵니다. InvalidEntityId면 부모 없음
+        EntityId GetParent(EntityId child) const;
+        /// 엔티티의 모든 자식을 가져옵니다.
+        std::vector<EntityId> GetChildren(EntityId parent) const;
+        /// 루트 엔티티들(부모가 없는 엔티티들)을 가져옵니다.
+        std::vector<EntityId> GetRootEntities() const;
 
         // ==== 게임 오브젝트 생성 헬퍼 ====
         /// 빈 게임 오브젝트를 생성합니다 (Transform만 가짐)
