@@ -4530,7 +4530,7 @@ namespace Alice
 						ImGuiTreeNodeFlags_DefaultOpen)) {
 						ImGui::Checkbox("Enabled", &sc.enabled);
 						ImGui::SameLine();
-						if (ImGui::Button("Remove"))
+						if (ImGui::Button("Remove##ScriptRemove"))
 							removed = true;
 
 						// Save/Load Defaults (.meta)
@@ -4656,7 +4656,8 @@ namespace Alice
 			if (!comp) return;
 			if (ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) {
 				bool changed = false;
-				if (ImGui::Button("Remove")) {
+				std::string removeId = std::string("Remove##") + label;
+				if (ImGui::Button(removeId.c_str())) {
 					removeFn();
 					g_SceneDirty = true;
 					return;
@@ -5096,7 +5097,7 @@ namespace Alice
 				{
 					bool changed = false;
 
-					if (ImGui::Button("Remove"))
+					if (ImGui::Button("Remove##ColliderRemove"))
 					{
 						world.RemoveComponent<Phy_ColliderComponent>(_selectedEntity);
 						g_SceneDirty = true;
@@ -5216,7 +5217,7 @@ namespace Alice
 				{
 					bool changed = false;
 
-					if (ImGui::Button("Remove"))
+					if (ImGui::Button("Remove##MeshColliderRemove"))
 					{
 						world.RemoveComponent<Phy_MeshColliderComponent>(_selectedEntity);
 						g_SceneDirty = true;
@@ -5428,7 +5429,7 @@ namespace Alice
 				{
 					bool changed = false;
 
-					if (ImGui::Button("Remove"))
+					if (ImGui::Button("Remove##CCTRemove"))
 					{
 						world.RemoveComponent<Phy_CCTComponent>(_selectedEntity);
 						g_SceneDirty = true;
@@ -5534,7 +5535,7 @@ namespace Alice
 				{
 					bool changed = false;
 
-					if (ImGui::Button("Remove"))
+					if (ImGui::Button("Remove##PhysicsSettingsRemove"))
 					{
 						world.RemoveComponent<Phy_SettingsComponent>(_selectedEntity);
 						g_SceneDirty = true;
@@ -5711,7 +5712,7 @@ namespace Alice
 				{
 					bool changed = false;
 
-					if (ImGui::Button("Remove"))
+					if (ImGui::Button("Remove##TerrainRemove"))
 					{
 						world.RemoveComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
 						g_SceneDirty = true;
@@ -5871,7 +5872,7 @@ namespace Alice
 				{
 					bool changed = false;
 
-					if (ImGui::Button("Remove"))
+					if (ImGui::Button("Remove##JointRemove"))
 					{
 						world.RemoveComponent<Phy_JointComponent>(_selectedEntity);
 						g_SceneDirty = true;
