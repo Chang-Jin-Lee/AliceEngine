@@ -11,7 +11,7 @@
 #include "PhysX/Components/TerrainHeightFieldComponent.h"
 #include "PhysX/IPhysicsWorld.h"
 #include "Components/EffectComponent.h"
-#include "Components/SwordEffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 
 using namespace DirectX;
 
@@ -307,15 +307,15 @@ namespace Alice
             .property("enabled", &EffectComponent::enabled)
             .property("alpha", &EffectComponent::alpha);
 
-	// === SwordEffectComponent 등록 (trailSamples는 내부용이므로 등록하지 않음) ===
-	rttr::registration::class_<SwordEffectComponent>("SwordEffectComponent")
+	// === TrailEffectComponent 등록 (trailSamples는 내부용이므로 등록하지 않음) ===
+	rttr::registration::class_<TrailEffectComponent>("TrailEffectComponent")
 		.constructor<>()
-		.property("color", &SwordEffectComponent::color)
-		.property("alpha", &SwordEffectComponent::alpha)
-		.property("enabled", &SwordEffectComponent::enabled)
-		.property("maxSamples", &SwordEffectComponent::maxSamples)
-		.property("sampleInterval", &SwordEffectComponent::sampleInterval)
-		.property("fadeDuration", &SwordEffectComponent::fadeDuration);
+		.property("color", &TrailEffectComponent::color)
+		.property("alpha", &TrailEffectComponent::alpha)
+		.property("enabled", &TrailEffectComponent::enabled)
+		.property("maxSamples", &TrailEffectComponent::maxSamples)
+		.property("sampleInterval", &TrailEffectComponent::sampleInterval)
+		.property("fadeDuration", &TrailEffectComponent::fadeDuration);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();

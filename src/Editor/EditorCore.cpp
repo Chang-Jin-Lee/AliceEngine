@@ -2527,8 +2527,8 @@ namespace Alice
                     } else if (typeName == "EffectComponent") {
                         world.AddComponent<EffectComponent>(_selectedEntity);
                         added = true;
-                    } else if (typeName == "SwordEffectComponent") {
-                        world.AddComponent<SwordEffectComponent>(_selectedEntity);
+                    } else if (typeName == "TrailEffectComponent") {
+                        world.AddComponent<TrailEffectComponent>(_selectedEntity);
                         added = true;
                     }
                     
@@ -2613,10 +2613,10 @@ namespace Alice
                 DrawEngineComponent("EffectComponent",
                     world.GetComponent<EffectComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<EffectComponent>(_selectedEntity); });
-            } else if (typeName == "SwordEffectComponent") {
-                DrawEngineComponent("SwordEffectComponent",
-                    world.GetComponent<SwordEffectComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<SwordEffectComponent>(_selectedEntity); });
+            } else if (typeName == "TrailEffectComponent") {
+                DrawEngineComponent("TrailEffectComponent",
+                    world.GetComponent<TrailEffectComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<TrailEffectComponent>(_selectedEntity); });
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }

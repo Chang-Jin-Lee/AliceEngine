@@ -1,6 +1,6 @@
-#include "Rendering/SwordRenderSystem.h"
-#include "Components/SwordEffectComponent.h"
-#include "Rendering/ShaderCode/SwordEffectShader.h"
+#include "Rendering/TrailEffectRenderSystem.h"
+#include "Components/TrailEffectComponent.h"
+#include "Rendering/ShaderCode/TrailEffectShader.h"
 #include "Core/ResourceManager.h"
 #include "Components/TransformComponent.h"
 #include "Core/Logger.h"
@@ -107,7 +107,7 @@ namespace Alice
 		m_context->OMSetBlendState(m_blendState.Get(), blendFactor, 0xffffffff);
 
 		// SwordEffectComponent를 가진 모든 엔티티 렌더링
-		const auto& swordEffects = world.GetComponents<SwordEffectComponent>();
+		const auto& swordEffects = world.GetComponents<TrailEffectComponent>();
 		for (const auto& [entityId, swordEffectComp] : swordEffects)
 		{
 			if (!swordEffectComp.enabled) continue;
@@ -273,11 +273,11 @@ namespace Alice
 		ComPtr<ID3DBlob> vsBlob, psBlob;
 
 		// 1. VS 컴파일 및 생성
-		if (FAILED(D3DCompile(SwordEffectShader::g_SwordEffectVS, std::strlen(SwordEffectShader::g_SwordEffectVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
+		if (FAILED(D3DCompile(TrailEffectShader::g_SwordEffectVS, std::strlen(TrailEffectShader::g_SwordEffectVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
 		if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vertexShader.ReleaseAndGetAddressOf()))) return false;
 
 		// 2. PS 컴파일 및 생성
-		if (FAILED(D3DCompile(SwordEffectShader::g_SwordEffectPS, std::strlen(SwordEffectShader::g_SwordEffectPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
+		if (FAILED(D3DCompile(TrailEffectShader::g_SwordEffectPS, std::strlen(TrailEffectShader::g_SwordEffectPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
 		if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_pixelShader.ReleaseAndGetAddressOf()))) return false;
 
 		// 3. Input Layout 생성

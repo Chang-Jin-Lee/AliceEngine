@@ -17,7 +17,7 @@ namespace Alice
 	};
 
 	/// 검기 이펙트 컴포넌트 (트레일/리본 이펙트)
-	struct SwordEffectComponent
+	struct TrailEffectComponent
 	{
 		DirectX::XMFLOAT3 color{ 0.8f, 0.2f, 0.9f };  // 이펙트 색상 (기본값: 보라색)
 		float alpha{ 1.0f };                          // 알파 값 (전체 이펙트 알파)

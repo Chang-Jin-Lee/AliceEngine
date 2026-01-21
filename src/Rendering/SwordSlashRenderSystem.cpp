@@ -110,13 +110,13 @@ float4 main(PSInput input) : SV_TARGET
 		const auto& allScripts = world.GetAllScriptsInWorld();
 		for (const auto& [entityId, scriptList] : allScripts)
 		{
-			// SwordSlashEffect 스크립트 찾기
-			SwordSlashEffect* slashEffect = nullptr;
+			// TrailEffect 스크립트 찾기
+			TrailEffect* slashEffect = nullptr;
 			for (const auto& scriptComp : scriptList)
 			{
 				if (scriptComp.instance)
 				{
-					slashEffect = dynamic_cast<SwordSlashEffect*>(scriptComp.instance.get());
+					slashEffect = dynamic_cast<TrailEffect*>(scriptComp.instance.get());
 					if (slashEffect) break;
 				}
 			}

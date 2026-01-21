@@ -16,10 +16,10 @@
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
-#include "Components/SwordEffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 #include "Rendering/ShaderCode/CommonShaderCode.h"
 #include "Rendering/ShaderCode/DeferredShader.h"
-#include "Rendering/SwordRenderSystem.h"
+#include "Rendering/TrailEffectRenderSystem.h"
 #include <fstream>
 #include <sstream>
 

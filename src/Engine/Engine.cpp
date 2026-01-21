@@ -3,7 +3,7 @@
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
 #include "Rendering/EffectSystem.h"
-#include "Rendering/SwordRenderSystem.h"
+#include "Rendering/TrailEffectRenderSystem.h"
 
 // ImGui
 #include "imgui.h"
@@ -40,7 +40,6 @@
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
-#include "Rendering/SwordRenderSystem.h"
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 #include "PhysX/PhysicsSystem.h" // 물리 시스템
