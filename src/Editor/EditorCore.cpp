@@ -1128,12 +1128,21 @@ namespace Alice
                             skinned.boneCount    = 1;
 
                             // 첫 번째 머티리얼이 있으면 기본 머티리얼로 할당
+                            // 원래 있는 경우 없는 경우 나눠서 있는 경우는 서브 메테리얼을 만들어야 하는데, 일단은 둘다 생기도록 함.
+                            // TODO : 여기서 서브 메테리얼을 각각 다르게 설정할 수 있게 해야함 
                             if (!result.materialAssetPaths.empty())
                             {
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = result.materialAssetPaths.front();
                                 MaterialFile::Load(mat.assetPath, mat);
+                            }
+                            else
+                            {
+								//DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+								//MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+								//mat.assetPath = "fbx has no material. default material";
+								//MaterialFile::Load(mat.assetPath, mat);
                             }
 
                             selectedEntity = e;
