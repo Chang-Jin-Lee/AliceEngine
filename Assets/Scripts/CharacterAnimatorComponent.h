@@ -9,12 +9,26 @@
 
 namespace Alice
 {
+    // 캐릭터의 동작 상태 정의
+    enum class CharState
+    {
+        Standing,    // 서기
+        Crouching,   // 앉는 중
+        Crouched,    // 앉음
+        StandingUp,  // 일어서는 중
+        Attacking    // 공격 중
+    };
+
     class CharacterAnimatorComponent : public IScript
     {
         ALICE_BODY(CharacterAnimatorComponent);
 
     public:
         void Update(float DeltaTime) override;
+
+        // 노티파이에서 호출될 함수 (리플렉션)
+        void OnAttackHit();
+        void OnCrouchHalfway(); // 앉기 애니메이션 중간에 호출되는 함수
 
         // --- Movement settings ---
         ALICE_PROPERTY(float, m_moveSpeed, 10.0f);
@@ -27,6 +41,16 @@ namespace Alice
         ALICE_PROPERTY(std::string, m_idleClip, "Idle");
         ALICE_PROPERTY(std::string, m_walkClip, "Walk");
         ALICE_PROPERTY(std::string, m_runClip, "Run");
+
+        // --- Crouch clips ---
+        ALICE_PROPERTY(std::string, m_crouchClip, "CrouchDown");        // 앉는 동작 (끝나면 멈춤)
+        ALICE_PROPERTY(std::string, m_crouchFireClip, "CrouchFire");    // 앉아서 사격 (Additive)
+        ALICE_PROPERTY(float, m_crouchDuration, 1.0f);                  // 앉기 애니메이션 길이 (수동 제어용)
+
+        // --- Attack montage clips ---
+        ALICE_PROPERTY(std::string, m_attackClip, "Attack01");          // 공격 몽타주 클립
+        ALICE_PROPERTY(float, m_attackDuration, 1.5f);                 // 공격 애니메이션 길이
+        ALICE_PROPERTY(float, m_attackHitTime, 0.7f);                   // 타격 판정 시간 (Notify 발생 지점)
 
         // --- Upper layer clips ---
         ALICE_PROPERTY(bool, m_enableUpperLayer, false);
@@ -63,6 +87,15 @@ namespace Alice
         float m_additiveTimer = -1.0f;
         bool m_socketInitialized = false;
         std::string m_lastMoveClip;
+
+        // 상태 관리 변수
+        CharState m_state = CharState::Standing;
+        float m_currentCrouchTime = 0.0f; // 앉기 애니메이션 현재 시간 수동 제어
+        std::string m_currentFireClip;    // 현재 발동된 사격 클립 저장
+
+        // 노티파이 등록 여부 체크
+        bool m_notifyRegistered = false;
+        float m_currentAttackTime = 0.0f;
     };
 }
 
