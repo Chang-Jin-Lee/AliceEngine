@@ -76,6 +76,13 @@ namespace Alice
         ALICE_PROPERTY(float, m_ikWeight, 1.0f);
         ALICE_PROPERTY(DirectX::XMFLOAT3, m_ikTargetLocal, DirectX::XMFLOAT3(0.0f, 1.2f, 0.2f));
 
+        // --- Foot IK settings (발 지형 적응) ---
+        ALICE_PROPERTY(bool, m_enableFootIK, true);
+        ALICE_PROPERTY(std::string, m_leftFootBone, "Ball_L"); // 또는 Foot_L
+        ALICE_PROPERTY(float, m_ikLiftSpeed, 5.0f);            // 발 드는 속도 (보간 속도)
+        ALICE_PROPERTY(float, m_maxLiftHeight, 0.5f);          // Y키 눌렀을 때 목표 높이
+        ALICE_PROPERTY(DirectX::XMFLOAT3, m_leftFootBasePos, DirectX::XMFLOAT3(-0.2f, 0.0f, 0.1f)); // 왼발 기본 위치 (모델 공간)
+
         // --- Aim (optional) ---
         ALICE_PROPERTY(bool, m_enableAim, false);
         ALICE_PROPERTY(float, m_aimYawDeg, 0.0f);
@@ -96,6 +103,9 @@ namespace Alice
         // 노티파이 등록 여부 체크
         bool m_notifyRegistered = false;
         float m_currentAttackTime = 0.0f;
+
+        // Foot IK 런타임 변수
+        float m_currentLeftFootHeight = 0.0f; // 현재 발 높이 (보간용)
     };
 }
 
