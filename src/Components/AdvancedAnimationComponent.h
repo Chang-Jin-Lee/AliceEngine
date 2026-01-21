@@ -11,7 +11,7 @@
 namespace Alice
 {
     // ---------------------------
-    // Anim Notify (언리얼 엔진 스타일)
+    // Anim Notify
     // ---------------------------
     struct AnimNotify
     {
