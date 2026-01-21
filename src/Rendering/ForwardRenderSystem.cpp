@@ -622,7 +622,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.pointCount >= MaxPointLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             auto& dst = data.pointLights[data.pointCount++];
             dst.position = tr->position;
@@ -637,7 +637,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.spotCount >= MaxSpotLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
             XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
@@ -664,7 +664,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.rectCount >= MaxRectLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
             XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
@@ -885,6 +885,7 @@ namespace Alice
         for (const auto& [id, tr] : transforms)
         {
             if (cameraEntities.contains(id)) continue;
+            if (!tr.enabled) continue;
 
             hasObjects = true;
             minP.x = (std::min)(minP.x, tr.position.x); minP.y = (std::min)(minP.y, tr.position.y); minP.z = (std::min)(minP.z, tr.position.z);
@@ -968,6 +969,7 @@ namespace Alice
             {
                 if (cameraEntities.contains(id)) continue;
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
+                if (!transform.enabled) continue;
 
                 XMMATRIX worldM = BuildWorldMatrix(transform);
 
@@ -1069,6 +1071,7 @@ namespace Alice
         for (const auto& [id, transform] : transforms)
         {
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue; // 스키닝 메시는 제외
+            if (!transform.enabled) continue;
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
 

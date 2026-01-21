@@ -58,7 +58,8 @@ namespace Alice
             .constructor<>()
             .property("position", &TransformComponent::position)
             .property("rotation", &TransformComponent::rotation)
-            .property("scale", &TransformComponent::scale);
+            .property("scale", &TransformComponent::scale)
+            .property("enabled", &TransformComponent::enabled);
 
         // === MaterialComponent 등록 ===
         rttr::registration::class_<MaterialComponent>("MaterialComponent")

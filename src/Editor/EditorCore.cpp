@@ -2514,6 +2514,7 @@ namespace Alice
                 }
 
                 changed |= ReflectionUI::RenderProperty(*transform, "scale", "Scale");
+                changed |= ReflectionUI::RenderProperty(*transform, "enabled", "Enabled");
                 
                 // Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
                 if (changed)

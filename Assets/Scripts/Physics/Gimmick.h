@@ -4,6 +4,7 @@
 #include "Core/ScriptReflection.h"
 #include <string>
 #include <vector>
+#include <memory>
 #include "Core/Entity.h"
 #include "DirectXMath.h"
 
@@ -19,41 +20,75 @@ namespace Alice
         void Update(float deltaTime) override;
 
     private:
+        // Legacy 오브젝트 (원본)
+        EntityId m_legacyEntity = InvalidEntityId;
+        
         // 파츠 엔티티들 (parts_1 ~ parts_5)
         std::vector<EntityId> m_parts;
         
         // 조인트 엔티티들 (각 파츠에 연결된 조인트)
         std::vector<EntityId> m_jointEntities;
         
-        // 원래 Collider의 trigger 상태 저장 (복원용)
-        std::vector<bool> m_originalTriggerStates;
+        // Legacy의 원래 컴포넌트 정보 저장
+        struct LegacyComponentInfo
+        {
+            bool hasSkinnedMesh = false;
+            bool hasMaterial = false;
+            bool hasRigidBody = false;
+            bool hasCollider = false;
+            bool hasMeshCollider = false;
+            // 컴포넌트 데이터 저장
+            std::string skinnedMeshAssetPath;
+            std::string materialAssetPath;
+            DirectX::XMFLOAT3 materialColor;
+            float materialRoughness = 0.5f;
+            float materialMetalness = 0.0f;
+            DirectX::XMFLOAT3 legacyPosition;
+            DirectX::XMFLOAT3 legacyRotation;
+            DirectX::XMFLOAT3 legacyScale;
+        } m_legacyInfo;
         
-        // 조인트 연결 상태
-        bool m_jointsConnected = true;
+        // Parts의 원래 Collider trigger 상태 저장
+        std::vector<bool> m_originalPartTriggerStates;
         
-        // 조인트 재연결 시 사용할 초기 maxDistance
-        float m_initialMaxDistance = 5.0f;
+        // 조립 상태
+        enum class AssemblyState
+        {
+            Assembled,      // 조립됨 (legacy 활성화, parts 비활성화)
+            Disassembled,   // 해체됨 (legacy 비활성화, parts 활성화, 물리 작용)
+            Assembling      // 조립 시도 중 (parts들이 조인트로 뭉치며 legacy 위치로 이동)
+        };
+        AssemblyState m_state = AssemblyState::Assembled;
         
-        // 조인트 재연결 애니메이션 진행도 (0.0 ~ 1.0)
-        float m_reconnectProgress = 0.0f;
+        // 조립 시도 중 현재 조립된 파츠 인덱스 (0~4)
+        int m_assemblingPartIndex = 0;
         
-        // 조인트 재연결 속도
-        float m_reconnectSpeed = 2.0f; // 초당 진행도
+        // 조립 시 유지할 거리
+        float m_assemblyDistance = 0.3f;
         
-        // Fixed Joint로 전환할 거리 임계값
-        float m_fixedJointThreshold = 0.1f;
         
-        // Fixed Joint로 전환되었는지 여부
-        bool m_isFixed = false;
-        
-        // 파츠 찾기 및 조인트 초기화
+        // 파츠 찾기 및 초기화
+        void FindLegacy();
         void FindParts();
+        void SaveLegacyTransform();
+        
+        // 활성화/비활성화
+        void ActivateLegacy();
+        void DeactivateLegacy();
+        void ActivateParts();
+        void DeactivateParts();
+        
+        // 조인트 관련
         void CreateJoints();
         void RemoveJoints();
-        void ReconnectJoints(float deltaTime);
-        void ConvertToFixedJoints();
+        void StartAssembling();
+        void UpdateAssembling(float deltaTime);
         
         // 파츠에 힘을 가해서 튀어나가게 만들기
         void ApplyExplosionForce();
+        
+        // Parts의 물리 충돌 켜기/끄기
+        void EnablePartsCollision();
+        void DisablePartsCollision();
     };
 }
