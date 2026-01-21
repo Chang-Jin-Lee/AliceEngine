@@ -64,6 +64,7 @@ namespace Alice
             .property("color", &MaterialComponent::color)
             .property("roughness", &MaterialComponent::roughness)
             .property("metalness", &MaterialComponent::metalness)
+            .property("shadingMode", &MaterialComponent::shadingMode)
             .property("assetPath", &MaterialComponent::assetPath)
             .property("albedoTexturePath", &MaterialComponent::albedoTexturePath);
 

@@ -104,6 +104,7 @@ namespace Alice
         DirectX::XMFLOAT3 color       { 0.7f, 0.7f, 0.7f };
         float             roughness   { 0.5f };
         float             metalness   { 0.0f };
+        int               shadingMode { -1 }; // -1: 전역, 0~5: 개별 셰이딩 모드
 
         // 선택적인 알베도 텍스처 경로 (.alice 단일 포맷 또는 원본 이미지 경로)
         std::string       albedoTexturePath;
@@ -272,6 +273,8 @@ namespace Alice
 		float             metalness;     // 0~1
 		int               useTexture;   // 0: 색만, 1: 디퓨즈 텍스처 사용
 		int               enableNormalMap; // 0/1: 노말맵 사용
+        int               shadingMode;    // -1: 전역, 0~5: 개별 셰이딩 모드
+        int               pad[3]{ 0, 0, 0 };
 	};
 
 	/// 단순 Directional Light 2개와 재질 파라미터를 담는 구조체입니다.
@@ -295,7 +298,7 @@ namespace Alice
 		DirectX::XMFLOAT4 materialDiffuse;   // rgb: 색상, a: 사용 안 함
 		DirectX::XMFLOAT4 materialSpecular;  // rgb: 색상, a: shininess
 
-		int               shadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon
+		int               shadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon, 4: PBR, 5: ToonPBR
 		int               pad2[3];           // 16바이트 정렬
 
 		DirectX::XMMATRIX lightViewProj;     // 섀도우 맵 계산용 라이트 뷰-프로젝션
