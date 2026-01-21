@@ -261,14 +261,25 @@ namespace Alice
         const aiAnimation* additiveRef = ResolveClip(rt, animComp.additive.refClip);
 
         // ------------------------------
-        // Time advance (if enabled)
+        // Time advance & Notify Check
         // ------------------------------
         if (animComp.playing)
         {
+            // [Base Layer Notify 체크]
             if (animComp.base.autoAdvance && baseA)
             {
+                float prevTime = animComp.base.timeA;
                 const float dur = GetClipDurationSec(baseA);
+                
+                // 시간 진행
                 AdvanceTime(animComp.base.timeA, (float)dtSec, animComp.base.speedA, dur, animComp.base.loopA);
+                
+                // 노티파이 실행 (현재 시간이 바뀌었으므로 체크)
+                // 루프가 되어 시간이 0으로 돌아간 경우는 몽타주에서 잘 안쓰이므로 단순 범위 체크만 적용
+                if (prevTime < animComp.base.timeA) 
+                {
+                    animComp.CheckAndFireNotifies(animComp.base.clipA, prevTime, animComp.base.timeA);
+                }
             }
 
             if (animComp.base.autoAdvance && baseB)
