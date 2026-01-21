@@ -67,7 +67,8 @@ namespace Alice
         // 1. 상태 변경 입력 (공격 추가)
         // ------------------------------------------------------------
         // 공격 입력 (Standing 상태에서만)
-        if (input->GetMouseButtonDown(MouseCode::Left) && m_state == CharState::Standing)
+        //if (input->GetMouseButtonDown(MouseCode::Left) && m_state == CharState::Standing)
+        if (input->GetKeyDown(KeyCode::Alpha1) && m_state == CharState::Standing)
         {
             m_state = CharState::Attacking;
             m_currentAttackTime = 0.0f;
@@ -294,7 +295,8 @@ namespace Alice
         // 앉은 상태에서의 사격
         if (m_state == CharState::Crouched)
         {
-            if (input->GetMouseButtonDown(MouseCode::Left))
+            //if (input->GetMouseButtonDown(MouseCode::Left))
+            if (input->GetKeyDown(KeyCode::Alpha1))
             {
                 ALICE_LOG_ERRORF("ALICE FIRE!!!");
                 tryFire = true;
@@ -305,7 +307,8 @@ namespace Alice
         // 서 있는 상태에서의 일반 행동 (필요시 추가)
         else if (m_state == CharState::Standing)
         {
-            if (input->GetMouseButtonDown(MouseCode::Left))
+            //if (input->GetMouseButtonDown(MouseCode::Left))
+            if (input->GetKeyDown(KeyCode::Alpha1))
             {
                 tryFire = true;
                 fireClip = Get_m_additiveClip();
@@ -365,12 +368,115 @@ namespace Alice
             m_socketInitialized = true;
         }
 
-        // IK & Aim
+        // ------------------------------------------------------------
+        // 6. Foot IK 로직 (Y키로 발 들어올리기 / 지형 적응)
+        // ------------------------------------------------------------
+        if (Get_m_enableFootIK())
+        {
+            // =========================================================
+            // [물리 구현 시 수정할 곳] - 목표 높이 결정
+            // =========================================================
+            // 현재는 Y키 입력으로 targetHeight를 강제로 설정합니다.
+            // 나중에 물리 충돌(Raycast)을 구현할 때는 아래 주석 부분을 활성화하고
+            // Y키 입력 부분을 제거하면 됩니다.
+            // 
+            // 물리 프로그래머가 해야 할 일:
+            // 1. 발 본의 현재 위치에서 아래로 Raycast를 쏜다
+            // 2. 바닥에 닿은 지점까지의 거리를 계산한다
+            // 3. 그 거리를 targetHeight 변수에 넣는다
+            // 4. SmoothApproach 함수가 알아서 부드럽게 발을 올리거나 내린다
+            // =========================================================
+            
+            float targetHeight = 0.0f;
+
+            // [현재 구현] Y키 입력으로 시뮬레이션
+            if (input->GetKey(KeyCode::Y))
+            {
+                targetHeight = Get_m_maxLiftHeight(); // Y키 누르면 최대 높이까지 들어올림
+            }
+            else
+            {
+                targetHeight = 0.0f; // 안 누르면 바닥(0.0)
+            }
+
+            // [물리 구현 시 이 부분을 주석 처리하고 아래 코드로 대체]
+            /*
+            // =========================================================
+            // 물리 Raycast 기반 Foot Placement 구현 예시
+            // =========================================================
+            // 1. 발 본의 현재 위치 가져오기 (월드 공간)
+            // (엔진에 GetBonePosition 함수가 있다고 가정)
+            // DirectX::XMVECTOR leftFootPosWS = anim->GetBonePosition("Foot_L");
+            // 
+            // 2. 레이캐스트 발사 (발 위치보다 조금 위에서 아래로)
+            // float rayStartHeight = 0.5f;  // 발 위 0.5m에서 시작
+            // float rayLength = 1.0f;       // 최대 1m까지 쏨
+            // 
+            // DirectX::XMVECTOR rayStart = leftFootPosWS + DirectX::XMVectorSet(0, rayStartHeight, 0, 0);
+            // DirectX::XMVECTOR rayDir = DirectX::XMVectorSet(0, -1.0f, 0, 0); // 아래 방향
+            // 
+            // RaycastHit leftHit;
+            // bool lHit = GetWorld()->Raycast(rayStart, rayDir, rayLength, &leftHit);
+            // 
+            // if (lHit)
+            // {
+            //     // 발바닥이 땅에 닿아야 할 높이 계산
+            //     // hit.point.y는 월드 공간의 바닥 높이
+            //     // characterPos.y는 캐릭터 위치 (모델 공간 기준 0)
+            //     // footOffset은 발바닥 두께 (예: 0.1f)
+            //     float footOffset = 0.1f;
+            //     float groundHeightWS = leftHit.point.y;
+            //     float characterHeightWS = t->position.y;
+            //     
+            //     // 모델 공간 기준으로 변환 (캐릭터 위치를 0으로 가정)
+            //     targetHeight = (groundHeightWS - characterHeightWS) + footOffset;
+            //     
+            //     // 음수 방지 (발이 땅 아래로 가지 않도록)
+            //     if (targetHeight < 0.0f)
+            //         targetHeight = 0.0f;
+            // }
+            // else
+            // {
+            //     // Raycast가 실패하면 기본값 (바닥)
+            //     targetHeight = 0.0f;
+            // }
+            // =========================================================
+            */
+
+            // 2. 부드러운 움직임 (Interpolation)
+            // 갑자기 팍 튀지 않게 현재 높이에서 목표 높이로 서서히 이동
+            m_currentLeftFootHeight = SmoothApproach(m_currentLeftFootHeight, targetHeight, Get_m_ikLiftSpeed(), DeltaTime);
+
+            // 3. IK 타겟 위치 계산 (Model Space)
+            // 캐릭터 기준(0,0,0)에서 왼발의 기본 위치를 알아야 합니다.
+            // 여기서는 m_leftFootBasePos로 설정된 기본 위치를 사용하고 Y값만 더합니다.
+            // *정확히 하려면*: anim->GetBoneTransform("Ball_L")로 현재 위치를 가져와야 함.
+            
+            DirectX::XMFLOAT3 targetPos = Get_m_leftFootBasePos();
+            targetPos.y = m_currentLeftFootHeight; // [핵심] 계산된 높이 적용
+
+            // 4. 엔진에 IK 적용 요청 (인덱스 0번: 왼발)
+            // ChainLength 2: 발 -> 종아리 -> 허벅지까지 영향을 줌 (무릎이 굽혀짐)
+            anim->SetIK(0, Get_m_leftFootBone(), 2, targetPos, 1.0f);
+        }
+        else
+        {
+            // Foot IK가 비활성화되면 IK 체인 비활성화
+            anim->DisableIK(0);
+        }
+
+        // 기존 단일 IK 설정 (하위 호환성)
         anim->ik.enabled = Get_m_enableIK();
         anim->ik.tipBone = Get_m_ikTipBone();
         anim->ik.chainLength = Get_m_ikChainLength();
         anim->ik.weight = Get_m_ikWeight();
         anim->ik.targetMS = Get_m_ikTargetLocal();
+        
+        // [하위 호환성] 기존 ik를 ikChains[0]에 동기화 (Foot IK가 사용하지 않을 때만)
+        if (anim->ik.enabled && !Get_m_enableFootIK() && anim->ikChains.empty())
+        {
+            anim->SetIK(0, anim->ik.tipBone, anim->ik.chainLength, anim->ik.targetMS, anim->ik.weight);
+        }
 
         anim->aim.enabled = Get_m_enableAim();
         anim->aim.yawRad = DirectX::XMConvertToRadians(Get_m_aimYawDeg());
