@@ -1017,7 +1017,7 @@ namespace Alice
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
 		// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
 		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
-		
+
 		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
 		{
 			FbxImporter importer(pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
