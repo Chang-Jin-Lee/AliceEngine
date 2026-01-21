@@ -30,7 +30,6 @@ namespace Alice
         {
             // 초기 상태: 조립됨 (legacy 활성화, parts 비활성화)
             m_state = AssemblyState::Assembled;
-            m_assemblingPartIndex = 0;
             m_originalPartTriggerStates.resize(5, false);
             
             // Legacy 트랜스폼 저장
@@ -66,7 +65,7 @@ namespace Alice
                 SaveLegacyTransform();
                 DeactivateLegacy();
                 ActivateParts();
-                ApplyExplosionForce();
+                m_pendingExplosion = true; // 다음 프레임에 폭발 힘 적용
                 m_state = AssemblyState::Disassembled;
                 ALICE_LOG_INFO("[Gimmick] Disassembled - Legacy disabled, Parts activated");
             }
@@ -79,14 +78,48 @@ namespace Alice
             }
             else if (m_state == AssemblyState::Assembling)
             {
-                // 조립 완료: Parts 비활성화, Legacy 활성화
-                RemoveJoints();
+                // 조립 완료: 조인트 해제 → Parts 비활성화 → Legacy 활성화
+                RemoveJoints(); // 조인트 해제
                 EnablePartsCollision(); // 충돌 복원
-                DeactivateParts();
-                ActivateLegacy();
+                DeactivateParts(); // Parts 비활성화
+                ActivateLegacy(); // Legacy 활성화
                 m_state = AssemblyState::Assembled;
-                m_assemblingPartIndex = 0;
-                ALICE_LOG_INFO("[Gimmick] Assembled - Legacy activated, Parts deactivated");
+                ALICE_LOG_INFO("[Gimmick] Assembled - Joints removed, Parts deactivated, Legacy activated");
+            }
+        }
+
+        // 폭발 힘 적용 재시도 (RigidBody가 생성될 때까지)
+        if (m_pendingExplosion)
+        {
+            auto* world = GetWorld();
+            if (world)
+            {
+                bool allReady = true;
+                for (EntityId partId : m_parts)
+                {
+                    if (auto* rb = world->GetComponent<Phy_RigidBodyComponent>(partId))
+                    {
+                        if (rb->physicsActorHandle)
+                        {
+                            IRigidBody* body = rb->physicsActorHandle;
+                            if (body && body->IsValid())
+                            {
+                                // RigidBody가 생성되었음
+                                continue;
+                            }
+                        }
+                    }
+                    // RigidBody가 아직 생성되지 않음
+                    allReady = false;
+                    break;
+                }
+                
+                if (allReady)
+                {
+                    // 모든 RigidBody가 생성되었으므로 폭발 힘 적용
+                    ApplyExplosionForce();
+                    m_pendingExplosion = false;
+                }
             }
         }
 
@@ -192,56 +225,13 @@ namespace Alice
         if (!world || m_legacyEntity == InvalidEntityId)
             return;
 
-        // Legacy의 컴포넌트 복원
-        if (m_legacyInfo.hasSkinnedMesh)
-        {
-            if (!world->GetComponent<SkinnedMeshComponent>(m_legacyEntity))
-            {
-                auto& skinnedMesh = world->AddComponent<SkinnedMeshComponent>(m_legacyEntity);
-                skinnedMesh.meshAssetPath = m_legacyInfo.skinnedMeshAssetPath;
-            }
-        }
-
-        if (m_legacyInfo.hasMaterial)
-        {
-            if (!world->GetComponent<MaterialComponent>(m_legacyEntity))
-            {
-                auto& material = world->AddComponent<MaterialComponent>(m_legacyEntity);
-                material.color = m_legacyInfo.materialColor;
-                material.roughness = m_legacyInfo.materialRoughness;
-                material.metalness = m_legacyInfo.materialMetalness;
-                material.assetPath = m_legacyInfo.materialAssetPath;
-            }
-        }
-
-        if (m_legacyInfo.hasRigidBody)
-        {
-            if (!world->GetComponent<Phy_RigidBodyComponent>(m_legacyEntity))
-            {
-                world->AddComponent<Phy_RigidBodyComponent>(m_legacyEntity);
-            }
-        }
-
-        if (m_legacyInfo.hasCollider)
-        {
-            if (!world->GetComponent<Phy_ColliderComponent>(m_legacyEntity))
-            {
-                world->AddComponent<Phy_ColliderComponent>(m_legacyEntity);
-            }
-        }
-
-        if (m_legacyInfo.hasMeshCollider)
-        {
-            if (!world->GetComponent<Phy_MeshColliderComponent>(m_legacyEntity))
-            {
-                world->AddComponent<Phy_MeshColliderComponent>(m_legacyEntity);
-            }
-        }
-
-        // Legacy 위치 복원
+        // Legacy 활성화: enabled 플래그만 설정
         if (auto* transform = world->GetComponent<TransformComponent>(m_legacyEntity))
         {
+            transform->enabled = true;
             transform->position = m_legacyInfo.legacyPosition;
+            transform->rotation = m_legacyInfo.legacyRotation;
+            transform->scale = m_legacyInfo.legacyScale;
         }
     }
 
@@ -251,36 +241,13 @@ namespace Alice
         if (!world || m_legacyEntity == InvalidEntityId)
             return;
 
-        // Legacy 위치 저장
+        // Legacy 위치 저장 및 비활성화
         if (auto* transform = world->GetComponent<TransformComponent>(m_legacyEntity))
         {
             m_legacyInfo.legacyPosition = transform->position;
-        }
-
-        // 렌더링 및 물리 컴포넌트 제거 (Transform은 유지)
-        if (m_legacyInfo.hasSkinnedMesh)
-        {
-            world->RemoveComponent<SkinnedMeshComponent>(m_legacyEntity);
-        }
-
-        if (m_legacyInfo.hasMaterial)
-        {
-            world->RemoveComponent<MaterialComponent>(m_legacyEntity);
-        }
-
-        if (m_legacyInfo.hasRigidBody)
-        {
-            world->RemoveComponent<Phy_RigidBodyComponent>(m_legacyEntity);
-        }
-
-        if (m_legacyInfo.hasCollider)
-        {
-            world->RemoveComponent<Phy_ColliderComponent>(m_legacyEntity);
-        }
-
-        if (m_legacyInfo.hasMeshCollider)
-        {
-            world->RemoveComponent<Phy_MeshColliderComponent>(m_legacyEntity);
+            m_legacyInfo.legacyRotation = transform->rotation;
+            m_legacyInfo.legacyScale = transform->scale;
+            transform->enabled = false;
         }
     }
 
@@ -290,23 +257,23 @@ namespace Alice
         if (!world || m_legacyEntity == InvalidEntityId)
             return;
 
-        // Legacy 트랜스폼을 parts에 계승
+        // Parts 활성화: enabled 플래그 설정 및 Legacy 트랜스폼 계승
         for (size_t i = 0; i < m_parts.size(); ++i)
         {
             EntityId partId = m_parts[i];
             
-            // Legacy 트랜스폼 계승
             if (auto* transform = world->GetComponent<TransformComponent>(partId))
             {
+                transform->enabled = true;
                 transform->position = m_legacyInfo.legacyPosition;
                 transform->rotation = m_legacyInfo.legacyRotation;
                 transform->scale = m_legacyInfo.legacyScale;
                 
-                // RigidBody가 있으면 텔레포트
+                // RigidBody가 있으면 텔레포트 및 중력 활성화
                 if (auto* rb = world->GetComponent<Phy_RigidBodyComponent>(partId))
                 {
                     rb->teleport = true;
-                    rb->gravityEnabled = true; // 중력 활성화 (바닥을 구르기 위해)
+                    rb->gravityEnabled = true;
                 }
             }
         }
@@ -318,42 +285,15 @@ namespace Alice
         if (!world)
             return;
 
-        // Parts 비활성화: 렌더링 및 물리 컴포넌트 제거 (Transform은 유지)
+        // Parts 비활성화: enabled 플래그만 설정
         for (EntityId partId : m_parts)
         {
-            // Legacy 트랜스폼으로 이동
             if (auto* transform = world->GetComponent<TransformComponent>(partId))
             {
+                transform->enabled = false;
                 transform->position = m_legacyInfo.legacyPosition;
                 transform->rotation = m_legacyInfo.legacyRotation;
                 transform->scale = m_legacyInfo.legacyScale;
-            }
-
-            // 렌더링 컴포넌트 제거
-            if (world->GetComponent<SkinnedMeshComponent>(partId))
-            {
-                world->RemoveComponent<SkinnedMeshComponent>(partId);
-            }
-            
-            if (world->GetComponent<MaterialComponent>(partId))
-            {
-                world->RemoveComponent<MaterialComponent>(partId);
-            }
-
-            // 물리 컴포넌트 제거
-            if (world->GetComponent<Phy_RigidBodyComponent>(partId))
-            {
-                world->RemoveComponent<Phy_RigidBodyComponent>(partId);
-            }
-            
-            if (world->GetComponent<Phy_ColliderComponent>(partId))
-            {
-                world->RemoveComponent<Phy_ColliderComponent>(partId);
-            }
-            
-            if (world->GetComponent<Phy_MeshColliderComponent>(partId))
-            {
-                world->RemoveComponent<Phy_MeshColliderComponent>(partId);
             }
         }
     }
@@ -370,96 +310,23 @@ namespace Alice
         // Parts의 물리 충돌 끄기 (trigger로 설정)
         DisablePartsCollision();
 
-        // 조립 인덱스 초기화
-        m_assemblingPartIndex = 0;
-
-        // parts_1을 먼저 Legacy 위치로 이동
-        if (m_parts.size() > 0)
+        // 모든 파츠를 순차적으로 조인트로 연결 (1->2->3->4->5)
+        for (size_t i = 1; i < m_parts.size(); ++i)
         {
-            EntityId part1Id = m_parts[0];
-            if (auto* transform = world->GetComponent<TransformComponent>(part1Id))
-            {
-                transform->position = m_legacyInfo.legacyPosition;
-                transform->rotation = m_legacyInfo.legacyRotation;
-                transform->scale = m_legacyInfo.legacyScale;
-                
-                if (auto* rb = world->GetComponent<Phy_RigidBodyComponent>(part1Id))
-                {
-                    rb->teleport = true;
-                    rb->gravityEnabled = false;
-                    
-                    if (rb->physicsActorHandle)
-                    {
-                        IRigidBody* body = rb->physicsActorHandle;
-                        if (body && body->IsValid())
-                        {
-                            Vec3 zero(0, 0, 0);
-                            body->SetLinearVelocity(zero);
-                            body->SetAngularVelocity(zero);
-                        }
-                    }
-                }
-            }
-            m_assemblingPartIndex = 1; // 다음은 parts_2부터
-        }
-    }
-
-    void Gimmick::UpdateAssembling(float deltaTime)
-    {
-        auto* world = GetWorld();
-        if (!world || m_parts.empty() || m_assemblingPartIndex >= static_cast<int>(m_parts.size()))
-            return;
-
-        // 현재 조립할 파츠
-        EntityId currentPartId = m_parts[m_assemblingPartIndex];
-        
-        // 이전 파츠 (이미 조립된 파츠)
-        EntityId prevPartId = m_parts[m_assemblingPartIndex - 1];
-
-        // 이전 파츠의 위치 가져오기
-        DirectX::XMFLOAT3 prevPos = { 0, 0, 0 };
-        if (auto* prevTransform = world->GetComponent<TransformComponent>(prevPartId))
-        {
-            prevPos = prevTransform->position;
-        }
-
-        // 현재 파츠의 위치 가져오기
-        DirectX::XMFLOAT3 currentPos = { 0, 0, 0 };
-        if (auto* currentTransform = world->GetComponent<TransformComponent>(currentPartId))
-        {
-            currentPos = currentTransform->position;
-        }
-
-        // 거리 계산
-        float dx = currentPos.x - prevPos.x;
-        float dy = currentPos.y - prevPos.y;
-        float dz = currentPos.z - prevPos.z;
-        float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-
-        // 조인트가 없으면 생성
-        bool hasJoint = false;
-        for (EntityId jointId : m_jointEntities)
-        {
-            if (jointId == currentPartId)
-            {
-                hasJoint = true;
-                break;
-            }
-        }
-
-        if (!hasJoint)
-        {
+            EntityId currentPartId = m_parts[i];
+            EntityId prevPartId = m_parts[i - 1];
+            
             // 조인트 생성: 현재 파츠를 이전 파츠에 연결
             Phy_JointComponent& joint = world->AddComponent<Phy_JointComponent>(currentPartId);
             joint.type = Phy_JointType::Distance;
             
             // 이전 파츠 이름 설정
-            std::string prevPartName = "parts_" + std::to_string(m_assemblingPartIndex);
+            std::string prevPartName = "parts_" + std::to_string(i);
             joint.targetName = prevPartName;
             
-            // Distance Joint 설정
+            // Distance Joint 설정 (줄 당기는 효과)
             joint.distance.minDistance = 0.0f;
-            joint.distance.maxDistance = m_assemblyDistance; // 적당한 거리 유지
+            joint.distance.maxDistance = m_assemblyDistance;
             joint.distance.tolerance = 0.1f;
             joint.distance.enableMinDistance = false;
             joint.distance.enableMaxDistance = true;
@@ -471,58 +338,82 @@ namespace Alice
             
             m_jointEntities.push_back(currentPartId);
         }
+        
+        // 모든 조인트 생성 완료
+    }
 
-        // 거리가 충분히 가까우면 다음 파츠로
-        if (distance <= m_assemblyDistance * 1.5f) // 여유를 두고
-        {
-            m_assemblingPartIndex++;
-        }
+    void Gimmick::UpdateAssembling(float deltaTime)
+    {
+        auto* world = GetWorld();
+        if (!world || m_parts.empty())
+            return;
 
-        // 모든 파츠가 조립되면 Legacy 위치로 이동 시작
-        if (m_assemblingPartIndex >= static_cast<int>(m_parts.size()))
+        // parts_1을 Legacy 위치로 물리 기반으로 이동
+        // 조인트가 있으므로 다른 파츠들도 따라올 것
+        EntityId part1Id = m_parts[0];
+        if (auto* transform = world->GetComponent<TransformComponent>(part1Id))
         {
-            // parts_1을 Legacy 위치로 점진적으로 이동
-            // 조인트가 있으므로 다른 파츠들도 따라올 것
-            EntityId part1Id = m_parts[0];
-            if (auto* transform = world->GetComponent<TransformComponent>(part1Id))
+            DirectX::XMFLOAT3 currentPos = transform->position;
+            DirectX::XMFLOAT3 targetPos = m_legacyInfo.legacyPosition;
+            
+            // 거리 계산
+            float dx = targetPos.x - currentPos.x;
+            float dy = targetPos.y - currentPos.y;
+            float dz = targetPos.z - currentPos.z;
+            float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+            
+            if (distance > 0.1f)
             {
-                DirectX::XMFLOAT3 currentPos = transform->position;
-                DirectX::XMFLOAT3 targetPos = m_legacyInfo.legacyPosition;
-                
-                // Legacy 위치로 점진적으로 이동 (Lerp)
-                float moveSpeed = 2.0f; // 초당 이동 속도
-                float dx = targetPos.x - currentPos.x;
-                float dy = targetPos.y - currentPos.y;
-                float dz = targetPos.z - currentPos.z;
-                float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-                
-                if (distance > 0.1f)
+                // 물리 기반 이동: RigidBody에 힘을 가하거나 kinematic으로 설정
+                if (auto* rb = world->GetComponent<Phy_RigidBodyComponent>(part1Id))
                 {
-                    // 방향 벡터 정규화
-                    float invDist = 1.0f / distance;
-                    dx *= invDist;
-                    dy *= invDist;
-                    dz *= invDist;
+                    // Kinematic으로 설정하여 목표 위치로 이동
+                    rb->isKinematic = true;
                     
-                    // 이동
-                    float moveAmount = moveSpeed * deltaTime;
-                    if (moveAmount > distance)
-                        moveAmount = distance;
+                    // 보간을 사용하여 부드럽게 이동
+                    float moveSpeed = 2.0f; // 초당 이동 속도
+                    float lerpFactor = std::min(1.0f, moveSpeed * deltaTime / distance);
                     
-                    transform->position.x += dx * moveAmount;
-                    transform->position.y += dy * moveAmount;
-                    transform->position.z += dz * moveAmount;
+                    DirectX::XMFLOAT3 newPos;
+                    newPos.x = currentPos.x + dx * lerpFactor;
+                    newPos.y = currentPos.y + dy * lerpFactor;
+                    newPos.z = currentPos.z + dz * lerpFactor;
                     
-                    // 회전도 점진적으로
+                    transform->position = newPos;
                     transform->rotation = m_legacyInfo.legacyRotation;
                     transform->scale = m_legacyInfo.legacyScale;
+                    
+                    // RigidBody 텔레포트로 물리 엔진에 반영
+                    rb->teleport = true;
                 }
                 else
                 {
-                    // 충분히 가까우면 정확히 Legacy 위치로
-                    transform->position = targetPos;
-                    transform->rotation = m_legacyInfo.legacyRotation;
-                    transform->scale = m_legacyInfo.legacyScale;
+                    // RigidBody가 없으면 직접 보간 이동
+                    float moveSpeed = 2.0f;
+                    float lerpFactor = std::min(1.0f, moveSpeed * deltaTime / distance);
+                    
+                    transform->position.x += dx * lerpFactor;
+                    transform->position.y += dy * lerpFactor;
+                    transform->position.z += dz * lerpFactor;
+                }
+            }
+            else
+            {
+                // 충분히 가까우면 정확히 Legacy 위치로
+                transform->position = targetPos;
+                transform->rotation = m_legacyInfo.legacyRotation;
+                transform->scale = m_legacyInfo.legacyScale;
+                
+                // 모든 파츠도 Legacy 위치로 이동 (조인트로 연결되어 있으므로 자연스럽게 따라올 것)
+                for (size_t i = 1; i < m_parts.size(); ++i)
+                {
+                    EntityId partId = m_parts[i];
+                    if (auto* partTransform = world->GetComponent<TransformComponent>(partId))
+                    {
+                        // 조인트로 연결되어 있으므로 parts_1이 목표 위치에 도달하면
+                        // 다른 파츠들도 조인트를 통해 자연스럽게 따라올 것
+                        // 여기서는 강제로 이동시키지 않음
+                    }
                 }
             }
         }
@@ -612,7 +503,7 @@ namespace Alice
 
         // 각 파츠마다 다른 방향으로 날아가도록 각도를 균등하게 분배
         const float angleStep = (2.0f * 3.14159265f) / static_cast<float>(m_parts.size());
-        std::uniform_real_distribution<float> forceDist(8.0f, 15.0f);
+        std::uniform_real_distribution<float> impulseDist(10.0f, 20.0f); // Impulse는 더 큰 값 필요
         
         // 랜덤 생성기 (힘의 크기만 랜덤)
         std::random_device rd;
@@ -624,33 +515,58 @@ namespace Alice
             EntityId partId = m_parts[i];
             if (auto* rb = world->GetComponent<Phy_RigidBodyComponent>(partId))
             {
-                // 중력 활성화 (바닥을 구르기 위해)
+                // 중력 활성화 및 깨어있게 설정 (바닥을 구르기 위해)
                 rb->gravityEnabled = true;
+                rb->startAwake = true;
                 
                 // 각 파츠마다 다른 각도 사용 (균등 분배)
                 float angle = angleStep * static_cast<float>(i);
-                float force = forceDist(gen); // 힘의 크기는 랜덤
+                float impulse = impulseDist(gen); // Impulse 크기는 랜덤
                 
                 // XZ 평면에서 방향 계산 (각 파츠마다 다른 방향)
-                DirectX::XMFLOAT3 velocity;
-                velocity.x = std::cos(angle) * force;
-                velocity.y = std::sin(angle * 0.3f) * force * 0.5f + 1.5f; // 위로 약간 튀어오르게
-                velocity.z = std::sin(angle) * force;
+                DirectX::XMFLOAT3 direction;
+                direction.x = std::cos(angle);
+                direction.y = 0.3f + std::sin(angle * 0.3f) * 0.2f; // 위로 약간 튀어오르게
+                direction.z = std::sin(angle);
                 
-                // RigidBody 핸들을 통해 velocity 설정
+                // 방향 정규화
+                float dirLength = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+                if (dirLength > 0.0f)
+                {
+                    direction.x /= dirLength;
+                    direction.y /= dirLength;
+                    direction.z /= dirLength;
+                }
+                
+                // Impulse 벡터 계산
+                DirectX::XMFLOAT3 impulseVec;
+                impulseVec.x = direction.x * impulse;
+                impulseVec.y = direction.y * impulse;
+                impulseVec.z = direction.z * impulse;
+                
+                // RigidBody 핸들을 통해 Impulse 적용
                 if (rb->physicsActorHandle)
                 {
                     IRigidBody* body = rb->physicsActorHandle;
                     if (body && body->IsValid())
                     {
-                        // Vec3로 변환
-                        Vec3 vel(velocity.x, velocity.y, velocity.z);
-                        body->SetLinearVelocity(vel);
+                        // Vec3로 변환하여 Impulse 적용
+                        Vec3 impulse(impulseVec.x, impulseVec.y, impulseVec.z);
+                        body->AddImpulse(impulse);
+                        body->WakeUp(); // 확실히 깨우기
                     }
+                }
+                else
+                {
+                    // RigidBody가 아직 생성되지 않았으면 다음 프레임에 시도하기 위해
+                    // velocity를 설정할 수 없으므로, 컴포넌트에 플래그를 설정하거나
+                    // 다음 Update에서 다시 시도하는 방법을 사용할 수 있습니다.
+                    // 일단 로그만 남깁니다.
+                    ALICE_LOG_WARN("[Gimmick] RigidBody not created yet for part %zu, will try next frame", i);
                 }
             }
         }
         
-        ALICE_LOG_INFO("[Gimmick] Applied explosion force to %zu parts - Parts will roll on ground", m_parts.size());
+        ALICE_LOG_INFO("[Gimmick] Applied explosion impulse to %zu parts - Parts will fly in different directions", m_parts.size());
     }
 }

@@ -60,11 +60,11 @@ namespace Alice
         };
         AssemblyState m_state = AssemblyState::Assembled;
         
-        // 조립 시도 중 현재 조립된 파츠 인덱스 (0~4)
-        int m_assemblingPartIndex = 0;
-        
         // 조립 시 유지할 거리
         float m_assemblyDistance = 0.3f;
+        
+        // 폭발 힘 적용 재시도 플래그
+        bool m_pendingExplosion = false;
         
         
         // 파츠 찾기 및 초기화
@@ -79,7 +79,6 @@ namespace Alice
         void DeactivateParts();
         
         // 조인트 관련
-        void CreateJoints();
         void RemoveJoints();
         void StartAssembling();
         void UpdateAssembling(float deltaTime);
