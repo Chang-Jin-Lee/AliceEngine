@@ -384,6 +384,20 @@ namespace Alice
 		// Editor: 프로젝트 루트 기준, Game: 실행 파일 기준
 		pImpl->m_resourceManager.Configure(!pImpl->m_editorMode, exeDir);
 
+		// 게임 모드일 때 데이터 무결성 검증 수행
+		if (!pImpl->m_editorMode)
+		{
+			if (!pImpl->m_resourceManager.ValidateGameData())
+			{
+				MessageBoxW(nullptr,
+					L"Critical Error: Game Data is corrupted or missing.\nPlease reinstall the game.",
+					L"Integrity Check Failed",
+					MB_OK | MB_ICONERROR);
+				ALICE_LOG_ERRORF("[Engine] Initialize FAILED: Data integrity check failed.");
+				return false; // 초기화 실패 -> 앱 종료
+			}
+		}
+
 		//===============================================================
 		// PVD 설정 로드 (물리 초기화 전에 실행)
 		LoadPvdSettings(exeDir, pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort);
@@ -1134,6 +1148,36 @@ namespace Alice
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
 		// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
 		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		
+		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
+		{
+			FbxImporter importer(pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
+			auto* device = pImpl->m_renderDevice ? pImpl->m_renderDevice->GetDevice() : nullptr;
+			if (device)
+			{
+				const auto& skinnedMap = pImpl->m_world.GetComponents<SkinnedMeshComponent>();
+				for (const auto& [entityId, comp] : skinnedMap)
+				{
+					if (comp.meshAssetPath.empty())
+						continue;
+
+					// meshKey가 레지스트리에 없고 instanceAssetPath가 있으면 온디맨드 로딩 시도
+					if (!pImpl->m_skinnedMeshRegistry.Has(comp.meshAssetPath) && !comp.instanceAssetPath.empty())
+					{
+						ALICE_LOG_INFO("[Engine] On-demand loading mesh: meshKey=\"%s\" instanceAssetPath=\"%s\"",
+							comp.meshAssetPath.c_str(), comp.instanceAssetPath.c_str());
+						pImpl->m_skinnedMeshRegistry.LoadFromFbxAsset(
+							comp.meshAssetPath,
+							comp.instanceAssetPath,
+							pImpl->m_resourceManager,
+							importer,
+							device
+						);
+					}
+				}
+			}
+		}
+		
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
 		// ============================================= 렌더링 =============================================

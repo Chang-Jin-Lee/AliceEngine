@@ -1160,7 +1160,8 @@ namespace Alice
 
         // G-Buffer 클리어
         float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-        float clearNormal[4] = { 0.5f, 0.5f, 0.5f, 1.0f };
+        // Normal 클리어 값: 평평한 노말 (0,0,1)을 [0,1] 인코딩하면 (0.5, 0.5, 1.0)
+        float clearNormal[4] = { 0.5f, 0.5f, 1.0f, 1.0f };
 
         m_context->ClearRenderTargetView(m_gBufferRTVs[0].Get(), clearColor); // Position
         m_context->ClearRenderTargetView(m_gBufferRTVs[1].Get(), clearNormal); // Normal
@@ -1184,6 +1185,10 @@ namespace Alice
         m_context->PSSetShader(m_gBufferPS.Get(), nullptr, 0);
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_context->IASetInputLayout(m_gBufferInputLayout.Get());
+        
+        // PS sampler 바인딩 (normal map 샘플링을 위해 필요)
+        ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
+        m_context->PSSetSamplers(0, 1, samplers);
 
         // 상수 버퍼 업데이트
         XMMATRIX view = camera.GetViewMatrix();

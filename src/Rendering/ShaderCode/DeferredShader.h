@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace Alice
 {
@@ -213,8 +213,11 @@ GBufferOut main(VertexOut pIn)
     float metalness = saturate(gMetalness);
     float roughness = saturate(gRoughness);
     
+    // Normal을 [0,1] 범위로 인코딩하여 저장 (LightPS에서 디코딩)
+    float3 normalEncoded = N * 0.5f + 0.5f;
+    
     gOut.PositionWS = float4(pIn.WorldPos, 1.0f);
-    gOut.NormalWS   = float4(N, 1.0f);
+    gOut.NormalWS   = float4(normalEncoded, 1.0f);
     gOut.Metalness  = float4(metalness, 0, 0, 1);
     gOut.Roughness  = float4(roughness, 0, 0, 1);
     gOut.BaseColor  = float4(baseColor, saturate((float)gShadingMode / 5.0f));
@@ -513,7 +516,8 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
 
     // 데이터 복원
     float3 posW = positionWS.xyz;
-    float3 N = normalize(normalWS_packed.xyz);
+    // Normal을 [0,1]에서 [-1,1]로 디코딩
+    float3 N = normalize(normalWS_packed.xyz * 2.0f - 1.0f);
     float metalness = metalness_packed.r;
     float roughness = max(roughness_packed.r, 0.04f);
     float3 albedo = baseColor.rgb;
