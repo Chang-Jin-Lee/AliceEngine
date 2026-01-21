@@ -11,12 +11,14 @@
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
 #include "Core/ResourceManager.h"
+#include "Core/GameObject.h"
 #include "Game/FbxImporter.h"
 #include "3Dmodel/FbxModel.h"
 #include "Core/Logger.h"
 #include "Core/ReflectionUI.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/JsonRttr.h"
+#include <set>
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
@@ -1885,6 +1887,17 @@ namespace Alice
                             );
                             
                             transform->scale = XMFLOAT3(matrixScale[0], matrixScale[1], matrixScale[2]);
+                            
+                            // ImGuizmo로 Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
+                            if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(selectedEntity))
+                            {
+                                rigidBody->teleport = true;
+                            }
+                            if (auto* cct = world.GetComponent<Phy_CCTComponent>(selectedEntity))
+                            {
+                                cct->teleport = true;
+                            }
+                            g_SceneDirty = true;
                         }
                     }
                 }
@@ -2515,7 +2528,21 @@ namespace Alice
                 }
 
                 changed |= ReflectionUI::RenderProperty(*transform, "scale", "Scale");
-                if (changed) g_SceneDirty = true;
+                changed |= ReflectionUI::RenderProperty(*transform, "enabled", "Enabled");
+                
+                // Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
+                if (changed)
+                {
+                    if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity))
+                    {
+                        rigidBody->teleport = true;
+                    }
+                    if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
+                    {
+                        cct->teleport = true;
+                    }
+                    g_SceneDirty = true;
+                }
             }
         }
     }
@@ -2619,6 +2646,9 @@ namespace Alice
                     } else if (typeName == "Phy_ColliderComponent") {
                         world.AddComponent<Phy_ColliderComponent>(_selectedEntity);
                         added = true;
+                    } else if (typeName == "Phy_MeshColliderComponent") {
+                        world.AddComponent<Phy_MeshColliderComponent>(_selectedEntity);
+                        added = true;
                     } else if (typeName == "Phy_CCTComponent") {
                         world.AddComponent<Phy_CCTComponent>(_selectedEntity);
                         added = true;
@@ -2627,6 +2657,9 @@ namespace Alice
                         added = true;
                     } else if (typeName == "Phy_SettingsComponent") {
                         world.AddComponent<Phy_SettingsComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_JointComponent") {
+                        world.AddComponent<Phy_JointComponent>(_selectedEntity);
                         added = true;
                     }
                     
@@ -2713,12 +2746,16 @@ namespace Alice
                     [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
             } else if (typeName == "Phy_ColliderComponent") {
                 DrawInspectorCollider(world, _selectedEntity);
+            } else if (typeName == "Phy_MeshColliderComponent") {
+                DrawInspectorMeshCollider(world, _selectedEntity);
             } else if (typeName == "Phy_CCTComponent") {
                 DrawInspectorCharacterController(world, _selectedEntity);
             } else if (typeName == "Phy_TerrainHeightFieldComponent") {
                 DrawInspectorTerrainHeightField(world, _selectedEntity);
             } else if (typeName == "Phy_SettingsComponent") {
                 DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
+            } else if (typeName == "Phy_JointComponent") {
+                DrawInspectorJoint(world, _selectedEntity);
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }
@@ -3213,10 +3250,24 @@ namespace Alice
                     return;
                 }
                 
+                // Collider Type 선택
+                ImGui::Text("Collider Type");
+                ImGui::Indent();
+                {
+                    const char* typeLabels[] = { "Box", "Sphere", "Capsule" };
+                    int typeIndex = static_cast<int>(collider->type);
+                    if (ImGui::Combo("##ColliderType", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                    {
+                        collider->type = static_cast<ColliderType>(typeIndex);
+                        changed = true;
+                    }
+                }
+                ImGui::Unindent();
+                
                 // 기본 프로퍼티는 ReflectionUI로
                 changed |= ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
-                    // layerBits, collideMask, queryMask는 커스텀 UI로 처리
-                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "physicsActorHandle";
+                    // type, layerBits, collideMask, queryMask는 커스텀 UI로 처리
+                    return name != "type" && name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "physicsActorHandle";
                 });
                 
                 // 레이어 마스크 편집
@@ -3298,6 +3349,218 @@ namespace Alice
                 changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", collider->ignoreLayers, layerNames);
                 ImGui::Unindent();
                 
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorMeshCollider(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* meshCollider = world.GetComponent<Phy_MeshColliderComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Mesh Collider", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_MeshColliderComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                // Mesh Collider Type 선택
+                ImGui::Text("Mesh Collider Type");
+                ImGui::Indent();
+                {
+                    const char* typeLabels[] = { "Triangle", "Convex" };
+                    int typeIndex = static_cast<int>(meshCollider->type);
+                    if (ImGui::Combo("##MeshColliderType", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                    {
+                        meshCollider->type = static_cast<MeshColliderType>(typeIndex);
+                        changed = true;
+                    }
+                }
+                ImGui::Unindent();
+
+                changed |= ReflectionUI::RenderInspector(*meshCollider, [](const std::string& name) {
+                    return name != "type" && name != "layerBits" && name != "collideMask" && name != "queryMask" &&
+                           name != "ignoreLayers" && name != "physicsActorHandle" &&
+                           name != "flipNormals" && name != "doubleSidedQueries" && name != "validate" &&
+                           name != "shiftVertices" && name != "vertexLimit";
+                });
+
+                ImGui::Separator();
+                ImGui::TextUnformatted("Mesh Options");
+
+                // Mesh Asset 선택 (ComboBox로 이미 로드된 메시 목록 표시)
+                ImGui::Text("Mesh Asset");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 메시 경로
+                    std::string currentPath = meshCollider->meshAssetPath;
+                    
+                    // 동일 엔티티의 SkinnedMeshComponent 확인
+                    const auto* skinned = world.GetComponent<SkinnedMeshComponent>(_selectedEntity);
+                    bool useSkinnedMesh = currentPath.empty() && skinned && !skinned->meshAssetPath.empty();
+                    
+                    if (useSkinnedMesh)
+                        currentPath = skinned->meshAssetPath;
+
+                    // Preview 텍스트
+                    std::string preview = "Auto (Use SkinnedMeshComponent)";
+                    if (!currentPath.empty())
+                        preview = currentPath;
+
+                    if (ImGui::BeginCombo("##MeshAssetPath", preview.c_str()))
+                    {
+                        // Auto 옵션 (SkinnedMeshComponent 사용)
+                        bool isAuto = meshCollider->meshAssetPath.empty();
+                        if (ImGui::Selectable("Auto (Use SkinnedMeshComponent)", isAuto))
+                        {
+                            meshCollider->meshAssetPath.clear();
+                            changed = true;
+                        }
+                        if (isAuto)
+                            ImGui::SetItemDefaultFocus();
+
+                        // 이미 로드된 메시 목록 표시 (SkinnedMeshRegistry에서)
+                        if (m_skinnedRegistry)
+                        {
+                            // SkinnedMeshComponent가 있는 모든 엔티티를 순회하여 등록된 메시 수집
+                            std::set<std::string> registeredMeshes;
+                            auto skinnedComps = world.GetComponents<SkinnedMeshComponent>();
+                            for (const auto& [eid, comp] : skinnedComps)
+                            {
+                                if (!comp.meshAssetPath.empty())
+                                {
+                                    // 레지스트리에 실제로 등록되어 있는지 확인
+                                    if (m_skinnedRegistry->Find(comp.meshAssetPath))
+                                        registeredMeshes.insert(comp.meshAssetPath);
+                                }
+                            }
+
+                            // 등록된 메시 목록 표시
+                            for (const auto& meshPath : registeredMeshes)
+                            {
+                                bool isSelected = (currentPath == meshPath);
+                                if (ImGui::Selectable(meshPath.c_str(), isSelected))
+                                {
+                                    meshCollider->meshAssetPath = meshPath;
+                                    changed = true;
+                                }
+                                if (isSelected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        else
+                        {
+                            ImGui::TextDisabled("(SkinnedMeshRegistry not available)");
+                        }
+
+                        ImGui::EndCombo();
+                    }
+
+                    // 현재 상태 표시
+                    if (meshCollider->meshAssetPath.empty())
+                    {
+                        if (skinned && !skinned->meshAssetPath.empty())
+                        {
+                            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 
+                                "Using: %s", skinned->meshAssetPath.c_str());
+                        }
+                        else
+                        {
+                            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), 
+                                "No SkinnedMeshComponent found on this entity");
+                        }
+                    }
+                }
+                ImGui::Unindent();
+
+                if (meshCollider->type == MeshColliderType::Triangle)
+                {
+                    changed |= ImGui::Checkbox("Flip Normals", &meshCollider->flipNormals);
+                    changed |= ImGui::Checkbox("Double-Sided Queries", &meshCollider->doubleSidedQueries);
+                    changed |= ImGui::Checkbox("Validate (Debug)", &meshCollider->validate);
+                }
+                else
+                {
+                    changed |= ImGui::Checkbox("Shift Vertices", &meshCollider->shiftVertices);
+                    changed |= ImGui::InputScalar("Vertex Limit", ImGuiDataType_U32, &meshCollider->vertexLimit);
+                    changed |= ImGui::Checkbox("Validate (Debug)", &meshCollider->validate);
+                }
+
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i)
+                    {
+                        if ((meshCollider->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+
+                    if (currentLayer == -1 && meshCollider->layerBits != 0)
+                    {
+                        meshCollider->layerBits = 0;
+                        changed = true;
+                    }
+
+                    std::string preview = (currentLayer >= 0) ?
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) :
+                        "None";
+
+                    if (ImGui::BeginCombo("##MeshColliderLayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            meshCollider->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i)
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                meshCollider->layerBits = (1u << i);
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+
+                changed |= DrawLayerMaskChipEditor("Collide Mask", meshCollider->collideMask, layerNames);
+                changed |= DrawLayerMaskChipEditor("Query Mask", meshCollider->queryMask, layerNames);
+
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("MeshIgnoreLayers", meshCollider->ignoreLayers, layerNames);
+                ImGui::Unindent();
+
                 if (changed) g_SceneDirty = true;
             }
         }
@@ -3426,8 +3689,80 @@ namespace Alice
                 // 기본 프로퍼티는 ReflectionUI로
                 changed |= ReflectionUI::RenderInspector(*settings, [](const std::string& name) {
                     // layerCollideMatrix, layerQueryMatrix, layerNames는 커스텀 UI로 처리
-                    return name != "layerCollideMatrix" && name != "layerQueryMatrix" && name != "layerNames";
+                    return name != "layerCollideMatrix" && name != "layerQueryMatrix" && name != "layerNames" &&
+                           name != "enableGroundPlane" && name != "groundStaticFriction" && name != "groundDynamicFriction" &&
+                           name != "groundRestitution" && name != "groundLayerBits" && name != "groundCollideMask" &&
+                           name != "groundQueryMask" && name != "groundIgnoreLayers" && name != "groundIsTrigger";
                 });
+
+                ImGui::Separator();
+                ImGui::Text("Ground Plane (y=0)");
+                changed |= ImGui::Checkbox("Enable Ground Plane", &settings->enableGroundPlane);
+
+                if (settings->enableGroundPlane)
+                {
+                    changed |= ImGui::DragFloat("Static Friction", &settings->groundStaticFriction, 0.01f, 0.0f, 10.0f);
+                    changed |= ImGui::DragFloat("Dynamic Friction", &settings->groundDynamicFriction, 0.01f, 0.0f, 10.0f);
+                    changed |= ImGui::DragFloat("Restitution", &settings->groundRestitution, 0.01f, 0.0f, 1.0f);
+                    changed |= ImGui::Checkbox("Trigger", &settings->groundIsTrigger);
+
+                    std::array<std::string, 32> layerNames = settings->layerNames;
+
+                    ImGui::Text("Layer");
+                    ImGui::Indent();
+                    {
+                        int currentLayer = -1;
+                        for (int i = 0; i < 16; ++i)
+                        {
+                            if ((settings->groundLayerBits & (1u << i)) != 0)
+                            {
+                                currentLayer = i;
+                                break;
+                            }
+                        }
+
+                        if (currentLayer == -1 && settings->groundLayerBits != 0)
+                        {
+                            settings->groundLayerBits = 0;
+                            changed = true;
+                        }
+
+                        std::string preview = (currentLayer >= 0) ?
+                            (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) :
+                            "None";
+
+                        if (ImGui::BeginCombo("##GroundLayerBits", preview.c_str()))
+                        {
+                            if (ImGui::Selectable("None", currentLayer == -1))
+                            {
+                                settings->groundLayerBits = 0;
+                                changed = true;
+                            }
+                            for (int i = 0; i < 16; ++i)
+                            {
+                                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                                bool isSelected = (currentLayer == i);
+                                if (ImGui::Selectable(layerName.c_str(), isSelected))
+                                {
+                                    settings->groundLayerBits = (1u << i);
+                                    changed = true;
+                                }
+                                if (isSelected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                            ImGui::EndCombo();
+                        }
+                    }
+                    ImGui::Unindent();
+
+                    changed |= DrawLayerMaskChipEditor("Ground Collide Mask", settings->groundCollideMask, layerNames);
+                    changed |= DrawLayerMaskChipEditor("Ground Query Mask", settings->groundQueryMask, layerNames);
+
+                    ImGui::Text("Ground Ignore Layers");
+                    ImGui::Indent();
+                    changed |= DrawIgnoreLayersChipEditor("GroundIgnoreLayers", settings->groundIgnoreLayers, layerNames);
+                    ImGui::Unindent();
+                }
                 
                 ImGui::Separator();
                 ImGui::Text("Layer Collision Matrix");
@@ -3665,6 +4000,304 @@ namespace Alice
                 changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", terrain->ignoreLayers, layerNames);
                 ImGui::Unindent();
                 
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorJoint(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* joint = world.GetComponent<Phy_JointComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Joint", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_JointComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                const char* typeLabels[] = { "Fixed", "Revolute", "Prismatic", "Distance", "Spherical", "D6" };
+                int typeIndex = static_cast<int>(joint->type);
+                if (ImGui::Combo("Type", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                {
+                    joint->type = static_cast<Phy_JointType>(typeIndex);
+                    changed = true;
+                }
+
+                // Target Entity 선택 (ComboBox)
+                ImGui::Text("Target Entity");
+                ImGui::Indent();
+                {
+                    // 현재 타겟 엔티티 찾기
+                    EntityId currentTargetId = Alice::InvalidEntityId;
+                    std::string currentTargetName = joint->targetName;
+                    if (!currentTargetName.empty())
+                    {
+                        GameObject targetGo = world.FindGameObject(currentTargetName);
+                        if (targetGo.IsValid())
+                            currentTargetId = targetGo.id();
+                    }
+
+                    // Preview 텍스트 생성
+                    std::string preview = "None";
+                    if (currentTargetId != Alice::InvalidEntityId)
+                    {
+                        std::string name = world.GetEntityName(currentTargetId);
+                        if (name.empty())
+                            name = "Entity " + std::to_string((uint32_t)currentTargetId);
+                        preview = name;
+                    }
+                    else if (!currentTargetName.empty())
+                    {
+                        preview = currentTargetName + " (not found)";
+                    }
+
+                    if (ImGui::BeginCombo("##JointTarget", preview.c_str()))
+                    {
+                        // None 옵션
+                        if (ImGui::Selectable("None", currentTargetId == Alice::InvalidEntityId))
+                        {
+                            joint->targetName.clear();
+                            changed = true;
+                        }
+                        if (currentTargetId == Alice::InvalidEntityId)
+                            ImGui::SetItemDefaultFocus();
+
+                        // 모든 엔티티 나열
+                        auto transforms = world.GetComponents<TransformComponent>();
+                        for (const auto& [entityId, transform] : transforms)
+                        {
+                            std::string name = world.GetEntityName(entityId);
+                            if (name.empty())
+                                name = "Entity " + std::to_string((uint32_t)entityId);
+
+                            bool isSelected = (currentTargetId == entityId);
+                            if (ImGui::Selectable(name.c_str(), isSelected))
+                            {
+                                joint->targetName = name;
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+
+                ImGui::Separator();
+                ImGui::Text("Common");
+                changed |= ImGui::Checkbox("Collide Connected", &joint->collideConnected);
+                changed |= ImGui::DragFloat("Break Force", &joint->breakForce, 1.0f, 0.0f);
+                changed |= ImGui::DragFloat("Break Torque", &joint->breakTorque, 1.0f, 0.0f);
+
+                auto drawFrame = [&](const char* label, Phy_JointFrame& frame) -> bool
+                {
+                    bool frameChanged = false;
+                    if (ImGui::TreeNode(label))
+                    {
+                        frameChanged |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
+                        frameChanged |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    return frameChanged;
+                };
+
+                changed |= drawFrame("Frame A", joint->frameA);
+                changed |= drawFrame("Frame B", joint->frameB);
+
+                ImGui::Separator();
+                switch (joint->type)
+                {
+                case Phy_JointType::Fixed:
+                    ImGui::Text("Fixed Joint: no extra settings");
+                    break;
+                case Phy_JointType::Revolute:
+                {
+                    if (ImGui::TreeNode("Revolute Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->revolute.enableLimit);
+                        changed |= ImGui::DragFloat("Lower Limit", &joint->revolute.lowerLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Limit", &joint->revolute.upperLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->revolute.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->revolute.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->revolute.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->revolute.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    if (ImGui::TreeNode("Revolute Drive"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Drive", &joint->revolute.enableDrive);
+                        changed |= ImGui::DragFloat("Drive Velocity", &joint->revolute.driveVelocity, 0.01f);
+                        changed |= ImGui::DragFloat("Force Limit", &joint->revolute.driveForceLimit, 1.0f, 0.0f);
+                        changed |= ImGui::Checkbox("Free Spin", &joint->revolute.driveFreeSpin);
+                        changed |= ImGui::Checkbox("Drive Limits Are Forces", &joint->revolute.driveLimitsAreForces);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Prismatic:
+                {
+                    if (ImGui::TreeNode("Prismatic Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->prismatic.enableLimit);
+                        changed |= ImGui::DragFloat("Lower Limit", &joint->prismatic.lowerLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Limit", &joint->prismatic.upperLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->prismatic.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->prismatic.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->prismatic.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->prismatic.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Distance:
+                {
+                    if (ImGui::TreeNode("Distance"))
+                    {
+                        changed |= ImGui::DragFloat("Min Distance", &joint->distance.minDistance, 0.01f);
+                        changed |= ImGui::DragFloat("Max Distance", &joint->distance.maxDistance, 0.01f);
+                        changed |= ImGui::DragFloat("Tolerance", &joint->distance.tolerance, 0.01f);
+                        changed |= ImGui::Checkbox("Enable Min", &joint->distance.enableMinDistance);
+                        changed |= ImGui::Checkbox("Enable Max", &joint->distance.enableMaxDistance);
+                        changed |= ImGui::Checkbox("Enable Spring", &joint->distance.enableSpring);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->distance.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->distance.damping, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Spherical:
+                {
+                    if (ImGui::TreeNode("Spherical Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->spherical.enableLimit);
+                        changed |= ImGui::DragFloat("Y Limit Angle", &joint->spherical.yLimitAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Z Limit Angle", &joint->spherical.zLimitAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->spherical.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->spherical.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->spherical.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->spherical.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::D6:
+                {
+                    const char* motionLabels[] = { "Locked", "Limited", "Free" };
+                    auto drawMotion = [&](const char* label, Phy_D6Motion& m)
+                    {
+                        int idx = static_cast<int>(m);
+                        if (ImGui::Combo(label, &idx, motionLabels, IM_ARRAYSIZE(motionLabels)))
+                        {
+                            m = static_cast<Phy_D6Motion>(idx);
+                            changed = true;
+                        }
+                    };
+
+                    if (ImGui::TreeNode("Motions"))
+                    {
+                        drawMotion("Motion X", joint->d6.motionX);
+                        drawMotion("Motion Y", joint->d6.motionY);
+                        drawMotion("Motion Z", joint->d6.motionZ);
+                        drawMotion("Motion Twist", joint->d6.motionTwist);
+                        drawMotion("Motion Swing1", joint->d6.motionSwing1);
+                        drawMotion("Motion Swing2", joint->d6.motionSwing2);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Linear Limits"))
+                    {
+                        ImGui::Text("X");
+                        changed |= ImGui::DragFloat("Lower X", &joint->d6.linearLimitX.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper X", &joint->d6.linearLimitX.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness X", &joint->d6.linearLimitX.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping X", &joint->d6.linearLimitX.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution X", &joint->d6.linearLimitX.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold X", &joint->d6.linearLimitX.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Y");
+                        changed |= ImGui::DragFloat("Lower Y", &joint->d6.linearLimitY.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Y", &joint->d6.linearLimitY.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Y", &joint->d6.linearLimitY.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Y", &joint->d6.linearLimitY.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Y", &joint->d6.linearLimitY.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Y", &joint->d6.linearLimitY.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Z");
+                        changed |= ImGui::DragFloat("Lower Z", &joint->d6.linearLimitZ.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Z", &joint->d6.linearLimitZ.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Z", &joint->d6.linearLimitZ.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Z", &joint->d6.linearLimitZ.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Z", &joint->d6.linearLimitZ.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Z", &joint->d6.linearLimitZ.bounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Angular Limits"))
+                    {
+                        ImGui::Text("Twist");
+                        changed |= ImGui::DragFloat("Lower Twist", &joint->d6.twistLimit.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Twist", &joint->d6.twistLimit.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Twist", &joint->d6.twistLimit.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Twist", &joint->d6.twistLimit.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Twist", &joint->d6.twistLimit.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Twist", &joint->d6.twistLimit.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Swing");
+                        changed |= ImGui::DragFloat("Swing Y", &joint->d6.swingLimit.yAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Swing Z", &joint->d6.swingLimit.zAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Swing", &joint->d6.swingLimit.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Swing", &joint->d6.swingLimit.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Swing", &joint->d6.swingLimit.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Swing", &joint->d6.swingLimit.bounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Drives"))
+                    {
+                        changed |= ImGui::Checkbox("Drive Limits Are Forces", &joint->d6.driveLimitsAreForces);
+
+                        auto drawDrive = [&](const char* label, Phy_D6JointDriveSettings& d)
+                        {
+                            if (ImGui::TreeNode(label))
+                            {
+                                changed |= ImGui::DragFloat("Stiffness", &d.stiffness, 0.01f);
+                                changed |= ImGui::DragFloat("Damping", &d.damping, 0.01f);
+                                changed |= ImGui::DragFloat("Force Limit", &d.forceLimit, 1.0f, 0.0f);
+                                changed |= ImGui::Checkbox("Acceleration", &d.isAcceleration);
+                                ImGui::TreePop();
+                            }
+                        };
+
+                        drawDrive("Drive X", joint->d6.driveX);
+                        drawDrive("Drive Y", joint->d6.driveY);
+                        drawDrive("Drive Z", joint->d6.driveZ);
+                        drawDrive("Drive Swing", joint->d6.driveSwing);
+                        drawDrive("Drive Twist", joint->d6.driveTwist);
+                        drawDrive("Drive Slerp", joint->d6.driveSlerp);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Drive Target"))
+                    {
+                        changed |= drawFrame("Drive Pose", joint->d6.drivePose);
+                        changed |= ImGui::DragFloat3("Drive Linear Vel", &joint->d6.driveLinearVelocity.x, 0.01f);
+                        changed |= ImGui::DragFloat3("Drive Angular Vel", &joint->d6.driveAngularVelocity.x, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                }
+
                 if (changed) g_SceneDirty = true;
             }
         }

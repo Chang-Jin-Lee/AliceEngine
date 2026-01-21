@@ -3,14 +3,22 @@
 #include "IPhysicsWorld.h"
 #include "Components/Phy_RigidBodyComponent.h"
 #include "Components/Phy_ColliderComponent.h"
+#include "Components/Phy_MeshColliderComponent.h"
 #include "Components/Phy_TerrainHeightFieldComponent.h"
 #include "Components/Phy_CCTComponent.h"
 #include "Components/Phy_SettingsComponent.h"
+#include "Components/Phy_JointComponent.h"
 #include <Core/World.h>
 #include <DirectXMath.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <array>
+#include <string>
+#include <limits>
+#include <cmath>
+
+namespace Alice { class SkinnedMeshRegistry; }
 
 // PhysicsSystem: ECS 컴포넌트와 PhysX를 연결하는 브릿지
 // - 컴포넌트 추가/제거 시 물리 액터 자동 생성/삭제
@@ -39,8 +47,19 @@ public:
     // Physics → Game 동기화 (외부에서 호출 가능)
     void SyncPhysicsToGame(const ActiveTransform& transform);
 
+    // MeshCollider용 스키닝 메시 레지스트리
+    void SetSkinnedMeshRegistry(class Alice::SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
+
     // 현재 추적 중인 엔티티인지 확인 (씬 전환 중 stale userData 방지)
     bool IsTrackedEntity(Alice::EntityId id) const noexcept;
+
+    // 타입 안전 핸들 검증 및 접근
+    // 컴포넌트의 void* 핸들을 안전하게 IPhysicsActor*로 변환
+    // worldEpoch 검증 + IsValid() 체크를 강제함
+    IPhysicsActor* ValidateAndGetActor(void* handle, Alice::EntityId entityId) const noexcept;
+    IRigidBody* ValidateAndGetRigidBody(void* handle, Alice::EntityId entityId) const noexcept;
+    IPhysicsJoint* ValidateAndGetJoint(void* handle, Alice::EntityId entityId) const noexcept;
+    ICharacterController* ValidateAndGetController(void* handle, Alice::EntityId entityId) const noexcept;
 
     // 유틸리티: Quat → Euler 변환
     static DirectX::XMFLOAT3 ToEulerRadians(const Quat& q);
@@ -48,13 +67,14 @@ public:
     // 레이어 마스크 유틸리티
     static constexpr uint32_t kMaxLayers = MAX_PHYSICS_LAYERS;
     using LayerMaskArray = std::array<uint32_t, kMaxLayers>;
-    
+
     static constexpr uint32_t AllLayersMask() noexcept
-    {
-        if constexpr (kMaxLayers >= 32) return 0xFFFFFFFFu;
-        else return (1u << kMaxLayers) - 1u;
-    }
-    
+	{
+		constexpr uint32_t W = std::numeric_limits<uint32_t>::digits; // 보통 32
+		constexpr uint32_t n = (kMaxLayers > W ? W : kMaxLayers);      // 0..W로 클램프
+		return static_cast<uint32_t>((1ull << n) - 1ull);
+	}
+
     static LayerMaskArray MakeAllMaskArray() noexcept;
 
 private:
@@ -76,7 +96,9 @@ private:
 
 private:
     Alice::World& m_world;
-    IPhysicsWorld* m_physicsWorld = nullptr;
+    // shared_ptr로 보관하여 수명 안전성 확보 (씬 전환 시 old world가 먼저 파괴되는 것을 방지)
+    std::shared_ptr<IPhysicsWorld> m_physicsWorldShared;
+    IPhysicsWorld* m_physicsWorld = nullptr; // m_physicsWorldShared.get()과 동기화
 
     struct ActorHandle
     {
@@ -144,6 +166,28 @@ private:
         DirectX::XMFLOAT3 scale{}; // Transform scale 포함
     };
     std::unordered_map<Alice::EntityId, ColliderState> m_lastColliders;
+
+    // MeshCollider 파라미터 변경 감지용
+    struct MeshColliderState
+    {
+        MeshColliderType type{};
+        std::string meshAssetPath;
+        float staticFriction{};
+        float dynamicFriction{};
+        float restitution{};
+        uint32_t layerBits{};
+        uint32_t collideMask{};
+        uint32_t queryMask{};
+        uint32_t ignoreLayers{};
+        bool isTrigger{};
+        bool flipNormals{};
+        bool doubleSidedQueries{};
+        bool validate{};
+        bool shiftVertices{};
+        uint32_t vertexLimit{};
+        DirectX::XMFLOAT3 scale{};
+    };
+    std::unordered_map<Alice::EntityId, MeshColliderState> m_lastMeshColliders;
 
     // RigidBody 파라미터 변경 감지용
     struct RigidBodyState
@@ -257,18 +301,22 @@ private:
 
         bool NeedsRebuild(const CCTState& prev) const noexcept
         {
-            return radius != prev.radius ||
-                   halfHeight != prev.halfHeight ||
-                   stepOffset != prev.stepOffset ||
-                   contactOffset != prev.contactOffset ||
-                   slopeLimitRadians != prev.slopeLimitRadians ||
+            // Float 비교를 위한 epsilon (PhysicsSystem.cpp의 kFloatEpsilon과 동일)
+            constexpr float kEpsilon = 1e-5f;
+            auto FloatEqual = [](float a, float b) { return std::abs(a - b) < kEpsilon; };
+            
+            return !FloatEqual(radius, prev.radius) ||
+                   !FloatEqual(halfHeight, prev.halfHeight) ||
+                   !FloatEqual(stepOffset, prev.stepOffset) ||
+                   !FloatEqual(contactOffset, prev.contactOffset) ||
+                   !FloatEqual(slopeLimitRadians, prev.slopeLimitRadians) ||
                    nonWalkableMode != prev.nonWalkableMode ||
                    climbingMode != prev.climbingMode ||
-                   density != prev.density ||
+                   !FloatEqual(density, prev.density) ||
                    enableQueries != prev.enableQueries ||
-                   scale.x != prev.scale.x ||
-                   scale.y != prev.scale.y ||
-                   scale.z != prev.scale.z;
+                   !FloatEqual(scale.x, prev.scale.x) ||
+                   !FloatEqual(scale.y, prev.scale.y) ||
+                   !FloatEqual(scale.z, prev.scale.z);
         }
 
         bool NeedsMaskUpdate(const CCTState& prev) const noexcept
@@ -307,6 +355,18 @@ private:
 
     // Collider/Scale 변경 시 Shape 재구성
     void RebuildShapes(Alice::EntityId entityId);
+    void RebuildMeshShapes(Alice::EntityId entityId);
+
+    // Joint 관리
+    struct JointState
+    {
+        Phy_JointComponent snapshot{};
+        Alice::EntityId targetId = Alice::InvalidEntityId;
+        std::string targetName; // 캐싱: targetName이 같으면 재탐색 생략
+    };
+    std::unordered_map<Alice::EntityId, std::unique_ptr<IPhysicsJoint>> m_entityToJoint;
+    std::unordered_map<Alice::EntityId, JointState> m_lastJoints;
+    void DestroyJoint(Alice::EntityId entityId);
 
     // 이벤트 콜백
     EventCallback m_eventCallback = nullptr;
@@ -314,4 +374,41 @@ private:
 
     // 전역 필터 매트릭스 변경 감지용
     uint32_t m_lastFilterRevision = 0;
+
+    // Ground Plane 상태
+    struct GroundPlaneState
+    {
+        bool enabled{};
+        float staticFriction{};
+        float dynamicFriction{};
+        float restitution{};
+        uint32_t layerBits{};
+        uint32_t collideMask{};
+        uint32_t queryMask{};
+        uint32_t ignoreLayers{};
+        bool isTrigger{};
+    };
+    std::unique_ptr<IPhysicsActor> m_groundPlaneActor;
+    GroundPlaneState m_lastGroundPlane{};
+
+    // Mesh asset access
+    class Alice::SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
+
+    // 성능 최적화: 매 프레임 재사용할 임시 컨테이너들
+    mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithRigidBody;
+    mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithMeshCollider;
+    mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithJoint;
+
+    // 런타임 마스크 캐시 (레이어 매트릭스 반영 결과)
+    // 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고,
+    // 실제 적용되는 필터는 이 캐시에서 관리
+    struct RuntimeMasks
+    {
+        uint32_t collideMask = 0xFFFFFFFFu;
+        uint32_t queryMask = 0xFFFFFFFFu;
+    };
+    std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeColliderMasks;
+    std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeMeshColliderMasks;
+    std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeTerrainMasks;
+    std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeCCTMasks;
 };
