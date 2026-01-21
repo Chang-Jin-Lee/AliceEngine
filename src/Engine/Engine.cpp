@@ -37,7 +37,7 @@
 #include "Editor/ViewportPicker.h"
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
-#include "Game/SkinnedAnimationSystem.h"
+#include "Core/AdvancedAnimSystem.h"
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 #include "PhysX/PhysicsSystem.h" // 물리 시스템
@@ -54,6 +54,8 @@
 #include "Game/FbxAsset.h"
 #include <dxgi1_3.h>
 #include <unordered_set>
+
+#include "3DModel/FbxModel.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -136,7 +138,7 @@ namespace Alice
 		// Skinned FBX 메시 렌더링용 레지스트리/시스템
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
-		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		AdvancedAnimSystem  m_advancedAnimSystem{ m_skinnedMeshRegistry };
 		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
 	};
 	namespace
@@ -824,6 +826,8 @@ namespace Alice
 
 			EntityId entityA = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(e.userDataA));
 			EntityId entityB = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(e.userDataB));
+			//(void)entityA;
+			//(void)entityB;
 
 			// 이벤트 타입에 따른 처리
 			switch (e.type)
@@ -1012,7 +1016,7 @@ namespace Alice
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
 		// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
-		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 		
 		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
 		{
