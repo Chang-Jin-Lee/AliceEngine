@@ -67,7 +67,13 @@ namespace Alice
             LayerBlendDesc upper;
             AdditiveDesc additive;
             ProceduralDesc procedural;
+            
+            // 단일 IK -> 다중 IK 리스트
+            std::vector<IKDesc> ikChains;
+            
+            // 기존 코드를 위해 단일 IK 접근 유지
             IKDesc ik;
+            
             AimDesc aim;
         };
 
@@ -509,9 +515,77 @@ namespace Alice
             }
 
             // ---------------------------------------------------------
-            // 5) IK (CCD)
+            // 5) IK (CCD) - 다중 IK 지원
             // ---------------------------------------------------------
-            if (d.ik.enabled && d.ik.tipBone && m_NodeIndexMap && m_NodeIndexMap->count(d.ik.tipBone))
+            // 다중 IK 체인 처리 (발 IK 등)
+            for (const auto& ikDesc : d.ikChains)
+            {
+                if (!ikDesc.enabled || !ikDesc.tipBone || !m_NodeIndexMap || !m_NodeIndexMap->count(ikDesc.tipBone))
+                    continue;
+                    
+                const int tipIdx = m_NodeIndexMap->at(ikDesc.tipBone);
+                if (tipIdx < 0 || (size_t)tipIdx >= nodeCount || ikDesc.chainLen <= 0 || ikDesc.weight <= 0.0f)
+                    continue;
+
+                std::vector<int> chain;
+                int curr = tipIdx;
+                for (int i = 0; i <= ikDesc.chainLen && curr != -1; ++i)
+                {
+                    chain.push_back(curr);
+                    curr = m_NodeParents[(size_t)curr];
+                }
+
+                auto SolveIKOnce = [&]()
+                {
+                    std::vector<XMMATRIX> globals;
+                    ComputeGlobalsFromLocals(localsFinal, globals);
+
+                    XMVECTOR effectorPos = GetTranslation_Col(globals[(size_t)tipIdx]);
+                    for (size_t ci = 1; ci < chain.size(); ++ci)
+                    {
+                        const int jointIdx = chain[ci];
+                        const int pIdx = (jointIdx >= 0) ? m_NodeParents[(size_t)jointIdx] : -1;
+
+                        XMVECTOR jointPos = GetTranslation_Col(globals[(size_t)jointIdx]);
+                        XMVECTOR toEff = XMVector3Normalize(XMVectorSubtract(effectorPos, jointPos));
+                        XMVECTOR toTar = XMVector3Normalize(XMVectorSubtract(ikDesc.targetMS, jointPos));
+
+                        float dot = XMVectorGetX(XMVector3Dot(toEff, toTar));
+                        if (dot > 0.999f)
+                            continue;
+                        dot = std::clamp(dot, -1.0f, 1.0f);
+
+                        XMVECTOR axisWS = XMVector3Cross(toEff, toTar);
+                        axisWS = XMVector3Normalize(axisWS);
+                        float angle = std::acosf(dot) * ikDesc.weight;
+
+                        XMVECTOR axisLS = axisWS;
+                        if (pIdx >= 0 && (size_t)pIdx < nodeCount)
+                        {
+                            XMMATRIX invP = XMMatrixInverse(nullptr, globals[(size_t)pIdx]);
+                            axisLS = XMVector3TransformNormal(axisWS, invP);
+                            axisLS = XMVector3Normalize(axisLS);
+                        }
+
+                        XMVECTOR S, R, T;
+                        if (!DecomposeSRT_Col(localsFinal[(size_t)jointIdx], S, R, T))
+                            continue;
+                        XMVECTOR qDelta = XMQuaternionRotationAxis(axisLS, angle);
+                        R = XMQuaternionMultiply(qDelta, R);
+                        R = XMQuaternionNormalize(R);
+                        localsFinal[(size_t)jointIdx] = ComposeSRT_Col(S, R, T);
+
+                        ComputeGlobalsFromLocals(localsFinal, globals);
+                        effectorPos = GetTranslation_Col(globals[(size_t)tipIdx]);
+                    }
+                };
+
+                for (int iter = 0; iter < 5; ++iter)
+                    SolveIKOnce();
+            }
+            
+            // 기존 단일 IK 처리 (ikChains가 비어있을 때만)
+            if (d.ikChains.empty() && d.ik.enabled && d.ik.tipBone && m_NodeIndexMap && m_NodeIndexMap->count(d.ik.tipBone))
             {
                 const int tipIdx = m_NodeIndexMap->at(d.ik.tipBone);
                 if (tipIdx >= 0 && (size_t)tipIdx < nodeCount && d.ik.chainLen > 0 && d.ik.weight > 0.0f)

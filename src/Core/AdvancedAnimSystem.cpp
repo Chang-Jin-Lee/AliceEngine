@@ -349,11 +349,36 @@ namespace Alice
         d.procedural.seed = animComp.procedural.seed;
         d.procedural.timeSec = animComp.procedural.timeSec;
 
-        d.ik.enabled = animComp.ik.enabled;
-        d.ik.tipBone = animComp.ik.tipBone.empty() ? nullptr : animComp.ik.tipBone.c_str();
-        d.ik.chainLen = animComp.ik.chainLength;
-        d.ik.targetMS = DirectX::XMLoadFloat3(&animComp.ik.targetMS);
-        d.ik.weight = animComp.ik.weight;
+        // 다중 IK 체인 처리
+        d.ikChains.clear();
+        for (const auto& ikChain : animComp.ikChains)
+        {
+            if (!ikChain.enabled || ikChain.tipBone.empty())
+                continue;
+                
+            AdvancedAnimator::IKDesc ikDesc{};
+            ikDesc.enabled = true;
+            ikDesc.tipBone = ikChain.tipBone.c_str();
+            ikDesc.chainLen = ikChain.chainLength;
+            ikDesc.targetMS = DirectX::XMLoadFloat3(&ikChain.targetMS);
+            ikDesc.weight = ikChain.weight;
+            d.ikChains.push_back(ikDesc);
+        }
+        
+        // 기존 단일 IK 처리 (ikChains가 비어있을 때만)
+        if (d.ikChains.empty())
+        {
+            d.ik.enabled = animComp.ik.enabled;
+            d.ik.tipBone = animComp.ik.tipBone.empty() ? nullptr : animComp.ik.tipBone.c_str();
+            d.ik.chainLen = animComp.ik.chainLength;
+            d.ik.targetMS = DirectX::XMLoadFloat3(&animComp.ik.targetMS);
+            d.ik.weight = animComp.ik.weight;
+        }
+        else
+        {
+            // ikChains가 있으면 기존 ik는 비활성화
+            d.ik.enabled = false;
+        }
 
         d.aim.enabled = animComp.aim.enabled;
         d.aim.yawRad = animComp.aim.yawRad;
