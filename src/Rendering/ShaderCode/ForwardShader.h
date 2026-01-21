@@ -19,6 +19,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 struct VSInput
@@ -75,6 +77,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 cbuffer CBBones : register(b2)
@@ -145,8 +149,7 @@ VSOutput main(VSInput input)
 }
 )";
 
-        // PBR Pixel Shader
-        inline static const char* PBRPS = R"(
+        inline static const char* PBRPS_Part1 = R"(
 Texture2D gDiffuseMap  : register(t0);
 Texture2D gNormalMap   : register(t1);
 Texture2D gSpecularMap : register(t2);
@@ -173,6 +176,8 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int3     gPadPerObject;
 };
 
 cbuffer CBLighting : register(b1)
@@ -197,7 +202,7 @@ cbuffer CBLighting : register(b1)
     float4 gMaterialDiffuse;   // rgb: diffuse color
     float4 gMaterialSpecular;  // rgb: specular color, a: shininess
 
-    int    gShadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon
+    int    gShadingMode2;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon, 4: PBR, 5: ToonPBR
     int3   gPad2;
 
     float4x4 gLightViewProj;   // 섀도우 맵 계산용 라이트 뷰-프로젝션
@@ -265,7 +270,9 @@ struct PSInput
     float3 TangentW : TEXCOORD3;
     float3 BitanW   : TEXCOORD4;
 };
+)";
 
+    inline static const char* PBRPS_Part2 = R"(
 float ComputeAttenuation(float dist, float range)
 {
     float r = max(range, 0.001f);
@@ -341,6 +348,14 @@ float3 EvaluatePBRLight(float3 N, float3 V, float3 L, float3 albedo, float metal
     float3 diffuseTerm = kd * albedo / 3.14159f;
 
     return (diffuseTerm + specularTerm) * lightColor * NdotL;
+}
+
+float ToonLevel(float n)
+{
+    if (n > 0.95f) return 1.0f;
+    if (n > 0.5f)  return 0.7f;
+    if (n > 0.2f)  return 0.4f;
+    return 0.1f;
 }
 
 float4 main(PSInput input) : SV_TARGET
@@ -537,9 +552,10 @@ float4 main(PSInput input) : SV_TARGET
         return float4(toonColor, alphaTex);
     }
 
-    // === PBR 경로 (shadingMode == 4) ===
-    if (gShadingMode == 4)
+    // === PBR 경로 (shadingMode == 4, 5) ===
+    if (gShadingMode == 4 || gShadingMode == 5)
     {
+        const bool toonPbr = (gShadingMode == 5);
         float roughness = saturate(gRoughness);
         float metalness = saturate(gMetalness);
 
@@ -549,7 +565,16 @@ float4 main(PSInput input) : SV_TARGET
         float3 Lo = 0.0f;
 
         float3 lightColor = gKeyLightColor * gKeyLightIntensity;
-        Lo += EvaluatePBRLight(Np, Vp, Lp, albedo, metalness, roughness, lightColor) * shadow;
+        {
+            float NdotL = max(dot(Np, Lp), 0.0f);
+            float3 lit = EvaluatePBRLight(Np, Vp, Lp, albedo, metalness, roughness, lightColor);
+            if (toonPbr && NdotL > 0.0f)
+            {
+                float level = ToonLevel(NdotL);
+                lit *= level / max(NdotL, 1e-4f);
+            }
+            Lo += lit * shadow;
+        }
 
         [loop] for (int i = 0; i < g_PointLightCount; ++i)
         {
@@ -559,7 +584,14 @@ float4 main(PSInput input) : SV_TARGET
             float3 L = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
             float atten = ComputeAttenuation(dist, pl.range);
             float3 lc = pl.color * pl.intensity * atten;
-            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            float NdotL = max(dot(Np, L), 0.0f);
+            float3 lit = EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            if (toonPbr && NdotL > 0.0f)
+            {
+                float level = ToonLevel(NdotL);
+                lit *= level / max(NdotL, 1e-4f);
+            }
+            Lo += lit;
         }
 
         [loop] for (int i = 0; i < g_SpotLightCount; ++i)
@@ -571,7 +603,14 @@ float4 main(PSInput input) : SV_TARGET
             float atten = ComputeAttenuation(dist, sl.range);
             float spot = ComputeSpotFactor(L, sl.direction, sl.innerCos, sl.outerCos);
             float3 lc = sl.color * sl.intensity * atten * spot;
-            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            float NdotL = max(dot(Np, L), 0.0f);
+            float3 lit = EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            if (toonPbr && NdotL > 0.0f)
+            {
+                float level = ToonLevel(NdotL);
+                lit *= level / max(NdotL, 1e-4f);
+            }
+            Lo += lit;
         }
 
         [loop] for (int i = 0; i < g_RectLightCount; ++i)
@@ -584,7 +623,14 @@ float4 main(PSInput input) : SV_TARGET
             float facing = ComputeRectFactor(L, rl.direction);
             float areaScale = max(rl.width * rl.height, 0.01f);
             float3 lc = rl.color * rl.intensity * atten * facing * areaScale;
-            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            float NdotL = max(dot(Np, L), 0.0f);
+            float3 lit = EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            if (toonPbr && NdotL > 0.0f)
+            {
+                float level = ToonLevel(NdotL);
+                lit *= level / max(NdotL, 1e-4f);
+            }
+            Lo += lit;
         }
 
         float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metalness);

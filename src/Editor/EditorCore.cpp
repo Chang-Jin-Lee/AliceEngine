@@ -30,6 +30,9 @@
 // ImGui
 #include "imgui.h"
 #include "imgui_internal.h"
+
+#include <algorithm>
+#include <iterator>
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
@@ -68,8 +71,8 @@ namespace Alice
 
         inline bool MaterialInspectorFilter(const std::string& propName)
         {
-            // assetPath와 albedoTexturePath는 특별 UI 처리하므로 제외
-            return propName != "assetPath" && propName != "albedoTexturePath";
+            // assetPath/albedoTexturePath/shadingMode는 특별 UI 처리하므로 제외
+            return propName != "assetPath" && propName != "albedoTexturePath" && propName != "shadingMode";
         }
 
         struct ScopedHandle
@@ -1135,7 +1138,7 @@ namespace Alice
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = result.materialAssetPaths.front();
-                                MaterialFile::Load(mat.assetPath, mat);
+                                MaterialFile::Load(mat.assetPath, mat, m_resources);
                             }
 
                             selectedEntity = e;
@@ -2081,6 +2084,8 @@ namespace Alice
             if (ImGui::RadioButton("Toon", mode == 3))      mode = 3;
             ImGui::SameLine();
             if (ImGui::RadioButton("PBR", mode == 4))       mode = 4;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("ToonPBR", mode == 5))   mode = 5;
             shadingMode = mode;
 
             Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
@@ -2091,7 +2096,7 @@ namespace Alice
 			auto& lighting = deferred.GetLightingParameters();
             
             // PBR 모드일 때 PBR 파라미터 표시
-            if (mode == 4)
+            if (mode == 4 || mode == 5)
             {
                 ImGui::Separator();
                 ImGui::Text("PBR Material Parameters");
@@ -2887,6 +2892,23 @@ namespace Alice
 
             bool changed = false;
             changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter);
+
+            const char* shadingItems[] = {
+                "Global",
+                "Lambert",
+                "Phong",
+                "Blinn-Phong",
+                "Toon",
+                "PBR",
+                "ToonPBR"
+            };
+            int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
+            shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
+            if (ImGui::Combo("Shading", &shadingIndex, shadingItems, (int)std::size(shadingItems)))
+            {
+                mat->shadingMode = shadingIndex - 1;
+                changed = true;
+            }
 
             ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty()
                 ? "None"
@@ -4614,7 +4636,7 @@ namespace Alice
                     g_MaterialEditorPath = path;
                     g_MaterialEditorData = {};
                     // 파일에서 값을 불러옵니다. 실패하면 기본 값으로 남겨둡니다.
-                    MaterialFile::Load(path, g_MaterialEditorData);
+                    MaterialFile::Load(path, g_MaterialEditorData, m_resources);
                     g_MaterialEditorData.assetPath = path.string();
                     g_MaterialEditorOpen = true;
                 }
@@ -4690,7 +4712,7 @@ namespace Alice
 
                         if (mat)
                         {
-                            MaterialFile::Load(path, *mat);
+                            MaterialFile::Load(path, *mat, m_resources);
                             mat->assetPath = path.string();
                             g_SceneDirty   = true;
                         }
@@ -4775,7 +4797,7 @@ namespace Alice
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = asset.materialAssetPaths.front();
-                                MaterialFile::Load(mat.assetPath, mat);
+                                MaterialFile::Load(mat.assetPath, mat, m_resources);
                             }
 
                             selectedEntity = e;
