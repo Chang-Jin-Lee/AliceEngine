@@ -1,14 +1,16 @@
 #pragma once
 
 #include "IPhysicsWorld.h"
-#include "Components/RigidBodyComponent.h"
-#include "Components/ColliderComponent.h"
-#include "Components/TerrainHeightFieldComponent.h"
-#include "Components/CharacterControllerComponent.h"
+#include "Components/Phy_RigidBodyComponent.h"
+#include "Components/Phy_ColliderComponent.h"
+#include "Components/Phy_TerrainHeightFieldComponent.h"
+#include "Components/Phy_CCTComponent.h"
+#include "Components/Phy_SettingsComponent.h"
 #include <Core/World.h>
 #include <DirectXMath.h>
 #include <unordered_map>
 #include <memory>
+#include <array>
 
 // PhysicsSystem: ECS 컴포넌트와 PhysX를 연결하는 브릿지
 // - 컴포넌트 추가/제거 시 물리 액터 자동 생성/삭제
@@ -26,6 +28,9 @@ public:
 
     // 물리 월드 설정 (씬 전환 시 호출)
     void SetPhysicsWorld(IPhysicsWorld* physicsWorld);
+    
+    // 현재 물리 월드 가져오기
+    IPhysicsWorld* GetPhysicsWorld() const { return m_physicsWorld; }
 
     // 이벤트 콜백 타입
     using EventCallback = void(*)(const PhysicsEvent& event, void* userData);
@@ -34,15 +39,30 @@ public:
     // Physics → Game 동기화 (외부에서 호출 가능)
     void SyncPhysicsToGame(const ActiveTransform& transform);
 
+    // 현재 추적 중인 엔티티인지 확인 (씬 전환 중 stale userData 방지)
+    bool IsTrackedEntity(Alice::EntityId id) const noexcept;
+
     // 유틸리티: Quat → Euler 변환
     static DirectX::XMFLOAT3 ToEulerRadians(const Quat& q);
+
+    // 레이어 마스크 유틸리티
+    static constexpr uint32_t kMaxLayers = MAX_PHYSICS_LAYERS;
+    using LayerMaskArray = std::array<uint32_t, kMaxLayers>;
+    
+    static constexpr uint32_t AllLayersMask() noexcept
+    {
+        if constexpr (kMaxLayers >= 32) return 0xFFFFFFFFu;
+        else return (1u << kMaxLayers) - 1u;
+    }
+    
+    static LayerMaskArray MakeAllMaskArray() noexcept;
 
 private:
     // 컴포넌트 → 물리 액터 생성
     void CreatePhysicsActor(Alice::EntityId entityId);
     void DestroyPhysicsActor(Alice::EntityId entityId);
     
-    // HeightField 전용 생성 (TerrainHeightFieldComponent)
+    // HeightField 전용 생성 (Phy_TerrainHeightFieldComponent)
     void CreateTerrainHeightField(Alice::EntityId entityId);
 
     // Game → Physics 동기화
@@ -58,23 +78,19 @@ private:
     Alice::World& m_world;
     IPhysicsWorld* m_physicsWorld = nullptr;
 
-    // EntityId → 물리 액터 매핑
-    // unique_ptr을 소유하여 래퍼 객체의 생명주기를 안전하게 관리
     struct ActorHandle
     {
-        std::unique_ptr<IPhysicsActor> owned;  // 소유권 유지! (래퍼 객체 delete 보장)
-        IRigidBody* rigid = nullptr;           // owned.get()의 non-owning 캐시 (편의용)
+        std::unique_ptr<IPhysicsActor> owned;
+        IRigidBody* rigid = nullptr;
         
         ActorHandle() = default;
         
-        // unique_ptr<IPhysicsActor>로부터 생성 (Static Actor용)
         explicit ActorHandle(std::unique_ptr<IPhysicsActor> actor)
             : owned(std::move(actor))
-            , rigid(nullptr)  // Static Actor는 IRigidBody가 아님
+            , rigid(nullptr)
         {
         }
         
-        // unique_ptr<IRigidBody>로부터 생성 (IRigidBody는 IPhysicsActor를 상속)
         explicit ActorHandle(std::unique_ptr<IRigidBody> body)
             : owned(std::move(body))
             , rigid(static_cast<IRigidBody*>(owned.get()))
@@ -84,14 +100,15 @@ private:
         bool IsValid() const { return owned && owned->IsValid(); }
         
         IPhysicsActor* GetActor() const { return owned.get(); }
+        
         IRigidBody* GetRigidBody() const { return rigid; }
         
         void Destroy()
         {
             if (owned)
             {
-                owned->Destroy();  // native PxActor 정리 예약 (deferred-safe)
-                owned.reset();     // 래퍼 객체 delete (누수 방지!)
+                owned->Destroy();
+                owned.reset();
             }
             rigid = nullptr;
         }
@@ -108,7 +125,7 @@ private:
     std::unordered_map<Alice::EntityId, TransformState> m_lastTransforms;
 
     // 이전 프레임의 Collider 상태 (변경 감지 및 Shape 재구성용)
-    struct ColliderState
+    struct ColliderState    
     {
         ColliderType type{};
         DirectX::XMFLOAT3 halfExtents{};
@@ -122,6 +139,7 @@ private:
         uint32_t layerBits{};
         uint32_t collideMask{};
         uint32_t queryMask{};
+        uint32_t ignoreLayers{}; // ignoreLayers 변경 감지 추가
         bool isTrigger{};
         DirectX::XMFLOAT3 scale{}; // Transform scale 포함
     };
@@ -152,22 +170,117 @@ private:
     // Terrain 파라미터 변경 감지용
     struct TerrainState
     {
-        uint32_t numRows{};
-        uint32_t numCols{};
-        float rowScale{};
-        float colScale{};
-        float heightScale{};
-        bool centerPivot{};
-        bool doubleSidedQueries{};
-        float staticFriction{};
-        float dynamicFriction{};
-        float restitution{};
+        uint32_t layerBits{};
+        uint32_t ignoreLayers{};
+        uint32_t collideMask{};
+        uint32_t queryMask{};
+        
+        // 지형 형상이 바뀌었는지 감지용
+        uint64_t lastGeomKey = 0;
+
+        TerrainState() = default;
+
+        TerrainState(uint32_t inLayerBits,
+                     uint32_t inIgnoreLayers,
+                     uint32_t inCollideMask,
+                     uint32_t inQueryMask,
+                     uint64_t inGeomKey) noexcept
+            : layerBits(inLayerBits)
+            , ignoreLayers(inIgnoreLayers)
+            , collideMask(inCollideMask)
+            , queryMask(inQueryMask)
+            , lastGeomKey(inGeomKey)
+        {}
+
+        bool GeometryChanged(const TerrainState& prev) const noexcept
+        {
+            return lastGeomKey != prev.lastGeomKey;
+        }
+
+        bool MasksChanged(const TerrainState& prev) const noexcept
+        {
+            return layerBits != prev.layerBits ||
+                   ignoreLayers != prev.ignoreLayers ||
+                   collideMask != prev.collideMask ||
+                   queryMask != prev.queryMask;
+        }
+    };
+    std::unordered_map<Alice::EntityId, TerrainState> m_lastTerrains;
+
+    // Character Controller 상태 변경 감지용
+    struct CCTState
+    {
+        float radius{};
+        float halfHeight{};
+        float stepOffset{};
+        float contactOffset{};
+        float slopeLimitRadians{};
+        CCTNonWalkableMode nonWalkableMode{};
+        CCTCapsuleClimbingMode climbingMode{};
+        float density{};
+        bool enableQueries{};
         uint32_t layerBits{};
         uint32_t collideMask{};
         uint32_t queryMask{};
-        DirectX::XMFLOAT3 scale{};
+        uint32_t ignoreLayers{}; // ignoreLayers 변경 감지 추가
+        bool hitTriggers{};
+        DirectX::XMFLOAT3 scale{}; // Transform scale 포함
+        // 참고: applyGravity, gravity, jumpSpeed는 매 프레임 직접 사용되므로 변경 감지 불필요
+
+        CCTState() = default;
+
+        // TransformComponent 의존 없애려고 scale만 받음 (헤더에서 TransformComponent 몰라도 됨)
+        explicit CCTState(const Phy_CCTComponent& ccc,
+                         const DirectX::XMFLOAT3& inScale) noexcept
+            : radius(ccc.radius)
+            , halfHeight(ccc.halfHeight)
+            , stepOffset(ccc.stepOffset)
+            , contactOffset(ccc.contactOffset)
+            , slopeLimitRadians(ccc.slopeLimitRadians)
+            , nonWalkableMode(ccc.nonWalkableMode)
+            , climbingMode(ccc.climbingMode)
+            , density(ccc.density)
+            , enableQueries(ccc.enableQueries)
+            , layerBits(ccc.layerBits)
+            , collideMask(ccc.collideMask)
+            , queryMask(ccc.queryMask)
+            , ignoreLayers(ccc.ignoreLayers)
+            , hitTriggers(ccc.hitTriggers)
+            , scale(inScale)
+        {}
+
+        void OverrideMasks(uint32_t inCollide, uint32_t inQuery) noexcept
+        {
+            collideMask = inCollide;
+            queryMask   = inQuery;
+        }
+
+        bool NeedsRebuild(const CCTState& prev) const noexcept
+        {
+            return radius != prev.radius ||
+                   halfHeight != prev.halfHeight ||
+                   stepOffset != prev.stepOffset ||
+                   contactOffset != prev.contactOffset ||
+                   slopeLimitRadians != prev.slopeLimitRadians ||
+                   nonWalkableMode != prev.nonWalkableMode ||
+                   climbingMode != prev.climbingMode ||
+                   density != prev.density ||
+                   enableQueries != prev.enableQueries ||
+                   scale.x != prev.scale.x ||
+                   scale.y != prev.scale.y ||
+                   scale.z != prev.scale.z;
+        }
+
+        bool NeedsMaskUpdate(const CCTState& prev) const noexcept
+        {
+            return layerBits != prev.layerBits ||
+                   collideMask != prev.collideMask ||
+                   queryMask != prev.queryMask ||
+                   ignoreLayers != prev.ignoreLayers ||
+                   hitTriggers != prev.hitTriggers;
+        }
     };
-    std::unordered_map<Alice::EntityId, TerrainState> m_lastTerrains;
+    std::unordered_map<Alice::EntityId, CCTState> m_lastCCTs;
 
     // Character Controller 핸들
     struct CCTHandle
@@ -198,4 +311,7 @@ private:
     // 이벤트 콜백
     EventCallback m_eventCallback = nullptr;
     void* m_eventCallbackUserData = nullptr;
+
+    // 전역 필터 매트릭스 변경 감지용
+    uint32_t m_lastFilterRevision = 0;
 };

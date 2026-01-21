@@ -1,6 +1,6 @@
 ﻿#include "PhysicsDebug.h"
-#include "PhysX/Components/ColliderComponent.h"
-#include "PhysX/Components/RigidBodyComponent.h"
+#include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include <Core/World.h>
 #include <Rendering/DebugDrawSystem.h>
 #include <DirectXMath.h>
@@ -204,7 +204,7 @@ namespace Alice
 
         void DrawColliders(World& world, DebugDrawSystem& debugDraw)
         {
-            auto colliders = world.GetComponents<ColliderComponent>();
+            auto colliders = world.GetComponents<Phy_ColliderComponent>();
             for (const auto& [entityId, collider] : colliders)
             {
                 auto* transform = world.GetComponent<TransformComponent>(entityId);

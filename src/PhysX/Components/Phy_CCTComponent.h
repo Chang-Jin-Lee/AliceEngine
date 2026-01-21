@@ -1,9 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include "../IPhysicsWorld.h"
 #include <DirectXMath.h>
 
-struct CharacterControllerComponent
+struct Phy_CCTComponent
 {
     // --- 생성 파라미터 (Capsule 기준) ---
     float radius = 0.35f;
@@ -20,6 +20,7 @@ struct CharacterControllerComponent
     uint32_t layerBits = 1u << 1;
     uint32_t collideMask = 0xFFFFFFFFu; // "장애물"로 취급할 레이어
     uint32_t queryMask = 0xFFFFFFFFu;
+    uint32_t ignoreLayers = 0u; // 이그노어 레이어 비트마스크 (충돌/쿼리 모두 무시)
     bool hitTriggers = false;
 
     // --- 입력(게임플레이가 채움) ---
@@ -31,7 +32,7 @@ struct CharacterControllerComponent
     float verticalVelocity = 0.0f;
 
     bool jumpRequested = false;
-    float jumpSpeed = 5.5f;
+    float jumpSpeed = 20.0f;
 
     bool teleport = false; // true면 이번 틱에 Transform 위치로 강제 이동
 

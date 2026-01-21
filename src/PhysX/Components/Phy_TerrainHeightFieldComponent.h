@@ -6,11 +6,11 @@
 #include <vector>
 
 // Terrain HeightField 컴포넌트
-// HeightField는 지형용 전용 컴포넌트로, ColliderComponent와 분리됨
+// HeightField는 지형용 전용 컴포넌트로, Phy_ColliderComponent와 분리됨
 // - RigidStatic으로만 생성 (움직이지 않는 지형)
 // - Trigger 불가 (PhysX 제약)
 // - Non-kinematic dynamic body에 붙일 수 없음
-struct TerrainHeightFieldComponent
+struct Phy_TerrainHeightFieldComponent
 {
     // HeightField 데이터
     // TODO: 나중에 AssetHandle로 리소스 시스템과 연동 가능
@@ -41,6 +41,7 @@ struct TerrainHeightFieldComponent
     uint32_t layerBits = 1u << 0;
     uint32_t collideMask = 0xFFFFFFFFu;
     uint32_t queryMask = 0xFFFFFFFFu;
+    uint32_t ignoreLayers = 0u; // 이그노어 레이어 비트마스크 (충돌/쿼리 모두 무시)
 
     // 내부 사용: 물리 액터 핸들 (PhysicsSystem이 관리)
     // HeightField는 항상 RigidStatic으로 생성됨

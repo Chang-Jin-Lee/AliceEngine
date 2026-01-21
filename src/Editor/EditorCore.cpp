@@ -28,6 +28,9 @@
 // ImGui
 #include "imgui.h"
 #include "imgui_internal.h"
+
+#include <algorithm>
+#include <iterator>
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
@@ -37,6 +40,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <sstream>
 #include <Core/Prefab.h>
 #include <Core/IScript.h>
 #include <Core/ScriptSystem.h>
@@ -65,8 +69,8 @@ namespace Alice
 
         inline bool MaterialInspectorFilter(const std::string& propName)
         {
-            // assetPath와 albedoTexturePath는 특별 UI 처리하므로 제외
-            return propName != "assetPath" && propName != "albedoTexturePath";
+            // assetPath/albedoTexturePath/shadingMode는 특별 UI 처리하므로 제외
+            return propName != "assetPath" && propName != "albedoTexturePath" && propName != "shadingMode";
         }
 
         struct ScopedHandle
@@ -813,6 +817,8 @@ namespace Alice
         // 다른 씬을 로드하기 위해 대기 중인 경로
         bool                     g_RequestSceneLoad     = false;
         std::filesystem::path    g_NextScenePath;
+        bool                     g_ShowSceneLoadError   = false;
+        std::string              g_SceneLoadErrorMsg;
 
         // 단일 머티리얼 에셋 편집기 상태
         bool                     g_MaterialEditorOpen   = false;
@@ -1125,12 +1131,21 @@ namespace Alice
                             skinned.boneCount    = 1;
 
                             // 첫 번째 머티리얼이 있으면 기본 머티리얼로 할당
+                            // 원래 있는 경우 없는 경우 나눠서 있는 경우는 서브 메테리얼을 만들어야 하는데, 일단은 둘다 생기도록 함.
+                            // TODO : 여기서 서브 메테리얼을 각각 다르게 설정할 수 있게 해야함 
                             if (!result.materialAssetPaths.empty())
                             {
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = result.materialAssetPaths.front();
-                                MaterialFile::Load(mat.assetPath, mat);
+                                MaterialFile::Load(mat.assetPath, mat, m_resources);
+                            }
+                            else
+                            {
+								//DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+								//MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+								//mat.assetPath = "fbx has no material. default material";
+								//MaterialFile::Load(mat.assetPath, mat);
                             }
 
                             selectedEntity = e;
@@ -2065,6 +2080,8 @@ namespace Alice
             if (ImGui::RadioButton("Toon", mode == 3))      mode = 3;
             ImGui::SameLine();
             if (ImGui::RadioButton("PBR", mode == 4))       mode = 4;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("ToonPBR", mode == 5))   mode = 5;
             shadingMode = mode;
 
             Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
@@ -2075,7 +2092,7 @@ namespace Alice
 			auto& lighting = deferred.GetLightingParameters();
             
             // PBR 모드일 때 PBR 파라미터 표시
-            if (mode == 4)
+            if (mode == 4 || mode == 5)
             {
                 ImGui::Separator();
                 ImGui::Text("PBR Material Parameters");
@@ -2328,7 +2345,7 @@ namespace Alice
             ImGui::End();
         }
 
-        // === 씬 변경사항 저장 확인 모달 ===
+		// === 씬 변경사항 저장 확인 모달 ===
         if (g_RequestSceneLoad)
         {
             // 현재 씬이 존재하고 변경사항이 있을 때만 확인 모달을 띄웁니다.
@@ -2356,47 +2373,119 @@ namespace Alice
             }
             g_RequestSceneLoad = false;
         }
+ 
+        
+
+        // === 씬 로드 에러 모달 ===
+        if (g_ShowSceneLoadError)
+        {
+            ImGui::OpenPopup("SceneLoadError");
+            g_ShowSceneLoadError = false;
+        }
+
+        if (ImGui::BeginPopupModal("SceneLoadError", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "씬 로드 실패");
+            ImGui::Separator();
+            
+            // 에러 메시지 표시 (여러 줄 지원)
+            std::istringstream iss(g_SceneLoadErrorMsg);
+            std::string line;
+            while (std::getline(iss, line))
+            {
+                ImGui::TextWrapped("%s", line.c_str());
+            }
+            
+            ImGui::Separator();
+            if (ImGui::Button("확인"))
+            {
+                g_SceneLoadErrorMsg.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
 
         if (ImGui::BeginPopupModal("SaveSceneBeforeLoad", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             Alice::ImGuiText(L"현재 씬의 변경 내용을 저장하시겠습니까?");
             ImGui::Separator();
 
-            if (ImGui::Button("Save"))
-            {
-                SaveScene(world);
-                LoadScene(world);
-                selectedEntity = InvalidEntityId;
-                ImGui::CloseCurrentPopup();
-            }
+			if (ImGui::Button("Save"))
+			{
+				SaveScene(world);
+				// 씬 로드 요청 (안전 지점에서 커밋)
+				if (sceneManager)
+				{
+					const std::filesystem::path loadAbs =
+						(m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+					if (!sceneManager->LoadSceneFileRequest(loadAbs))
+					{
+						// 요청 실패: 에러 로그 및 팝업 표시
+						const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+						ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+						
+						g_SceneLoadErrorMsg = errorMsg;
+						g_ShowSceneLoadError = true;
+						g_RequestSceneLoad = false;
+						ImGui::CloseCurrentPopup();
+						return;
+					}
+					// 성공 시 경로만 저장 (실제 로드는 엔진의 안전 지점에서 CommitPendingSceneChange로 처리됨)
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+				}
+				else
+				{
+					ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
+				}
+				selectedEntity = InvalidEntityId;
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
 
             ImGui::SameLine();
             if (ImGui::Button("Don't Save"))
             {
+                // 씬 로드 요청 (안전 지점에서 커밋)
+                if (sceneManager)
                 {
-                    ALICE_LOG_INFO("[Editor] SceneFile::Load (dont-save): \"%s\"\n",
+                    ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (dont-save): \"%s\"\n",
                         g_NextScenePath.string().c_str());
-                }
-                {
                     const std::filesystem::path loadAbs =
                         (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
-                    SceneFile::Load(world, loadAbs);
-                }
-                EnsureSkinnedMeshesRegistered(world);
-                selectedEntity        = InvalidEntityId;
-                g_CurrentScenePath    = g_NextScenePath;
-                g_HasCurrentScenePath = true;
-                g_SceneDirty          = false;
+                    if (!sceneManager->LoadSceneFileRequest(loadAbs))
+                    {
+                        // 요청 실패: 에러 로그 및 팝업 표시
+                        const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+                        ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+                        
+                        g_SceneLoadErrorMsg = errorMsg;
+                        g_ShowSceneLoadError = true;
+                        g_RequestSceneLoad = false;
+                        return;
+                    }
+					// 성공 시 경로만 저장 (실제 로드는 엔진의 안전 지점에서 CommitPendingSceneChange로 처리됨)
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+				}
+				else
+				{
+					ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
+				}
+				selectedEntity = InvalidEntityId;
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
 
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
-            {
-                // 아무것도 하지 않고 씬 로드를 취소합니다.
-                ImGui::CloseCurrentPopup();
-            }
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel"))
+			{
+				// 아무것도 하지 않고 씬 로드를 취소합니다.
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
 
             ImGui::EndPopup();
         }
@@ -2529,6 +2618,20 @@ namespace Alice
                         added = true;
                     } else if (typeName == "TrailEffectComponent") {
                         world.AddComponent<TrailEffectComponent>(_selectedEntity);
+                    } else if (typeName == "Phy_RigidBodyComponent") {
+                        world.AddComponent<Phy_RigidBodyComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_ColliderComponent") {
+                        world.AddComponent<Phy_ColliderComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_CCTComponent") {
+                        world.AddComponent<Phy_CCTComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_TerrainHeightFieldComponent") {
+                        world.AddComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_SettingsComponent") {
+                        world.AddComponent<Phy_SettingsComponent>(_selectedEntity);
                         added = true;
                     }
                     
@@ -2617,6 +2720,18 @@ namespace Alice
                 DrawEngineComponent("TrailEffectComponent",
                     world.GetComponent<TrailEffectComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<TrailEffectComponent>(_selectedEntity); });
+            } else if (typeName == "Phy_RigidBodyComponent") {
+                DrawEngineComponent("Phy_RigidBodyComponent",
+                    world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
+            } else if (typeName == "Phy_ColliderComponent") {
+                DrawInspectorCollider(world, _selectedEntity);
+            } else if (typeName == "Phy_CCTComponent") {
+                DrawInspectorCharacterController(world, _selectedEntity);
+            } else if (typeName == "Phy_TerrainHeightFieldComponent") {
+                DrawInspectorTerrainHeightField(world, _selectedEntity);
+            } else if (typeName == "Phy_SettingsComponent") {
+                DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }
@@ -2763,6 +2878,23 @@ namespace Alice
             bool changed = false;
             changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter);
 
+            const char* shadingItems[] = {
+                "Global",
+                "Lambert",
+                "Phong",
+                "Blinn-Phong",
+                "Toon",
+                "PBR",
+                "ToonPBR"
+            };
+            int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
+            shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
+            if (ImGui::Combo("Shading", &shadingIndex, shadingItems, (int)std::size(shadingItems)))
+            {
+                mat->shadingMode = shadingIndex - 1;
+                changed = true;
+            }
+
             ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty()
                 ? "None"
                 : mat->albedoTexturePath.c_str());
@@ -2857,6 +2989,695 @@ namespace Alice
                     return;
                 }
 
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    bool EditorCore::DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
+    {
+        bool changed = false;
+        ImGui::Text("%s", label);
+        ImGui::Indent();
+        
+        // 최대 32개 레이어를 2열로 표시
+        for (int i = 0; i < 32; i++)
+        {
+            bool bit = (mask & (1u << i)) != 0;
+            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+            std::string checkboxLabel = layerName + "##" + label + std::to_string(i);
+            
+            if (ImGui::Checkbox(checkboxLabel.c_str(), &bit))
+            {
+                if (bit)
+                    mask |= (1u << i);
+                else
+                    mask &= ~(1u << i);
+                changed = true;
+            }
+            
+            // 2열로 배치
+            if ((i + 1) % 2 == 0)
+                ImGui::SameLine();
+        }
+        
+        ImGui::Unindent();
+        return changed;
+    }
+
+    bool EditorCore::DrawLayerMaskChipEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
+    {
+        bool changed = false;
+        ImGui::Text("%s", label);
+        ImGui::Indent();
+        
+        // 현재 선택된 레이어들을 칩으로 표시
+        bool hasAnyLayers = false;
+        for (int i = 0; i < 32; ++i)
+        {
+            if ((mask & (1u << i)) != 0)
+            {
+                hasAnyLayers = true;
+                
+                // 레이어 이름
+                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                
+                // 칩 스타일 버튼 (레이어 이름) - 클릭하면 토글
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.7f, 1.0f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                
+                std::string chipLabel = layerName + "##" + label + "_chip_" + std::to_string(i);
+                if (ImGui::Button(chipLabel.c_str()))
+                {
+                    mask &= ~(1u << i); // 토글: 제거
+                    changed = true;
+                }
+                
+                ImGui::PopStyleColor(3);
+                
+                // 다음 줄로 넘어가기 위해
+                ImGui::SameLine(0.0f, 4.0f);
+            }
+        }
+        
+        // 줄바꿈이 필요하면
+        if (hasAnyLayers)
+        {
+            ImGui::NewLine();
+        }
+        
+        // + 버튼 (레이어 추가)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
+        
+        std::string addButtonLabel = "+##" + std::string(label) + "_add";
+        if (ImGui::SmallButton(addButtonLabel.c_str()))
+        {
+            ImGui::OpenPopup((std::string("AddLayer##") + label).c_str());
+        }
+        
+        ImGui::PopStyleColor(3);
+        
+        // 팝업: 레이어 선택 (선택되지 않은 레이어만 표시)
+        if (ImGui::BeginPopup((std::string("AddLayer##") + label).c_str()))
+        {
+            ImGui::Text("Add Layer");
+            ImGui::Separator();
+            
+            bool foundAny = false;
+            for (int i = 0; i < 32; ++i)
+            {
+                if ((mask & (1u << i)) == 0) // 선택되지 않은 레이어만 표시
+                {
+                    foundAny = true;
+                    std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                    if (ImGui::Selectable(layerName.c_str()))
+                    {
+                        mask |= (1u << i);
+                        changed = true;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+            }
+            
+            if (!foundAny)
+            {
+                ImGui::TextDisabled("All layers are selected");
+            }
+            
+            ImGui::EndPopup();
+        }
+        
+        ImGui::Unindent();
+        return changed;
+    }
+
+    bool EditorCore::DrawIgnoreLayersChipEditor(const char* label, uint32_t& ignoreLayers, const std::array<std::string, 32>& layerNames)
+    {
+        bool changed = false;
+        ImGui::Text("%s", label);
+        ImGui::Indent();
+        
+        // 현재 선택된 레이어들을 칩으로 표시
+        bool hasAnyLayers = false;
+        for (int i = 0; i < 32; ++i)
+        {
+            if ((ignoreLayers & (1u << i)) != 0)
+            {
+                hasAnyLayers = true;
+                
+                // 레이어 이름
+                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                
+                // 칩 스타일 버튼 (레이어 이름) - 클릭해도 아무 일도 안 일어남 (표시만)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.6f, 0.9f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                
+                std::string chipLabel = layerName + "##" + label + "_chip_" + std::to_string(i);
+                ImGui::Button(chipLabel.c_str()); // 버튼으로 표시만 (클릭 비활성화)
+                
+                ImGui::PopStyleColor(3);
+                
+                ImGui::SameLine(0.0f, 4.0f);
+                
+                // [x] 버튼 (제거용)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+                
+                std::string removeLabel = std::string(" [x]##") + label + "_remove_" + std::to_string(i);
+                if (ImGui::SmallButton(removeLabel.c_str()))
+                {
+                    ignoreLayers &= ~(1u << i);
+                    changed = true;
+                }
+                
+                ImGui::PopStyleColor(3);
+                
+                // 다음 줄로 넘어가기 위해
+                ImGui::SameLine(0.0f, 0.0f);
+            }
+        }
+        
+        // 줄바꿈이 필요하면
+        if (hasAnyLayers)
+        {
+            ImGui::NewLine();
+        }
+        
+        // + 버튼 (레이어 추가)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
+        
+        std::string addButtonLabel = "+##" + std::string(label) + "_add";
+        if (ImGui::SmallButton(addButtonLabel.c_str()))
+        {
+            ImGui::OpenPopup((std::string("AddIgnoreLayer##") + label).c_str());
+        }
+        
+        ImGui::PopStyleColor(3);
+        
+        // 팝업: 레이어 선택
+        if (ImGui::BeginPopup((std::string("AddIgnoreLayer##") + label).c_str()))
+        {
+            ImGui::Text("Select layer to ignore:");
+            ImGui::Separator();
+            
+            for (int i = 0; i < 32; ++i)
+            {
+                // 이미 추가된 레이어는 표시하지 않음
+                if ((ignoreLayers & (1u << i)) != 0)
+                    continue;
+                
+                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                std::string selectLabel = layerName + "##" + label + "_select_" + std::to_string(i);
+                
+                if (ImGui::Selectable(selectLabel.c_str()))
+                {
+                    ignoreLayers |= (1u << i);
+                    changed = true;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            
+            ImGui::EndPopup();
+        }
+        
+        ImGui::Unindent();
+        return changed;
+    }
+
+    void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* collider = world.GetComponent<Phy_ColliderComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_ColliderComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
+                    // layerBits, collideMask, queryMask는 커스텀 UI로 처리
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "physicsActorHandle";
+                });
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
+                    {
+                        if ((collider->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && collider->layerBits != 0)
+                    {
+                        collider->layerBits = 0;
+                        changed = true;
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            collider->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                collider->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+                
+                // Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Collide Mask", collider->collideMask, layerNames);
+                
+                // Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Query Mask", collider->queryMask, layerNames);
+                
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", collider->ignoreLayers, layerNames);
+                ImGui::Unindent();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Character Controller", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_CCTComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*cct, [](const std::string& name) {
+                    // layerBits, collideMask, queryMask는 커스텀 UI로 처리
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "controllerHandle";
+                });
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
+                    {
+                        if ((cct->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && cct->layerBits != 0)
+                    {
+                        cct->layerBits = 0;
+                        changed = true;
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            cct->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                cct->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+                
+                // Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Collide Mask", cct->collideMask, layerNames);
+                
+                // Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Query Mask", cct->queryMask, layerNames);
+                
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", cct->ignoreLayers, layerNames);
+                ImGui::Unindent();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorPhysicsSceneSettings(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* settings = world.GetComponent<Phy_SettingsComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Physics Scene Settings", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_SettingsComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*settings, [](const std::string& name) {
+                    // layerCollideMatrix, layerQueryMatrix, layerNames는 커스텀 UI로 처리
+                    return name != "layerCollideMatrix" && name != "layerQueryMatrix" && name != "layerNames";
+                });
+                
+                ImGui::Separator();
+                ImGui::Text("Layer Collision Matrix");
+                ImGui::Text("(Collide Mask: Check = Collision enabled between layers)");
+                
+                // 레이어 충돌 매트릭스 편집 (최대 16개 레이어만 표시)
+                ImGui::BeginChild("LayerCollideMatrix", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
+                
+                // 행 단위로 표시: "00 | 00 [ ] 01 [ ] 02 [ ] 03 [ ]"
+                for (int i = 0; i < 16; ++i)
+                {
+                    // 행 번호 표시 (2자리로 포맷팅)
+                    char rowLabel[8];
+                    snprintf(rowLabel, sizeof(rowLabel), "%02d |", i);
+                    ImGui::Text("%s", rowLabel);
+                    ImGui::SameLine();
+                    
+                    // 해당 행의 모든 열에 대한 체크박스 표시
+                    for (int j = 0; j < 16; ++j)
+                    {
+                        bool collision = settings->layerCollideMatrix[i][j];
+                        char colLabel[8];
+                        snprintf(colLabel, sizeof(colLabel), "%02d", j);
+                        ImGui::PushID(i * 16 + j);
+                        if (ImGui::Checkbox(colLabel, &collision))
+                        {
+                            settings->layerCollideMatrix[i][j] = collision;
+                            settings->layerCollideMatrix[j][i] = collision; // 충돌은 대칭 (필수)
+                            settings->filterRevision++; // 필터 변경 감지용
+                            changed = true;
+                        }
+                        ImGui::PopID();
+                        ImGui::SameLine();
+                    }
+                    ImGui::NewLine();
+                }
+                
+                ImGui::EndChild();
+                
+                ImGui::Separator();
+                ImGui::Text("Layer Query Matrix");
+                ImGui::Text("(Query Mask: Check = Query enabled between layers)");
+                
+                // 레이어 쿼리 매트릭스 편집 (최대 16개 레이어만 표시)
+                ImGui::BeginChild("LayerQueryMatrix", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
+                
+                // 행 단위로 표시: "00 | 00 [ ] 01 [ ] 02 [ ] 03 [ ]"
+                for (int i = 0; i < 16; ++i)
+                {
+                    // 행 번호 표시 (2자리로 포맷팅)
+                    char rowLabel[8];
+                    snprintf(rowLabel, sizeof(rowLabel), "%02d |", i);
+                    ImGui::Text("%s", rowLabel);
+                    ImGui::SameLine();
+                    
+                    // 해당 행의 모든 열에 대한 체크박스 표시
+                    for (int j = 0; j < 16; ++j)
+                    {
+                        bool query = settings->layerQueryMatrix[i][j];
+                        char colLabel[8];
+                        snprintf(colLabel, sizeof(colLabel), "%02d", j);
+                        ImGui::PushID(10000 + i * 16 + j);
+                        if (ImGui::Checkbox(colLabel, &query))
+                        {
+                            settings->layerQueryMatrix[i][j] = query;
+                            // 쿼리는 비대칭이 유용한 경우가 많으므로 대칭 적용 제거
+                            // (예: 카메라 레이는 특정 레이어만 보고, AI는 또 다르게 봄)
+                            settings->filterRevision++; // 필터 변경 감지용
+                            changed = true;
+                        }
+                        ImGui::PopID();
+                        ImGui::SameLine();
+                    }
+                    ImGui::NewLine();
+                }
+                
+                ImGui::EndChild();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* terrain = world.GetComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Terrain Height Field", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*terrain, [](const std::string& name) {
+                    // layerBits, collideMask, queryMask, heightSamples, physicsActorHandle는 커스텀 UI로 처리
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && 
+                           name != "heightSamples" && name != "physicsActorHandle";
+                });
+                
+                // HeightSamples 상태 표시 및 생성 버튼
+                ImGui::Separator();
+                ImGui::Text("Height Samples");
+                ImGui::Indent();
+                {
+                    const size_t expectedSamples = static_cast<size_t>(terrain->numRows) * static_cast<size_t>(terrain->numCols);
+                    const bool isValid = (terrain->numRows >= 2 && terrain->numCols >= 2) && 
+                                         (terrain->heightSamples.size() == expectedSamples);
+                    
+                    if (terrain->heightSamples.empty())
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Status: Empty (requires data)");
+                    }
+                    else if (!isValid)
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 
+                            "Status: Invalid (size: %zu, expected: %zu)", 
+                            terrain->heightSamples.size(), expectedSamples);
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 
+                            "Status: Valid (size: %zu)", 
+                            terrain->heightSamples.size());
+                    }
+                    
+                    ImGui::Text("Grid: %u x %u (total: %zu samples)", 
+                        terrain->numRows, terrain->numCols, expectedSamples);
+                    
+                    if (terrain->numRows >= 2 && terrain->numCols >= 2)
+                    {
+                        if (ImGui::Button("Generate Flat (0.0)"))
+                        {
+                            terrain->heightSamples.resize(expectedSamples, 0.0f);
+                            changed = true;
+                            g_SceneDirty = true;
+                        }
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(?)");
+                        if (ImGui::IsItemHovered())
+                        {
+                            ImGui::BeginTooltip();
+                            ImGui::Text("Generates a flat terrain with all heights set to 0.0");
+                            ImGui::EndTooltip();
+                        }
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Set numRows and numCols (>= 2) to enable generation");
+                    }
+                }
+                ImGui::Unindent();
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
+                    {
+                        if ((terrain->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && terrain->layerBits != 0)
+                    {
+                        terrain->layerBits = 0;
+                        changed = true;
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            terrain->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                terrain->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+                
+                // Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Collide Mask", terrain->collideMask, layerNames);
+                
+                // Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Query Mask", terrain->queryMask, layerNames);
+                
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", terrain->ignoreLayers, layerNames);
+                ImGui::Unindent();
+                
                 if (changed) g_SceneDirty = true;
             }
         }
@@ -3204,7 +4025,7 @@ namespace Alice
                     g_MaterialEditorPath = path;
                     g_MaterialEditorData = {};
                     // 파일에서 값을 불러옵니다. 실패하면 기본 값으로 남겨둡니다.
-                    MaterialFile::Load(path, g_MaterialEditorData);
+                    MaterialFile::Load(path, g_MaterialEditorData, m_resources);
                     g_MaterialEditorData.assetPath = path.string();
                     g_MaterialEditorOpen = true;
                 }
@@ -3280,7 +4101,7 @@ namespace Alice
 
                         if (mat)
                         {
-                            MaterialFile::Load(path, *mat);
+                            MaterialFile::Load(path, *mat, m_resources);
                             mat->assetPath = path.string();
                             g_SceneDirty   = true;
                         }
@@ -3365,7 +4186,7 @@ namespace Alice
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = asset.materialAssetPaths.front();
-                                MaterialFile::Load(mat.assetPath, mat);
+                                MaterialFile::Load(mat.assetPath, mat, m_resources);
                             }
 
                             selectedEntity = e;
@@ -3476,15 +4297,30 @@ namespace Alice
         g_SceneDirty = false;
     }
 
-    // 씬 로드
+    // 씬 로드 (레거시 함수 - 이제는 LoadSceneFileRequest 사용 권장)
     void EditorCore::LoadScene(World& world)
     {
-        ALICE_LOG_INFO("[Editor] Loading Scene: %s", g_NextScenePath.string().c_str());
+        // 이 함수는 더 이상 사용하지 않음. SceneManager::LoadSceneFileRequest을 사용해야 함.
+        // 하지만 호환성을 위해 남겨둠 (내부적으로는 즉시 로드)
+        ALICE_LOG_WARN("[Editor] LoadScene() is deprecated. Use SceneManager::LoadSceneFileRequest() instead.");
 
-        // 로드 실행
-        SceneFile::Load(world, m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+        const std::filesystem::path loadAbs = m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath;
+        
+        // 로드 실행 및 반환값 체크
+        if (!SceneFile::Load(world, loadAbs))
+        {
+            // 로드 실패: 에러 로그 및 팝업 표시
+            const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
+            ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+            
+            g_SceneLoadErrorMsg = errorMsg;
+            g_ShowSceneLoadError = true;
+            
+            // 후처리하지 않고 종료 (부분 로드 방지)
+            return;
+        }
 
-        // 후처리 및 상태 갱신
+        // 로드 성공: 후처리 및 상태 갱신
         EnsureSkinnedMeshesRegistered(world);
         g_CurrentScenePath = g_NextScenePath;
         g_HasCurrentScenePath = true;

@@ -134,6 +134,7 @@ namespace Alice
                         const Camera& camera,
                         const std::vector<SkinnedDrawCommand>& skinnedCommands,
                         const std::unordered_set<EntityId>& cameraEntities,
+                        int shadingMode,
                         bool editorMode = false,
                         bool isPlaying = false);
         void PassDeferredLight(const World& world,
@@ -145,8 +146,8 @@ namespace Alice
         // 반투명(알파 블렌딩) 오브젝트는 Deferred(GBuffer)로 정확히 합성하기 어렵기 때문에
         // 라이트 패스 이후 Forward-Style 패스로 별도 렌더링합니다.
         void PassTransparentForward(const Camera& camera,
-                                    const std::vector<SkinnedDrawCommand>& skinnedCommands);
-        void RenderSwordEffects(const World& world, const Camera& camera);
+                                    const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                                    int shadingMode);
         
         // 상수 버퍼 업데이트
         void UpdatePerObjectCB(const DirectX::XMMATRIX& world,
@@ -159,7 +160,8 @@ namespace Alice
                                float roughness,
                                float metalness,
                                bool useTexture,
-                               bool enableNormalMap);
+                               bool enableNormalMap,
+                               int shadingMode);
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
                               bool enableFillLight,
