@@ -311,7 +311,7 @@ namespace Alice {
 		c.primary = !hasCamera;
 
 		SetEntityName(e, "Camera" + std::to_string(camIndex));
-		return e;
+		return e;	
 	}
 
 	EntityId World::CreatePointLight()
