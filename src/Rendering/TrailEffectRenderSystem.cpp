@@ -15,7 +15,7 @@ using Microsoft::WRL::ComPtr;
 
 namespace Alice
 {
-	SwordRenderSystem::SwordRenderSystem(ID3D11RenderDevice& renderDevice)
+	TrailEffectRenderSystem::TrailEffectRenderSystem(ID3D11RenderDevice& renderDevice)
 		: m_renderDevice(renderDevice)
 	{
 		m_device = m_renderDevice.GetDevice();
@@ -23,7 +23,7 @@ namespace Alice
 	}
 
 
-	bool SwordRenderSystem::Initialize()
+	bool TrailEffectRenderSystem::Initialize()
 	{
 		if (!m_device || !m_context) return false;
 		if (!CreateShadersAndInputLayout()) return false;
@@ -71,23 +71,23 @@ namespace Alice
 		return true;
 	}
 
-	bool SwordRenderSystem::LoadTexture()
+	bool TrailEffectRenderSystem::LoadTexture()
 	{
 		if (!m_resources || !m_device) return false;
 
 		auto srv = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Image/Hanako.png", m_device.Get());
 		if (!srv)
 		{
-			ALICE_LOG_WARN("[SwordRenderSystem] Failed to load texture: Resource/Image/Hanako.png");
+			ALICE_LOG_WARN("[TrailEffectRenderSystem] Failed to load texture: Resource/Image/Hanako.png");
 			return false;
 		}
 
 		m_textureSRV = srv;
-		ALICE_LOG_INFO("[SwordRenderSystem] Texture loaded: Resource/Image/Hanako.png");
+		ALICE_LOG_INFO("[TrailEffectRenderSystem] Texture loaded: Resource/Image/Hanako.png");
 		return true;
 	}
 
-	void SwordRenderSystem::Render(const World& world, const Camera& camera)
+	void TrailEffectRenderSystem::Render(const World& world, const Camera& camera)
 	{
 		if (!m_vertexShader || !m_pixelShader || !m_inputLayout) return;
 
@@ -268,7 +268,7 @@ namespace Alice
 		m_context->OMSetBlendState(nullptr, nullptr, 0xffffffff);
 	}
 
-	bool SwordRenderSystem::CreateShadersAndInputLayout()
+	bool TrailEffectRenderSystem::CreateShadersAndInputLayout()
 	{
 		ComPtr<ID3DBlob> vsBlob, psBlob;
 
@@ -292,7 +292,7 @@ namespace Alice
 		return true;
 	}
 
-	bool SwordRenderSystem::EnsureVertexBufferSize(std::size_t vertexCount)
+	bool TrailEffectRenderSystem::EnsureVertexBufferSize(std::size_t vertexCount)
 	{
 		if (vertexCount <= m_vertexCapacity) return true;
 

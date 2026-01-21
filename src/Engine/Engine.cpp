@@ -128,7 +128,7 @@ namespace Alice
 		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
 		std::unique_ptr<class EffectSystem> m_effectSystem;
-		std::unique_ptr<class SwordRenderSystem> m_swordRenderSystem;
+		std::unique_ptr<class TrailEffectRenderSystem> m_trailRenderSystem;
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
 		bool m_useForwardRendering = false;
@@ -440,14 +440,14 @@ namespace Alice
 		pImpl->m_effectSystem = std::make_unique<EffectSystem>(*pImpl->m_renderDevice);
 		if (!pImpl->m_effectSystem->Initialize()) return false;
 
-		pImpl->m_swordRenderSystem = std::make_unique<SwordRenderSystem>(*pImpl->m_renderDevice);
-		pImpl->m_swordRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
-		if (!pImpl->m_swordRenderSystem->Initialize()) return false;
+		pImpl->m_trailRenderSystem = std::make_unique<TrailEffectRenderSystem>(*pImpl->m_renderDevice);
+		pImpl->m_trailRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
+		if (!pImpl->m_trailRenderSystem->Initialize()) return false;
 
-		// DeferredRenderSystem에 SwordRenderSystem 주입
-		if (pImpl->m_deferredRenderSystem && pImpl->m_swordRenderSystem)
+		// DeferredRenderSystem에 TrailEffectRenderSystem 주입
+		if (pImpl->m_deferredRenderSystem && pImpl->m_trailRenderSystem)
 		{
-			pImpl->m_deferredRenderSystem->SetSwordRenderSystem(pImpl->m_swordRenderSystem.get());
+			pImpl->m_deferredRenderSystem->SetSwordRenderSystem(pImpl->m_trailRenderSystem.get());
 		}
 
 		// ============================================= 카메라 & 스크립트 =============================================
@@ -1073,7 +1073,7 @@ namespace Alice
 		// 디버그 드로우 및 ImGui(에디터 전용)
 		if (pImpl->m_debugDrawSystem) pImpl->m_debugDrawSystem->Render(pImpl->m_camera);
 		if (pImpl->m_effectSystem) pImpl->m_effectSystem->Render(pImpl->m_world, pImpl->m_camera);
-		if (pImpl->m_swordRenderSystem)pImpl->m_swordRenderSystem->Render(pImpl->m_world, pImpl->m_camera);
+		if (pImpl->m_trailRenderSystem)pImpl->m_trailRenderSystem->Render(pImpl->m_world, pImpl->m_camera);
 		// SwordRenderSystem은 DeferredRenderSystem 내부에서 호출되므로 여기서는 호출하지 않음
 		if (pImpl->m_editorMode)      pImpl->m_editorCore.RenderDrawData();
 
