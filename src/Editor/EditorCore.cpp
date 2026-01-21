@@ -65,13 +65,16 @@ namespace Alice
 	// 씬 상태 전역 - 여러 네임스페이스에서 공유
 	bool g_SceneDirty = false;
 
-	// === Undo 시스템 ===
+	// === Undo/Redo 시스템 ===
 	struct ICommand
 	{
 		virtual ~ICommand() = default;
 		virtual void Execute(World& world, EntityId& selectedEntity) = 0;
 		virtual void Undo(World& world, EntityId& selectedEntity) = 0;
 		virtual const char* GetDescription() const = 0;
+		
+		// Redo 지원 여부 (기본값: true, Create/Destroy는 false로 오버라이드)
+		virtual bool SupportsRedo() const { return true; }
 	};
 
 	namespace
@@ -111,6 +114,9 @@ namespace Alice
 			{
 				return description.c_str();
 			}
+
+			// Create/Destroy는 ID 변경 문제로 Redo 지원 안 함
+			bool SupportsRedo() const override { return false; }
 		};
 
 		// 엔티티 삭제 명령 (씬 파일 직렬화 함수 사용)
@@ -148,15 +154,16 @@ namespace Alice
 					JsonRttr::json childJson;
 					if (WriteEntityToJson(childJson, world, childId))
 					{
-						outArray.push_back(childJson);
-
-						// 재귀적으로 손자들도 저장
+						// 재귀적으로 손자들도 저장 (push_back 전에 완료)
 						JsonRttr::json grandchildrenArray = JsonRttr::json::array();
 						SaveChildrenRecursive(world, childId, grandchildrenArray);
 						if (!grandchildrenArray.empty())
 						{
-							childJson["_children"] = grandchildrenArray;
+							childJson["_children"] = std::move(grandchildrenArray);
 						}
+
+						// 손자 정보를 포함한 childJson을 push
+						outArray.push_back(std::move(childJson));
 					}
 				}
 			}
@@ -564,6 +571,9 @@ namespace Alice
 			{
 				return description.c_str();
 			}
+
+			// Create/Destroy는 ID 변경 문제로 Redo 지원 안 함
+			bool SupportsRedo() const override { return false; }
 		};
 
 		// 엔티티 이름 변경 명령
@@ -675,8 +685,9 @@ namespace Alice
 			}
 		};
 
-		// Undo 스택 관리
+		// Undo/Redo 스택 관리
 		std::vector<std::unique_ptr<ICommand>> g_UndoStack;
+		std::vector<std::unique_ptr<ICommand>> g_RedoStack;
 		constexpr size_t MAX_UNDO_STACK_SIZE = 50;
 
 		// PushCommand는 EditorCore 클래스의 멤버 함수로 이동됨
@@ -691,6 +702,38 @@ namespace Alice
 
 			cmd->Undo(world, selectedEntity);
 
+			// Redo 지원하는 커맨드만 Redo 스택에 추가
+			if (cmd->SupportsRedo())
+			{
+				g_RedoStack.push_back(std::move(cmd));
+				if (g_RedoStack.size() > MAX_UNDO_STACK_SIZE)
+				{
+					g_RedoStack.erase(g_RedoStack.begin());
+				}
+			}
+			// else: Redo 불가 커맨드는 버림
+
+			g_SceneDirty = true;
+			return true;
+		}
+
+		bool ExecuteRedo(World& world, EntityId& selectedEntity)
+		{
+			if (g_RedoStack.empty())
+				return false;
+
+			auto cmd = std::move(g_RedoStack.back());
+			g_RedoStack.pop_back();
+
+			cmd->Execute(world, selectedEntity);
+
+			// Undo 스택에 다시 추가
+			g_UndoStack.push_back(std::move(cmd));
+			if (g_UndoStack.size() > MAX_UNDO_STACK_SIZE)
+			{
+				g_UndoStack.erase(g_UndoStack.begin());
+			}
+
 			g_SceneDirty = true;
 			return true;
 		}
@@ -698,6 +741,7 @@ namespace Alice
 		void ClearUndoStack()
 		{
 			g_UndoStack.clear();
+			g_RedoStack.clear();
 		}
 
 		inline bool MaterialInspectorFilter(const std::string& propName)
@@ -862,6 +906,9 @@ namespace Alice
 					if (!sc.instance)
 						continue;
 
+					// 컨텍스트 주입 (필수): World와 EntityId 설정
+					sc.instance->SetContext(&world, e.id);
+
 					rttr::instance inst = *sc.instance;
 					rttr::type t = rttr::type::get_by_name(sc.scriptName);
 					JsonRttr::FromJsonObject(inst, s.props, t);
@@ -904,34 +951,32 @@ namespace Alice
 #endif
 
 			// ----------------------------------------------------------------------
-			// 1: Configure 명령어 수정
-			// cmd /C "cmake -S "..." -B "..." || pause"
+			// 1: Configure 명령어 (cmd.exe /C는 ExecuteCommandWithConsole에서 처리)
 			// ----------------------------------------------------------------------
-			std::wstring cmdConfig = L"cmd /C \"cmake -S \"";
+			std::wstring cmdConfig = L"cmake -S \"";
 			cmdConfig += scriptsRoot.wstring();
 			cmdConfig += L"\" -B \"";
 			cmdConfig += scriptsBuildDir.wstring();
-			cmdConfig += L"\" || pause\"";
+			cmdConfig += L"\" || pause";
 
 			// Configure 실행
-			if (ExecuteCommandWithConsole(cmdConfig.c_str()) != 0)
+			if (ExecuteCommandWithConsole(cmdConfig) != 0)
 			{
 				ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed.");
 				return;
 			}
 
 			// ----------------------------------------------------------------------
-			// 2: Build 명령어 수정
-			// cmd /C "cmake --build "..." --config ... || pause"
+			// 2: Build 명령어 (cmd.exe /C는 ExecuteCommandWithConsole에서 처리)
 			// ----------------------------------------------------------------------
-			std::wstring cmdBuild = L"cmd /C \"cmake --build \"";
+			std::wstring cmdBuild = L"cmake --build \"";
 			cmdBuild += scriptsBuildDir.wstring();
 			cmdBuild += L"\" --config ";
 			cmdBuild += kConfig;
-			cmdBuild += L" --target AliceScripts || pause\"";
+			cmdBuild += L" --target AliceScripts || pause";
 
 			// Build 실행
-			if (ExecuteCommandWithConsole(cmdBuild.c_str()) != 0)
+			if (ExecuteCommandWithConsole(cmdBuild) != 0)
 			{
 				ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed.");
 				return;
@@ -1279,9 +1324,13 @@ namespace Alice
 				si.dwFlags = STARTF_USESHOWWINDOW;
 				si.wShowWindow = SW_HIDE;
 
+				// CreateProcessW는 커맨드라인 버퍼를 수정할 수 있어야 하므로 writable buffer 사용
+				std::vector<wchar_t> cmdBuffer(cmd.begin(), cmd.end());
+				cmdBuffer.push_back(L'\0');
+
 				BOOL ok = CreateProcessW(
 					nullptr,
-					const_cast<wchar_t*>(cmd.c_str()),
+					cmdBuffer.data(),  // writable buffer
 					nullptr,
 					nullptr,
 					FALSE,
@@ -1585,6 +1634,10 @@ namespace Alice
 			if (ctrlDown && m_inputSystem->IsKeyPressed(Keyboard::Keys::Z))
 			{
 				ExecuteUndo(world, selectedEntity);
+			}
+			else if (ctrlDown && m_inputSystem->IsKeyPressed(Keyboard::Keys::Y))
+			{
+				ExecuteRedo(world, selectedEntity);
 			}
 		}
 
@@ -1968,6 +2021,14 @@ namespace Alice
 					}
 				}
 
+				// Refresh 버튼 추가
+				if (ImGui::Button("Refresh Scenes"))
+				{
+					s_ScanScenesOnce = true; // 다음 프레임에 다시 스캔
+				}
+				ImGui::SameLine();
+				ImGui::TextDisabled("(Click to rescan Assets folder)");
+
 				if (s_ScenePaths.empty())
 				{
 					ImGui::TextDisabled("No .scene files found under Assets.");
@@ -2141,8 +2202,13 @@ namespace Alice
 						if (oldParent != InvalidEntityId)
 						{
 							world.SetParent(draggedId, InvalidEntityId);
-							PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, InvalidEntityId));
-							g_SceneDirty = true;
+							
+							// 성공 여부 확인 후에만 Undo 커맨드 추가
+							if (world.GetParent(draggedId) == InvalidEntityId)
+							{
+								PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, InvalidEntityId));
+								g_SceneDirty = true;
+							}
 						}
 					}
 				}
@@ -2210,10 +2276,15 @@ namespace Alice
 							// 기존 부모 가져오기
 							EntityId oldParent = world.GetParent(draggedId);
 
-							// 새 부모 설정
+							// 새 부모 설정 (순환 참조 방지로 실패할 수 있음)
 							world.SetParent(draggedId, entityId);
-							PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, entityId));
-							g_SceneDirty = true;
+							
+							// 성공 여부 확인 후에만 Undo 커맨드 추가
+							if (world.GetParent(draggedId) == entityId)
+							{
+								PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, entityId));
+								g_SceneDirty = true;
+							}
 						}
 					}
 					ImGui::EndDragDropTarget();
@@ -2246,8 +2317,13 @@ namespace Alice
 						if (oldParent != InvalidEntityId)
 						{
 							world.SetParent(entityId, InvalidEntityId);
-							PushCommand(std::make_unique<SetParentCommand>(entityId, oldParent, InvalidEntityId));
-							g_SceneDirty = true;
+							
+							// 성공 여부 확인 후에만 Undo 커맨드 추가
+							if (world.GetParent(entityId) == InvalidEntityId)
+							{
+								PushCommand(std::make_unique<SetParentCommand>(entityId, oldParent, InvalidEntityId));
+								g_SceneDirty = true;
+							}
 						}
 					}
 
@@ -2461,9 +2537,15 @@ namespace Alice
 								{
 									EntityId oldParent = world.GetParent(e);
 									world.SetParent(e, selectedEntity);
-									PushCommand(std::make_unique<SetParentCommand>(e, oldParent, selectedEntity));
+									
+									// 성공 여부 확인 후에만 Undo 커맨드 추가
+									if (world.GetParent(e) == selectedEntity)
+									{
+										PushCommand(std::make_unique<SetParentCommand>(e, oldParent, selectedEntity));
+										g_SceneDirty = true;
+									}
+									
 									selectedEntity = e; // 새로 생성된 엔티티를 선택
-									g_SceneDirty = true;
 								}
 							}
 							else
@@ -2937,7 +3019,9 @@ namespace Alice
 							{
 								if (gizmoOp == ImGuizmo::TRANSLATE)
 								{
-									snapValue[0] = snapValue[1] = snapValue[2] = snapTranslation.x;
+									snapValue[0] = snapTranslation.x;
+									snapValue[1] = snapTranslation.y;
+									snapValue[2] = snapTranslation.z;
 									snap = snapValue;
 								}
 								else if (gizmoOp == ImGuizmo::ROTATE)
@@ -2952,19 +3036,8 @@ namespace Alice
 								}
 							}
 
-							// Gizmo 조작 시작/종료 감지
-							bool isUsingGizmo = ImGuizmo::IsUsing();
-
-							// 조작 시작 감지: false → true 또는 다른 엔티티로 변경
-							if (!wasUsingGizmo && isUsingGizmo && lastGizmoEntity == selectedEntity)
-							{
-								// 조작 시작: 현재 Transform을 old state로 저장
-								gizmoStartTransform.position = transform->position;
-								gizmoStartTransform.rotation = transform->rotation;
-								gizmoStartTransform.scale = transform->scale;
-								gizmoStartTransform.enabled = transform->enabled;
-							}
-							else if (lastGizmoEntity != selectedEntity)
+							// Gizmo 조작 시작 감지: Manipulate 호출 전에 체크 (시작 시점 감지용)
+							if (lastGizmoEntity != selectedEntity)
 							{
 								// 다른 엔티티로 변경: 상태 리셋
 								wasUsingGizmo = false;
@@ -2973,6 +3046,19 @@ namespace Alice
 
 							// Gizmo 조작 (worldMatrix 배열을 직접 넘겨주어 수정되게 함)
 							bool manipulated = ImGuizmo::Manipulate(viewMat, projMat, gizmoOp, gizmoMode, objMat, nullptr, snap);
+
+							// Gizmo 조작 시작/종료 감지: Manipulate 호출 후에 체크 (정확한 상태 반영)
+							bool isUsingGizmo = ImGuizmo::IsUsing();
+
+							// 조작 시작 감지: false → true
+							if (!wasUsingGizmo && isUsingGizmo && lastGizmoEntity == selectedEntity)
+							{
+								// 조작 시작: 현재 Transform을 old state로 저장
+								gizmoStartTransform.position = transform->position;
+								gizmoStartTransform.rotation = transform->rotation;
+								gizmoStartTransform.scale = transform->scale;
+								gizmoStartTransform.enabled = transform->enabled;
+							}
 
 							if (manipulated)
 							{
@@ -2992,7 +3078,7 @@ namespace Alice
 									bool foundSnap = false;
 
 									// 모든 엔티티를 순회하며 가장 가까운 위치 찾기
-									for (auto [eid, otherTransform] : world.GetComponents<TransformComponent>())
+									for (auto&& [eid, otherTransform] : world.GetComponents<TransformComponent>())
 									{
 										if (eid == selectedEntity) continue; // 자기 자신은 제외
 
@@ -3672,8 +3758,21 @@ namespace Alice
 
 						if (GetOpenFileNameW(&ofn))
 						{
-							std::filesystem::path src = fileBuffer;
-							g_MaterialEditorData.albedoTexturePath = src.string();
+							std::filesystem::path absolutePath = fileBuffer;
+							
+							// 절대 경로를 논리 경로로 변환
+							std::string logicalPath = absolutePath.string();
+							if (m_resources)
+							{
+								// NormalizeResourcePathAbsoluteToLogical는 static 함수이므로 인스턴스 불필요
+								std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(absolutePath);
+								if (!logical.empty() && !logical.is_absolute())
+								{
+									logicalPath = logical.string();
+								}
+							}
+							
+							g_MaterialEditorData.albedoTexturePath = logicalPath;
 							changed = true;
 
 							ALICE_LOG_INFO("[Editor] Material albedo set from MatEditor: \"%s\"\n",
@@ -4672,14 +4771,27 @@ namespace Alice
 					ofn.nMaxFile = MAX_PATH;
 					ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 					if (GetOpenFileNameW(&ofn)) {
-						mat->albedoTexturePath = std::filesystem::path(buf).string();
+						std::filesystem::path absolutePath = buf;
+						
+						// 절대 경로를 논리 경로로 변환
+						std::string logicalPath = absolutePath.string();
+						if (m_resources)
+						{
+							// NormalizeResourcePathAbsoluteToLogical는 static 함수이므로 인스턴스 불필요
+							std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(absolutePath);
+							if (!logical.empty() && !logical.is_absolute())
+							{
+								logicalPath = logical.string();
+							}
+						}
+						
+						mat->albedoTexturePath = logicalPath;
 						changed = true;
 					}
 				}
 
 				if (changed) {
-					g_SceneDirty = true; /* Save logic omitted for brevity as requested
-																	"Short code" */
+					g_SceneDirty = true;
 				}
 
 				if (ImGui::Button("Remove Material")) {
@@ -5027,13 +5139,14 @@ namespace Alice
 						layerNames = settings.layerNames;
 					}
 
-					// Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+					// Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능
+					// 주의: PhysX 엔진은 32개 레이어를 지원하지만, 에디터 UI는 편의상 16개만 표시합니다.
 					ImGui::Text("Layer");
 					ImGui::Indent();
 					{
 						// 현재 선택된 레이어 찾기
 						int currentLayer = -1;
-						for (int i = 0; i < 16; ++i) // 16개만 확인
+						for (int i = 0; i < 16; ++i) // 16개만 확인 (UI 제한)
 						{
 							if ((collider->layerBits & (1u << i)) != 0)
 							{
@@ -5344,13 +5457,14 @@ namespace Alice
 						layerNames = settings.layerNames;
 					}
 
-					// Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+					// Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능
+					// 주의: PhysX 엔진은 32개 레이어를 지원하지만, 에디터 UI는 편의상 16개만 표시합니다.
 					ImGui::Text("Layer");
 					ImGui::Indent();
 					{
 						// 현재 선택된 레이어 찾기
 						int currentLayer = -1;
-						for (int i = 0; i < 16; ++i) // 16개만 확인
+						for (int i = 0; i < 16; ++i) // 16개만 확인 (UI 제한)
 						{
 							if ((cct->layerBits & (1u << i)) != 0)
 							{
@@ -5509,7 +5623,8 @@ namespace Alice
 					ImGui::Text("Layer Collision Matrix");
 					ImGui::Text("(Collide Mask: Check = Collision enabled between layers)");
 
-					// 레이어 충돌 매트릭스 편집 (최대 16개 레이어만 표시)
+					// 레이어 충돌 매트릭스 편집
+					// 주의: PhysX 엔진은 32개 레이어를 지원하지만, 에디터 UI는 편의상 16개만 표시합니다.
 					ImGui::BeginChild("LayerCollideMatrix", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
 
 					// 행 단위로 표시: "00 | 00 [ ] 01 [ ] 02 [ ] 03 [ ]"
@@ -5547,7 +5662,8 @@ namespace Alice
 					ImGui::Text("Layer Query Matrix");
 					ImGui::Text("(Query Mask: Check = Query enabled between layers)");
 
-					// 레이어 쿼리 매트릭스 편집 (최대 16개 레이어만 표시)
+					// 레이어 쿼리 매트릭스 편집
+					// 주의: PhysX 엔진은 32개 레이어를 지원하지만, 에디터 UI는 편의상 16개만 표시합니다.
 					ImGui::BeginChild("LayerQueryMatrix", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
 
 					// 행 단위로 표시: "00 | 00 [ ] 01 [ ] 02 [ ] 03 [ ]"
@@ -5678,13 +5794,14 @@ namespace Alice
 						layerNames = settings.layerNames;
 					}
 
-					// Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+					// Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능
+					// 주의: PhysX 엔진은 32개 레이어를 지원하지만, 에디터 UI는 편의상 16개만 표시합니다.
 					ImGui::Text("Layer");
 					ImGui::Indent();
 					{
 						// 현재 선택된 레이어 찾기
 						int currentLayer = -1;
-						for (int i = 0; i < 16; ++i) // 16개만 확인
+						for (int i = 0; i < 16; ++i) // 16개만 확인 (UI 제한)
 						{
 							if ((terrain->layerBits & (1u << i)) != 0)
 							{
@@ -6671,6 +6788,9 @@ namespace Alice
 		// 씬 로드 (레거시 함수 - 이제는 LoadSceneFileRequest 사용 권장)
 		void EditorCore::PushCommand(std::unique_ptr<ICommand> cmd)
 		{
+			// 새로운 액션이 들어오면 Redo 스택 클리어 (일반적인 Undo/Redo 동작)
+			g_RedoStack.clear();
+			
 			g_UndoStack.push_back(std::move(cmd));
 			if (g_UndoStack.size() > MAX_UNDO_STACK_SIZE)
 			{
