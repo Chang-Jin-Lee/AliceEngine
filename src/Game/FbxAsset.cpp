@@ -1,4 +1,4 @@
-﻿#include "Game/FbxAsset.h"
+#include "Game/FbxAsset.h"
 
 #include <fstream>
 
