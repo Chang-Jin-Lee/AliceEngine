@@ -14,7 +14,7 @@
 
 #include "Core/Entity.h"
 #include "Core/World.h"
-#include "Core/UIWorldManager.h"
+#include "UI/UIWorldManager.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/SkinnedMeshRegistry.h"

@@ -23,9 +23,8 @@
 
 #include "Core/Helper.h"
 
-// TODO: UIRenderStruct와 UISceneManager 헤더 파일이 생성되면 아래 주석을 해제하고 전방 선언을 제거하세요
-// #include "UIRenderStruct.h"
-// #include "UISceneManager.h"
+#include "UIRenderStruct.h"
+#include "UISceneManager.h"
 
 
 
@@ -61,9 +60,6 @@
 //
 //    //WIC
 //    m_wicFactory.Reset();
-//    
-//
-//    
 //}
 
 // inputSystem은 추후에 싱글톤인 경우 SceneManager에서 변경하기
@@ -128,15 +124,23 @@ void UIWorldManager::Initalize(ID3D11Device* pDev, ID3D11DeviceContext* pDevCon,
 
  
     // 하위 Manager나 Object들에게 변수를 넘겨주기 위해 struct 구조로 넘겨줄 예정
-  /* m_RenderStruct.m_d2DFactory = m_d2DFactory;
-    m_RenderStruct.m_d2DDevice = m_d2DDevice;
+    // ID2D1Factory8 -> ID2D1Factory1 변환 (QueryInterface)
+    Microsoft::WRL::ComPtr<ID2D1Factory1> factory1;
+    HR_T(m_d2DFactory.As(&factory1));
+    m_RenderStruct.m_d2DFactory = factory1;
+    
+    // ID2D1Device7 -> ID2D1Device 변환 (QueryInterface)
+    Microsoft::WRL::ComPtr<ID2D1Device> device;
+    HR_T(m_d2DDevice.As(&device));
+    m_RenderStruct.m_d2DDevice = device;
+    
     m_RenderStruct.m_d2DdevCon = m_d2DdevCon;
     m_RenderStruct.m_D3DWFactory = m_D3DWFactory;
     m_RenderStruct.m_brush = m_brush;
     m_RenderStruct.m_wicImageFactory = m_wicFactory;
     m_RenderStruct.m_d2dTargetBitmap = m_d2dTargetBitmap;
     m_RenderStruct.m_width = w;
-    m_RenderStruct.m_height = h;*/
+    m_RenderStruct.m_height = h;
 }
 
 
@@ -146,23 +150,39 @@ void UIWorldManager::Update(UINT w, UINT h)
     m_curHeight = h;
 
     // 현재 매니저 포인터 저장
-    //if (sceneStorages.size() == 0) { return; }
-    //m_nowManager = sceneStorages[m_nowSceneID].get();
-    //m_nowManager->Update();
+    if (sceneStorages.size() == 0) { return; }
+    m_nowManager = sceneStorages[m_nowSceneID].get();
+    if (m_nowManager)
+    {
+        m_nowManager->Update();
+    }
 }
 
 
 void UIWorldManager::Render()
 {
-    // if (sceneStorages.size() == 0) { return; }
-    // D2D 렌더링 시작 + 2D 텍스처에 렌더링 + 바인딩
-    //    m_nowManager->Render();
+    if (sceneStorages.size() == 0) { return; }
+    
+    // D2D 렌더 타겟 설정 (UI 텍스처에 렌더링)
+    m_devCon->OMSetRenderTargets(1, m_RenderTV.GetAddressOf(), nullptr);
+    
+    // D2D 타겟 비트맵 설정 (이미 Initialize에서 설정했지만 재확인)
+    if (m_d2DdevCon && m_d2dTargetBitmap)
+    {
+        m_d2DdevCon->SetTarget(m_d2dTargetBitmap.Get());
+    }
+    
+    // D2D 렌더링 시작 + 2D 텍스처에 렌더링
+    if (m_nowManager)
+    {
+        m_nowManager->Render();
+    }
 
-    // RTV 해제 
+    // RTV 해제 (렌더 시스템에서 UI 텍스처를 사용할 수 있도록)
     ID3D11RenderTargetView* nullRTV[1] = { nullptr };
     m_devCon->OMSetRenderTargets(1, nullRTV, nullptr);
 
-
+    // UI 텍스처 SRV 바인딩 (렌더 시스템에서 사용)
     ID3D11ShaderResourceView* srvs[] = { m_shaderRV.Get() };
     m_devCon->PSSetShaderResources(m_bindSlot, 1, srvs);
 }
@@ -193,26 +213,22 @@ void UIWorldManager::Create2DTex(UINT w, UINT h)
 
 
 void UIWorldManager::ChangeScene(UINT nowSceneID) {
-    // 추후에 SceneManager 추가시 주셕 변경ㄴ
-    //if (m_nowSceneID < nowSceneID && sceneStorages.size() == 0)
-    //{
-    //    auto CreateUI = [&](UINT ID) -> UISceneManager* {
-    //        auto pObj = std::make_unique<UISceneManager>();
+    // 씬이 없거나 새로운 씬인 경우 생성
+    if (sceneStorages.find(nowSceneID) == sceneStorages.end())
+    {
+        auto pObj = std::make_unique<UISceneManager>();
 
-    //        //없는경우 생성하면서 해당 매니저 initalize()
-    //        UISceneManager* ptr = pObj.get();
-    //        ptr->initalize(m_d3dDev, m_devCon, &m_RenderStruct, m_inputSystem);
-    //        m_nowManager = ptr;
-    //        sceneStorages.emplace(ID, std::move(pObj));
-    //        m_SceneID++;
-    //        return ptr;
-    //        };
-    //    CreateUI(nowSceneID);
-    //}
-    //else
-    //{
-    //    m_nowManager = sceneStorages[nowSceneID].get();
-    //}
+        //없는경우 생성하면서 해당 매니저 initalize()
+        UISceneManager* ptr = pObj.get();
+        ptr->initalize(m_d3dDev, m_devCon, &m_RenderStruct, m_inputSystem);
+        m_nowManager = ptr;
+        sceneStorages.emplace(nowSceneID, std::move(pObj));
+        m_SceneID++;
+    }
+    else
+    {
+        m_nowManager = sceneStorages[nowSceneID].get();
+    }
 
     m_nowSceneID = nowSceneID;
 }

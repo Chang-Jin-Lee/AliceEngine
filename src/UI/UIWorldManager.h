@@ -28,11 +28,11 @@
 
 
 #include "Core/InputSystem.h"
+#include "UIRenderStruct.h"
+#include "UISceneManager.h"
 
 // 전방 선언
 struct IWICImagingFactory;
-struct UIRenderStruct;
-class UISceneManager;
 
 
     class UIWorldManager
@@ -67,10 +67,10 @@ class UISceneManager;
        
         ID3D11DeviceContext* m_devCon{ nullptr };
         
-        //UIRenderStruct m_RenderStruct;
+        UIRenderStruct m_RenderStruct;
 
         //Scene Manager 저장소
-       // std::unordered_map<UINT, std::unique_ptr<UISceneManager>> sceneStorages;
+        std::unordered_map<UINT, std::unique_ptr<UISceneManager>> sceneStorages;
 
         //Scene 정보
         UINT m_SceneID{0}; // 나중에 scene으로 바꾸면 하기!!

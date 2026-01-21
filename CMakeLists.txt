@@ -110,7 +110,6 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Helper.cpp
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
     ${ALICE_SRC_DIR}/Core/Input.cpp
-    ${ALICE_SRC_DIR}/Core/UIWorldManager.cpp
 
     # FBX/3D 모델 로더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
@@ -138,10 +137,25 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
 
+    #UI
+     ${ALICE_SRC_DIR}/UI/UIWorldManager.cpp
+     ${ALICE_SRC_DIR}/UI/UISceneManager.cpp
+
+     #UI Component
+     ${ALICE_SRC_DIR}/UI/IUIComponent.cpp
+
+     #UI Object
+      ${ALICE_SRC_DIR}/UI/UIBase.cpp
+
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
+	${ALICE_SRC_DIR}/UI/UITransform.cpp
+	${ALICE_SRC_DIR}/UI/UI_ImageComponent.cpp
+	${ALICE_SRC_DIR}/UI/UIImage.cpp
+	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.cpp
+	${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
 )
 
 set(ENGINE_HEADERS
@@ -184,7 +198,6 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Vertex.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
-    ${ALICE_SRC_DIR}/Core/UIWorldManager.h
 
     
     #컴포넌트들
@@ -236,6 +249,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
 	${ALICE_SRC_DIR}/PhysX/PhysicsSystem.h
+
     #Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
@@ -245,10 +259,30 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
+
+     #UI
+    ${ALICE_SRC_DIR}/UI/UIWorldManager.h
+    ${ALICE_SRC_DIR}/UI/UISceneManager.h
+    ${ALICE_SRC_DIR}/UI/UIRenderStruct.h
+	${ALICE_SRC_DIR}/UI/UITransform.h
+	${ALICE_SRC_DIR}/UI/UICompDelegate.h
+	${ALICE_SRC_DIR}/UI/IUIScript.h
+	${ALICE_SRC_DIR}/UI/UIScriptSystem.h
+
+     #UI Component
+    ${ALICE_SRC_DIR}/UI/IUIComponent.h
+
+     #UI Object
+    ${ALICE_SRC_DIR}/UI/UIBase.h
+
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+
+	${ALICE_SRC_DIR}/UI/UI_ImageComponent.h
+	${ALICE_SRC_DIR}/UI/UIImage.h
+	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.h
 )
 
 # [변경] AliceEngine -> Engine
