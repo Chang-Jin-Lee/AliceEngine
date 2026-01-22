@@ -261,6 +261,13 @@ namespace Alice
             if (!name.empty())
                 outEntity["name"] = name;
             
+            // Parent 관계 저장 (순환 참조 방지를 위해 나중에 복원)
+            EntityId parentId = world.GetParent(id);
+            if (parentId != InvalidEntityId)
+            {
+                outEntity["_parentId"] = static_cast<std::uint32_t>(parentId);
+            }
+            
             if (const auto* transform = world.GetComponent<TransformComponent>(id); transform)
             {
                 rttr::instance inst = const_cast<TransformComponent&>(*transform);

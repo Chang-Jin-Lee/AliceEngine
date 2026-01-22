@@ -84,6 +84,121 @@ namespace Alice
 		extern std::atomic<float> g_BuildProgress;
 		extern std::atomic<long>  g_BuildExitCode;
 
+		// === ImGuizmo 통합을 위한 어댑터 함수들 ===
+		// 엔진 컨벤션: Y(yaw) * X(pitch) * Z(roll) 순서로 회전 행렬 생성
+		// rotation.x = pitch, rotation.y = yaw, rotation.z = roll (라디안)
+		inline XMMATRIX BuildRotYPR_Rad(const XMFLOAT3& rotation)
+		{
+			float yaw   = rotation.y;
+			float pitch = rotation.x;
+			float roll  = rotation.z;
+
+			XMMATRIX Ry = XMMatrixRotationY(yaw);
+			XMMATRIX Rx = XMMatrixRotationX(pitch);
+			XMMATRIX Rz = XMMatrixRotationZ(roll);
+
+			return Ry * Rx * Rz; // 엔진 규칙: Y * X * Z
+		}
+
+		// 로컬 행렬 생성 (S * R * T 순서, row-vector 컨벤션)
+		inline XMMATRIX BuildLocalMatrix(const TransformComponent& transform)
+		{
+			XMMATRIX S = XMMatrixScaling(transform.scale.x, transform.scale.y, transform.scale.z);
+			XMMATRIX R = BuildRotYPR_Rad(transform.rotation);
+			XMMATRIX T = XMMatrixTranslation(transform.position.x, transform.position.y, transform.position.z);
+
+			return S * R * T;
+		}
+
+		// Matrix에서 YPR 추출 (BuildRotYPR_Rad의 역함수)
+		// forward = +Z 기준, yaw/pitch로 forward 결정, roll은 forward축 기준
+		inline XMFLOAT3 MatrixToYPR_Rad(const XMMATRIX& matrix)
+		{
+			// forward 벡터 추출 (Z축 방향, +Z forward 컨벤션)
+			XMVECTOR forward0 = XMVectorSet(0, 0, 1, 0);
+			XMVECTOR right0_  = XMVectorSet(1, 0, 0, 0);
+			XMVECTOR upWorld  = XMVectorSet(0, 1, 0, 0);
+
+			XMVECTOR forward = XMVector3Normalize(XMVector3TransformNormal(forward0, matrix));
+			XMVECTOR right   = XMVector3Normalize(XMVector3TransformNormal(right0_, matrix));
+
+			float fx = XMVectorGetX(forward);
+			float fy = XMVectorGetY(forward);
+			float fz = XMVectorGetZ(forward);
+
+			// Yaw (Y축 회전): forward 벡터의 XZ 평면에서의 각도
+			float yaw = atan2f(fx, fz);
+
+			// Pitch (X축 회전): forward 벡터의 Y 성분
+			float pitch = atan2f(-fy, sqrtf(fx * fx + fz * fz));
+
+			// Roll (Z축 회전): "yaw/pitch만 적용했을 때의 right"와 실제 right의 차이를 forward축 기준으로 측정
+			XMVECTOR rightRef = XMVector3Cross(upWorld, forward);
+			float len = XMVectorGetX(XMVector3Length(rightRef));
+			float roll = 0.0f;
+			if (len > 1e-6f)
+			{
+				rightRef = XMVector3Normalize(rightRef);
+				float dot = XMVectorGetX(XMVector3Dot(rightRef, right));
+				dot = std::clamp(dot, -1.0f, 1.0f);
+				XMVECTOR cross = XMVector3Cross(rightRef, right);
+				float sign = XMVectorGetX(XMVector3Dot(forward, cross));
+				roll = atan2f(sign, dot);
+			}
+
+			return XMFLOAT3(pitch, yaw, roll); // (x=pitch, y=yaw, z=roll)
+		}
+
+		// 부모 체인을 따라 올라가며 월드 행렬 계산 (row-vector 컨벤션: World = Local * Parent)
+		inline XMMATRIX ComputeWorldMatrix(const World& world, EntityId entityId)
+		{
+			std::vector<XMMATRIX> matrixStack;
+			EntityId currentId = entityId;
+
+			while (currentId != InvalidEntityId)
+			{
+				const TransformComponent* t = world.GetComponent<TransformComponent>(currentId);
+				if (t)
+				{
+					XMMATRIX localMatrix = BuildLocalMatrix(*t);
+					matrixStack.push_back(localMatrix);
+					currentId = t->parent;
+				}
+				else
+				{
+					break;
+				}
+			}
+
+			// row-vector 컨벤션: child * parent * ... * root
+			XMMATRIX worldMatrix = XMMatrixIdentity();
+			for (const auto& m : matrixStack)  // child -> parent -> root 순서
+			{
+				worldMatrix = worldMatrix * m;
+			}
+
+			return worldMatrix;
+		}
+
+		// 로컬 행렬을 TRS로 분해
+		inline bool DecomposeLocalMatrix(const XMMATRIX& localMatrix, XMFLOAT3& position, XMFLOAT3& rotation, XMFLOAT3& scale)
+		{
+			XMVECTOR scaleVec, rotationQuat, translationVec;
+			if (!XMMatrixDecompose(&scaleVec, &rotationQuat, &translationVec, localMatrix))
+			{
+				return false; // 스케일 0이나 심한 skew면 실패
+			}
+
+			XMStoreFloat3(&position, translationVec);
+			XMStoreFloat3(&scale, scaleVec);
+
+			// 쿼터니언을 YPR로 변환
+			XMMATRIX rotMatrix = XMMatrixRotationQuaternion(rotationQuat);
+			rotation = MatrixToYPR_Rad(rotMatrix);
+
+			return true;
+		}
+
 		// 엔티티 생성 명령
 		struct CreateEntityCommand : ICommand
 		{
@@ -3019,46 +3134,6 @@ namespace Alice
 							// [핵심 수정] 씬 그래프 반영: 부모-자식 관계를 고려한 월드 행렬 계산
 							using namespace DirectX;
 							
-							// 쿼터니언을 Yaw-Pitch-Roll로 변환하는 헬퍼 함수
-							auto QuatToPitchYawRoll = [](XMVECTOR q) -> XMFLOAT3
-							{
-								using namespace DirectX;
-								
-								q = XMQuaternionNormalize(q);
-								
-								const XMVECTOR forward0 = XMVectorSet(0, 0, 1, 0);
-								const XMVECTOR right0_  = XMVectorSet(1, 0, 0, 0);
-								const XMVECTOR upWorld  = XMVectorSet(0, 1, 0, 0);
-								
-								XMVECTOR forward = XMVector3Normalize(XMVector3Rotate(forward0, q));
-								XMVECTOR right   = XMVector3Normalize(XMVector3Rotate(right0_, q));
-								
-								float fx = XMVectorGetX(forward);
-								float fy = XMVectorGetY(forward);
-								float fz = XMVectorGetZ(forward);
-								
-								float yaw   = std::atan2f(fx, fz);
-								float pitch = std::atan2f(-fy, std::sqrtf(fx*fx + fz*fz));
-								
-								// roll: "yaw/pitch만 적용했을 때의 right"와 실제 right의 차이를 forward축 기준으로 측정
-								XMVECTOR rightRef = XMVector3Cross(upWorld, forward);
-								float len = XMVectorGetX(XMVector3Length(rightRef));
-								if (len < 1e-6f)
-								{
-									// forward가 up과 거의 평행이면 roll이 정의가 약해짐(오일러의 저주 구간)
-									return XMFLOAT3(pitch, yaw, 0.0f);
-								}
-								rightRef = XMVectorScale(rightRef, 1.0f / len);
-								
-								float dot = XMVectorGetX(XMVector3Dot(rightRef, right));
-								dot = std::clamp(dot, -1.0f, 1.0f);
-								
-								float sign = XMVectorGetX(XMVector3Dot(XMVector3Cross(rightRef, right), forward));
-								float roll = std::atan2f(sign, dot);
-								
-								return XMFLOAT3(pitch, yaw, roll); // (x=pitch, y=yaw, z=roll)
-							};
-							
 							// 부모부터 루트까지 로컬 행렬을 스택에 쌓음
 							// 엔진의 yaw/pitch/roll 순서로 직접 행렬 생성 (ImGuizmo와의 호환성)
 							std::vector<XMMATRIX> matrixStack;
@@ -3188,73 +3263,32 @@ namespace Alice
 								XMMATRIX parentWorldMatrix = XMMatrixIdentity();
 								if (transform->parent != InvalidEntityId)
 								{
-									const TransformComponent* parentTransform = world.GetComponent<TransformComponent>(transform->parent);
-									if (parentTransform)
-									{
-										// 부모부터 루트까지 로컬 행렬을 스택에 쌓음
-										std::vector<XMMATRIX> parentMatrixStack;
-										EntityId parentId = transform->parent;
-										
-										while (parentId != InvalidEntityId)
-										{
-											const TransformComponent* t = world.GetComponent<TransformComponent>(parentId);
-											if (t)
-											{
-												// 엔진 순서: yaw(Y) → pitch(X) → roll(Z)
-												float pitch = t->rotation.x;
-												float yaw   = t->rotation.y;
-												float roll  = t->rotation.z;
-												
-												XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
-												XMMATRIX R = XMMatrixRotationY(yaw) * XMMatrixRotationX(pitch) * XMMatrixRotationZ(roll);
-												XMMATRIX T = XMMatrixTranslation(t->position.x, t->position.y, t->position.z);
-												
-												XMMATRIX localMatrix = S * R * T;
-												
-												parentMatrixStack.push_back(localMatrix);
-												parentId = t->parent;
-											}
-											else
-											{
-												break;
-											}
-										}
-										
-										// 부모의 월드 행렬 계산
-										for (const auto& m : parentMatrixStack)
-										{
-											parentWorldMatrix = parentWorldMatrix * m;
-										}
-									}
+									parentWorldMatrix = ComputeWorldMatrix(world, transform->parent);
 								}
 								
-								// 부모의 월드 행렬을 역으로 곱해서 로컬 행렬 추출
+								// 부모의 월드 행렬을 역으로 곱해서 로컬 행렬 추출 (row-vector 컨벤션)
 								XMMATRIX parentWorldMatrixInv = XMMatrixInverse(nullptr, parentWorldMatrix);
 								XMMATRIX localMatrix = manipulatedWorldMatrix * parentWorldMatrixInv;
 								
-								// XMMatrixDecompose로 쿼터니언 추출 (안정적)
-								XMVECTOR scaleVec, rotationQuat, translationVec;
-								if (XMMatrixDecompose(&scaleVec, &rotationQuat, &translationVec, localMatrix))
+								// 어댑터 함수를 사용하여 로컬 행렬을 TRS로 분해
+								XMFLOAT3 newPosition, newRotation, newScale;
+								if (DecomposeLocalMatrix(localMatrix, newPosition, newRotation, newScale))
 								{
-									// 위치와 스케일은 직접 저장
-									XMStoreFloat3(&transform->position, translationVec);
-									XMStoreFloat3(&transform->scale, scaleVec);
-									
-									// 쿼터니언을 엔진의 yaw/pitch/roll로 변환
-									XMFLOAT3 euler = QuatToPitchYawRoll(rotationQuat);
-									transform->rotation = euler;  // (x=pitch, y=yaw, z=roll)
+									transform->position = newPosition;
+									transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
+									transform->scale = newScale;
 								}
 								
 								// 오브젝트 스냅 모드용 위치 (월드 공간)
-								XMFLOAT3 newPosition;
-								XMStoreFloat3(&newPosition, XMVector3Transform(XMVectorZero(), manipulatedWorldMatrix));
+								XMFLOAT3 worldPosition;
+								XMStoreFloat3(&worldPosition, XMVector3Transform(XMVectorZero(), manipulatedWorldMatrix));
 
 								// 오브젝트 스냅 모드: 다른 엔티티에 스냅
 								if (snapMode == SnapMode::Object && gizmoOp == ImGuizmo::TRANSLATE)
 								{
-									XMVECTOR currentPos = XMLoadFloat3(&newPosition);
+									XMVECTOR currentPos = XMLoadFloat3(&worldPosition);
 									float minDistance = objectSnapDistance;
-									XMFLOAT3 snappedPosition = newPosition;
+									XMFLOAT3 snappedPosition = worldPosition;
 									bool foundSnap = false;
 
 									// 모든 엔티티를 순회하며 가장 가까운 위치 찾기
@@ -3296,43 +3330,8 @@ namespace Alice
 													auto mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
 													if (mesh && mesh->sourceModel)
 													{
-														// 월드 행렬 계산 (부모 포함)
-														// 부모에서 자식으로 내려가면서 행렬을 곱해야 하므로,
-														// 먼저 부모 체인을 스택에 쌓고 역순으로 곱합니다.
-														std::vector<XMMATRIX> matrixStack;
-														EntityId currentId = eid;
-
-														// 부모 체인을 따라 올라가면서 로컬 행렬들을 수집
-														while (currentId != InvalidEntityId)
-														{
-															if (auto* t = world.GetComponent<TransformComponent>(currentId))
-															{
-																// 엔진 순서: yaw(Y) → pitch(X) → roll(Z)
-																float pitch = t->rotation.x;
-																float yaw   = t->rotation.y;
-																float roll  = t->rotation.z;
-																
-																XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
-																XMMATRIX R = XMMatrixRotationY(yaw) * XMMatrixRotationX(pitch) * XMMatrixRotationZ(roll);
-																XMMATRIX T = XMMatrixTranslation(t->position.x, t->position.y, t->position.z);
-																
-																XMMATRIX localMatrix = S * R * T;
-
-																matrixStack.push_back(localMatrix);
-																currentId = t->parent;
-															}
-															else
-															{
-																break;
-															}
-														}
-
-														// 루트에서 자식으로 내려가면서 행렬 곱하기 (역순으로)
-														XMMATRIX worldMatrix = XMMatrixIdentity();
-														for (auto it = matrixStack.rbegin(); it != matrixStack.rend(); ++it)
-														{
-															worldMatrix = worldMatrix * (*it);
-														}
+														// 어댑터 함수를 사용하여 월드 행렬 계산
+														XMMATRIX worldMatrix = ComputeWorldMatrix(world, eid);
 
 														const auto& vertices = mesh->sourceModel->GetCPUVertices();
 														const auto& indices = mesh->sourceModel->GetCPUIndices();
@@ -3470,17 +3469,13 @@ namespace Alice
 										// 스냅된 월드 행렬을 로컬 행렬로 변환
 										XMMATRIX snappedLocalMatrix = snappedWorldMatrix * parentWorldMatrixInv;
 										
-										// XMMatrixDecompose로 쿼터니언 추출 (안정적)
-										XMVECTOR scaleVec, rotationQuat, translationVec;
-										if (XMMatrixDecompose(&scaleVec, &rotationQuat, &translationVec, snappedLocalMatrix))
+										// 어댑터 함수를 사용하여 로컬 행렬을 TRS로 분해
+										XMFLOAT3 newPosition, newRotation, newScale;
+										if (DecomposeLocalMatrix(snappedLocalMatrix, newPosition, newRotation, newScale))
 										{
-											// 위치와 스케일은 직접 저장
-											XMStoreFloat3(&transform->position, translationVec);
-											XMStoreFloat3(&transform->scale, scaleVec);
-											
-											// 쿼터니언을 엔진의 yaw/pitch/roll로 변환
-											XMFLOAT3 euler = QuatToPitchYawRoll(rotationQuat);
-											transform->rotation = euler;  // (x=pitch, y=yaw, z=roll)
+											transform->position = newPosition;
+											transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
+											transform->scale = newScale;
 										}
 									}
 								}
@@ -3511,17 +3506,20 @@ namespace Alice
 								newTransform.scale = transform->scale;
 								newTransform.enabled = transform->enabled;
 
-								// Transform이 실제로 변경되었는지 확인
+								// Transform이 실제로 변경되었는지 확인 (float 비교는 epsilon 사용)
+								constexpr float kFloatEpsilon = 1e-6f;
+								auto FloatNotEqual = [](float a, float b) { return std::fabs(a - b) > kFloatEpsilon; };
+								
 								bool hasChanged =
-									(gizmoStartTransform.position.x != newTransform.position.x ||
-										gizmoStartTransform.position.y != newTransform.position.y ||
-										gizmoStartTransform.position.z != newTransform.position.z) ||
-									(gizmoStartTransform.rotation.x != newTransform.rotation.x ||
-										gizmoStartTransform.rotation.y != newTransform.rotation.y ||
-										gizmoStartTransform.rotation.z != newTransform.rotation.z) ||
-									(gizmoStartTransform.scale.x != newTransform.scale.x ||
-										gizmoStartTransform.scale.y != newTransform.scale.y ||
-										gizmoStartTransform.scale.z != newTransform.scale.z) ||
+									FloatNotEqual(gizmoStartTransform.position.x, newTransform.position.x) ||
+									FloatNotEqual(gizmoStartTransform.position.y, newTransform.position.y) ||
+									FloatNotEqual(gizmoStartTransform.position.z, newTransform.position.z) ||
+									FloatNotEqual(gizmoStartTransform.rotation.x, newTransform.rotation.x) ||
+									FloatNotEqual(gizmoStartTransform.rotation.y, newTransform.rotation.y) ||
+									FloatNotEqual(gizmoStartTransform.rotation.z, newTransform.rotation.z) ||
+									FloatNotEqual(gizmoStartTransform.scale.x, newTransform.scale.x) ||
+									FloatNotEqual(gizmoStartTransform.scale.y, newTransform.scale.y) ||
+									FloatNotEqual(gizmoStartTransform.scale.z, newTransform.scale.z) ||
 									(gizmoStartTransform.enabled != newTransform.enabled);
 
 								if (hasChanged)
@@ -4316,17 +4314,20 @@ namespace Alice
 						newTransform.scale = transform->scale;
 						newTransform.enabled = transform->enabled;
 
-						// Transform이 실제로 변경되었는지 확인
+						// Transform이 실제로 변경되었는지 확인 (float 비교는 epsilon 사용)
+						constexpr float kFloatEpsilon = 1e-6f;
+						auto FloatNotEqual = [](float a, float b) { return std::fabs(a - b) > kFloatEpsilon; };
+						
 						bool hasChanged =
-							(editStartTransform.position.x != newTransform.position.x ||
-								editStartTransform.position.y != newTransform.position.y ||
-								editStartTransform.position.z != newTransform.position.z) ||
-							(editStartTransform.rotation.x != newTransform.rotation.x ||
-								editStartTransform.rotation.y != newTransform.rotation.y ||
-								editStartTransform.rotation.z != newTransform.rotation.z) ||
-							(editStartTransform.scale.x != newTransform.scale.x ||
-								editStartTransform.scale.y != newTransform.scale.y ||
-								editStartTransform.scale.z != newTransform.scale.z) ||
+							FloatNotEqual(editStartTransform.position.x, newTransform.position.x) ||
+							FloatNotEqual(editStartTransform.position.y, newTransform.position.y) ||
+							FloatNotEqual(editStartTransform.position.z, newTransform.position.z) ||
+							FloatNotEqual(editStartTransform.rotation.x, newTransform.rotation.x) ||
+							FloatNotEqual(editStartTransform.rotation.y, newTransform.rotation.y) ||
+							FloatNotEqual(editStartTransform.rotation.z, newTransform.rotation.z) ||
+							FloatNotEqual(editStartTransform.scale.x, newTransform.scale.x) ||
+							FloatNotEqual(editStartTransform.scale.y, newTransform.scale.y) ||
+							FloatNotEqual(editStartTransform.scale.z, newTransform.scale.z) ||
 							(editStartTransform.enabled != newTransform.enabled);
 
 						if (hasChanged)

@@ -60,6 +60,19 @@ static uint64_t MakeTerrainGeomKey(const Phy_TerrainHeightFieldComponent& t) noe
 	
 	key = HashCombine64(key, static_cast<uint64_t>(t.heightSamples.size()));
 	
+	// heightSamples 내용 해시 추가 (높이값 변경 감지)
+	// 성능을 위해 샘플 일부만 해시에 포함 (매 8번째 샘플)
+	if (!t.heightSamples.empty())
+	{
+		const size_t step = std::max<size_t>(1, t.heightSamples.size() / 256); // 최대 256개 샘플만 사용
+		for (size_t i = 0; i < t.heightSamples.size(); i += step)
+		{
+			uint32_t sampleBits = 0;
+			std::memcpy(&sampleBits, &t.heightSamples[i], sizeof(float));
+			key = HashCombine64(key, static_cast<uint64_t>(sampleBits));
+		}
+	}
+	
 	return key;
 }
 
