@@ -90,11 +90,23 @@ namespace Alice
         /// @param viewport 뷰포트 영역
         void RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
+        /// Bloom 패스를 렌더링합니다.
+        /// @param sourceSRV 입력 씬 텍스처 SRV
+        /// @param targetRTV 출력 렌더 타겟 RTV
+        /// @param viewport 뷰포트 영역
+        void RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
         
         /// 포스트 프로세스 파라미터 설정하기
         void SetPostProcessParams(float exposure, float maxHDRNits);
+
+        /// Bloom 설정 가져오기
+        const BloomSettings& GetBloomSettings() const { return m_bloomSettings; }
+        
+        /// Bloom 설정 설정하기
+        void SetBloomSettings(const BloomSettings& settings);
 
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }
         const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
@@ -123,6 +135,8 @@ namespace Alice
         bool CreateIblResources(const std::string& iblDir = "Bridge", const std::string& iblName = "bridge");
         bool CreateShadowMapResources();
         bool CreateToneMappingResources(const std::uint32_t& width, const std::uint32_t& height);
+
+        bool CreateBloomResources(const std::uint32_t& width, const std::uint32_t& height);
         
         // 렌더링 패스
         DirectX::XMMATRIX RenderShadowPass(const World& world,
@@ -211,6 +225,20 @@ namespace Alice
         // ==== Tone Mapping 셰이더 ====
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_toneMappingPS;
 
+        // ==== Bloom 셰이더 ====
+		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_bloomBrightSRV;
+		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_bloomBrightRTV;
+		Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_bloomBrightTex;
+
+		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_bloomBlurSRV[2];
+		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_bloomBlurRTV[2];
+		Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_bloomBlurTex[2];
+       
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomBrightPassPS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomBlurPassPS_H;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomBlurPassPS_V;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomCompositePS;
+
         // ==== Shadow pass shaders ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowVS;
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowSkinnedVS;
@@ -237,6 +265,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbExtraLights;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbBones;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbPostProcess;
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbBloom;
         // Transparent Forward-Style 패스용 최소 조명 CB
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbTransparentLight;
         // Shadow 전용 CB (정확한 패킹/행렬 전달용)
@@ -313,5 +342,8 @@ namespace Alice
 
         // ==== 포스트 프로세스 파라미터 ====
         PostProcessParams m_postProcessParams;
+        
+        // ==== Bloom 파라미터 ====
+        BloomSettings m_bloomSettings;
     };
 }

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -13,6 +13,19 @@ namespace Alice
     {
         float exposure = 0.0f;        // Exposure 값 (기본값: 0 = 1.0배)
         float maxHDRNits = 1000.0f;   // HDR 모니터 최대 밝기 (nits)
+    };
+
+    /// Bloom 파라미터 구조체
+    struct BloomSettings
+    {
+        bool enabled = true;          // Bloom 활성화
+        float intensity = 1.2f;      // 합성 강도
+        float threshold = 1.0f;      // 밝기 추출 기준
+        float knee = 0.5f;            // Soft threshold (0~1)
+        float radius = 6.0f;          // Blur 크기 (sigma)
+        int downsample = 2;           // 다운샘플링 (1=원본, 2=1/2, 4=1/4)
+        float clamp = 10.0f;          // Bloom 값 상한 (옵션)
+        int blurTaps = 9;              // Blur 탭 수 (5/7/9 등, 옵션)
     };
 
     /// 조명/재질 파라미터 구조체
@@ -128,6 +141,17 @@ namespace Alice
 		float exposure;
 		float maxHDRNits;
 		float padding[2];
+	};
+
+	struct BloomCB
+	{
+		float threshold;
+		float knee;
+		float intensity;
+		float radius;
+		DirectX::XMFLOAT2 texelSize;
+		int downsample;
+		float padding;
 	};
 
 	// 디퍼드에서 쓰이는 중

@@ -120,6 +120,12 @@ namespace Alice
 			return false;
 		}
 
+		if (!CreateBloomResources(width, height))
+		{
+			ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateBloomResources failed.");
+			return false;
+		}
+
         // IBL 리소스 생성
         if (!CreateIblResources())
         {
@@ -164,6 +170,18 @@ namespace Alice
         if (FAILED(m_device->CreateTexture2D(&dDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf()))) return;
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { dDesc.Format, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
         if (FAILED(m_device->CreateDepthStencilView(m_sceneDepthTex.Get(), &dsvDesc, m_sceneDSV.ReleaseAndGetAddressOf()))) return;
+
+        // Bloom 리소스 리사이즈
+        m_bloomBrightTex.Reset();
+        m_bloomBrightRTV.Reset();
+        m_bloomBrightSRV.Reset();
+        for (int i = 0; i < 2; ++i)
+        {
+            m_bloomBlurTex[i].Reset();
+            m_bloomBlurRTV[i].Reset();
+            m_bloomBlurSRV[i].Reset();
+        }
+        CreateBloomResources(width, height);
     }
 
     bool DeferredRenderSystem::CreateGBuffer(std::uint32_t width, std::uint32_t height)
@@ -658,6 +676,12 @@ namespace Alice
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbPostProcess.ReleaseAndGetAddressOf())))
             return false;
 
+        // Bloom CB
+        cbDesc.ByteWidth = sizeof(BloomCB);
+        cbDesc.ByteWidth = (cbDesc.ByteWidth + 15u) & ~15u; // 16-byte alignment
+        if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbBloom.ReleaseAndGetAddressOf())))
+            return false;
+
         // Transparent Forward-Style Light CB (register(b1))
         // float3 dir + float intensity + float3 color + pad + float3 camPos + pad = 48 bytes (16B 정렬)
         cbDesc.ByteWidth = sizeof(float) * 12;
@@ -922,6 +946,85 @@ namespace Alice
         return true;
     }
 
+    bool DeferredRenderSystem::CreateBloomResources(const std::uint32_t& width, const std::uint32_t& height)
+    {
+        // Bloom Bright Pass 텍스처 생성 (다운샘플링 적용)
+        std::uint32_t bloomWidth = width / m_bloomSettings.downsample;
+        std::uint32_t bloomHeight = height / m_bloomSettings.downsample;
+        
+        // 최소 크기 보장 (다운샘플링이 너무 크면 최소 1x1 텍스처 유지)
+        if (bloomWidth == 0) bloomWidth = 1;
+        if (bloomHeight == 0) bloomHeight = 1;
+        
+        // 다운샘플링이 너무 크면 경고
+        if (bloomWidth < 4 || bloomHeight < 4)
+        {
+            ALICE_LOG_WARN("DeferredRenderSystem::CreateBloomResources: Bloom texture size is very small (%dx%d). Consider reducing downsample value.", bloomWidth, bloomHeight);
+        }
+        
+        D3D11_TEXTURE2D_DESC bloomDesc = { bloomWidth, bloomHeight, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+        if (FAILED(m_device->CreateTexture2D(&bloomDesc, nullptr, m_bloomBrightTex.ReleaseAndGetAddressOf()))) return false;
+        if (FAILED(m_device->CreateRenderTargetView(m_bloomBrightTex.Get(), nullptr, m_bloomBrightRTV.ReleaseAndGetAddressOf()))) return false;
+        if (FAILED(m_device->CreateShaderResourceView(m_bloomBrightTex.Get(), nullptr, m_bloomBrightSRV.ReleaseAndGetAddressOf()))) return false;
+
+        // Bloom Blur Ping-Pong 버퍼 생성
+        for (int i = 0; i < 2; ++i)
+        {
+            if (FAILED(m_device->CreateTexture2D(&bloomDesc, nullptr, m_bloomBlurTex[i].ReleaseAndGetAddressOf()))) return false;
+            if (FAILED(m_device->CreateRenderTargetView(m_bloomBlurTex[i].Get(), nullptr, m_bloomBlurRTV[i].ReleaseAndGetAddressOf()))) return false;
+            if (FAILED(m_device->CreateShaderResourceView(m_bloomBlurTex[i].Get(), nullptr, m_bloomBlurSRV[i].ReleaseAndGetAddressOf()))) return false;
+        }
+
+        // Bloom 셰이더 컴파일 (한 번만 컴파일하므로 이미 생성되어 있으면 스킵)
+        if (!m_bloomBrightPassPS)
+        {
+            ComPtr<ID3DBlob> psBlob, errorBlob;
+
+            // Bright Pass PS
+            if (FAILED(D3DCompile(CommonShaderCode::BloomBrightPassPS, strlen(CommonShaderCode::BloomBrightPassPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Bright Pass PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomBrightPassPS.ReleaseAndGetAddressOf()))) return false;
+
+            psBlob.Reset();
+            errorBlob.Reset();
+
+            // Blur Pass PS (Horizontal)
+            if (FAILED(D3DCompile(CommonShaderCode::BloomBlurPassPS_H, strlen(CommonShaderCode::BloomBlurPassPS_H), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Blur Pass PS (H) compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomBlurPassPS_H.ReleaseAndGetAddressOf()))) return false;
+
+            psBlob.Reset();
+            errorBlob.Reset();
+
+            // Blur Pass PS (Vertical)
+            if (FAILED(D3DCompile(CommonShaderCode::BloomBlurPassPS_V, strlen(CommonShaderCode::BloomBlurPassPS_V), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Blur Pass PS (V) compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomBlurPassPS_V.ReleaseAndGetAddressOf()))) return false;
+
+            psBlob.Reset();
+            errorBlob.Reset();
+
+            // Composite PS
+            if (FAILED(D3DCompile(CommonShaderCode::BloomCompositePS, strlen(CommonShaderCode::BloomCompositePS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Composite PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomCompositePS.ReleaseAndGetAddressOf()))) return false;
+        }
+
+        ALICE_LOG_INFO("DeferredRenderSystem::CreateBloomResources: success. (%dx%d)", bloomWidth, bloomHeight);
+        return true;
+    }
 
     bool DeferredRenderSystem::CreateIblResources(const std::string& iblDir, const std::string& iblName)
     {
@@ -1136,14 +1239,23 @@ namespace Alice
         // 반투명(알파 블렌딩) 오브젝트는 라이트 패스 이후 Forward-Style로 합성
         PassTransparentForward(camera, skinnedCommands, shadingMode);
 
-        // 에디터 뷰포트 표시용 LDR 텍스처로 톤매핑 (ImGui::Image에서 사용)
+        // 에디터 뷰포트 표시용 LDR 텍스처로 Bloom + 톤매핑 (ImGui::Image에서 사용)
         if (m_viewportRTV)
         {
             D3D11_VIEWPORT viewport = {};
             viewport.Width = static_cast<float>(m_sceneWidth);
             viewport.Height = static_cast<float>(m_sceneHeight);
             viewport.MaxDepth = 1.0f;
-            RenderToneMapping(m_viewportRTV.Get(), viewport);
+            
+            // Bloom 패스 (enabled일 때만)
+            if (m_bloomSettings.enabled)
+            {
+                RenderBloomPass(m_sceneColorSRV.Get(), m_viewportRTV.Get(), viewport);
+            }
+            else
+            {
+                RenderToneMapping(m_viewportRTV.Get(), viewport);
+            }
         }
 
         // 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
@@ -1986,6 +2098,18 @@ namespace Alice
         m_postProcessParams.maxHDRNits = maxHDRNits;
     }
 
+    void DeferredRenderSystem::SetBloomSettings(const BloomSettings& settings)
+    {
+        bool downsampleChanged = (m_bloomSettings.downsample != settings.downsample);
+        m_bloomSettings = settings;
+        
+        // 다운샘플링 변경 시 리소스 재생성
+        if (downsampleChanged && m_sceneWidth > 0 && m_sceneHeight > 0)
+        {
+            CreateBloomResources(m_sceneWidth, m_sceneHeight);
+        }
+    }
+
     bool DeferredRenderSystem::SetIblSet(const std::string& iblDir, const std::string& iblName)
     {
         return CreateIblResources(iblDir, iblName);
@@ -2057,6 +2181,110 @@ namespace Alice
         // 리소스 해제
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
+    }
+
+    void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+    {
+        if (!m_bloomSettings.enabled || !sourceSRV || !targetRTV) return;
+        if (!m_bloomBrightPassPS || !m_bloomBlurPassPS_H || !m_bloomBlurPassPS_V || !m_bloomCompositePS) return;
+
+        // 다운샘플링 크기 계산 (최소 크기 보장)
+        std::uint32_t bloomWidth = (viewport.Width > 0) ? (viewport.Width / m_bloomSettings.downsample) : 1;
+        std::uint32_t bloomHeight = (viewport.Height > 0) ? (viewport.Height / m_bloomSettings.downsample) : 1;
+        
+        // 최소 크기 보장
+        if (bloomWidth == 0) bloomWidth = 1;
+        if (bloomHeight == 0) bloomHeight = 1;
+        
+        // 텍셀 크기 계산 (0으로 나누기 방지)
+        float texelSizeX = (bloomWidth > 0) ? (1.0f / bloomWidth) : 1.0f;
+        float texelSizeY = (bloomHeight > 0) ? (1.0f / bloomHeight) : 1.0f;
+        
+        D3D11_VIEWPORT bloomViewport = { 0.0f, 0.0f, (float)bloomWidth, (float)bloomHeight, 0.0f, 1.0f };
+
+        // Bloom CB 업데이트
+        BloomCB bloomCB = {};
+        bloomCB.threshold = m_bloomSettings.threshold;
+        bloomCB.knee = m_bloomSettings.knee;
+        bloomCB.intensity = m_bloomSettings.intensity;
+        bloomCB.radius = m_bloomSettings.radius;
+        bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+        bloomCB.downsample = m_bloomSettings.downsample;
+
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+            m_context->Unmap(m_cbBloom.Get(), 0);
+        }
+
+        // 상태 설정
+        float blendFactor[4] = { 0, 0, 0, 0 };
+        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        m_context->RSSetState(m_ppRasterNoCull.Get());
+
+        // Quad 설정
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_context->IASetInputLayout(m_quadInputLayout.Get());
+        m_context->IASetVertexBuffers(0, 1, m_quadVB.GetAddressOf(), &m_quadStride, &m_quadOffset);
+        m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+        m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
+
+        ID3D11Buffer* cbBloom = m_cbBloom.Get();
+        ID3D11SamplerState* sampler = m_samplerLinear.Get();
+
+        // 1. Bright Pass
+        m_context->RSSetViewports(1, &bloomViewport);
+        m_context->OMSetRenderTargets(1, m_bloomBrightRTV.GetAddressOf(), nullptr);
+        ID3D11ShaderResourceView* srvBright = sourceSRV;
+        m_context->PSSetShaderResources(0, 1, &srvBright);
+        m_context->PSSetSamplers(0, 1, &sampler);
+        m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+        m_context->PSSetShader(m_bloomBrightPassPS.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+        // 2. Blur Pass (Horizontal -> Vertical, ping-pong)
+        ID3D11ShaderResourceView* inputSRV = m_bloomBrightSRV.Get();
+        ID3D11RenderTargetView* outputRTV = m_bloomBlurRTV[0].Get();
+        
+        // Horizontal
+        m_context->OMSetRenderTargets(1, &outputRTV, nullptr);
+        m_context->PSSetShaderResources(0, 1, &inputSRV);
+        m_context->PSSetShader(m_bloomBlurPassPS_H.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+        // Vertical
+        ID3D11ShaderResourceView* nullSRVs[1] = { nullptr };
+        m_context->PSSetShaderResources(0, 1, nullSRVs);
+        inputSRV = m_bloomBlurSRV[0].Get();
+        outputRTV = m_bloomBlurRTV[1].Get();
+        m_context->OMSetRenderTargets(1, &outputRTV, nullptr);
+        m_context->PSSetShaderResources(0, 1, &inputSRV);
+        m_context->PSSetShader(m_bloomBlurPassPS_V.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+        // 3. Composite (Bloom + Scene -> Target)
+        m_context->RSSetViewports(1, &viewport);
+        m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
+        ID3D11ShaderResourceView* srvs[2] = { sourceSRV, m_bloomBlurSRV[1].Get() };
+        m_context->PSSetShaderResources(0, 2, srvs);
+        ID3D11Buffer* cbPostProcess = m_cbPostProcess.Get();
+        PostProcessCB postProcessCB = {};
+        GetPostProcessParams(postProcessCB.exposure, postProcessCB.maxHDRNits);
+        if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            memcpy(mapped.pData, &postProcessCB, sizeof(PostProcessCB));
+            m_context->Unmap(m_cbPostProcess.Get(), 0);
+        }
+        m_context->PSSetConstantBuffers(2, 1, &cbPostProcess);
+        m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+        m_context->PSSetShader(m_bloomCompositePS.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+        // 리소스 해제
+        ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
+        m_context->PSSetShaderResources(0, 2, nullSRVs2);
     }
 }
 
