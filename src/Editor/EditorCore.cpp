@@ -85,19 +85,11 @@ namespace Alice
 		extern std::atomic<long>  g_BuildExitCode;
 
 		// === ImGuizmo 통합을 위한 어댑터 함수들 ===
-		// 엔진 컨벤션: Y(yaw) * X(pitch) * Z(roll) 순서로 회전 행렬 생성
+		// 엔진 컨벤션: XMMatrixRotationRollPitchYaw 사용 (런타임과 동일)
 		// rotation.x = pitch, rotation.y = yaw, rotation.z = roll (라디안)
 		inline XMMATRIX BuildRotYPR_Rad(const XMFLOAT3& rotation)
 		{
-			float yaw   = rotation.y;
-			float pitch = rotation.x;
-			float roll  = rotation.z;
-
-			XMMATRIX Ry = XMMatrixRotationY(yaw);
-			XMMATRIX Rx = XMMatrixRotationX(pitch);
-			XMMATRIX Rz = XMMatrixRotationZ(roll);
-
-			return Ry * Rx * Rz; // 엔진 규칙: Y * X * Z
+			return DirectX::XMMatrixRotationRollPitchYaw(rotation.x, rotation.y, rotation.z);
 		}
 
 		// 로컬 행렬 생성 (S * R * T 순서, row-vector 컨벤션)
@@ -110,43 +102,29 @@ namespace Alice
 			return S * R * T;
 		}
 
-		// Matrix에서 YPR 추출 (BuildRotYPR_Rad의 역함수)
-		// forward = +Z 기준, yaw/pitch로 forward 결정, roll은 forward축 기준
-		inline XMFLOAT3 MatrixToYPR_Rad(const XMMATRIX& matrix)
+		// 쿼터니언을 YPR (Euler)로 변환 (쿼터니언 기반 역변환)
+		// PhysicsSystem과 동일한 공식 사용
+		inline XMFLOAT3 QuaternionToYPR_Rad(DirectX::FXMVECTOR q)
 		{
-			// forward 벡터 추출 (Z축 방향, +Z forward 컨벤션)
-			XMVECTOR forward0 = XMVectorSet(0, 0, 1, 0);
-			XMVECTOR right0_  = XMVectorSet(1, 0, 0, 0);
-			XMVECTOR upWorld  = XMVectorSet(0, 1, 0, 0);
+			DirectX::XMFLOAT4 qq;
+			DirectX::XMStoreFloat4(&qq, q);
 
-			XMVECTOR forward = XMVector3Normalize(XMVector3TransformNormal(forward0, matrix));
-			XMVECTOR right   = XMVector3Normalize(XMVector3TransformNormal(right0_, matrix));
+			const float x = qq.x, y = qq.y, z = qq.z, w = qq.w;
 
-			float fx = XMVectorGetX(forward);
-			float fy = XMVectorGetY(forward);
-			float fz = XMVectorGetZ(forward);
+			float sinp = 2.0f * (w * x - y * z);
+			float pitch = (std::abs(sinp) >= 1.0f)
+				? std::copysign(DirectX::XM_PIDIV2, sinp)
+				: std::asin(sinp);
 
-			// Yaw (Y축 회전): forward 벡터의 XZ 평면에서의 각도
-			float yaw = atan2f(fx, fz);
+			float siny_cosp = 2.0f * (w * y + x * z);
+			float cosy_cosp = 1.0f - 2.0f * (x * x + y * y);
+			float yaw = std::atan2(siny_cosp, cosy_cosp);
 
-			// Pitch (X축 회전): forward 벡터의 Y 성분
-			float pitch = atan2f(-fy, sqrtf(fx * fx + fz * fz));
+			float sinr_cosp = 2.0f * (w * z + x * y);
+			float cosr_cosp = 1.0f - 2.0f * (x * x + z * z);
+			float roll = std::atan2(sinr_cosp, cosr_cosp);
 
-			// Roll (Z축 회전): "yaw/pitch만 적용했을 때의 right"와 실제 right의 차이를 forward축 기준으로 측정
-			XMVECTOR rightRef = XMVector3Cross(upWorld, forward);
-			float len = XMVectorGetX(XMVector3Length(rightRef));
-			float roll = 0.0f;
-			if (len > 1e-6f)
-			{
-				rightRef = XMVector3Normalize(rightRef);
-				float dot = XMVectorGetX(XMVector3Dot(rightRef, right));
-				dot = std::clamp(dot, -1.0f, 1.0f);
-				XMVECTOR cross = XMVector3Cross(rightRef, right);
-				float sign = XMVectorGetX(XMVector3Dot(forward, cross));
-				roll = atan2f(sign, dot);
-			}
-
-			return XMFLOAT3(pitch, yaw, roll); // (x=pitch, y=yaw, z=roll)
+			return DirectX::XMFLOAT3(pitch, yaw, roll);
 		}
 
 		// 부모 체인을 따라 올라가며 월드 행렬 계산 (row-vector 컨벤션: World = Local * Parent)
@@ -180,22 +158,16 @@ namespace Alice
 			return worldMatrix;
 		}
 
-		// 로컬 행렬을 TRS로 분해
+		// 로컬 행렬을 TRS로 분해 (쿼터니언 기반 역변환)
 		inline bool DecomposeLocalMatrix(const XMMATRIX& localMatrix, XMFLOAT3& position, XMFLOAT3& rotation, XMFLOAT3& scale)
 		{
-			XMVECTOR scaleVec, rotationQuat, translationVec;
-			if (!XMMatrixDecompose(&scaleVec, &rotationQuat, &translationVec, localMatrix))
-			{
-				return false; // 스케일 0이나 심한 skew면 실패
-			}
+			DirectX::XMVECTOR s, q, t;
+			if (!DirectX::XMMatrixDecompose(&s, &q, &t, localMatrix))
+				return false;
 
-			XMStoreFloat3(&position, translationVec);
-			XMStoreFloat3(&scale, scaleVec);
-
-			// 쿼터니언을 YPR로 변환
-			XMMATRIX rotMatrix = XMMatrixRotationQuaternion(rotationQuat);
-			rotation = MatrixToYPR_Rad(rotMatrix);
-
+			DirectX::XMStoreFloat3(&position, t);
+			DirectX::XMStoreFloat3(&scale, s);
+			rotation = QuaternionToYPR_Rad(q);
 			return true;
 		}
 
@@ -3131,52 +3103,17 @@ namespace Alice
 							XMStoreFloat4x4(&viewMatrix, viewXM);
 							XMStoreFloat4x4(&projMatrix, projXM);
 
-							// [핵심 수정] 씬 그래프 반영: 부모-자식 관계를 고려한 월드 행렬 계산
+							// [핵심 수정] ComputeWorldMatrix()로 통일 (런타임과 동일한 규약)
 							using namespace DirectX;
 							
-							// 부모부터 루트까지 로컬 행렬을 스택에 쌓음
-							// 엔진의 yaw/pitch/roll 순서로 직접 행렬 생성 (ImGuizmo와의 호환성)
-							std::vector<XMMATRIX> matrixStack;
-							EntityId currentId = selectedEntity;
-							
-							while (currentId != InvalidEntityId)
-							{
-								const TransformComponent* t = world.GetComponent<TransformComponent>(currentId);
-								if (t)
-								{
-									// 엔진 순서: yaw(Y) → pitch(X) → roll(Z)
-									float pitch = t->rotation.x;
-									float yaw   = t->rotation.y;
-									float roll  = t->rotation.z;
-									
-									XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
-									XMMATRIX R = XMMatrixRotationY(yaw) * XMMatrixRotationX(pitch) * XMMatrixRotationZ(roll);
-									XMMATRIX T = XMMatrixTranslation(t->position.x, t->position.y, t->position.z);
-									
-									// 로컬 행렬: S * R * T 순서 (DirectXMath 행벡터 컨벤션)
-									XMMATRIX localMatrix = S * R * T;
-									
-									matrixStack.push_back(localMatrix);
-									currentId = t->parent;
-								}
-								else
-								{
-									break;
-								}
-							}
-							
-							// 행벡터 컨벤션: child * parent * ... * root 형태로 곱하기 (정순)
-							XMMATRIX worldMatrixXM = XMMatrixIdentity();
-							for (const auto& m : matrixStack)  // child -> parent -> root 순서
-							{
-								worldMatrixXM = worldMatrixXM * m;  // I * child * parent * ... * root
-							}
+							// ComputeWorldMatrix()를 사용하여 월드 행렬 계산 (런타임과 동일)
+							XMMATRIX worldMatrixXM = ComputeWorldMatrix(world, selectedEntity);
 							
 							// XMMATRIX를 float[16] 배열로 변환 (ImGuizmo 형식: row-major)
 							XMFLOAT4X4 worldMatrixFloat4x4;
 							XMStoreFloat4x4(&worldMatrixFloat4x4, worldMatrixXM);
 							float worldMatrix[16];
-							memcpy(worldMatrix, &worldMatrixFloat4x4, sizeof(float) * 16);
+							memcpy(worldMatrix, &worldMatrixFloat4x4, sizeof(worldMatrix));
 
 							// ImGuizmo에 직접 포인터 전달
 							const float* viewMat = reinterpret_cast<const float*>(viewMatrix.m);
@@ -3281,7 +3218,7 @@ namespace Alice
 								
 								// 오브젝트 스냅 모드용 위치 (월드 공간)
 								XMFLOAT3 worldPosition;
-								XMStoreFloat3(&worldPosition, XMVector3Transform(XMVectorZero(), manipulatedWorldMatrix));
+								XMStoreFloat3(&worldPosition, XMVector3TransformCoord(XMVectorZero(), manipulatedWorldMatrix));
 
 								// 오브젝트 스냅 모드: 다른 엔티티에 스냅
 								if (snapMode == SnapMode::Object && gizmoOp == ImGuizmo::TRANSLATE)
