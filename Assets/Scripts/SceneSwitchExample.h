@@ -15,8 +15,8 @@ namespace Alice
         const char* GetName() const override { return "SceneSwitchExample"; }
         void Update(float deltaTime) override;
 
-        ALICE_PROPERTY(std::string, m_targetName1, "");
-        ALICE_PROPERTY(std::string, m_targetName2, "");
+        ALICE_PROPERTY(std::string, targetSceneA, "");
+        ALICE_PROPERTY(std::string, targetSceneB, "");
     };
 }
 
