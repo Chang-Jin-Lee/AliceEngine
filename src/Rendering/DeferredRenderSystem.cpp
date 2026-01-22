@@ -1938,6 +1938,7 @@ namespace Alice
         XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(rotation);
         XMMATRIX T = XMMatrixTranslationFromVector(translation);
         
+        // DirectXMath 행벡터 컨벤션: S * R * T
         return S * R * T;
     }
 
@@ -1957,7 +1958,7 @@ namespace Alice
                 XMVECTOR rotation = XMLoadFloat3(&t->rotation);
                 XMVECTOR translation = XMLoadFloat3(&t->position);
                 
-                // 로컬 행렬: S * R * T 순서 (c.txt 참조)
+                // 로컬 행렬: S * R * T 순서 (DirectXMath 행벡터 컨벤션)
                 XMMATRIX localMatrix = XMMatrixScalingFromVector(scale) *
                     XMMatrixRotationRollPitchYawFromVector(rotation) *
                     XMMatrixTranslationFromVector(translation);
@@ -1971,11 +1972,11 @@ namespace Alice
             }
         }
         
-        // 루트에서 자식으로 내려가면서 행렬 곱하기 (역순으로)
+        // 행벡터 컨벤션: child * parent * ... * root 형태로 곱하기 (정순)
         XMMATRIX worldMatrix = XMMatrixIdentity();
-        for (auto it = matrixStack.rbegin(); it != matrixStack.rend(); ++it)
+        for (const auto& m : matrixStack)  // child -> parent -> root 순서
         {
-            worldMatrix = worldMatrix * (*it);
+            worldMatrix = worldMatrix * m;  // I * child * parent * ... * root
         }
         
         return worldMatrix;
