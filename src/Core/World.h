@@ -30,6 +30,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/ComputeEffectComponent.h"
 
 
 // 물리 컴포넌트들

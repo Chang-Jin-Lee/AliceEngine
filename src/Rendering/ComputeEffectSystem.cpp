@@ -1,5 +1,10 @@
 ﻿#include "ComputeEffectSystem.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <vector>
+
 #include <d3dcompiler.h>
 #include "Rendering/ShaderCode/ComputeEffectShader.h"
 #include "Core/Logger.h"
@@ -9,11 +14,67 @@ using Microsoft::WRL::ComPtr;
 
 namespace Alice
 {
+    namespace
+    {
+        struct CBParams
+        {
+            XMFLOAT4 params0;     // (emitterX, emitterY, emitterRadius, spawnJitter)
+            XMFLOAT4 params1;     // (colorR, colorG, colorB, particleSizePx)
+            XMFLOAT4 time;        // (timeSec, dtSec, particleCount, 0)
+            XMFLOAT4 resolution;  // (w, h, invW, invH)
+        };
+
+        struct ParticleInit
+        {
+            XMFLOAT2 pos;
+            XMFLOAT2 vel;
+            float life;
+            float seed;
+        };
+
+        static float ClampFloat(float v, float lo, float hi)
+        {
+            return std::max(lo, std::min(hi, v));
+        }
+    }
+
+    static HRESULT CompileCSBlob(
+        const char* source,
+        const char* entry,
+        const char* target,
+        ID3DBlob** outBlob,
+        ID3DBlob** outError)
+    {
+        UINT flags = 0;
+#if defined(_DEBUG)
+        flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#else
+        flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+#endif
+
+        return D3DCompile(
+            source,
+            std::strlen(source),
+            nullptr,
+            nullptr,
+            nullptr,
+            entry,
+            target,
+            flags,
+            0,
+            outBlob,
+            outError
+        );
+    }
+
     ComputeEffectSystem::ComputeEffectSystem(ID3D11RenderDevice& renderDevice)
         : m_renderDevice(renderDevice)
     {
         m_device  = m_renderDevice.GetDevice();
         m_context = m_renderDevice.GetImmediateContext();
+
+        QueryPerformanceFrequency(&m_qpcFreq);
+        QueryPerformanceCounter(&m_qpcPrev);
     }
 
     ComputeEffectSystem::~ComputeEffectSystem()
@@ -36,6 +97,12 @@ namespace Alice
             return false;
         }
 
+        if (!CreateComputeShaders())
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateComputeShaders failed.");
+            return false;
+        }
+
         if (!CreateConstantBuffer())
         {
             ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateConstantBuffer failed.");
@@ -45,6 +112,12 @@ namespace Alice
         if (!CreateUnorderedAccessViews(width, height))
         {
             ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateUnorderedAccessViews failed.");
+            return false;
+        }
+
+        if (!CreateParticleBuffers(m_particleCount))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateParticleBuffers failed.");
             return false;
         }
 
@@ -71,30 +144,76 @@ namespace Alice
         }
     }
 
-    void ComputeEffectSystem::Execute(const World& world)
+    void ComputeEffectSystem::SetParticleCount(std::uint32_t particleCount)
     {
-        if (!m_computeShader || !m_outputUAV)
+        particleCount = std::max<std::uint32_t>(particleCount, 1);
+        if (particleCount == m_particleCount)
             return;
 
-        // 컴퓨트 셰이더 바인딩
-        m_context->CSSetShader(m_computeShader.Get(), nullptr, 0);
+        m_particleCount = particleCount;
 
-        // 상수 버퍼 바인딩
-        m_context->CSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
+        m_particleBuffer.Reset();
+        m_particleUAV.Reset();
+        m_particleSRV.Reset();
 
-        // UAV 바인딩
-        ID3D11UnorderedAccessView* uavs[] = { m_outputUAV.Get() };
-        UINT initialCounts[] = { 0 };
-        m_context->CSSetUnorderedAccessViews(0, 1, uavs, initialCounts);
+        if (!CreateParticleBuffers(m_particleCount))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::SetParticleCount: CreateParticleBuffers failed (count=%u)", m_particleCount);
+        }
+    }
 
-        // 스레드 그룹 실행 (예: 8x8 스레드 그룹)
-        UINT threadGroupX = (m_width  + 7) / 8;
-        UINT threadGroupY = (m_height + 7) / 8;
-        m_context->Dispatch(threadGroupX, threadGroupY, 1);
+    void ComputeEffectSystem::SetEmitterNormalized(float x, float y, float radius)
+    {
+        m_params0.x = ClampFloat(x, 0.0f, 1.0f);
+        m_params0.y = ClampFloat(y, 0.0f, 1.0f);
+        m_params0.z = std::max(radius, 0.0f);
+    }
 
-        // UAV 언바인딩
-        ID3D11UnorderedAccessView* nullUAVs[] = { nullptr };
-        m_context->CSSetUnorderedAccessViews(0, 1, nullUAVs, nullptr);
+    void ComputeEffectSystem::SetParticleColor(float r, float g, float b)
+    {
+        m_params1.x = std::max(r, 0.0f);
+        m_params1.y = std::max(g, 0.0f);
+        m_params1.z = std::max(b, 0.0f);
+    }
+
+    void ComputeEffectSystem::SetParticleSizePx(float sizePx)
+    {
+        m_params1.w = std::max(sizePx, 1.0f);
+    }
+
+    void ComputeEffectSystem::Execute(const World& world)
+    {
+        if (!m_clearShader || !m_particleUpdateShader || !m_particleDrawShader)
+            return;
+
+        if (!m_constantBuffer || !m_outputUAV || !m_particleUAV || !m_particleSRV)
+            return;
+
+        // ComputeEffectComponent를 찾아서 파티클 셰이더가 활성화되어 있는지 확인
+        bool shouldExecute = false;
+        for (auto&& [entityId, effect] : world.GetComponents<ComputeEffectComponent>())
+        {
+            if (effect.enabled)
+            {
+                // shaderName이 "Particle" 또는 "ParticleEffect"인 경우 파티클 실행
+                if (effect.shaderName == "Particle" || effect.shaderName == "ParticleEffect")
+                {
+                    shouldExecute = true;
+                    break;
+                }
+            }
+        }
+
+        if (!shouldExecute)
+            return;
+
+        UpdateConstantBuffer();
+
+        DispatchClear();
+        DispatchParticlesUpdate();
+        DispatchParticlesDraw();
+
+        UnbindCS();
     }
 
     bool ComputeEffectSystem::CreateComputeShader()
@@ -144,11 +263,55 @@ namespace Alice
         return true;
     }
 
+    bool ComputeEffectSystem::CreateComputeShaders()
+    {
+        auto createOne = [&](const char* code, ComPtr<ID3D11ComputeShader>& outShader, const char* label) -> bool
+        {
+            ComPtr<ID3DBlob> blob;
+            ComPtr<ID3DBlob> err;
+
+            HRESULT hr = CompileCSBlob(code, "main", "cs_5_0", blob.GetAddressOf(), err.GetAddressOf());
+            if (FAILED(hr))
+            {
+                if (err)
+                {
+                    ALICE_LOG_ERRORF("ComputeEffectSystem::CreateComputeShaders(%s): %s", label,
+                        static_cast<const char*>(err->GetBufferPointer()));
+                }
+                else
+                {
+                    ALICE_LOG_ERRORF("ComputeEffectSystem::CreateComputeShaders(%s): D3DCompile failed (0x%08X)", label, (unsigned)hr);
+                }
+                return false;
+            }
+
+            hr = m_device->CreateComputeShader(
+                blob->GetBufferPointer(),
+                blob->GetBufferSize(),
+                nullptr,
+                outShader.GetAddressOf());
+
+            if (FAILED(hr))
+            {
+                ALICE_LOG_ERRORF("ComputeEffectSystem::CreateComputeShaders(%s): CreateComputeShader failed (0x%08X)", label, (unsigned)hr);
+                return false;
+            }
+
+            return true;
+        };
+
+        if (!createOne(ComputeEffectShader::ParticleClearCS,  m_clearShader,          "ParticleClearCS"))  return false;
+        if (!createOne(ComputeEffectShader::ParticleUpdateCS, m_particleUpdateShader, "ParticleUpdateCS")) return false;
+        if (!createOne(ComputeEffectShader::ParticleDrawCS,   m_particleDrawShader,   "ParticleDrawCS"))   return false;
+
+        return true;
+    }
+
     bool ComputeEffectSystem::CreateConstantBuffer()
     {
         D3D11_BUFFER_DESC desc = {};
         desc.Usage          = D3D11_USAGE_DYNAMIC;
-        desc.ByteWidth      = sizeof(DirectX::XMFLOAT4) * 4; // 기본 상수 버퍼 크기
+        desc.ByteWidth      = sizeof(CBParams);
         desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
@@ -160,6 +323,167 @@ namespace Alice
         }
 
         return true;
+    }
+
+    bool ComputeEffectSystem::CreateParticleBuffers(std::uint32_t particleCount)
+    {
+        static_assert(sizeof(ParticleInit) == 24, "ParticleInit must match HLSL Particle layout (24 bytes).");
+
+        std::vector<ParticleInit> init(particleCount);
+        for (std::uint32_t i = 0; i < particleCount; ++i)
+        {
+            float s = (float)i * 0.6180339887f;
+            s -= std::floor(s);
+
+            init[i].pos  = XMFLOAT2(0.0f, 0.0f);
+            init[i].vel  = XMFLOAT2(0.0f, 0.0f);
+            init[i].life = 0.0f;
+            init[i].seed = s;
+        }
+
+        D3D11_BUFFER_DESC desc = {};
+        desc.ByteWidth           = sizeof(ParticleInit) * particleCount;
+        desc.Usage               = D3D11_USAGE_DEFAULT;
+        desc.BindFlags           = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+        desc.CPUAccessFlags      = 0;
+        desc.MiscFlags           = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+        desc.StructureByteStride = sizeof(ParticleInit);
+
+        D3D11_SUBRESOURCE_DATA srd = {};
+        srd.pSysMem = init.data();
+
+        HRESULT hr = m_device->CreateBuffer(&desc, &srd, m_particleBuffer.GetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::CreateParticleBuffers: CreateBuffer failed.");
+            return false;
+        }
+
+        D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+        uavDesc.ViewDimension       = D3D11_UAV_DIMENSION_BUFFER;
+        uavDesc.Format              = DXGI_FORMAT_UNKNOWN;
+        uavDesc.Buffer.FirstElement = 0;
+        uavDesc.Buffer.NumElements  = particleCount;
+
+        hr = m_device->CreateUnorderedAccessView(m_particleBuffer.Get(), &uavDesc, m_particleUAV.GetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::CreateParticleBuffers: CreateUnorderedAccessView failed.");
+            return false;
+        }
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+        srvDesc.ViewDimension       = D3D11_SRV_DIMENSION_BUFFER;
+        srvDesc.Format              = DXGI_FORMAT_UNKNOWN;
+        srvDesc.Buffer.FirstElement = 0;
+        srvDesc.Buffer.NumElements  = particleCount;
+
+        hr = m_device->CreateShaderResourceView(m_particleBuffer.Get(), &srvDesc, m_particleSRV.GetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::CreateParticleBuffers: CreateShaderResourceView failed.");
+            return false;
+        }
+
+        return true;
+    }
+
+    void ComputeEffectSystem::UpdateConstantBuffer()
+    {
+        LARGE_INTEGER now{};
+        QueryPerformanceCounter(&now);
+
+        double dt = (double)(now.QuadPart - m_qpcPrev.QuadPart) / (double)m_qpcFreq.QuadPart;
+        m_qpcPrev = now;
+
+        m_dtSec = ClampFloat((float)dt, 0.0f, 1.0f / 20.0f);
+        m_timeSec += m_dtSec;
+
+        float w = (float)std::max<std::uint32_t>(m_width, 1);
+        float h = (float)std::max<std::uint32_t>(m_height, 1);
+
+        CBParams cb{};
+        cb.params0    = m_params0;
+        cb.params1    = m_params1;
+        cb.time       = XMFLOAT4(m_timeSec, m_dtSec, (float)m_particleCount, 0.0f);
+        cb.resolution = XMFLOAT4(w, h, 1.0f / w, 1.0f / h);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        HRESULT hr = m_context->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::UpdateConstantBuffer: Map failed (0x%08X)", (unsigned)hr);
+            return;
+        }
+
+        std::memcpy(mapped.pData, &cb, sizeof(CBParams));
+        m_context->Unmap(m_constantBuffer.Get(), 0);
+    }
+
+    void ComputeEffectSystem::DispatchClear()
+    {
+        m_context->CSSetShader(m_clearShader.Get(), nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
+
+        ID3D11UnorderedAccessView* uav = m_outputUAV.Get();
+        m_context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+        UINT tgX = (m_width + 7) / 8;
+        UINT tgY = (m_height + 7) / 8;
+        m_context->Dispatch(tgX, tgY, 1);
+
+        ID3D11UnorderedAccessView* nullUAV = nullptr;
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+    }
+
+    void ComputeEffectSystem::DispatchParticlesUpdate()
+    {
+        m_context->CSSetShader(m_particleUpdateShader.Get(), nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
+
+        ID3D11UnorderedAccessView* uav = m_particleUAV.Get();
+        m_context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+        UINT tg = (m_particleCount + 255) / 256;
+        m_context->Dispatch(tg, 1, 1);
+
+        ID3D11UnorderedAccessView* nullUAV = nullptr;
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+    }
+
+    void ComputeEffectSystem::DispatchParticlesDraw()
+    {
+        m_context->CSSetShader(m_particleDrawShader.Get(), nullptr, 0);
+        m_context->CSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
+
+        ID3D11ShaderResourceView* srv = m_particleSRV.Get();
+        m_context->CSSetShaderResources(0, 1, &srv);
+
+        ID3D11UnorderedAccessView* uav = m_outputUAV.Get();
+        m_context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+        UINT tg = (m_particleCount + 255) / 256;
+        m_context->Dispatch(tg, 1, 1);
+
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+        ID3D11UnorderedAccessView* nullUAV = nullptr;
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+    }
+
+    void ComputeEffectSystem::UnbindCS()
+    {
+        m_context->CSSetShader(nullptr, nullptr, 0);
+
+        ID3D11Buffer* nullCB = nullptr;
+        m_context->CSSetConstantBuffers(0, 1, &nullCB);
+
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->CSSetShaderResources(0, 1, &nullSRV);
+
+        ID3D11UnorderedAccessView* nullUAV = nullptr;
+        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
     }
 
     bool ComputeEffectSystem::CreateUnorderedAccessViews(std::uint32_t width, std::uint32_t height)

@@ -17,6 +17,7 @@
 
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
+#include "Components/ComputeEffectComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
@@ -388,6 +389,12 @@ namespace Alice
                 outEntity["RectLight"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* computeEffect = world.GetComponent<ComputeEffectComponent>(id); computeEffect)
+            {
+                rttr::instance inst = const_cast<ComputeEffectComponent&>(*computeEffect);
+                outEntity["ComputeEffect"] = JsonRttr::ToJsonObject(inst);
+            }
+
             // PhysX Components
             if (const auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(id); rigidBody)
             {
@@ -615,6 +622,15 @@ namespace Alice
                 RectLightComponent& rl = world.AddComponent<RectLightComponent>(id);
                 rttr::instance inst = rl;
                 if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
+            }
+
+            // ComputeEffect 선택
+            auto itCE = e.find("ComputeEffect");
+            if (itCE != e.end() && itCE->is_object())
+            {
+                ComputeEffectComponent& ce = world.AddComponent<ComputeEffectComponent>(id);
+                rttr::instance inst = ce;
+                if (!JsonRttr::FromJsonObject(inst, *itCE)) return false;
             }
 
             // PhysX Components

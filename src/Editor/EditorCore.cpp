@@ -2732,6 +2732,9 @@ namespace Alice
 					DrawInspectorSpotLight(world, selectedEntity);
 					DrawInspectorRectLight(world, selectedEntity);
 
+					// 3-3. Compute Effect
+					DrawInspectorComputeEffect(world, selectedEntity);
+
 					// 4. Skinned Mesh (Condensed)
 					if (auto* skinned =
 						world.GetComponent<SkinnedMeshComponent>(selectedEntity)) {
@@ -4503,6 +4506,10 @@ namespace Alice
 							world.AddComponent<RectLightComponent>(_selectedEntity);
 							added = true;
 						}
+						else if (typeName == "ComputeEffectComponent") {
+							world.AddComponent<ComputeEffectComponent>(_selectedEntity);
+							added = true;
+						}
 						else if (typeName == "Phy_RigidBodyComponent") {
 							world.AddComponent<Phy_RigidBodyComponent>(_selectedEntity);
 							added = true;
@@ -5018,6 +5025,35 @@ namespace Alice
 
 					if (ImGui::Button("Remove Rect Light")) {
 						world.RemoveComponent<RectLightComponent>(_selectedEntity);
+						g_SceneDirty = true;
+						return;
+					}
+
+					if (changed) g_SceneDirty = true;
+				}
+			}
+		}
+
+		void EditorCore::DrawInspectorComputeEffect(World & world, const EntityId & _selectedEntity)
+		{
+			if (auto* effect = world.GetComponent<ComputeEffectComponent>(_selectedEntity)) {
+				if (ImGui::CollapsingHeader("Compute Effect", ImGuiTreeNodeFlags_DefaultOpen)) {
+					bool changed = false;
+					changed |= ImGui::Checkbox("Enabled##ComputeEffect", &effect->enabled);
+					
+					char shaderNameBuffer[256];
+					strncpy_s(shaderNameBuffer, effect->shaderName.c_str(), sizeof(shaderNameBuffer) - 1);
+					shaderNameBuffer[sizeof(shaderNameBuffer) - 1] = '\0';
+					if (ImGui::InputText("Shader Name##ComputeEffect", shaderNameBuffer, sizeof(shaderNameBuffer))) {
+						effect->shaderName = shaderNameBuffer;
+						changed = true;
+					}
+
+					changed |= ImGui::SliderFloat3("Effect Params##ComputeEffect", &effect->effectParams.x, 0.0f, 10.0f);
+					changed |= ImGui::SliderFloat("Intensity##ComputeEffect", &effect->intensity, 0.0f, 10.0f);
+
+					if (ImGui::Button("Remove Compute Effect")) {
+						world.RemoveComponent<ComputeEffectComponent>(_selectedEntity);
 						g_SceneDirty = true;
 						return;
 					}

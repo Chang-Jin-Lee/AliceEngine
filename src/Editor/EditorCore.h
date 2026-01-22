@@ -76,6 +76,7 @@ namespace Alice
 		void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorComputeEffect(World& world, const EntityId& _selectedEntity);
 
 		// 물리잇
 		bool DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames);

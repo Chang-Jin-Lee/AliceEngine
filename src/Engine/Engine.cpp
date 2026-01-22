@@ -33,6 +33,7 @@
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/DeferredRenderSystem.h"
+#include "Rendering/ComputeEffectSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
 #include "Editor/EditorCore.h"
@@ -127,6 +128,7 @@ namespace Alice
 		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
 		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+		std::unique_ptr<ComputeEffectSystem> m_computeEffectSystem;
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
 		bool m_useForwardRendering = false;
@@ -473,6 +475,10 @@ namespace Alice
 
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
 		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
+
+		// Compute Effect System 설정
+		pImpl->m_computeEffectSystem = std::make_unique<ComputeEffectSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_computeEffectSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
 
 		// ============================================= 카메라 & 스크립트 =============================================
 		// 기본 카메라 위치 설정 및 핫리로드 로드
@@ -1268,6 +1274,16 @@ namespace Alice
 				{
 					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
 				}
+
+				// 파티클 오버레이 합성 (톤매핑 후)
+				if (pImpl->m_computeEffectSystem && pImpl->m_useForwardRendering)
+				{
+					ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
+					if (particleSRV)
+					{
+						pImpl->m_forwardRenderSystem->RenderParticleOverlay(particleSRV, backBufferRTV, viewport);
+					}
+				}
 			}
 		}
 
@@ -1419,6 +1435,10 @@ namespace Alice
 		if (pImpl->m_deferredRenderSystem)
 		{
 			pImpl->m_deferredRenderSystem->Resize(width, height);
+		}
+		if (pImpl->m_computeEffectSystem)
+		{
+			pImpl->m_computeEffectSystem->Resize(width, height);
 		}
 	}
 
