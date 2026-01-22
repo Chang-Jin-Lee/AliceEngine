@@ -14,6 +14,8 @@
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/IPhysicsWorld.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 
 using namespace DirectX;
 
@@ -333,6 +335,23 @@ namespace Alice
             .property("queryMask", &Phy_TerrainHeightFieldComponent::queryMask)
             .property("ignoreLayers", &Phy_TerrainHeightFieldComponent::ignoreLayers);
 
+        // === EffectComponent 등록 ===
+        rttr::registration::class_<EffectComponent>("EffectComponent")
+            .constructor<>()
+            .property("color", &EffectComponent::color)
+            .property("size", &EffectComponent::size)
+            .property("enabled", &EffectComponent::enabled)
+            .property("alpha", &EffectComponent::alpha);
+
+	// === TrailEffectComponent 등록 (trailSamples는 내부용이므로 등록하지 않음) ===
+	rttr::registration::class_<TrailEffectComponent>("TrailEffectComponent")
+		.constructor<>()
+		.property("color", &TrailEffectComponent::color)
+		.property("alpha", &TrailEffectComponent::alpha)
+		.property("enabled", &TrailEffectComponent::enabled)
+		.property("maxSamples", &TrailEffectComponent::maxSamples)
+		.property("sampleInterval", &TrailEffectComponent::sampleInterval)
+		.property("fadeDuration", &TrailEffectComponent::fadeDuration);
         // === CCTNonWalkableMode enum 등록 ===
         rttr::registration::enumeration<CCTNonWalkableMode>("CCTNonWalkableMode")
             (

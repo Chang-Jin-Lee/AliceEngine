@@ -2640,6 +2640,11 @@ namespace Alice
                     } else if (typeName == "RectLightComponent") {
                         world.AddComponent<RectLightComponent>(_selectedEntity);
                         added = true;
+                    } else if (typeName == "EffectComponent") {
+                        world.AddComponent<EffectComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "TrailEffectComponent") {
+                        world.AddComponent<TrailEffectComponent>(_selectedEntity);
                     } else if (typeName == "Phy_RigidBodyComponent") {
                         world.AddComponent<Phy_RigidBodyComponent>(_selectedEntity);
                         added = true;
@@ -2740,6 +2745,14 @@ namespace Alice
                 DrawEngineComponent("RectLightComponent",
                     world.GetComponent<RectLightComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
+            } else if (typeName == "EffectComponent") {
+                DrawEngineComponent("EffectComponent",
+                    world.GetComponent<EffectComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<EffectComponent>(_selectedEntity); });
+            } else if (typeName == "TrailEffectComponent") {
+                DrawEngineComponent("TrailEffectComponent",
+                    world.GetComponent<TrailEffectComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<TrailEffectComponent>(_selectedEntity); });
             } else if (typeName == "Phy_RigidBodyComponent") {
                 DrawEngineComponent("Phy_RigidBodyComponent",
                     world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
