@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 #include "Core/ScriptFactory.h"
 #include "Core/GameObject.h"
@@ -58,39 +59,82 @@ namespace Alice
         {
             // "Attack01" 클립의 0.7초 지점에 OnAttackHit 함수를 묶는다.
             anim->AddNotify(Get_m_attackClip(), Get_m_attackHitTime(), 
-                [this]() { this->OnAttackHit(); });
+                std::bind(&CharacterAnimatorComponent::OnAttackHit, this));
             
             m_notifyRegistered = true;
         }
 
         // ------------------------------------------------------------
+        // 0. 애니메이션 속도 제어 (2번/3번/4번/5번 키 - 누르고 있을 때만 적용)
+        // ------------------------------------------------------------
+        // 키를 떼면 기본 속도(1.0f)로 돌아가야 하므로 매 프레임 초기화
+        m_animSpeed = 1.0f;
+
+        // 2번 키: 2배 빠르게
+        if (input->GetKey(KeyCode::Alpha2))
+        {
+            m_animSpeed = 2.0f;
+        }
+        // 3번 키: 3배 빠르게
+        else if (input->GetKey(KeyCode::Alpha3))
+        {
+            m_animSpeed = 3.0f;
+        }
+        // 4번 키: 0.5배 (느리게)
+        else if (input->GetKey(KeyCode::Alpha4))
+        {
+            m_animSpeed = 0.5f;
+        }
+        // 5번 키: 0.25배 (아주 느리게)
+        else if (input->GetKey(KeyCode::Alpha5))
+        {
+            m_animSpeed = 0.25f;
+        }
+
+        // ------------------------------------------------------------
         // 1. 상태 변경 입력 (공격 추가)
         // ------------------------------------------------------------
-        // 공격 입력 (Standing 상태에서만)
-        //if (input->GetMouseButtonDown(MouseCode::Left) && m_state == CharState::Standing)
-        if (input->GetKeyDown(KeyCode::Alpha1) && m_state == CharState::Standing)
+        // 공격 입력 (Standing 상태에서만) - 마우스 좌클릭 사용
+        if (input->GetMouseButtonDown(MouseCode::Left) && m_state == CharState::Standing)
         {
             m_state = CharState::Attacking;
             m_currentAttackTime = 0.0f;
         }
 
-        // Ctrl 키 토글 (기존)
+        // Ctrl 키 토글 (기존) 및 6번 키 토글 (구간 늘리기 모드)
+        bool toggleCrouch = false;
+        bool useStretch = false;
+
         if (input->GetKeyDown(KeyCode::LeftCtrl))
+        {
+            toggleCrouch = true;
+            useStretch = false; // 일반 모드
+        }
+        else if (input->GetKeyDown(KeyCode::Alpha6))
+        {
+            toggleCrouch = true;
+            useStretch = true; // 6번 키: 구간 늘리기 모드
+        }
+
+        if (toggleCrouch)
         {
             if (m_state == CharState::Standing)
             {
                 m_state = CharState::Crouching; // 서기 -> 앉기 시작
                 m_currentCrouchTime = 0.0f;     // 시간 0부터 시작
+                m_isStretchedMode = useStretch;  // 모드 설정
 
                 // [애님 몽타주 예시] 앉기 애니메이션 중간에 노티파이 등록
                 // "CrouchDown" 클립의 0.5초 지점에 함수 바인딩
                 anim->notifies.clear(); // 기존 노티파이 초기화 (안전장치)
-                anim->AddNotify(Get_m_crouchClip(), 0.5f, [this]() { this->OnCrouchHalfway(); });
+                anim->AddNotify(Get_m_crouchClip(), 0.5f, 
+                    std::bind(&CharacterAnimatorComponent::OnCrouchHalfway, this));
             }
             else if (m_state == CharState::Crouched)
             {
                 m_state = CharState::StandingUp; // 앉음 -> 서기 시작 (역재생)
                 m_currentCrouchTime = Get_m_crouchDuration(); // 끝 시간부터 시작
+                m_isStretchedMode = useStretch;  // 모드 설정
             }
         }
 
@@ -198,13 +242,14 @@ namespace Alice
             anim->base.clipA = Get_m_idleClip();
             anim->base.clipB = moveClip;
             anim->base.blend01 = m_moveBlend;
-            anim->base.speedA = 1.0f;
-            anim->base.speedB = 1.0f;
+            // [속도 적용] 서 있을 때도 설정한 배속 적용
+            anim->base.speedA = m_animSpeed;
+            anim->base.speedB = m_animSpeed;
         }
         else if (m_state == CharState::Attacking)
         {
-            // 몽타주 재생 로직
-            m_currentAttackTime += DeltaTime;
+            // 몽타주 재생 로직 (속도 적용)
+            m_currentAttackTime += DeltaTime * m_animSpeed;
 
             // 애니메이션 설정
             anim->base.autoAdvance = true; // 시스템의 자동 시간 진행 사용
@@ -212,8 +257,9 @@ namespace Alice
             anim->base.clipA = Get_m_attackClip();
             anim->base.clipB = Get_m_attackClip(); // 블렌딩 없이 즉시 재생
             anim->base.blend01 = 0.0f;
-            anim->base.speedA = 1.0f;
-            anim->base.speedB = 1.0f;
+            // [속도 적용] 공격 애니메이션에도 배속 적용
+            anim->base.speedA = m_animSpeed;
+            anim->base.speedB = m_animSpeed;
             
             // 현재 애니메이션 시간이 끝났는지 체크 (시스템이 업데이트한 timeA 활용)
             if (anim->base.timeA >= Get_m_attackDuration() || m_currentAttackTime >= Get_m_attackDuration())
@@ -227,11 +273,25 @@ namespace Alice
             // 앉기 관련 상태 (Crouching, Crouched, StandingUp)
             // 앉기 애니메이션은 하나를 가지고 시간 제어로 처리
 
-            // 1. 시간 업데이트 및 노티파이 체크
+            // 1. 시간 업데이트 및 노티파이 체크 (속도 적용)
+            float prevTime = m_currentCrouchTime;
+            float stepSpeed = m_animSpeed; // 기본 속도
+
+            // [6번 키 로직] 1.0초 ~ 2.0초 구간을 2초 늘려서(총 3초) 재생 -> 1/3 배속
+            // 원래 구간: 1초 (1.0초 ~ 2.0초)
+            // 목표 재생 시간: 3초 (1.0초 + 2.0초)
+            // 배속 = 원래길이 / 목표시간 = 1.0 / 3.0 = 0.333...배속
+            if (m_isStretchedMode)
+            {
+                if (m_currentCrouchTime >= 0.01f && m_currentCrouchTime < 0.5f)
+                {
+                    stepSpeed = 1.0f / 3.0f; // 0.333...배속 (1초 구간을 3초로 늘림)
+                }
+            }
+
             if (m_state == CharState::Crouching)
             {
-                float prevTime = m_currentCrouchTime;
-                m_currentCrouchTime += DeltaTime; // 정재생
+                m_currentCrouchTime += DeltaTime * stepSpeed; // 구간별 속도 적용
                 
                 // [중요] 수동 시간 제어 시 직접 노티파이 체크 함수 호출
                 anim->CheckAndFireNotifies(Get_m_crouchClip(), prevTime, m_currentCrouchTime);
@@ -244,8 +304,7 @@ namespace Alice
             }
             else if (m_state == CharState::StandingUp)
             {
-                float prevTime = m_currentCrouchTime;
-                m_currentCrouchTime -= DeltaTime; // 역재생
+                m_currentCrouchTime -= DeltaTime * stepSpeed; // 구간별 속도 적용 (역재생)
                 
                 // 역재생 시에도 노티파이 체크 (역순으로 체크)
                 anim->CheckAndFireNotifies(Get_m_crouchClip(), prevTime, m_currentCrouchTime);
@@ -266,24 +325,9 @@ namespace Alice
             anim->base.timeB = m_currentCrouchTime;
             anim->base.blend01 = 0.0f;
             
-            // ------------------------------------------------------------
-            // [애니메이션 속도 변형 예시] 특정 구간을 느리게 재생
-            // ------------------------------------------------------------
-            // 예: 1초 ~ 2초 구간을 1초만큼 더 느리게(총 2초 동안 재생) 하고 싶다.
-            // 원래 구간 길이: 1.0초 (2.0 - 1.0)
-            // 목표 재생 시간: 2.0초 (1.0 + 1.0)
-            // 배속 = 원래길이 / 목표시간 = 1.0 / 2.0 = 0.5배속
-            float currentSpeed = 1.0f;
-            if (m_currentCrouchTime >= 1.0f && m_currentCrouchTime < 2.0f)
-            {
-                currentSpeed = 0.5f; // 0.5배속 (슬로우 모션)
-            }
-            else
-            {
-                currentSpeed = 1.0f; // 정상 속도
-            }
-            anim->base.speedA = currentSpeed;
-            anim->base.speedB = currentSpeed;
+            // 속도 적용 (구간별 속도 사용)
+            anim->base.speedA = stepSpeed;
+            anim->base.speedB = stepSpeed;
         }
 
         // ------------------------------------------------------------
@@ -295,8 +339,7 @@ namespace Alice
         // 앉은 상태에서의 사격
         if (m_state == CharState::Crouched)
         {
-            //if (input->GetMouseButtonDown(MouseCode::Left))
-            if (input->GetKeyDown(KeyCode::Alpha1))
+            if (input->GetMouseButtonDown(MouseCode::Left))
             {
                 ALICE_LOG_ERRORF("ALICE FIRE!!!");
                 tryFire = true;
@@ -307,8 +350,7 @@ namespace Alice
         // 서 있는 상태에서의 일반 행동 (필요시 추가)
         else if (m_state == CharState::Standing)
         {
-            //if (input->GetMouseButtonDown(MouseCode::Left))
-            if (input->GetKeyDown(KeyCode::Alpha1))
+            if (input->GetMouseButtonDown(MouseCode::Left))
             {
                 tryFire = true;
                 fireClip = Get_m_additiveClip();
@@ -332,7 +374,8 @@ namespace Alice
             anim->additive.time = m_additiveTimer;
             anim->additive.loop = false;
 
-            m_additiveTimer += DeltaTime;
+            // [속도 적용] 반동 애니메이션에도 배속 적용
+            m_additiveTimer += DeltaTime * m_animSpeed;
             if (m_additiveTimer > Get_m_additiveDuration())
             {
                 anim->additive.enabled = false;
@@ -355,7 +398,8 @@ namespace Alice
         anim->upper.clipB.clear();
         anim->upper.blend01 = 0.0f;
         anim->upper.layerAlpha = anim->upper.enabled ? 1.0f : 0.0f;
-        anim->upper.speedA = 1.0f;
+        // [속도 적용] Upper 레이어에도 배속 적용
+        anim->upper.speedA = m_animSpeed;
 
         // Socket
         if (!m_socketInitialized)
@@ -371,6 +415,8 @@ namespace Alice
         // ------------------------------------------------------------
         // 6. Foot IK 로직 (Y키로 발 들어올리기 / 지형 적응)
         // ------------------------------------------------------------
+        // [중요] Y키는 캐릭터 Transform을 건드리지 않고, 오직 발 본의 IK만 조절합니다.
+        // IK는 애니메이션 시스템 내부에서 본 체인을 조정하여 발만 움직이게 합니다.
         if (Get_m_enableFootIK())
         {
             // =========================================================
@@ -390,6 +436,7 @@ namespace Alice
             float targetHeight = 0.0f;
 
             // [현재 구현] Y키 입력으로 시뮬레이션
+            // Y키를 누르면 IK 타겟 높이만 설정 (캐릭터 Transform 이동 X)
             if (input->GetKey(KeyCode::Y))
             {
                 targetHeight = Get_m_maxLiftHeight(); // Y키 누르면 최대 높이까지 들어올림
