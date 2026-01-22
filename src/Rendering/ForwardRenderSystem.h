@@ -274,6 +274,9 @@ namespace Alice
 
         /// 파티클 텍스처를 오버레이로 합성합니다 (additive blending)
         void RenderParticleOverlay(ID3D11ShaderResourceView* particleSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+        
+        /// 뷰포트 렌더 타겟에 파티클 오버레이 합성 (에디터 모드용)
+        void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;

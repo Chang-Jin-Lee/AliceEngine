@@ -87,6 +87,9 @@ namespace Alice
         /// @param targetRTV 백버퍼 RTV
         /// @param viewport 뷰포트 영역
         void RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+        
+        /// 뷰포트 렌더 타겟에 파티클 오버레이 합성 (에디터 모드용)
+        void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
@@ -257,6 +260,10 @@ namespace Alice
         // ==== 샘플러 상태 ====
         Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_samplerState;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_shadowSampler;
+        
+        // 파티클 오버레이용
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>       m_particleOverlayPS;
+        Microsoft::WRL::ComPtr<ID3D11BlendState>        m_ppBlendAdditive;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_samplerLinear;
 
         // ==== 블렌드 상태 ====

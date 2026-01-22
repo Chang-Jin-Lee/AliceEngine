@@ -1562,6 +1562,18 @@ namespace Alice
         // Blend state 복원 (다음 렌더링을 위해)
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
     }
+
+    void ForwardRenderSystem::RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV)
+    {
+        if (!particleSRV || !m_viewportRTV) return;
+        
+        D3D11_VIEWPORT viewport = {};
+        viewport.Width = static_cast<float>(m_sceneWidth);
+        viewport.Height = static_cast<float>(m_sceneHeight);
+        viewport.MaxDepth = 1.0f;
+        
+        RenderParticleOverlay(particleSRV, m_viewportRTV.Get(), viewport);
+    }
 }
 
 
