@@ -1739,6 +1739,33 @@ namespace Alice
 		ImGuiIO& io = ImGui::GetIO();
 		const bool isTextInputActive = io.WantTextInput || ImGui::IsAnyItemActive();
 
+		// Gizmo 및 스냅 관련 변수 (뷰창과 인스펙터에서 공유)
+		static ImGuizmo::OPERATION gizmoOp = ImGuizmo::TRANSLATE;
+		static ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD; // 기본값: WORLD 모드
+
+		// 스냅 모드 enum
+		enum class SnapMode {
+			None = 0,
+			Increment = 1,
+			Object = 2
+		};
+
+		// 오브젝트 스냅 타입 enum (Blender 스타일)
+		enum class ObjectSnapType {
+			Center = 0,  // 중심점 (Transform position)
+			Vertex = 1,  // 버텍스
+			Edge = 2,    // 엣지
+			Face = 3     // 면
+		};
+
+		static SnapMode snapMode = SnapMode::None;
+		static ObjectSnapType objectSnapType = ObjectSnapType::Center;
+		static bool gizmoSnap = false; // 레거시 호환성 (Increment 모드와 동일)
+		static XMFLOAT3 snapTranslation = XMFLOAT3(1.0f, 1.0f, 1.0f);
+		static float snapRotation = 15.0f; // degrees
+		static float snapScale = 1.0f;
+		static float objectSnapDistance = 0.5f; // 오브젝트 스냅 거리
+
 		if (m_inputSystem && !isTextInputActive && !isPlaying)
 		{
 			using namespace DirectX;
@@ -2838,38 +2865,8 @@ namespace Alice
 			// === Game ===
 			if (ImGui::Begin("Game"))
 			{
-				// Gizmo 컨트롤 UI (static 변수로 상태 유지)
-				static ImGuizmo::OPERATION gizmoOp = ImGuizmo::TRANSLATE;
-				static ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD; // 기본값: WORLD 모드
-
-				// 스냅 모드 enum
-				enum class SnapMode {
-					None = 0,
-					Increment = 1,
-					Object = 2
-				};
-
-				// 오브젝트 스냅 타입 enum (Blender 스타일)
-				enum class ObjectSnapType {
-					Center = 0,  // 중심점 (Transform position)
-					Vertex = 1,  // 버텍스
-					Edge = 2,    // 엣지
-					Face = 3     // 면
-				};
-
-				static SnapMode snapMode = SnapMode::None;
-				static ObjectSnapType objectSnapType = ObjectSnapType::Center;
-				static bool gizmoSnap = false; // 레거시 호환성 (Increment 모드와 동일)
-				static XMFLOAT3 snapTranslation = XMFLOAT3(1.0f, 1.0f, 1.0f);
-				static float snapRotation = 15.0f; // degrees
-				static float snapScale = 1.0f;
-				static float objectSnapDistance = 0.5f; // 오브젝트 스냅 거리
-
 				// 키보드 단축키로 Gizmo 모드 변경 (InputSystem 사용)
 				// 텍스트 입력 중이 아닐 때만 단축키 작동
-				ImGuiIO& io = ImGui::GetIO();
-				const bool isTextInputActive = io.WantTextInput || ImGui::IsAnyItemActive();
-
 				if (m_inputSystem && !isTextInputActive)
 				{
 					using namespace DirectX;
@@ -2907,73 +2904,93 @@ namespace Alice
 					gizmoMode = ImGuizmo::LOCAL; // Scale은 항상 Local
 				}
 
-				// Snap 모드 선택
-				ImGui::Text("Snap Mode:");
-				const char* snapModeItems[] = { "None", "Increment", "Object" };
-				int snapModeInt = static_cast<int>(snapMode);
-				if (ImGui::Combo("##SnapMode", &snapModeInt, snapModeItems, IM_ARRAYSIZE(snapModeItems)))
+				// 게임 상태 표시 (한 줄, 색상 포함)
+				ImGui::SameLine();
+				ImGui::Text(" | ");
+				ImGui::SameLine();
+				ImVec4 stateColor = isPlaying ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+				ImGui::TextColored(stateColor, "%s", isPlaying ? "Playing" : "Stopped");
+				
+				// 스냅 토글 버튼
+				ImGui::SameLine();
+				ImGui::Text(" | ");
+				ImGui::SameLine();
+				static bool showSnapSettings = false;
+				if (ImGui::SmallButton("Snap"))
 				{
-					snapMode = static_cast<SnapMode>(snapModeInt);
-					gizmoSnap = (snapMode == SnapMode::Increment); // 레거시 호환성
+					showSnapSettings = !showSnapSettings;
 				}
-
-				// Snap 값 설정 (접을 수 있는 섹션)
-				if (snapMode == SnapMode::Increment)
+				
+				// 스냅 설정 UI (토글이 켜져 있을 때만 표시)
+				if (showSnapSettings)
 				{
-					ImGui::Indent();
-					switch (gizmoOp)
+					ImGui::Separator();
+					ImGui::Text("Snap Settings");
+					
+					// Snap 모드 선택
+					ImGui::Text("Snap Mode:");
+					const char* snapModeItems[] = { "None", "Increment", "Object" };
+					int snapModeInt = static_cast<int>(snapMode);
+					if (ImGui::Combo("##SnapMode", &snapModeInt, snapModeItems, IM_ARRAYSIZE(snapModeItems)))
 					{
-					case ImGuizmo::TRANSLATE:
-						ImGui::DragFloat3("Snap Translation", &snapTranslation.x, 0.1f, 0.01f, 100.0f);
-						break;
-					case ImGuizmo::ROTATE:
-						ImGui::DragFloat("Snap Rotation (deg)", &snapRotation, 1.0f, 1.0f, 90.0f);
-						break;
-					case ImGuizmo::SCALE:
-						ImGui::DragFloat("Snap Scale", &snapScale, 0.1f, 0.1f, 10.0f);
-						break;
-					default:
-						break;
-					}
-					ImGui::Unindent();
-				}
-				else if (snapMode == SnapMode::Object)
-				{
-					ImGui::Indent();
-					ImGui::DragFloat("Snap Distance", &objectSnapDistance, 0.1f, 0.01f, 10.0f);
-
-					// 오브젝트 스냅 타입 선택 (Blender 스타일)
-					ImGui::Text("Snap To:");
-					const char* snapTypeItems[] = { "Center", "Vertex", "Edge", "Face" };
-					int snapTypeInt = static_cast<int>(objectSnapType);
-					if (ImGui::Combo("##SnapType", &snapTypeInt, snapTypeItems, IM_ARRAYSIZE(snapTypeItems)))
-					{
-						objectSnapType = static_cast<ObjectSnapType>(snapTypeInt);
+						snapMode = static_cast<SnapMode>(snapModeInt);
+						gizmoSnap = (snapMode == SnapMode::Increment); // 레거시 호환성
 					}
 
-					// 현재 스냅 타입 설명
-					switch (objectSnapType)
+					// Snap 값 설정
+					if (snapMode == SnapMode::Increment)
 					{
-					case ObjectSnapType::Center:
-						ImGui::TextDisabled("Snap to object center");
-						break;
-					case ObjectSnapType::Vertex:
-						ImGui::TextDisabled("Snap to mesh vertices (if available)");
-						break;
-					case ObjectSnapType::Edge:
-						ImGui::TextDisabled("Snap to mesh edges (if available)");
-						break;
-					case ObjectSnapType::Face:
-						ImGui::TextDisabled("Snap to mesh face centers (if available)");
-						break;
+						ImGui::Indent();
+						switch (gizmoOp)
+						{
+						case ImGuizmo::TRANSLATE:
+							ImGui::DragFloat3("Snap Translation", &snapTranslation.x, 0.1f, 0.01f, 100.0f);
+							break;
+						case ImGuizmo::ROTATE:
+							ImGui::DragFloat("Snap Rotation (deg)", &snapRotation, 1.0f, 1.0f, 90.0f);
+							break;
+						case ImGuizmo::SCALE:
+							ImGui::DragFloat("Snap Scale", &snapScale, 0.1f, 0.1f, 10.0f);
+							break;
+						default:
+							break;
+						}
+						ImGui::Unindent();
 					}
-					ImGui::Unindent();
-				}
+					else if (snapMode == SnapMode::Object)
+					{
+						ImGui::Indent();
+						ImGui::DragFloat("Snap Distance", &objectSnapDistance, 0.1f, 0.01f, 10.0f);
 
-				ImGui::Separator();
-				Alice::ImGuiText(L"게임 상태");
-				ImGui::Separator();
-				ImGui::Text("Play State : %s", isPlaying ? "Playing" : "Stopped");
+						// 오브젝트 스냅 타입 선택 (Blender 스타일)
+						ImGui::Text("Snap To:");
+						const char* snapTypeItems[] = { "Center", "Vertex", "Edge", "Face" };
+						int snapTypeInt = static_cast<int>(objectSnapType);
+						if (ImGui::Combo("##SnapType", &snapTypeInt, snapTypeItems, IM_ARRAYSIZE(snapTypeItems)))
+						{
+							objectSnapType = static_cast<ObjectSnapType>(snapTypeInt);
+						}
+
+						// 현재 스냅 타입 설명
+						switch (objectSnapType)
+						{
+						case ObjectSnapType::Center:
+							ImGui::TextDisabled("Snap to object center");
+							break;
+						case ObjectSnapType::Vertex:
+							ImGui::TextDisabled("Snap to mesh vertices (if available)");
+							break;
+						case ObjectSnapType::Edge:
+							ImGui::TextDisabled("Snap to mesh edges (if available)");
+							break;
+						case ObjectSnapType::Face:
+							ImGui::TextDisabled("Snap to mesh face centers (if available)");
+							break;
+						}
+						ImGui::Unindent();
+					}
+					ImGui::Separator();
+				}
 
 				// 에디터 뷰포트는 톤매핑 완료(LDR) 텍스처를 표시해야 정상 색감이 나옵니다.
 				ID3D11ShaderResourceView* sceneSRV = nullptr;
