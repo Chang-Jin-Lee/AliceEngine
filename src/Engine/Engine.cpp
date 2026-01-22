@@ -1227,6 +1227,13 @@ namespace Alice
 		
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
+		// ============================================= 컴퓨트 이펙트 실행 =============================================
+		// ComputeEffectComponent를 가진 엔티티들의 컴퓨트 셰이더를 실행
+		if (pImpl->m_computeEffectSystem)
+		{
+			pImpl->m_computeEffectSystem->Execute(pImpl->m_world);
+		}
+
 		// ============================================= 렌더링 =============================================
 		// Forward/Deferred 렌더링 모드에 따라 분기
 		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
@@ -1244,6 +1251,16 @@ namespace Alice
 				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
 				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
 			);
+			
+			// 에디터 모드: 뷰포트 렌더 타겟에 파티클 오버레이 합성
+			if (pImpl->m_editorMode && pImpl->m_computeEffectSystem)
+			{
+				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
+				if (particleSRV)
+				{
+					pImpl->m_forwardRenderSystem->RenderParticleOverlayToViewport(particleSRV);
+				}
+			}
 		}
 		else
 		{
@@ -1253,11 +1270,59 @@ namespace Alice
 				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
 				pImpl->m_editorMode, pImpl->m_isPlaying
 			);
+			
+			// 에디터 모드: Deferred의 뷰포트 렌더 타겟에 파티클 오버레이 합성
+			if (pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_deferredRenderSystem)
+			{
+				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
+				if (particleSRV)
+				{
+					pImpl->m_deferredRenderSystem->RenderParticleOverlayToViewport(particleSRV);
+				}
+			}
 		}
 
-		// 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
-		if (!pImpl->m_editorMode)
+		// 파티클 오버레이 합성 (게임 모드와 에디터 모드 모두)
+		// ForwardRenderSystem이 초기화되어 있으면 사용 가능
+		if (pImpl->m_computeEffectSystem && pImpl->m_forwardRenderSystem)
 		{
+			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
+			if (backBufferRTV)
+			{
+				D3D11_VIEWPORT viewport = {};
+				viewport.Width = static_cast<float>(pImpl->m_width);
+				viewport.Height = static_cast<float>(pImpl->m_height);
+				viewport.MaxDepth = 1.0f;
+
+				// 게임 모드에서는 톤매핑 후 오버레이
+				if (!pImpl->m_editorMode)
+				{
+					if (pImpl->m_useForwardRendering)
+					{
+						pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					}
+					else
+					{
+						pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					}
+				}
+
+				// 파티클 오버레이 합성 (톤매핑 후 또는 에디터 모드에서 직접)
+				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
+				if (particleSRV)
+				{
+					pImpl->m_forwardRenderSystem->RenderParticleOverlay(particleSRV, backBufferRTV, viewport);
+				}
+				else
+				{
+					// 디버깅: SRV가 null인 경우 로그 출력 (너무 많이 찍히지 않도록 주석 처리)
+					// ALICE_LOG_WARNING("ComputeEffectSystem::GetOutputSRV() returned nullptr");
+				}
+			}
+		}
+		else if (!pImpl->m_editorMode)
+		{
+			// 게임 모드에서만 톤매핑 (파티클 오버레이 없을 때)
 			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
 			if (backBufferRTV)
 			{
@@ -1273,16 +1338,6 @@ namespace Alice
 				else
 				{
 					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-				}
-
-				// 파티클 오버레이 합성 (톤매핑 후)
-				if (pImpl->m_computeEffectSystem && pImpl->m_useForwardRendering)
-				{
-					ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
-					if (particleSRV)
-					{
-						pImpl->m_forwardRenderSystem->RenderParticleOverlay(particleSRV, backBufferRTV, viewport);
-					}
 				}
 			}
 		}

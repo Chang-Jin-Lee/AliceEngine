@@ -97,9 +97,23 @@ namespace Alice
             return false;
         }
 
-        if (!CreateComputeShaders())
+        // 기본 파티클 셰이더 세트 등록
+        if (!RegisterParticleShaderSet("Particle",
+                                       ComputeEffectShader::ParticleClearCS,
+                                       ComputeEffectShader::ParticleUpdateCS,
+                                       ComputeEffectShader::ParticleDrawCS))
         {
-            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateComputeShaders failed.");
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: RegisterParticleShaderSet failed.");
+            return false;
+        }
+        
+        // "ParticleEffect"도 같은 셰이더 사용
+        if (!RegisterParticleShaderSet("ParticleEffect",
+                                       ComputeEffectShader::ParticleClearCS,
+                                       ComputeEffectShader::ParticleUpdateCS,
+                                       ComputeEffectShader::ParticleDrawCS))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: RegisterParticleShaderSet(ParticleEffect) failed.");
             return false;
         }
 
@@ -183,35 +197,44 @@ namespace Alice
 
     void ComputeEffectSystem::Execute(const World& world)
     {
-        if (!m_clearShader || !m_particleUpdateShader || !m_particleDrawShader)
-            return;
-
         if (!m_constantBuffer || !m_outputUAV || !m_particleUAV || !m_particleSRV)
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Execute: resources not initialized");
             return;
+        }
 
-        // ComputeEffectComponent를 찾아서 파티클 셰이더가 활성화되어 있는지 확인
-        bool shouldExecute = false;
+        // ComputeEffectComponent를 찾아서 활성화된 이펙트 실행
+        std::string activeShaderName;
         for (auto&& [entityId, effect] : world.GetComponents<ComputeEffectComponent>())
         {
-            if (effect.enabled)
+            if (effect.enabled && !effect.shaderName.empty())
             {
-                // shaderName이 "Particle" 또는 "ParticleEffect"인 경우 파티클 실행
-                if (effect.shaderName == "Particle" || effect.shaderName == "ParticleEffect")
+                // 등록된 파티클 셰이더 세트가 있는지 확인
+                if (m_particleShaderSets.find(effect.shaderName) != m_particleShaderSets.end())
                 {
-                    shouldExecute = true;
+                    activeShaderName = effect.shaderName;
                     break;
                 }
             }
         }
 
-        if (!shouldExecute)
+        if (activeShaderName.empty())
+            return;
+
+        // 해당 셰이더 세트 가져오기
+        auto it = m_particleShaderSets.find(activeShaderName);
+        if (it == m_particleShaderSets.end())
+            return;
+
+        const ParticleShaderSet& shaderSet = it->second;
+        if (!shaderSet.clearShader || !shaderSet.updateShader || !shaderSet.drawShader)
             return;
 
         UpdateConstantBuffer();
 
-        DispatchClear();
-        DispatchParticlesUpdate();
-        DispatchParticlesDraw();
+        DispatchClear(shaderSet.clearShader.Get());
+        DispatchParticlesUpdate(shaderSet.updateShader.Get());
+        DispatchParticlesDraw(shaderSet.drawShader.Get());
 
         UnbindCS();
     }
@@ -263,7 +286,10 @@ namespace Alice
         return true;
     }
 
-    bool ComputeEffectSystem::CreateComputeShaders()
+    bool ComputeEffectSystem::RegisterParticleShaderSet(const std::string& name, 
+                                                        const char* clearCS, 
+                                                        const char* updateCS, 
+                                                        const char* drawCS)
     {
         auto createOne = [&](const char* code, ComPtr<ID3D11ComputeShader>& outShader, const char* label) -> bool
         {
@@ -275,12 +301,12 @@ namespace Alice
             {
                 if (err)
                 {
-                    ALICE_LOG_ERRORF("ComputeEffectSystem::CreateComputeShaders(%s): %s", label,
+                    ALICE_LOG_ERRORF("ComputeEffectSystem::RegisterParticleShaderSet(%s, %s): %s", name.c_str(), label,
                         static_cast<const char*>(err->GetBufferPointer()));
                 }
                 else
                 {
-                    ALICE_LOG_ERRORF("ComputeEffectSystem::CreateComputeShaders(%s): D3DCompile failed (0x%08X)", label, (unsigned)hr);
+                    ALICE_LOG_ERRORF("ComputeEffectSystem::RegisterParticleShaderSet(%s, %s): D3DCompile failed (0x%08X)", name.c_str(), label, (unsigned)hr);
                 }
                 return false;
             }
@@ -293,17 +319,20 @@ namespace Alice
 
             if (FAILED(hr))
             {
-                ALICE_LOG_ERRORF("ComputeEffectSystem::CreateComputeShaders(%s): CreateComputeShader failed (0x%08X)", label, (unsigned)hr);
+                ALICE_LOG_ERRORF("ComputeEffectSystem::RegisterParticleShaderSet(%s, %s): CreateComputeShader failed (0x%08X)", name.c_str(), label, (unsigned)hr);
                 return false;
             }
 
             return true;
         };
 
-        if (!createOne(ComputeEffectShader::ParticleClearCS,  m_clearShader,          "ParticleClearCS"))  return false;
-        if (!createOne(ComputeEffectShader::ParticleUpdateCS, m_particleUpdateShader, "ParticleUpdateCS")) return false;
-        if (!createOne(ComputeEffectShader::ParticleDrawCS,   m_particleDrawShader,   "ParticleDrawCS"))   return false;
+        ParticleShaderSet shaderSet;
+        if (!createOne(clearCS,  shaderSet.clearShader,  "ClearCS"))  return false;
+        if (!createOne(updateCS, shaderSet.updateShader, "UpdateCS")) return false;
+        if (!createOne(drawCS,   shaderSet.drawShader,    "DrawCS"))   return false;
 
+        m_particleShaderSets[name] = std::move(shaderSet);
+        ALICE_LOG_INFO("ComputeEffectSystem::RegisterParticleShaderSet: registered '%s'", name.c_str());
         return true;
     }
 
@@ -420,9 +449,11 @@ namespace Alice
         m_context->Unmap(m_constantBuffer.Get(), 0);
     }
 
-    void ComputeEffectSystem::DispatchClear()
+    void ComputeEffectSystem::DispatchClear(ID3D11ComputeShader* clearShader)
     {
-        m_context->CSSetShader(m_clearShader.Get(), nullptr, 0);
+        if (!clearShader) return;
+        
+        m_context->CSSetShader(clearShader, nullptr, 0);
         m_context->CSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
 
         ID3D11UnorderedAccessView* uav = m_outputUAV.Get();
@@ -436,9 +467,11 @@ namespace Alice
         m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
     }
 
-    void ComputeEffectSystem::DispatchParticlesUpdate()
+    void ComputeEffectSystem::DispatchParticlesUpdate(ID3D11ComputeShader* updateShader)
     {
-        m_context->CSSetShader(m_particleUpdateShader.Get(), nullptr, 0);
+        if (!updateShader) return;
+        
+        m_context->CSSetShader(updateShader, nullptr, 0);
         m_context->CSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
 
         ID3D11UnorderedAccessView* uav = m_particleUAV.Get();
@@ -451,9 +484,11 @@ namespace Alice
         m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
     }
 
-    void ComputeEffectSystem::DispatchParticlesDraw()
+    void ComputeEffectSystem::DispatchParticlesDraw(ID3D11ComputeShader* drawShader)
     {
-        m_context->CSSetShader(m_particleDrawShader.Get(), nullptr, 0);
+        if (!drawShader) return;
+        
+        m_context->CSSetShader(drawShader, nullptr, 0);
         m_context->CSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
 
         ID3D11ShaderResourceView* srv = m_particleSRV.Get();

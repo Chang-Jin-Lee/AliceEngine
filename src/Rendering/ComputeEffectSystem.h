@@ -4,6 +4,8 @@
 #include <Windows.h>
 
 #include <cstdint>
+#include <unordered_map>
+#include <string>
 #include <wrl/client.h>
 #include <d3d11.h>
 #include <DirectXMath.h>
@@ -50,10 +52,16 @@ namespace Alice
         bool CreateParticleBuffers(std::uint32_t particleCount);
 
         void UpdateConstantBuffer();
-        void DispatchClear();
-        void DispatchParticlesUpdate();
-        void DispatchParticlesDraw();
+        void DispatchClear(ID3D11ComputeShader* clearShader);
+        void DispatchParticlesUpdate(ID3D11ComputeShader* updateShader);
+        void DispatchParticlesDraw(ID3D11ComputeShader* drawShader);
         void UnbindCS();
+        
+        // 파티클 셰이더 세트 등록 (타입별)
+        bool RegisterParticleShaderSet(const std::string& name, 
+                                       const char* clearCS, 
+                                       const char* updateCS, 
+                                       const char* drawCS);
 
     private:
         ID3D11RenderDevice& m_renderDevice;
@@ -62,9 +70,15 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context;
 
         Microsoft::WRL::ComPtr<ID3D11ComputeShader> m_computeShader;
-        Microsoft::WRL::ComPtr<ID3D11ComputeShader> m_clearShader;
-        Microsoft::WRL::ComPtr<ID3D11ComputeShader> m_particleUpdateShader;
-        Microsoft::WRL::ComPtr<ID3D11ComputeShader> m_particleDrawShader;
+        
+        // 파티클 셰이더 세트 (타입별로 관리)
+        struct ParticleShaderSet
+        {
+            Microsoft::WRL::ComPtr<ID3D11ComputeShader> clearShader;
+            Microsoft::WRL::ComPtr<ID3D11ComputeShader> updateShader;
+            Microsoft::WRL::ComPtr<ID3D11ComputeShader> drawShader;
+        };
+        std::unordered_map<std::string, ParticleShaderSet> m_particleShaderSets;
         Microsoft::WRL::ComPtr<ID3D11Buffer>        m_constantBuffer;
 
         // 컴퓨트 셰이더 출력용 UAV
@@ -79,8 +93,8 @@ namespace Alice
         std::uint32_t m_particleCount = 65536;
 
         // 파티클 파라미터
-        DirectX::XMFLOAT4 m_params0{ 0.5f, 0.25f, 0.08f, 0.25f }; // emitterX,Y,radius,jitter
-        DirectX::XMFLOAT4 m_params1{ 1.0f, 0.8f, 0.2f, 3.0f };   // color rgb, size(px)
+        DirectX::XMFLOAT4 m_params0{ 0.5f, 0.5f, 0.1f, 0.25f };  // emitterX,Y,radius,jitter (화면 중앙, 더 큰 반경)
+        DirectX::XMFLOAT4 m_params1{ 1.0f, 1.0f, 0.0f, 5.0f };   // color rgb (밝은 노란색), size(px) (더 큰 크기)
 
         // 시간 관리
         LARGE_INTEGER m_qpcFreq{};

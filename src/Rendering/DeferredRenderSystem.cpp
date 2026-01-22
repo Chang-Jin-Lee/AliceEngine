@@ -918,6 +918,42 @@ namespace Alice
             ALICE_LOG_INFO("DeferredRenderSystem::CreateToneMappingResources: LDR 톤매핑 셰이더 사용.");
         }
 
+        // 파티클 오버레이 Pixel Shader 생성
+        {
+            ComPtr<ID3DBlob> psBlob, errorBlob;
+            if (FAILED(D3DCompile(CommonShaderCode::ParticleOverlayPS, strlen(CommonShaderCode::ParticleOverlayPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob)
+                {
+                    ALICE_LOG_ERRORF("Particle Overlay PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+                }
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_particleOverlayPS.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Particle Overlay PS");
+                return false;
+            }
+        }
+
+        // 파티클 오버레이용 Additive Blend State 생성
+        {
+            D3D11_BLEND_DESC blendDesc = {};
+            blendDesc.RenderTarget[0].BlendEnable = TRUE;
+            blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+            blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+            blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+            if (FAILED(m_device->CreateBlendState(&blendDesc, m_ppBlendAdditive.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Particle Overlay Additive Blend State");
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -2094,6 +2130,55 @@ namespace Alice
         // 리소스 해제
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
+    }
+
+    void DeferredRenderSystem::RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV)
+    {
+        if (!particleSRV || !m_viewportRTV || !m_particleOverlayPS || !m_quadVS) return;
+        
+        D3D11_VIEWPORT viewport = {};
+        viewport.Width = static_cast<float>(m_sceneWidth);
+        viewport.Height = static_cast<float>(m_sceneHeight);
+        viewport.MaxDepth = 1.0f;
+        
+        // 뷰포트 설정
+        m_context->RSSetViewports(1, &viewport);
+        
+        // 렌더 타겟 설정
+        m_context->OMSetRenderTargets(1, m_viewportRTV.GetAddressOf(), nullptr);
+        
+        // Additive blending 활성화
+        float blendFactor[4] = { 0, 0, 0, 0 };
+        m_context->OMSetBlendState(m_ppBlendAdditive.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        m_context->RSSetState(m_ppRasterNoCull.Get());
+        
+        // 리소스 바인딩
+        ID3D11ShaderResourceView* srv = particleSRV;
+        ID3D11SamplerState* sampler = m_samplerLinear.Get();
+        
+        m_context->PSSetShaderResources(0, 1, &srv);
+        m_context->PSSetSamplers(0, 1, &sampler);
+        
+        // Quad 그리기
+        UINT stride = m_quadStride, offset = m_quadOffset;
+        ID3D11Buffer* vb = m_quadVB.Get();
+        
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_context->IASetInputLayout(m_quadInputLayout.Get());
+        m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+        
+        m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
+        m_context->PSSetShader(m_particleOverlayPS.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+        
+        // 리소스 해제
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(0, 1, &nullSRV);
+        
+        // Blend state 복원
+        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
     }
 }
 
