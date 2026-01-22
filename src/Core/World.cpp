@@ -78,19 +78,16 @@ namespace Alice {
 		// 지연 파괴 예약이 있으면 제거
 		m_delayedDestructions.erase(id);
 
-		// 부모-자식 관계 정리: 자식들의 부모를 해제
+		// 부모-자식 관계 정리: 자식들을 재귀적으로 삭제
 		auto* transform = GetComponent<TransformComponent>(id);
 		if (transform)
 		{
-			// 이 엔티티를 부모로 가지는 자식들을 찾아 부모 해제
+			// 이 엔티티를 부모로 가지는 자식들을 찾아 재귀적으로 삭제
 			std::vector<EntityId> children = GetChildren(id);
 			for (EntityId child : children)
 			{
-				auto* childTransform = GetComponent<TransformComponent>(child);
-				if (childTransform)
-				{
-					childTransform->parent = InvalidEntityId;
-				}
+				// 자식도 재귀적으로 삭제 (자식의 자식들도 함께 삭제됨)
+				DestroyEntity(child);
 			}
 		}
 

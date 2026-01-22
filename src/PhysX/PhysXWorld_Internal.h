@@ -1658,6 +1658,14 @@ public:
 	{
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
 		if (!actor) return false;
+		
+		// PhysX 5.5: TriangleMesh는 트리거 shape로 지원하지 않음
+		if (mesh.isTrigger)
+		{
+			// 경고는 PhysicsSystem에서 이미 출력했으므로 여기서는 false만 반환
+			return false;
+		}
+		
 		auto s = world.lock();
 		if (!s || !s->scene) return false;
 

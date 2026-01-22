@@ -24,8 +24,7 @@ struct Phy_MeshColliderComponent
 
     // Filtering
     uint32_t layerBits = 1u << 0;
-    uint32_t collideMask = 0xFFFFFFFFu;
-    uint32_t queryMask = 0xFFFFFFFFu;
+    // collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거)
     uint32_t ignoreLayers = 0u; // 이그노어 레이어 비트마스크 (충돌/쿼리 모두 무시)
 
     // Trigger 여부
