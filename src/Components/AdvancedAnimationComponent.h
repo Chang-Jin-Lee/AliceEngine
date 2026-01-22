@@ -5,6 +5,7 @@
 #include <vector>
 #include <functional>
 #include <unordered_map>
+#include <cmath> // atan2, asin 등을 위해 필요
 
 #include <DirectXMath.h>
 
@@ -105,14 +106,14 @@ namespace Alice
         AdvancedAnimLayer upper;
         AdvancedAnimAdditive additive;
         AdvancedAnimProcedural procedural;
-        
+
         // 단일 IK -> 다중 IK 리스트 (발 IK 등 여러 개 동시 지원)
         // 예: 0: 왼발, 1: 오른발, 2: 왼손...
         std::vector<AdvancedAnimIK> ikChains;
-        
+
         // 기존 코드를 위해 단일 IK 접근 유지 (ikChains[0]과 동기화)
         AdvancedAnimIK ik;
-        
+
         AdvancedAnimAim aim;
 
         std::vector<AdvancedAnimSocket> sockets;
@@ -146,7 +147,7 @@ namespace Alice
                 // (역재생: prev > notify >= curr)
                 bool forwardPass = (prevTime < notify.timeSec && currTime >= notify.timeSec);
                 bool backwardPass = (prevTime > notify.timeSec && currTime <= notify.timeSec);
-                
+
                 if (forwardPass || backwardPass)
                 {
                     if (notify.callback) notify.callback();
@@ -156,10 +157,10 @@ namespace Alice
 
         // Helper: add/update a socket definition
         void SetSocketSRT(const std::string& name,
-                          const std::string& parentBone,
-                          DirectX::XMFLOAT3 pos,
-                          DirectX::XMFLOAT3 rotDeg,
-                          DirectX::XMFLOAT3 scale)
+            const std::string& parentBone,
+            DirectX::XMFLOAT3 pos,
+            DirectX::XMFLOAT3 rotDeg,
+            DirectX::XMFLOAT3 scale)
         {
             for (auto& s : sockets)
             {
@@ -193,6 +194,55 @@ namespace Alice
             return DirectX::XMMatrixIdentity();
         }
 
+        // 소켓의 월드 Transform(위치, 회전)을 추출하는 헬퍼 함수
+        bool GetSocketWorldTransform(const std::string& name, DirectX::XMFLOAT3& outPos, DirectX::XMFLOAT3& outRotDeg) const
+        {
+            for (const auto& s : sockets)
+            {
+                if (s.name == name)
+                {
+                    DirectX::XMMATRIX m = DirectX::XMLoadFloat4x4(&s.worldMatrix);
+
+                    DirectX::XMVECTOR scale, rotQuat, trans;
+                    if (!DirectX::XMMatrixDecompose(&scale, &rotQuat, &trans, m))
+                        return false;
+
+                    // Position 저장
+                    DirectX::XMStoreFloat3(&outPos, trans);
+
+                    // Quaternion -> Euler Angles (Degrees) 변환
+                    DirectX::XMFLOAT4 q;
+                    DirectX::XMStoreFloat4(&q, rotQuat);
+
+                    // 간단한 쿼터니언 -> 오일러 변환 (Y-X-Z 순서 등 엔진 좌표계에 따라 다를 수 있음)
+                    // 여기서는 일반적인 Pitch(X), Yaw(Y), Roll(Z) 변환 적용
+                    float sinr_cosp = 2.0f * (q.w * q.x + q.y * q.z);
+                    float cosr_cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
+                    float pitch = std::atan2(sinr_cosp, cosr_cosp);
+
+                    float sinp = 2.0f * (q.w * q.y - q.z * q.x);
+                    float yaw = 0.0f;
+                    if (std::abs(sinp) >= 1.0f)
+                        yaw = std::copysign(3.14159265f / 2.0f, sinp); // Use 90 degrees if out of range
+                    else
+                        yaw = std::asin(sinp);
+
+                    float siny_cosp = 2.0f * (q.w * q.z + q.x * q.y);
+                    float cosy_cosp = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+                    float roll = std::atan2(siny_cosp, cosy_cosp);
+
+                    // Radian -> Degree 변환
+                    constexpr float ToDeg = 180.0f / 3.14159265f;
+                    outRotDeg.x = pitch * ToDeg;
+                    outRotDeg.y = yaw * ToDeg;
+                    outRotDeg.z = roll * ToDeg;
+
+                    return true;
+                }
+            }
+            return false;
+        }
+
         // IK 체인 설정 헬퍼 함수
         void SetIK(int index, const std::string& boneName, int length, const DirectX::XMFLOAT3& target, float weight = 1.0f)
         {
@@ -205,7 +255,7 @@ namespace Alice
             ikChains[index].chainLength = length;
             ikChains[index].targetMS = target;
             ikChains[index].weight = weight;
-            
+
             // index 0이면 기존 ik 변수도 업데이트
             if (index == 0)
             {
@@ -219,7 +269,7 @@ namespace Alice
             if (index >= 0 && index < (int)ikChains.size())
             {
                 ikChains[index].enabled = false;
-                
+
                 // index 0이면 기존 ik 변수도 업데이트
                 if (index == 0)
                 {
@@ -229,4 +279,3 @@ namespace Alice
         }
     };
 }
-
