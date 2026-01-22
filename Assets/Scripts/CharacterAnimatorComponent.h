@@ -106,6 +106,12 @@ namespace Alice
 
         // Foot IK 런타임 변수
         float m_currentLeftFootHeight = 0.0f; // 현재 발 높이 (보간용)
+
+        // 애니메이션 속도 제어 변수 (1번/2번/3번 키로 조절)
+        float m_animSpeed = 1.0f; // 기본 속도 1.0배속
+
+        // [6번 키] 구간 늘리기 모드 플래그 (1초~2초 구간을 2초 늘려서 재생)
+        bool m_isStretchedMode = false;
     };
 }
 
