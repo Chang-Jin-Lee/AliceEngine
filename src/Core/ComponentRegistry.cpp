@@ -229,6 +229,14 @@ namespace Alice
             .property("range", &RectLightComponent::range)
             .property("enabled", &RectLightComponent::enabled);
 
+        // === ComputeEffectComponent 등록 ===
+        rttr::registration::class_<ComputeEffectComponent>("ComputeEffectComponent")
+            .constructor<>()
+            .property("enabled", &ComputeEffectComponent::enabled)
+            .property("shaderName", &ComputeEffectComponent::shaderName)
+            .property("effectParams", &ComputeEffectComponent::effectParams)
+            .property("intensity", &ComputeEffectComponent::intensity);
+
         // === ColliderType enum 등록 ===
         rttr::registration::enumeration<ColliderType>("ColliderType")
             (

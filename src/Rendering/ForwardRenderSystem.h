@@ -218,6 +218,7 @@ namespace Alice
         // ==== 톤매핑 리소스 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_quadVS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>       m_toneMappingPS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>       m_particleOverlayPS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_quadInputLayout;
         Microsoft::WRL::ComPtr<ID3D11Buffer>            m_quadVB;
         Microsoft::WRL::ComPtr<ID3D11Buffer>            m_quadIB;
@@ -227,6 +228,7 @@ namespace Alice
         // 톤매핑 전용 상태 객체 (Blend OFF, Depth OFF, Cull OFF)
         Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_ppDepthOff;
         Microsoft::WRL::ComPtr<ID3D11BlendState>        m_ppBlendOpaque;
+        Microsoft::WRL::ComPtr<ID3D11BlendState>        m_ppBlendAdditive;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_ppRasterNoCull;
 
     public:
@@ -269,6 +271,9 @@ namespace Alice
         /// @param targetRTV 백버퍼 RTV
         /// @param viewport 뷰포트 영역
         void RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+
+        /// 파티클 텍스처를 오버레이로 합성합니다 (additive blending)
+        void RenderParticleOverlay(ID3D11ShaderResourceView* particleSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;

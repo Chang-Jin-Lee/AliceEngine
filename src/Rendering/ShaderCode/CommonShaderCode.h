@@ -193,5 +193,24 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     return float4(C_ST2084, 1.0);
 }
 )";
+
+        // Particle Overlay Pixel Shader (Additive blending)
+        inline static const char* ParticleOverlayPS = R"(
+Texture2D g_ParticleTexture : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_TARGET
+{
+    float4 particleColor = g_ParticleTexture.Sample(g_SamplerLinear, input.uv);
+    // Alpha를 곱해서 additive blending 효과
+    return float4(particleColor.rgb * particleColor.a, particleColor.a);
+}
+)";
     };
 }

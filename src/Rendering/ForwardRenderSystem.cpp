@@ -1312,6 +1312,23 @@ namespace Alice
             return false;
         }
 
+        // Particle Overlay Pixel Shader 컴파일
+        psBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(CommonShaderCode::ParticleOverlayPS, strlen(CommonShaderCode::ParticleOverlayPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+            {
+                ALICE_LOG_ERRORF("Particle Overlay PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            }
+            return false;
+        }
+        if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_particleOverlayPS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Particle Overlay PS");
+            return false;
+        }
+
         if (isHDRSupported)
         {
             ALICE_LOG_INFO("ForwardRenderSystem::CreateToneMappingResources: HDR 톤매핑 셰이더 사용. MaxNits: %.1f", maxNits);
@@ -1347,6 +1364,27 @@ namespace Alice
             if (FAILED(m_device->CreateBlendState(&bd, m_ppBlendOpaque.ReleaseAndGetAddressOf())))
             {
                 ALICE_LOG_ERRORF("Failed to create PostProcess Blend State");
+                return false;
+            }
+        }
+
+        // Blend Additive (파티클 오버레이용)
+        {
+            D3D11_BLEND_DESC bd = {};
+            bd.AlphaToCoverageEnable = FALSE;
+            bd.IndependentBlendEnable = FALSE;
+            auto& rt = bd.RenderTarget[0];
+            rt.BlendEnable = TRUE;
+            rt.SrcBlend = D3D11_BLEND_ONE;
+            rt.DestBlend = D3D11_BLEND_ONE;
+            rt.BlendOp = D3D11_BLEND_OP_ADD;
+            rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+            rt.DestBlendAlpha = D3D11_BLEND_ONE;
+            rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+            rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+            if (FAILED(m_device->CreateBlendState(&bd, m_ppBlendAdditive.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Additive Blend State");
                 return false;
             }
         }
@@ -1479,6 +1517,50 @@ namespace Alice
     {
         m_postProcessParams.exposure = exposure;
         m_postProcessParams.maxHDRNits = maxHDRNits;
+    }
+
+    void ForwardRenderSystem::RenderParticleOverlay(ID3D11ShaderResourceView* particleSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+    {
+        if (!m_particleOverlayPS || !m_quadVS || !particleSRV || !targetRTV) return;
+
+        // 뷰포트 설정
+        m_context->RSSetViewports(1, &viewport);
+
+        // 렌더 타겟 설정
+        m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
+
+        // Additive blending 활성화
+        float blendFactor[4] = { 0, 0, 0, 0 };
+        m_context->OMSetBlendState(m_ppBlendAdditive.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        m_context->RSSetState(m_ppRasterNoCull.Get());
+
+        // 리소스 바인딩
+        ID3D11ShaderResourceView* srv = particleSRV;
+        ID3D11SamplerState* sampler = m_samplerLinear.Get();
+
+        m_context->PSSetShaderResources(0, 1, &srv);
+        m_context->PSSetSamplers(0, 1, &sampler);
+
+        // Quad 그리기
+        UINT stride = m_quadStride, offset = m_quadOffset;
+        ID3D11Buffer* vb = m_quadVB.Get();
+
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_context->IASetInputLayout(m_quadInputLayout.Get());
+        m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+        m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
+        m_context->PSSetShader(m_particleOverlayPS.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+        // 리소스 해제
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(0, 1, &nullSRV);
+
+        // Blend state 복원 (다음 렌더링을 위해)
+        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
     }
 }
 
