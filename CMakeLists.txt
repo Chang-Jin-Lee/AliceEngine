@@ -232,7 +232,9 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
-
+    ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+    
     #PhysX 물리
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
@@ -249,14 +251,12 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_MeshColliderComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_JointComponent.h
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
-
-	${ALICE_SRC_DIR}/PhysX/Components/CharacterControllerComponent.h
-	${ALICE_SRC_DIR}/Rendering/EffectSystem.h
-	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
 )
 
 # [변경] AliceEngine -> Engine
