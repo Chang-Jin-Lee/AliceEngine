@@ -252,6 +252,7 @@ const std::vector<FbxSubset>& FbxGeometryBuilder::GetSubsets() const { return m_
 const std::vector<std::string>& FbxGeometryBuilder::GetVertexOwningNodeNames() const { return m_->owningNode; }
 std::vector<VertexSkinnedTBN>& FbxGeometryBuilder::GetCPUVertices() { return m_->bindVertices; }
 const std::vector<VertexSkinnedTBN>& FbxGeometryBuilder::GetCPUVertices() const { return m_->bindVertices; }
+const std::vector<uint32_t>& FbxGeometryBuilder::GetCPUIndices() const { return m_->indices; }
 
 bool FbxGeometryBuilder::RebuildVBFromCPU(ID3D11Device* device)
 {
