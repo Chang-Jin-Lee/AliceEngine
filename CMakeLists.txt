@@ -141,6 +141,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
+	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
 )
 
 set(ENGINE_HEADERS
@@ -248,6 +249,9 @@ set(ENGINE_HEADERS
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
+	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
+	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
 )
 
 # [변경] AliceEngine -> Engine
