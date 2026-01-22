@@ -83,7 +83,7 @@ namespace Alice
                         XMVECTOR rotation = XMLoadFloat3(&tc->rotation);
                         XMVECTOR translation = XMLoadFloat3(&tc->position);
                         
-                        // 로컬 행렬: S * R * T 순서 (c.txt 참조)
+                        // 로컬 행렬: S * R * T 순서 (DirectXMath 행벡터 컨벤션)
                         XMMATRIX localMatrix = XMMatrixScalingFromVector(scale) *
                             XMMatrixRotationRollPitchYawFromVector(rotation) *
                             XMMatrixTranslationFromVector(translation);
@@ -97,11 +97,11 @@ namespace Alice
                     }
                 }
                 
-                // 루트에서 자식으로 내려가면서 행렬 곱하기 (역순으로)
+                // 행벡터 컨벤션: child * parent * ... * root 형태로 곱하기 (정순)
                 XMMATRIX worldM = XMMatrixIdentity();
-                for (auto it = matrixStack.rbegin(); it != matrixStack.rend(); ++it)
+                for (const auto& m : matrixStack)  // child -> parent -> root 순서
                 {
-                    worldM = worldM * (*it);
+                    worldM = worldM * m;  // I * child * parent * ... * root
                 }
 
                 SkinnedDrawCommand cmd = {};
