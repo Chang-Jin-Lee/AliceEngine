@@ -1,11 +1,13 @@
 ﻿#pragma once
 
 #include <vector>
+#include <functional>
 
 #include "Core/World.h"
 #include "Core/Logger.h"
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
+#include "Components/TransformComponent.h"
 
 namespace Alice
 {
@@ -65,12 +67,42 @@ namespace Alice
                 }
                 if (!t->enabled) continue;
 
-                // ?붾뱶 ?됰젹 援ъ꽦 (S * R * T)
+                // 월드 행렬 계산 (c.txt 참조: 부모부터 루트까지 스택에 쌓고 역순으로 곱하기)
                 using namespace DirectX;
-                XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
-                XMMATRIX R = XMMatrixRotationRollPitchYaw(t->rotation.x, t->rotation.y, t->rotation.z);
-                XMMATRIX Tm = XMMatrixTranslation(t->position.x, t->position.y, t->position.z);
-                XMMATRIX worldM = S * R * Tm;
+                
+                std::vector<XMMATRIX> matrixStack;
+                EntityId currentId = entityId;
+                
+                // 부모부터 루트까지 로컬 행렬을 스택에 쌓음
+                while (currentId != InvalidEntityId)
+                {
+                    const TransformComponent* tc = world.GetComponent<TransformComponent>(currentId);
+                    if (tc && tc->enabled)
+                    {
+                        XMVECTOR scale = XMLoadFloat3(&tc->scale);
+                        XMVECTOR rotation = XMLoadFloat3(&tc->rotation);
+                        XMVECTOR translation = XMLoadFloat3(&tc->position);
+                        
+                        // 로컬 행렬: S * R * T 순서 (c.txt 참조)
+                        XMMATRIX localMatrix = XMMatrixScalingFromVector(scale) *
+                            XMMatrixRotationRollPitchYawFromVector(rotation) *
+                            XMMatrixTranslationFromVector(translation);
+                        
+                        matrixStack.push_back(localMatrix);
+                        currentId = tc->parent;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                
+                // 루트에서 자식으로 내려가면서 행렬 곱하기 (역순으로)
+                XMMATRIX worldM = XMMatrixIdentity();
+                for (auto it = matrixStack.rbegin(); it != matrixStack.rend(); ++it)
+                {
+                    worldM = worldM * (*it);
+                }
 
                 SkinnedDrawCommand cmd = {};
                 cmd.vertexBuffer = mesh->vertexBuffer.Get();

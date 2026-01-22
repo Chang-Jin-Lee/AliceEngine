@@ -1943,33 +1943,42 @@ namespace Alice
 
     DirectX::XMMATRIX DeferredRenderSystem::BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const
     {
-        // 부모 Transform 적용
-        EntityId parentId = transform.parent;
-        XMMATRIX parentMatrix = XMMatrixIdentity();
+        // c.txt 참조: 부모부터 루트까지 로컬 행렬을 스택에 쌓고, 루트에서 자식으로 내려가면서 행렬 곱하기
+        std::vector<XMMATRIX> matrixStack;
+        EntityId currentId = entityId;
         
-        // 부모가 있으면 부모의 World Matrix를 재귀적으로 계산
-        if (parentId != InvalidEntityId)
+        // 부모부터 루트까지 로컬 행렬을 스택에 쌓음
+        while (currentId != InvalidEntityId)
         {
-            const TransformComponent* parentTransform = world.GetComponent<TransformComponent>(parentId);
-            if (parentTransform)
+            const TransformComponent* t = world.GetComponent<TransformComponent>(currentId);
+            if (t)
             {
-                parentMatrix = BuildWorldMatrix(world, parentId, *parentTransform);
+                XMVECTOR scale = XMLoadFloat3(&t->scale);
+                XMVECTOR rotation = XMLoadFloat3(&t->rotation);
+                XMVECTOR translation = XMLoadFloat3(&t->position);
+                
+                // 로컬 행렬: S * R * T 순서 (c.txt 참조)
+                XMMATRIX localMatrix = XMMatrixScalingFromVector(scale) *
+                    XMMatrixRotationRollPitchYawFromVector(rotation) *
+                    XMMatrixTranslationFromVector(translation);
+                
+                matrixStack.push_back(localMatrix);
+                currentId = t->parent;
+            }
+            else
+            {
+                break;
             }
         }
         
-        // 현재 Transform 계산
-        XMVECTOR scale = XMLoadFloat3(&transform.scale);
-        XMVECTOR rotation = XMLoadFloat3(&transform.rotation);
-        XMVECTOR translation = XMLoadFloat3(&transform.position);
-
-        XMMATRIX S = XMMatrixScalingFromVector(scale);
-        XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(rotation);
-        XMMATRIX T = XMMatrixTranslationFromVector(translation);
+        // 루트에서 자식으로 내려가면서 행렬 곱하기 (역순으로)
+        XMMATRIX worldMatrix = XMMatrixIdentity();
+        for (auto it = matrixStack.rbegin(); it != matrixStack.rend(); ++it)
+        {
+            worldMatrix = worldMatrix * (*it);
+        }
         
-        XMMATRIX localMatrix = S * R * T;
-        
-        // 부모 행렬 적용
-        return localMatrix * parentMatrix;
+        return worldMatrix;
     }
 
     ID3D11ShaderResourceView* DeferredRenderSystem::GetOrCreateTexture(const std::string& path)
