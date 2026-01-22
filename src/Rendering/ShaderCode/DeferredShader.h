@@ -24,6 +24,10 @@ cbuffer CBPerObject : register(b0)
     // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
     
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
     float    gOutlineWidth;
@@ -90,6 +94,10 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -183,6 +191,10 @@ cbuffer CBPerObject : register(b0)
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
     
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
     float    gOutlineWidth;
@@ -260,6 +272,8 @@ GBufferOut main(VertexOut pIn)
         float3x3 TBN = float3x3(T, B, N);
         float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
         N_ts.y = -N_ts.y;
+        // 노말맵 강도 조절: X, Y 성분에만 Strength를 곱하고 정규화
+        N_ts.xy *= gNormalStrength;
         N_ts = normalize(N_ts);
         N = normalize(mul(N_ts, TBN));
     }
@@ -585,7 +599,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     // shadingMode == 6: TextureOnly (빛의 영향을 받지 않는 텍스처만 반환)
     if (shadingMode == 6)
     {
-        return float4(albedo, 1.0f);
+        return float4(albedoLinear, 1.0f);
     }
 
     // 라이팅 벡터 계산
@@ -769,6 +783,10 @@ cbuffer CBPerObject : register(b0)
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
     
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
     float    gOutlineWidth;
@@ -902,6 +920,10 @@ cbuffer CBPerObject : register(b0)
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
     
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
     float    gOutlineWidth;
@@ -967,7 +989,10 @@ float4 main(PSIn pIn) : SV_Target
         float3x3 TBN = float3x3(T, B, N);
         float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
         N_ts.y = -N_ts.y;
-        N = normalize(mul(normalize(N_ts), TBN));
+        // 노말맵 강도 조절: X, Y 성분에만 Strength를 곱하고 정규화
+        N_ts.xy *= gNormalStrength;
+        N_ts = normalize(N_ts);
+        N = normalize(mul(N_ts, TBN));
     }
 
     float metalness = saturate(gMetalness);
@@ -1031,6 +1056,10 @@ cbuffer CBPerObject : register(b0)
     // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
     
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
     float    gOutlineWidth;
@@ -1072,6 +1101,10 @@ cbuffer CBPerObject : register(b0)
     
     // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;

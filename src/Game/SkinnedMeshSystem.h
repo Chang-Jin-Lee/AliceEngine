@@ -88,6 +88,7 @@ namespace Alice
                     cmd.color = mat->color;
                     cmd.roughness = mat->roughness;
                     cmd.metalness = mat->metalness;
+                    cmd.normalStrength = mat->normalStrength;
                     cmd.shadingMode = mat->shadingMode;
                     cmd.outlineColor = mat->outlineColor;
                     cmd.outlineWidth = mat->outlineWidth;
