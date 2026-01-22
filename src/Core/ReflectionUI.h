@@ -3,6 +3,8 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 
 #include <rttr/type.h>
 #include <rttr/variant.h>
@@ -16,9 +18,12 @@
 #include <filesystem>
 #include <algorithm>
 #include "Core/ResourceManager.h"
+#include "Core/Entity.h"
 
 namespace Alice
 {
+    class World; // 전방 선언
+    
     /// @note RTTR 기반으로 렌더링하는 유틸리티 클래스
     namespace ReflectionUI
     {
@@ -26,9 +31,10 @@ namespace Alice
         {
             /// @param obj 인스턴스
             /// @param label 렌더링할 라벨
+            /// @param world World 포인터 (엔티티 참조 드래그 앤 드롭용, 선택적)
             /// @return 변경 여부
             inline bool RenderProperty(const rttr::property& prop, rttr::instance& obj, 
-                                      const std::string& label = "")
+                                      const std::string& label = "", World* world = nullptr)
             {
                 rttr::type propType = prop.get_type();
                 std::string propName = prop.get_name().to_string();
@@ -99,39 +105,139 @@ namespace Alice
                         changed = true;
                     }
                     
-                    // 드래그앤드롭 지원: 파일 경로 필드에 드롭 타겟 추가
-                    // 프로퍼티 이름에 "Path", "path", "Asset", "asset", "File", "file" 등이 포함된 경우
+                    // 드래그앤드롭 지원 감지
                     std::string propNameLower = propName;
                     std::transform(propNameLower.begin(), propNameLower.end(), propNameLower.begin(), ::tolower);
+                    
+                    // 파일 경로 필드 감지: "Path", "path", "Asset", "asset", "File", "file" 등이 포함된 경우
                     bool isPathField = propNameLower.find("path") != std::string::npos ||
                                        propNameLower.find("asset") != std::string::npos ||
-                                       propNameLower.find("file") != std::string::npos;
+                                       propNameLower.find("file") != std::string::npos ||
+                                       propNameLower.find("scene") != std::string::npos;
                     
-                    if (isPathField && ImGui::BeginDragDropTarget())
+                    // 엔티티 참조 필드 감지: 
+                    // - 메타데이터 "EntityRef" 존재
+                    // - "target"과 "name"이 모두 포함된 경우 (targetPosition 같은 경우 제외)
+                    // - "target"과 "id"가 모두 포함된 경우
+                    bool isEntityRefField = prop.get_metadata("EntityRef") ||
+                                           (propNameLower.find("target") != std::string::npos && 
+                                            propNameLower.find("name") != std::string::npos) ||
+                                           (propNameLower.find("target") != std::string::npos && 
+                                            propNameLower.find("id") != std::string::npos);
+                    
+                    // 드롭 타겟 시작 (파일 경로 또는 엔티티 참조)
+                    if ((isPathField || isEntityRefField) && ImGui::BeginDragDropTarget())
                     {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
+                        // 엔티티 참조 드롭 처리 (World가 제공된 경우, 우선 처리)
+                        if (isEntityRefField && world)
                         {
-                            const char* pathStr = static_cast<const char*>(payload->Data);
-                            std::filesystem::path droppedPath(pathStr);
-                            
-                            // 논리 경로로 변환 시도 (ResourceManager 사용)
-                            std::string logicalPath = droppedPath.string();
-                            try {
-                                // ResourceManager 싱글톤 사용
-                                auto& rm = ResourceManager::Get();
-                                std::filesystem::path logical = rm.NormalizeResourcePathAbsoluteToLogical(droppedPath);
-                                if (!logical.empty() && !logical.is_absolute())
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_HIERARCHY"))
+                            {
+                                IM_ASSERT(payload->DataSize == sizeof(EntityId));
+                                EntityId draggedId = *(const EntityId*)payload->Data;
+                                
+                                if (draggedId != InvalidEntityId)
                                 {
-                                    logicalPath = logical.string();
+                                    // 엔티티 이름 가져오기
+                                    std::string entityName = world->GetEntityName(draggedId);
+                                    if (entityName.empty())
+                                    {
+                                        entityName = "Entity " + std::to_string(static_cast<uint32_t>(draggedId));
+                                    }
+                                    
+                                    prop.set_value(obj, entityName);
+                                    changed = true;
                                 }
                             }
-                            catch (...) {
-                                // ResourceManager 접근 실패 시 원본 경로 사용
-                            }
-                            
-                            prop.set_value(obj, logicalPath);
-                            changed = true;
                         }
+                        
+                        // 파일 경로 드롭 처리
+                        if (isPathField)
+                        {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
+                            {
+                                const char* pathStr = static_cast<const char*>(payload->Data);
+                                std::filesystem::path droppedPath(pathStr);
+                                
+                                // 씬 경로 필드인 경우 .scene 파일만 허용
+                                bool isSceneField = propNameLower.find("scene") != std::string::npos;
+                                if (isSceneField)
+                                {
+                                    std::string ext = droppedPath.extension().string();
+                                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                                    if (ext != ".scene")
+                                    {
+                                        // .scene 파일이 아니면 무시
+                                        ImGui::EndDragDropTarget();
+                                        return changed;
+                                    }
+                                }
+                                
+                                // 절대 경로를 상대 경로로 변환
+                                std::string logicalPath = droppedPath.string();
+                                
+                                if (droppedPath.is_absolute())
+                                {
+                                    try {
+                                        // ResourceManager를 통해 논리 경로로 변환 시도
+                                        auto& rm = ResourceManager::Get();
+                                        std::filesystem::path logical = rm.NormalizeResourcePathAbsoluteToLogical(droppedPath);
+                                        
+                                        // 논리 경로로 변환 성공 (Resource/... 형식)
+                                        if (!logical.is_absolute())
+                                        {
+                                            logicalPath = logical.generic_string();
+                                        }
+                                        else
+                                        {
+                                            // 논리 경로 변환 실패 시 프로젝트 루트 기준 상대 경로로 변환 시도
+                                            // 프로젝트 루트 구하기 (에디터 모드 기준: exeDir/../../..)
+                                            wchar_t exePathW[MAX_PATH] = {};
+                                            GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+                                            std::filesystem::path exePath = exePathW;
+                                            std::filesystem::path exeDir = exePath.parent_path();
+                                            std::filesystem::path projectRoot = exeDir.parent_path().parent_path().parent_path();
+                                            
+                                            try {
+                                                std::filesystem::path relative = std::filesystem::relative(droppedPath, projectRoot);
+                                                if (!relative.empty())
+                                                {
+                                                    const std::string result = relative.generic_string();
+                                                    // Assets/, Resource/, Cooked/로 시작하는지 확인
+                                                    if (result.find("Assets/") == 0 || 
+                                                        result.find("Resource/") == 0 || 
+                                                        result.find("Cooked/") == 0)
+                                                    {
+                                                        logicalPath = result;
+                                                    }
+                                                }
+                                            }
+                                            catch (...) {
+                                                // relative() 실패 시 논리 경로 변환 결과 사용
+                                            }
+                                        }
+                                    }
+                                    catch (...) {
+                                        // ResourceManager 접근 실패 시 원본 경로 사용
+                                    }
+                                }
+                                else
+                                {
+                                    // 이미 상대 경로인 경우 그대로 사용 (Assets/, Resource/, Cooked/로 시작하는지 확인)
+                                    const std::string s = droppedPath.generic_string();
+                                    if (s.find("Assets/") == 0 || 
+                                        s.find("Resource/") == 0 || 
+                                        s.find("Cooked/") == 0)
+                                    {
+                                        logicalPath = s;
+                                    }
+                                }
+                                
+                                prop.set_value(obj, logicalPath);
+                                changed = true;
+                            }
+                        }
+                        
                         ImGui::EndDragDropTarget();
                     }
                 }
@@ -206,7 +312,7 @@ namespace Alice
                             rttr::instance inst = value;
                             for (auto& subProp : classType.get_properties())
                             {
-                                RenderProperty(subProp, inst);
+                                RenderProperty(subProp, inst, "", world);
                             }
                             ImGui::TreePop();
                         }
@@ -224,12 +330,12 @@ namespace Alice
             /// @return 변경 여부
             inline bool RenderPropertyWithRange(const rttr::property& prop, rttr::instance& obj,
                                                float minVal, float maxVal,
-                                               const std::string& label = "")
+                                               const std::string& label = "", World* world = nullptr)
             {
                 rttr::type propType = prop.get_type();
                 if (propType != rttr::type::get<float>() && propType != rttr::type::get<double>())
                 {
-                    return RenderProperty(prop, obj, label);
+                    return RenderProperty(prop, obj, label, world);
                 }
 
                 std::string propName = prop.get_name().to_string();
@@ -256,9 +362,10 @@ namespace Alice
 
         /// @param obj 인스턴스
         /// @param filter 필터 함수
+        /// @param world World 포인터 (엔티티 참조 드래그 앤 드롭용, 선택적)
         /// @return 변경 여부
         template<typename T>
-        bool RenderInspector(T& obj, const std::function<bool(const std::string&)>& filter = nullptr)
+        bool RenderInspector(T& obj, const std::function<bool(const std::string&)>& filter = nullptr, World* world = nullptr)
         {
             rttr::type t = rttr::type::get(obj);
             rttr::instance inst = obj;
@@ -275,11 +382,11 @@ namespace Alice
                 // 그 외 프로퍼티는 자동으로 렌더링
                 if (propName == "roughness" || propName == "metalness")
                 {
-                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f);
+                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
                 }
                 else
                 {
-                    changed |= Detail::RenderProperty(prop, inst);
+                    changed |= Detail::RenderProperty(prop, inst, "", world);
                 }
             }
 
@@ -289,10 +396,11 @@ namespace Alice
         /// @param obj 인스턴스
         /// @param propName 프로퍼티 이름
         /// @param label 렌더링할 라벨
+        /// @param world World 포인터 (엔티티 참조 드래그 앤 드롭용, 선택적)
         /// @return 변경 여부
         // 프로퍼티 렌더링
         template<typename T>
-        bool RenderProperty(T& obj, const std::string& propName, const std::string& label = "")
+        bool RenderProperty(T& obj, const std::string& propName, const std::string& label = "", World* world = nullptr)
         {
             rttr::type t = rttr::type::get(obj);
             rttr::instance inst = obj;
@@ -304,15 +412,16 @@ namespace Alice
                 return false;
             }
 
-            return Detail::RenderProperty(prop, inst, label.empty() ? propName : label);
+            return Detail::RenderProperty(prop, inst, label.empty() ? propName : label, world);
         }
 
         // 프로퍼티 렌더링
         /// @param obj 인스턴스
         /// @param labelMap 렌더링할 라벨 맵
+        /// @param world World 포인터 (엔티티 참조 드래그 앤 드롭용, 선택적)
         /// @return 변경 여부
         template<typename T>
-        bool RenderInspectorWithLabels(T& obj, const std::unordered_map<std::string, std::string>& labelMap)
+        bool RenderInspectorWithLabels(T& obj, const std::unordered_map<std::string, std::string>& labelMap, World* world = nullptr)
         {
             rttr::type t = rttr::type::get(obj);
             rttr::instance inst = obj;
@@ -330,11 +439,11 @@ namespace Alice
                 // roughness, metalness는 자동으로 SliderFloat로 렌더링
                 if (propName == "roughness" || propName == "metalness")
                 {
-                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel);
+                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
                 }
                 else
                 {
-                    changed |= Detail::RenderProperty(prop, inst, displayLabel);
+                    changed |= Detail::RenderProperty(prop, inst, displayLabel, world);
                 }
             }
 

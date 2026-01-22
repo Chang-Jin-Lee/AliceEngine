@@ -323,6 +323,20 @@ namespace Alice
 
 				const EntityId id = world.CreateEntity();
 				restoredId = id;
+				
+				// RAII 가드: 복원 실패 시 엔티티가 찌꺼기로 남지 않게 자동 정리
+				struct EntityGuard {
+					World& world;
+					EntityId id;
+					bool committed = false;
+					
+					EntityGuard(World& w, EntityId i) : world(w), id(i) {}
+					~EntityGuard() {
+						if (!committed) {
+							world.DestroyEntity(id);
+						}
+					}
+				} guard(world, id);
 
 				const std::string name = e.value("name", std::string{});
 				if (!name.empty())
@@ -514,6 +528,19 @@ namespace Alice
 					if (!JsonRttr::FromJsonObject(inst, *itJoint)) return false;
 				}
 
+				// Parent 관계 복원 (순환 참조 방지를 위해 나중에 처리)
+				auto itParent = e.find("_parentId");
+				if (itParent != e.end() && itParent->is_number_unsigned())
+				{
+					EntityId parentId = static_cast<EntityId>(itParent->get<std::uint32_t>());
+					if (parentId != InvalidEntityId && world.GetEntityName(parentId) != "")
+					{
+						world.SetParent(id, parentId);
+					}
+				}
+
+				// 모든 컴포넌트 복원이 성공했으므로 가드 커밋
+				guard.committed = true;
 				return true;
 			}
 
@@ -2056,6 +2083,29 @@ namespace Alice
 				// 배포용 출력 경로 입력 + 폴더 선택 버튼
 				ImGui::Text("Export Path (relative to project root or absolute)");
 				ImGui::InputText("##ExportPath", s_ExportPath, IM_ARRAYSIZE(s_ExportPath));
+				
+				// Export Path 입력 필드에 드래그 앤 드롭 추가
+				if (ImGui::BeginDragDropTarget())
+				{
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
+					{
+						const char* pathStr = static_cast<const char*>(payload->Data);
+						std::filesystem::path droppedPath(pathStr);
+						std::string ext = droppedPath.extension().string();
+						std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+						
+						// 씬 파일(.scene)을 드래그하면 해당 씬 파일의 디렉토리 경로를 Export Path로 설정
+						if (ext == ".scene")
+						{
+							std::filesystem::path sceneDir = droppedPath.parent_path();
+							std::string dirStr = sceneDir.string();
+							strncpy_s(s_ExportPath, dirStr.c_str(), IM_ARRAYSIZE(s_ExportPath) - 1);
+							s_ExportPath[IM_ARRAYSIZE(s_ExportPath) - 1] = '\0';
+						}
+					}
+					ImGui::EndDragDropTarget();
+				}
+				
 				ImGui::SameLine();
 				if (ImGui::Button("Browse..."))
 				{
@@ -3082,18 +3132,27 @@ namespace Alice
 									{
 										if (eid == selectedEntity) continue; // 자기 자신은 제외
 
-										// 스냅 타입에 따라 타겟 위치 결정
-										XMVECTOR bestSnapPos = XMLoadFloat3(&otherTransform.position);
-										float bestSnapDist = objectSnapDistance;
-										bool hasMeshSnap = false;
+									// 스냅 타입에 따라 타겟 위치 결정
+									XMVECTOR bestSnapPos = XMLoadFloat3(&otherTransform.position);
+									float bestSnapDist = objectSnapDistance;
+									bool hasMeshSnap = false;
 
-										switch (objectSnapType)
+									switch (objectSnapType)
+									{
+									case ObjectSnapType::Center:
+										// 중심점 스냅: 거리를 명시적으로 계산하여 bestSnapDist 업데이트
 										{
-										case ObjectSnapType::Center:
-											// 중심점 스냅
-											bestSnapPos = XMLoadFloat3(&otherTransform.position);
-											hasMeshSnap = true;
-											break;
+											XMVECTOR centerPos = XMLoadFloat3(&otherTransform.position);
+											XMVECTOR diff = currentPos - centerPos;
+											float dist = XMVectorGetX(XMVector3Length(diff));
+											if (dist < bestSnapDist)
+											{
+												bestSnapDist = dist;
+												bestSnapPos = centerPos;
+												hasMeshSnap = true;
+											}
+										}
+										break;
 
 										case ObjectSnapType::Vertex:
 										case ObjectSnapType::Edge:
@@ -4631,8 +4690,9 @@ namespace Alice
 									}
 								}
 								else {
-									// Generic
-									if (ReflectionUI::Detail::RenderProperty(prop, inst))
+									// Generic - string 타입의 경우 world를 전달하여 드래그 앤 드롭 지원
+									// ReflectionUI::Detail::RenderProperty가 자동으로 엔티티 참조 필드를 감지하고 처리함
+									if (ReflectionUI::Detail::RenderProperty(prop, inst, "", &world))
 										g_SceneDirty = true;
 								}
 							}
@@ -6255,6 +6315,36 @@ namespace Alice
 
 						std::error_code ec;
 						fs::create_directories(newPath, ec);
+					}
+
+					// 새 Material 파일 생성
+					if (ImGui::MenuItem("Create Material"))
+					{
+						const std::string baseName = "NewMaterial";
+						fs::path matPath = path / (baseName + ".mat");
+						
+						int index = 1;
+						while (fs::exists(matPath))
+						{
+							matPath = path / (baseName + std::to_string(index) + ".mat");
+							++index;
+						}
+						
+						// 기본 MaterialComponent 생성 및 저장
+						MaterialComponent defaultMat;
+						defaultMat.color = DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
+						defaultMat.roughness = 0.5f;
+						defaultMat.metalness = 0.0f;
+						defaultMat.shadingMode = -1; // Global
+						
+						if (MaterialFile::Save(matPath, defaultMat))
+						{
+							ALICE_LOG_INFO("[EditorCore] Created new Material file: %s", matPath.string().c_str());
+						}
+						else
+						{
+							ALICE_LOG_ERRORF("[EditorCore] Failed to create Material file: %s", matPath.string().c_str());
+						}
 					}
 
 					// Unity 스타일: C++ 스크립트(.h/.cpp)와 프리팹을 간단하게 생성합니다.
