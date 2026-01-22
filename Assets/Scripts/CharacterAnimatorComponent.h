@@ -5,18 +5,18 @@
 
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
-#include "Core/GameObject.h" // GameObject 저장을 위해 필요
+#include "Core/GameObject.h"
 
 namespace Alice
 {
     // 캐릭터의 동작 상태 정의
     enum class CharState
     {
-        Standing,    // 서기
+        Standing,    // 서기 (이동 및 공격 가능)
         Crouching,   // 앉는 중
-        Crouched,    // 앉음
+        Crouched,    // 앉음 (이동 불가, 공격 불가)
         StandingUp,  // 일어서는 중
-        Attacking    // 공격 중
+        Attacking    // 공격 중 (이동 불가, 다른 동작 불가)
     };
 
     class CharacterAnimatorComponent : public IScript
@@ -26,9 +26,9 @@ namespace Alice
     public:
         void Update(float DeltaTime) override;
 
-        // 노티파이에서 호출될 함수 (리플렉션)
+        // 노티파이용 함수
         void OnAttackHit();
-        void OnCrouchHalfway(); // 앉기 애니메이션 중간에 호출되는 함수
+        void OnCrouchHalfway();
 
         // --- Movement settings ---
         ALICE_PROPERTY(float, m_moveSpeed, 10.0f);
@@ -43,20 +43,19 @@ namespace Alice
         ALICE_PROPERTY(std::string, m_runClip, "Run");
 
         // --- Crouch clips ---
-        ALICE_PROPERTY(std::string, m_crouchClip, "CrouchDown");        // 앉는 동작 (끝나면 멈춤)
-        ALICE_PROPERTY(std::string, m_crouchFireClip, "CrouchFire");    // 앉아서 사격 (Additive)
-        ALICE_PROPERTY(float, m_crouchDuration, 1.0f);                  // 앉기 애니메이션 길이 (수동 제어용)
+        ALICE_PROPERTY(std::string, m_crouchClip, "CrouchDown");
+        ALICE_PROPERTY(float, m_crouchDuration, 1.0f);
 
-        // --- Attack montage clips ---
-        ALICE_PROPERTY(std::string, m_attackClip, "Attack01");          // 공격 몽타주 클립
-        ALICE_PROPERTY(float, m_attackDuration, 1.5f);                 // 공격 애니메이션 길이
-        ALICE_PROPERTY(float, m_attackHitTime, 0.7f);                   // 타격 판정 시간 (Notify 발생 지점)
+        // --- Attack clips ---
+        ALICE_PROPERTY(std::string, m_attackClip, "Attack01");
+        ALICE_PROPERTY(float, m_attackDuration, 1.5f);
+        ALICE_PROPERTY(float, m_attackHitTime, 0.7f);
 
         // --- Upper layer clips ---
         ALICE_PROPERTY(bool, m_enableUpperLayer, false);
         ALICE_PROPERTY(std::string, m_upperClip, "Aim");
 
-        // --- Additive clips ---
+        // --- Additive clips (필요 시 유지, 현재 로직에선 사용 안 함) ---
         ALICE_PROPERTY(bool, m_enableAdditive, false);
         ALICE_PROPERTY(std::string, m_additiveClip, "Recoil");
         ALICE_PROPERTY(std::string, m_additiveRefClip, "Idle");
@@ -69,8 +68,8 @@ namespace Alice
         ALICE_PROPERTY(DirectX::XMFLOAT3, m_socketRotDeg, DirectX::XMFLOAT3(0.0f, 90.0f, 0.0f));
         ALICE_PROPERTY(DirectX::XMFLOAT3, m_socketScale, DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f));
 
-        // [추가] 무기 부착 관련 설정
-        ALICE_PROPERTY(std::string, m_weaponObjName, "Weapon"); // 찾을 오브젝트 이름
+        // 무기 부착 관련
+        ALICE_PROPERTY(std::string, m_weaponObjName, "Weapon");
 
         // --- IK settings ---
         ALICE_PROPERTY(bool, m_enableIK, false);
@@ -79,14 +78,14 @@ namespace Alice
         ALICE_PROPERTY(float, m_ikWeight, 1.0f);
         ALICE_PROPERTY(DirectX::XMFLOAT3, m_ikTargetLocal, DirectX::XMFLOAT3(0.0f, 1.2f, 0.2f));
 
-        // --- Foot IK settings (발 지형 적응) ---
+        // --- Foot IK settings ---
         ALICE_PROPERTY(bool, m_enableFootIK, true);
-        ALICE_PROPERTY(std::string, m_leftFootBone, "Ball_L"); // 또는 Foot_L
-        ALICE_PROPERTY(float, m_ikLiftSpeed, 5.0f);            // 발 드는 속도 (보간 속도)
-        ALICE_PROPERTY(float, m_maxLiftHeight, 0.5f);          // Y키 눌렀을 때 목표 높이
-        ALICE_PROPERTY(DirectX::XMFLOAT3, m_leftFootBasePos, DirectX::XMFLOAT3(-0.2f, 0.0f, 0.1f)); // 왼발 기본 위치 (모델 공간)
+        ALICE_PROPERTY(std::string, m_leftFootBone, "Ball_L");
+        ALICE_PROPERTY(float, m_ikLiftSpeed, 5.0f);
+        ALICE_PROPERTY(float, m_maxLiftHeight, 0.5f);
+        ALICE_PROPERTY(DirectX::XMFLOAT3, m_leftFootBasePos, DirectX::XMFLOAT3(-0.2f, 0.0f, 0.1f));
 
-        // --- Aim (optional) ---
+        // --- Aim ---
         ALICE_PROPERTY(bool, m_enableAim, false);
         ALICE_PROPERTY(float, m_aimYawDeg, 0.0f);
         ALICE_PROPERTY(float, m_aimWeight, 1.0f);
@@ -98,26 +97,16 @@ namespace Alice
         bool m_socketInitialized = false;
         std::string m_lastMoveClip;
 
-        // 상태 관리 변수
         CharState m_state = CharState::Standing;
-        float m_currentCrouchTime = 0.0f; // 앉기 애니메이션 현재 시간 수동 제어
-        std::string m_currentFireClip;    // 현재 발동된 사격 클립 저장
+        float m_currentCrouchTime = 0.0f;
 
-        // 노티파이 등록 여부 체크
         bool m_notifyRegistered = false;
         float m_currentAttackTime = 0.0f;
-
-        // Foot IK 런타임 변수
-        float m_currentLeftFootHeight = 0.0f; // 현재 발 높이 (보간용)
-
-        // 애니메이션 속도 제어 변수 (1번/2번/3번 키로 조절)
-        float m_animSpeed = 1.0f; // 기본 속도 1.0배속
-
-        // [6번 키] 구간 늘리기 모드 플래그 (1초~2초 구간을 2초 늘려서 재생)
+        float m_currentLeftFootHeight = 0.0f;
+        float m_animSpeed = 1.0f;
         bool m_isStretchedMode = false;
 
-        // 무기 부착 상태 변수
         bool m_isWeaponAttached = false;
-        GameObject m_weaponGo; // 찾은 무기 오브젝트 저장
+        GameObject m_weaponGo;
     };
 }
