@@ -290,8 +290,6 @@ namespace Alice
             .property("dynamicFriction", &Phy_ColliderComponent::dynamicFriction)
             .property("restitution", &Phy_ColliderComponent::restitution)
             .property("layerBits", &Phy_ColliderComponent::layerBits)
-            .property("collideMask", &Phy_ColliderComponent::collideMask)
-            .property("queryMask", &Phy_ColliderComponent::queryMask)
             .property("ignoreLayers", &Phy_ColliderComponent::ignoreLayers)
             .property("isTrigger", &Phy_ColliderComponent::isTrigger);
 
@@ -303,8 +301,6 @@ namespace Alice
             .property("dynamicFriction", &Phy_MeshColliderComponent::dynamicFriction)
             .property("restitution", &Phy_MeshColliderComponent::restitution)
             .property("layerBits", &Phy_MeshColliderComponent::layerBits)
-            .property("collideMask", &Phy_MeshColliderComponent::collideMask)
-            .property("queryMask", &Phy_MeshColliderComponent::queryMask)
             .property("ignoreLayers", &Phy_MeshColliderComponent::ignoreLayers)
             .property("isTrigger", &Phy_MeshColliderComponent::isTrigger)
             .property("meshAssetPath", &Phy_MeshColliderComponent::meshAssetPath)
@@ -329,8 +325,6 @@ namespace Alice
             .property("dynamicFriction", &Phy_TerrainHeightFieldComponent::dynamicFriction)
             .property("restitution", &Phy_TerrainHeightFieldComponent::restitution)
             .property("layerBits", &Phy_TerrainHeightFieldComponent::layerBits)
-            .property("collideMask", &Phy_TerrainHeightFieldComponent::collideMask)
-            .property("queryMask", &Phy_TerrainHeightFieldComponent::queryMask)
             .property("ignoreLayers", &Phy_TerrainHeightFieldComponent::ignoreLayers);
 
         // === CCTNonWalkableMode enum 등록 ===
@@ -360,8 +354,6 @@ namespace Alice
             .property("density", &Phy_CCTComponent::density)
             .property("enableQueries", &Phy_CCTComponent::enableQueries)
             .property("layerBits", &Phy_CCTComponent::layerBits)
-            .property("collideMask", &Phy_CCTComponent::collideMask)
-            .property("queryMask", &Phy_CCTComponent::queryMask)
             .property("ignoreLayers", &Phy_CCTComponent::ignoreLayers)
             .property("hitTriggers", &Phy_CCTComponent::hitTriggers)
             .property("desiredVelocity", &Phy_CCTComponent::desiredVelocity)

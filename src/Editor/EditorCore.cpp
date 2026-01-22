@@ -3016,28 +3016,92 @@ namespace Alice
 							XMStoreFloat4x4(&viewMatrix, viewXM);
 							XMStoreFloat4x4(&projMatrix, projXM);
 
-							// [핵심 수정] ImGuizmo의 RecomposeMatrixFromComponents를 사용하여 행렬 생성
-							// 이렇게 하면 DecomposeMatrixToComponents와 알고리즘이 일치하여 떨림이 사라집니다
-							// ImGuizmo는 Degree(도) 단위를 사용하므로 변환 필요
-							float matrixTranslation[3], matrixRotation[3], matrixScale[3];
-
-							matrixTranslation[0] = transform->position.x;
-							matrixTranslation[1] = transform->position.y;
-							matrixTranslation[2] = transform->position.z;
-
-							// Radian을 Degree로 변환
-							matrixRotation[1] = XMConvertToDegrees(transform->rotation.x);
-							matrixRotation[0] = XMConvertToDegrees(transform->rotation.y);
-							matrixRotation[2] = XMConvertToDegrees(transform->rotation.z);
-
-							matrixScale[0] = transform->scale.x;
-							matrixScale[1] = transform->scale.y;
-							matrixScale[2] = transform->scale.z;
-
-							// ImGuizmo 방식으로 행렬을 재조립 (Recompose)
-							// 이렇게 하면 나중에 Decompose할 때의 알고리즘과 대칭이 되어 떨림이 사라집니다
+							// [핵심 수정] 씬 그래프 반영: 부모-자식 관계를 고려한 월드 행렬 계산
+							using namespace DirectX;
+							
+							// 쿼터니언을 Yaw-Pitch-Roll로 변환하는 헬퍼 함수
+							auto QuatToPitchYawRoll = [](XMVECTOR q) -> XMFLOAT3
+							{
+								using namespace DirectX;
+								
+								q = XMQuaternionNormalize(q);
+								
+								const XMVECTOR forward0 = XMVectorSet(0, 0, 1, 0);
+								const XMVECTOR right0_  = XMVectorSet(1, 0, 0, 0);
+								const XMVECTOR upWorld  = XMVectorSet(0, 1, 0, 0);
+								
+								XMVECTOR forward = XMVector3Normalize(XMVector3Rotate(forward0, q));
+								XMVECTOR right   = XMVector3Normalize(XMVector3Rotate(right0_, q));
+								
+								float fx = XMVectorGetX(forward);
+								float fy = XMVectorGetY(forward);
+								float fz = XMVectorGetZ(forward);
+								
+								float yaw   = std::atan2f(fx, fz);
+								float pitch = std::atan2f(-fy, std::sqrtf(fx*fx + fz*fz));
+								
+								// roll: "yaw/pitch만 적용했을 때의 right"와 실제 right의 차이를 forward축 기준으로 측정
+								XMVECTOR rightRef = XMVector3Cross(upWorld, forward);
+								float len = XMVectorGetX(XMVector3Length(rightRef));
+								if (len < 1e-6f)
+								{
+									// forward가 up과 거의 평행이면 roll이 정의가 약해짐(오일러의 저주 구간)
+									return XMFLOAT3(pitch, yaw, 0.0f);
+								}
+								rightRef = XMVectorScale(rightRef, 1.0f / len);
+								
+								float dot = XMVectorGetX(XMVector3Dot(rightRef, right));
+								dot = std::clamp(dot, -1.0f, 1.0f);
+								
+								float sign = XMVectorGetX(XMVector3Dot(XMVector3Cross(rightRef, right), forward));
+								float roll = std::atan2f(sign, dot);
+								
+								return XMFLOAT3(pitch, yaw, roll); // (x=pitch, y=yaw, z=roll)
+							};
+							
+							// 부모부터 루트까지 로컬 행렬을 스택에 쌓음
+							// 엔진의 yaw/pitch/roll 순서로 직접 행렬 생성 (ImGuizmo와의 호환성)
+							std::vector<XMMATRIX> matrixStack;
+							EntityId currentId = selectedEntity;
+							
+							while (currentId != InvalidEntityId)
+							{
+								const TransformComponent* t = world.GetComponent<TransformComponent>(currentId);
+								if (t)
+								{
+									// 엔진 순서: yaw(Y) → pitch(X) → roll(Z)
+									float pitch = t->rotation.x;
+									float yaw   = t->rotation.y;
+									float roll  = t->rotation.z;
+									
+									XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
+									XMMATRIX R = XMMatrixRotationY(yaw) * XMMatrixRotationX(pitch) * XMMatrixRotationZ(roll);
+									XMMATRIX T = XMMatrixTranslation(t->position.x, t->position.y, t->position.z);
+									
+									// 로컬 행렬: S * R * T 순서 (DirectXMath 행벡터 컨벤션)
+									XMMATRIX localMatrix = S * R * T;
+									
+									matrixStack.push_back(localMatrix);
+									currentId = t->parent;
+								}
+								else
+								{
+									break;
+								}
+							}
+							
+							// 행벡터 컨벤션: child * parent * ... * root 형태로 곱하기 (정순)
+							XMMATRIX worldMatrixXM = XMMatrixIdentity();
+							for (const auto& m : matrixStack)  // child -> parent -> root 순서
+							{
+								worldMatrixXM = worldMatrixXM * m;  // I * child * parent * ... * root
+							}
+							
+							// XMMATRIX를 float[16] 배열로 변환 (ImGuizmo 형식: row-major)
+							XMFLOAT4X4 worldMatrixFloat4x4;
+							XMStoreFloat4x4(&worldMatrixFloat4x4, worldMatrixXM);
 							float worldMatrix[16];
-							ImGuizmo::RecomposeMatrixFromComponents(matrixTranslation, matrixRotation, matrixScale, worldMatrix);
+							memcpy(worldMatrix, &worldMatrixFloat4x4, sizeof(float) * 16);
 
 							// ImGuizmo에 직접 포인터 전달
 							const float* viewMat = reinterpret_cast<const float*>(viewMatrix.m);
@@ -3112,12 +3176,78 @@ namespace Alice
 
 							if (manipulated)
 							{
-								// [핵심 수정] ImGuizmo로 조립했으므로 분해(Decompose)도 안정적으로 동작함
-								// Recompose와 Decompose의 알고리즘이 일치하여 떨림이 사라집니다
-								ImGuizmo::DecomposeMatrixToComponents(worldMatrix, matrixTranslation, matrixRotation, matrixScale);
-
-								// Transform 컴포넌트 업데이트 (다시 Radian으로 변환하여 저장)
-								XMFLOAT3 newPosition = XMFLOAT3(matrixTranslation[0], matrixTranslation[1], matrixTranslation[2]);
+								// [핵심 수정] 조작된 월드 행렬을 로컬 Transform으로 변환
+								// ImGuizmo가 반환한 worldMatrix는 조작된 월드 행렬이므로,
+								// 부모의 월드 행렬을 역으로 곱해서 로컬 Transform을 추출해야 함
+								using namespace DirectX;
+								
+								// 조작된 월드 행렬을 XMMATRIX로 변환
+								XMMATRIX manipulatedWorldMatrix = XMLoadFloat4x4(reinterpret_cast<XMFLOAT4X4*>(worldMatrix));
+								
+								// 부모의 월드 행렬 계산 (부모가 있는 경우)
+								XMMATRIX parentWorldMatrix = XMMatrixIdentity();
+								if (transform->parent != InvalidEntityId)
+								{
+									const TransformComponent* parentTransform = world.GetComponent<TransformComponent>(transform->parent);
+									if (parentTransform)
+									{
+										// 부모부터 루트까지 로컬 행렬을 스택에 쌓음
+										std::vector<XMMATRIX> parentMatrixStack;
+										EntityId parentId = transform->parent;
+										
+										while (parentId != InvalidEntityId)
+										{
+											const TransformComponent* t = world.GetComponent<TransformComponent>(parentId);
+											if (t)
+											{
+												// 엔진 순서: yaw(Y) → pitch(X) → roll(Z)
+												float pitch = t->rotation.x;
+												float yaw   = t->rotation.y;
+												float roll  = t->rotation.z;
+												
+												XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
+												XMMATRIX R = XMMatrixRotationY(yaw) * XMMatrixRotationX(pitch) * XMMatrixRotationZ(roll);
+												XMMATRIX T = XMMatrixTranslation(t->position.x, t->position.y, t->position.z);
+												
+												XMMATRIX localMatrix = S * R * T;
+												
+												parentMatrixStack.push_back(localMatrix);
+												parentId = t->parent;
+											}
+											else
+											{
+												break;
+											}
+										}
+										
+										// 부모의 월드 행렬 계산
+										for (const auto& m : parentMatrixStack)
+										{
+											parentWorldMatrix = parentWorldMatrix * m;
+										}
+									}
+								}
+								
+								// 부모의 월드 행렬을 역으로 곱해서 로컬 행렬 추출
+								XMMATRIX parentWorldMatrixInv = XMMatrixInverse(nullptr, parentWorldMatrix);
+								XMMATRIX localMatrix = manipulatedWorldMatrix * parentWorldMatrixInv;
+								
+								// XMMatrixDecompose로 쿼터니언 추출 (안정적)
+								XMVECTOR scaleVec, rotationQuat, translationVec;
+								if (XMMatrixDecompose(&scaleVec, &rotationQuat, &translationVec, localMatrix))
+								{
+									// 위치와 스케일은 직접 저장
+									XMStoreFloat3(&transform->position, translationVec);
+									XMStoreFloat3(&transform->scale, scaleVec);
+									
+									// 쿼터니언을 엔진의 yaw/pitch/roll로 변환
+									XMFLOAT3 euler = QuatToPitchYawRoll(rotationQuat);
+									transform->rotation = euler;  // (x=pitch, y=yaw, z=roll)
+								}
+								
+								// 오브젝트 스냅 모드용 위치 (월드 공간)
+								XMFLOAT3 newPosition;
+								XMStoreFloat3(&newPosition, XMVector3Transform(XMVectorZero(), manipulatedWorldMatrix));
 
 								// 오브젝트 스냅 모드: 다른 엔티티에 스냅
 								if (snapMode == SnapMode::Object && gizmoOp == ImGuizmo::TRANSLATE)
@@ -3177,13 +3307,16 @@ namespace Alice
 														{
 															if (auto* t = world.GetComponent<TransformComponent>(currentId))
 															{
-																XMVECTOR scale = XMLoadFloat3(&t->scale);
-																XMVECTOR rotation = XMLoadFloat3(&t->rotation);
-																XMVECTOR translation = XMLoadFloat3(&t->position);
-
-																XMMATRIX localMatrix = XMMatrixScalingFromVector(scale) *
-																	XMMatrixRotationRollPitchYawFromVector(rotation) *
-																	XMMatrixTranslationFromVector(translation);
+																// 엔진 순서: yaw(Y) → pitch(X) → roll(Z)
+																float pitch = t->rotation.x;
+																float yaw   = t->rotation.y;
+																float roll  = t->rotation.z;
+																
+																XMMATRIX S = XMMatrixScaling(t->scale.x, t->scale.y, t->scale.z);
+																XMMATRIX R = XMMatrixRotationY(yaw) * XMMatrixRotationX(pitch) * XMMatrixRotationZ(roll);
+																XMMATRIX T = XMMatrixTranslation(t->position.x, t->position.y, t->position.z);
+																
+																XMMATRIX localMatrix = S * R * T;
 
 																matrixStack.push_back(localMatrix);
 																currentId = t->parent;
@@ -3329,24 +3462,32 @@ namespace Alice
 
 									if (foundSnap)
 									{
-										newPosition = snappedPosition;
-										// 스냅된 위치로 행렬 업데이트
-										matrixTranslation[0] = newPosition.x;
-										matrixTranslation[1] = newPosition.y;
-										matrixTranslation[2] = newPosition.z;
-										ImGuizmo::RecomposeMatrixFromComponents(matrixTranslation, matrixRotation, matrixScale, worldMatrix);
+										// 스냅된 월드 위치를 조작된 월드 행렬에 반영
+										// 조작된 월드 행렬의 translation 부분만 업데이트
+										XMMATRIX snappedWorldMatrix = manipulatedWorldMatrix;
+										snappedWorldMatrix.r[3] = XMVectorSet(snappedPosition.x, snappedPosition.y, snappedPosition.z, 1.0f);
+										
+										// 스냅된 월드 행렬을 로컬 행렬로 변환
+										XMMATRIX snappedLocalMatrix = snappedWorldMatrix * parentWorldMatrixInv;
+										
+										// XMMatrixDecompose로 쿼터니언 추출 (안정적)
+										XMVECTOR scaleVec, rotationQuat, translationVec;
+										if (XMMatrixDecompose(&scaleVec, &rotationQuat, &translationVec, snappedLocalMatrix))
+										{
+											// 위치와 스케일은 직접 저장
+											XMStoreFloat3(&transform->position, translationVec);
+											XMStoreFloat3(&transform->scale, scaleVec);
+											
+											// 쿼터니언을 엔진의 yaw/pitch/roll로 변환
+											XMFLOAT3 euler = QuatToPitchYawRoll(rotationQuat);
+											transform->rotation = euler;  // (x=pitch, y=yaw, z=roll)
+										}
 									}
 								}
-
-								transform->position = newPosition;
-
-								transform->rotation = XMFLOAT3(
-									XMConvertToRadians(matrixRotation[1]),  // pitch (x)
-									XMConvertToRadians(matrixRotation[0]),  // yaw (y)
-									XMConvertToRadians(matrixRotation[2])   // roll (z)
-								);
-
-								transform->scale = XMFLOAT3(matrixScale[0], matrixScale[1], matrixScale[2]);
+								else
+								{
+									// 스냅이 없으면 이미 위에서 설정한 transform 사용 (변경 없음)
+								}
 
 								// ImGuizmo로 Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
 								if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(selectedEntity))
@@ -3394,6 +3535,22 @@ namespace Alice
 							wasUsingGizmo = isUsingGizmo;
 							lastGizmoEntity = selectedEntity;
 						}
+					}
+
+					// Delete 키 입력 처리: 뷰포트가 포커스를 가지고 있고, 텍스트 입력 중이 아닐 때
+					// 기즈모를 잡고 있어도 삭제 가능하도록 처리
+					if (selectedEntity != InvalidEntityId &&
+						ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+						!isTextInputActive &&
+						m_inputSystem &&
+						m_inputSystem->IsKeyPressed(Keyboard::Keys::Delete))
+					{
+						// 선택된 엔티티 삭제
+						const std::string entityName = world.GetEntityName(selectedEntity);
+						PushCommand(std::make_unique<DestroyEntityCommand>(selectedEntity, entityName, world));
+						world.DestroyEntity(selectedEntity);
+						selectedEntity = InvalidEntityId;
+						g_SceneDirty = true;
 					}
 
 					// 엔티티 선택 (Gizmo 위에 있지 않을 때만)
@@ -5180,8 +5337,8 @@ namespace Alice
 
 					// 기본 프로퍼티는 ReflectionUI로
 					changed |= ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
-						// type, layerBits, collideMask, queryMask는 커스텀 UI로 처리
-						return name != "type" && name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "physicsActorHandle";
+						// type, layerBits는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
+						return name != "type" && name != "layerBits" && name != "physicsActorHandle";
 						});
 
 					// 레이어 마스크 편집
@@ -5252,11 +5409,8 @@ namespace Alice
 					}
 					ImGui::Unindent();
 
-					// Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
-					changed |= DrawLayerMaskChipEditor("Collide Mask", collider->collideMask, layerNames);
-
-					// Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
-					changed |= DrawLayerMaskChipEditor("Query Mask", collider->queryMask, layerNames);
+					// collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거됨)
+					ImGui::TextDisabled("(Collide/Query Mask는 Physics Scene Settings의 레이어 매트릭스로 결정됩니다)");
 
 					// Ignore Layers (칩 UI)
 					ImGui::Text("Ignore Layers");
@@ -5468,8 +5622,8 @@ namespace Alice
 					}
 					ImGui::Unindent();
 
-					changed |= DrawLayerMaskChipEditor("Collide Mask", meshCollider->collideMask, layerNames);
-					changed |= DrawLayerMaskChipEditor("Query Mask", meshCollider->queryMask, layerNames);
+					// collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거됨)
+					ImGui::TextDisabled("(Collide/Query Mask는 Physics Scene Settings의 레이어 매트릭스로 결정됩니다)");
 
 					ImGui::Text("Ignore Layers");
 					ImGui::Indent();
@@ -5498,8 +5652,8 @@ namespace Alice
 
 					// 기본 프로퍼티는 ReflectionUI로
 					changed |= ReflectionUI::RenderInspector(*cct, [](const std::string& name) {
-						// layerBits, collideMask, queryMask는 커스텀 UI로 처리
-						return name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "controllerHandle";
+						// layerBits는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
+						return name != "layerBits" && name != "controllerHandle";
 						});
 
 					// 레이어 마스크 편집
@@ -5570,11 +5724,8 @@ namespace Alice
 					}
 					ImGui::Unindent();
 
-					// Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
-					changed |= DrawLayerMaskChipEditor("Collide Mask", cct->collideMask, layerNames);
-
-					// Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
-					changed |= DrawLayerMaskChipEditor("Query Mask", cct->queryMask, layerNames);
+					// collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거됨)
+					ImGui::TextDisabled("(Collide/Query Mask는 Physics Scene Settings의 레이어 매트릭스로 결정됩니다)");
 
 					// Ignore Layers (칩 UI)
 					ImGui::Text("Ignore Layers");
@@ -5781,9 +5932,8 @@ namespace Alice
 
 					// 기본 프로퍼티는 ReflectionUI로
 					changed |= ReflectionUI::RenderInspector(*terrain, [](const std::string& name) {
-						// layerBits, collideMask, queryMask, heightSamples, physicsActorHandle는 커스텀 UI로 처리
-						return name != "layerBits" && name != "collideMask" && name != "queryMask" &&
-							name != "heightSamples" && name != "physicsActorHandle";
+						// layerBits, heightSamples는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
+						return name != "layerBits" && name != "heightSamples" && name != "physicsActorHandle";
 						});
 
 					// HeightSamples 상태 표시 및 생성 버튼
@@ -5907,11 +6057,8 @@ namespace Alice
 					}
 					ImGui::Unindent();
 
-					// Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
-					changed |= DrawLayerMaskChipEditor("Collide Mask", terrain->collideMask, layerNames);
-
-					// Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
-					changed |= DrawLayerMaskChipEditor("Query Mask", terrain->queryMask, layerNames);
+					// collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거됨)
+					ImGui::TextDisabled("(Collide/Query Mask는 Physics Scene Settings의 레이어 매트릭스로 결정됩니다)");
 
 					// Ignore Layers (칩 UI)
 					ImGui::Text("Ignore Layers");
