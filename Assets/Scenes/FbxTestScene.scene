@@ -28,7 +28,7 @@
                     "z": 0.9999999403953552
                 }
             },
-            "id": 1
+            "id": 2
         },
         {
             "Material": {
@@ -39,8 +39,15 @@
                     "y": 0.8957529067993164,
                     "z": 0.8957529067993164
                 },
-                "metalness": 0.0,
-                "roughness": 0.5
+                "metalness": 0.37400001287460327,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.3499999940395355,
+                "roughness": 0.5,
+                "shadingMode": 6
             },
             "Scripts": [
                 {
@@ -57,7 +64,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 25.096047890372574
+                "timeSec": 766.2119112669025
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -66,22 +73,22 @@
             },
             "Transform": {
                 "position": {
-                    "x": 1.7001844644546509,
+                    "x": 1.5,
                     "y": 0.0,
                     "z": 0.05795396864414215
                 },
                 "rotation": {
                     "x": 0.0,
-                    "y": 4.457570552825928,
+                    "y": 6.41228723526001,
                     "z": 0.0
                 },
                 "scale": {
-                    "x": 0.05000000074505806,
-                    "y": 0.05000000074505806,
-                    "z": 0.05000000074505806
+                    "x": 0.019999999552965164,
+                    "y": 0.019999999552965164,
+                    "z": 0.019999999552965164
                 }
             },
-            "id": 2,
+            "id": 3,
             "name": "Rapi"
         },
         {
@@ -102,7 +109,14 @@
                     "z": 0.0
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "Scripts": [
                 {
@@ -146,7 +160,7 @@
                     "z": 1.0
                 }
             },
-            "id": 3,
+            "id": 4,
             "name": "MainCamera"
         },
         {
@@ -154,12 +168,19 @@
                 "albedoTexturePath": "",
                 "assetPath": "",
                 "color": {
-                    "x": 0.17374515533447266,
-                    "y": 0.17374515533447266,
-                    "z": 0.17374515533447266
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
                 },
-                "metalness": 0.0,
-                "roughness": 1.0
+                "metalness": 0.024000000208616257,
+                "outlineColor": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "outlineWidth": 0.029999999329447746,
+                "roughness": 0.40299999713897705,
+                "shadingMode": 5
             },
             "Transform": {
                 "position": {
@@ -178,7 +199,7 @@
                     "z": 118.77100372314453
                 }
             },
-            "id": 4,
+            "id": 5,
             "name": "Ground"
         },
         {
@@ -190,8 +211,15 @@
                     "y": 1.0,
                     "z": 1.0
                 },
-                "metalness": 1.0,
-                "roughness": 0.0
+                "metalness": 0.9580000042915344,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.0,
+                "shadingMode": -1
             },
             "Scripts": [
                 {
@@ -221,7 +249,7 @@
                     "z": 0.3630249798297882
                 }
             },
-            "id": 5,
+            "id": 6,
             "name": "Entity5"
         },
         {
@@ -234,13 +262,20 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1158.1964012839599
+                "timeSec": 1899.3122646604897
             },
             "SkinnedMesh": {
                 "boneCount": 67,
@@ -264,19 +299,26 @@
                     "z": 0.07999999821186066
                 }
             },
-            "id": 6
+            "id": 7
         },
         {
             "Material": {
                 "albedoTexturePath": "Cooked/Textures/Tree/Tree_Diffuse_embedded7.alice",
                 "assetPath": "Assets/Materials/Tree_0.mat",
                 "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
+                    "x": 0.6949806809425354,
+                    "y": 0.6949806809425354,
+                    "z": 0.6949806809425354
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -306,7 +348,7 @@
                     "z": 5.0
                 }
             },
-            "id": 7
+            "id": 8
         },
         {
             "SkinnedAnimation": {
@@ -337,14 +379,32 @@
                     "z": 0.04000000283122063
                 }
             },
-            "id": 8
+            "id": 9
         },
         {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "metalness": 0.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
+            },
             "SkinnedAnimation": {
                 "clipIndex": 0,
-                "playing": true,
+                "playing": false,
                 "speed": 1.0,
-                "timeSec": 1062.9900524889817
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 16,
@@ -368,7 +428,7 @@
                     "z": 0.029999999329447746
                 }
             },
-            "id": 9
+            "id": 10
         }
     ],
     "version": 1

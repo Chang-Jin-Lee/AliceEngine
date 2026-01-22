@@ -63,8 +63,8 @@ namespace Alice
         /// 빈 게임 오브젝트를 생성합니다 (Transform만 가짐)
         EntityId CreateEmpty();
         
-        /// 큐브 게임 오브젝트를 생성합니다 (Transform + Material)
-        EntityId CreateCube();
+		/// 큐브 게임 오브젝트를 생성합니다 (Transform + Material)
+		EntityId CreateCube();
         
         /// 카메라 게임 오브젝트를 생성합니다 (Transform + Camera)
         EntityId CreateCamera();
