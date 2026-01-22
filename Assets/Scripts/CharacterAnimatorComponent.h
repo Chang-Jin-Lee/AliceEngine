@@ -1,11 +1,11 @@
 #pragma once
 
 #include <string>
-
 #include <DirectXMath.h>
 
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
+#include "Core/GameObject.h" // GameObject 저장을 위해 필요
 
 namespace Alice
 {
@@ -69,6 +69,9 @@ namespace Alice
         ALICE_PROPERTY(DirectX::XMFLOAT3, m_socketRotDeg, DirectX::XMFLOAT3(0.0f, 90.0f, 0.0f));
         ALICE_PROPERTY(DirectX::XMFLOAT3, m_socketScale, DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f));
 
+        // [추가] 무기 부착 관련 설정
+        ALICE_PROPERTY(std::string, m_weaponObjName, "Weapon"); // 찾을 오브젝트 이름
+
         // --- IK settings ---
         ALICE_PROPERTY(bool, m_enableIK, false);
         ALICE_PROPERTY(std::string, m_ikTipBone, "Hand_L");
@@ -112,6 +115,9 @@ namespace Alice
 
         // [6번 키] 구간 늘리기 모드 플래그 (1초~2초 구간을 2초 늘려서 재생)
         bool m_isStretchedMode = false;
+
+        // 무기 부착 상태 변수
+        bool m_isWeaponAttached = false;
+        GameObject m_weaponGo; // 찾은 무기 오브젝트 저장
     };
 }
-
