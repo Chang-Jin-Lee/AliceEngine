@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace Alice
 {
@@ -20,7 +20,14 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 struct VSInput
@@ -44,12 +51,16 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
 
-    float4 worldPos = mul(float4(input.Position, 1.0f), gWorld);
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
+    
+    // 아웃라인: 모든 쉐이딩 모드에서 normal 방향으로 확장 (아웃라인 두께가 0보다 클 때만)
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (N * gOutlineWidth) : float3(0, 0, 0);
+    
+    float4 worldPos = mul(float4(input.Position + posOffset, 1.0f), gWorld);
     float4 viewPos  = mul(worldPos, gView);
     output.Position = mul(viewPos, gProj);
 
     output.WorldPos = worldPos.xyz;
-    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
     output.Normal = N;
     // 정적 지오메트리(큐브 등)는 탄젠트/바이탄젠트가 없으므로
     // 노말에서 임의의 직교 기저를 만들어 노말맵(TBN) 계산이 가능하게 합니다.
@@ -78,7 +89,14 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 cbuffer CBBones : register(b2)
@@ -97,6 +115,7 @@ struct VSInput
     uint4  BoneIndices  : BLENDINDICES;
     float4 BoneWeights  : BLENDWEIGHT;
     float2 TexCoord     : TEXCOORD0;
+    float3 SmoothNormal : SMOOTHNORMAL; // 아웃라인용 스무스 노멀
 };
 
 struct VSOutput
@@ -135,12 +154,20 @@ VSOutput main(VSInput input)
     float3 skinnedT = normalize(mul(tL, M3));
     float3 skinnedB = normalize(mul(bL, M3));
 
-    float4 worldPos = mul(skinnedPos, gWorld);
+    float3 N = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    
+    // 아웃라인: 스무스 노멀 방향으로 확장 (하드 엣지 모델의 아웃라인 끊김 방지)
+    // 스무스 노멀도 스키닝 변환을 적용해야 함
+    float3 skinnedSmoothN = normalize(mul(input.SmoothNormal, M3));
+    float3 smoothN = normalize(mul(float4(skinnedSmoothN, 0.0f), gWorld).xyz);
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
+    
+    float4 worldPos = mul(float4(skinnedPos.xyz + posOffset, 1.0f), gWorld);
     float4 viewPos  = mul(worldPos, gView);
     output.Position = mul(viewPos, gProj);
 
     output.WorldPos = worldPos.xyz;
-    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.Normal   = N;
     output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
     output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
     output.TexCoord = input.TexCoord;
@@ -177,7 +204,14 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 cbuffer CBLighting : register(b1)
@@ -197,13 +231,13 @@ cbuffer CBLighting : register(b1)
     float  gFillLightIntensity;
 
     float3 gCameraPos;
-    float  gPad1;
+    float  gPad2;
 
     float4 gMaterialDiffuse;   // rgb: diffuse color
     float4 gMaterialSpecular;  // rgb: specular color, a: shininess
 
     int    gShadingMode2;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon, 4: PBR, 5: ToonPBR
-    int3   gPad2;
+    int3   gPad3;
 
     float4x4 gLightViewProj;   // 섀도우 맵 계산용 라이트 뷰-프로젝션
 
@@ -360,10 +394,29 @@ float ToonLevel(float n)
 
 float4 main(PSInput input) : SV_TARGET
 {
+    // 아웃라인 패스 감지: Width가 0보다 크면 아웃라인용 드로우콜임
+    if (gOutlineWidth > 0.0f)
+    {
+        // 아웃라인 색상 반환 (Unlit)
+        return float4(gOutlineColor, 1.0f);
+    }
+    
 	float4 textureColor = gDiffuseMap.Sample(gSampler, input.TexCoord);
     float alphaTex = textureColor.a * gMaterialColor.a;
     // 알파 블렌딩
     clip(alphaTex - 0.1f);
+
+    // shadingMode == 6: TextureOnly (빛의 영향을 받지 않는 텍스처만 반환)
+    if (gShadingMode == 6)
+    {
+        float3 albedo = gMaterialColor.rgb;
+        if (gUseTexture != 0)
+        {
+            float3 texSample = textureColor.rgb;
+            albedo *= texSample;
+        }
+        return float4(albedo, alphaTex);
+    }
 
     float3 N = normalize(input.Normal);
     if (gEnableNormalMap != 0)
