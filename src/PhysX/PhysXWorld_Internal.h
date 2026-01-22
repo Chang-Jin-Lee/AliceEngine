@@ -377,6 +377,13 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		enableSceneLocks = desc.enableSceneLocks;
 		enableActiveTransforms = desc.enableActiveTransforms;
 
+		// Pre-reserve activeTransforms to avoid reallocation during simulation
+		// (onAdvance callback runs during simulation, so allocations should be minimized)
+		if (enableActiveTransforms)
+		{
+			activeTransforms.reserve(256);  // 예상치: 일반적인 씬에서 활성 액터 수
+		}
+
 		// Default material (used for planes and as a fallback)
 		defaultMaterial = physics->createMaterial(0.5f, 0.5f, 0.0f);
 		if (!defaultMaterial) throw std::runtime_error("createMaterial failed");
@@ -510,6 +517,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		}
 		void onWake(PxActor**, PxU32) override {}
 		void onSleep(PxActor**, PxU32) override {}
+		// onAdvance는 simulate~fetchResults 사이(시뮬레이션 도는 중)에 호출됨
+		// PhysX 문서: PxSimulationEventCallback::onAdvance는 eENABLE_POSE_INTEGRATION_PREVIEW가
+		// 켜진 바디들의 포즈를 미리 제공하기 위해 시뮬레이션 중간에 호출됨
+		// 주의: 이 콜백 내에서는 할당/로그/복잡한 연산을 피해야 함 (성능/안정성)
 		void onAdvance(const PxRigidBody* const* bodyBuffer, const PxTransform* poseBuffer, const PxU32 count) override
 		{
 			auto s = owner.lock();
@@ -517,6 +528,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (!bodyBuffer || !poseBuffer || count == 0) return;
 
 			std::scoped_lock lock(s->activeMtx);
+			// reserve로 할당 최소화 (시뮬레이션 중 할당을 피하기 위함)
 			s->activeTransforms.reserve(s->activeTransforms.size() + count);
 
 			for (PxU32 i = 0; i < count; ++i)
@@ -545,14 +557,38 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			{
 				const PxTriggerPair& tp = pairs[i];
 
-				if (HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER) ||
-					HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_OTHER))
-					continue;
+				const bool removedShape = HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER) ||
+					HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_OTHER);
 
 				const PxShape* shA = tp.triggerShape;
 				const PxShape* shB = tp.otherShape;
 				const PxActor* acA = tp.triggerActor;
 				const PxActor* acB = tp.otherActor;
+
+				// if shape removed, 정리 후 스킵
+				if (removedShape)
+				{
+					// 가능한 범위에서 상태 정리 (누수 방지)
+					// shape가 유효하면 shapeKey를 계산해서 제거
+					if (shA && shB && acA && acB)
+					{
+						const uint64_t shapeKey = PtrPairKey(shA, shB);
+						const uint64_t actorKey = PtrPairKey(acA, acB);
+						
+						if (s->activeTriggerShapePairs.erase(shapeKey) > 0)
+						{
+							// actorCount 감소
+							auto it = s->activeTriggerActorCounts.find(actorKey);
+							if (it != s->activeTriggerActorCounts.end())
+							{
+								if (it->second > 0) --it->second;
+								if (it->second == 0)
+									s->activeTriggerActorCounts.erase(it);
+							}
+						}
+					}
+					continue;
+				}
 
 				if (!shA || !shB || !acA || !acB)
 					continue;
@@ -629,14 +665,36 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			{
 				const PxContactPair& cp = pairs[i];
 
-				// if shape removed, ignore
-				if ((static_cast<PxU32>(cp.flags) &
+				const bool removedShape = (static_cast<PxU32>(cp.flags) &
 					(static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_0) |
-						static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_1))) != 0u)
-					continue;
+						static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_1))) != 0u;
 
 				const PxShape* sh0 = cp.shapes[0];
 				const PxShape* sh1 = cp.shapes[1];
+
+				// if shape removed, 정리 후 스킵
+				if (removedShape)
+				{
+					// 가능한 범위에서 상태 정리 (누수 방지)
+					// shape가 유효하면 shapeKey를 계산해서 제거
+					if (sh0 && sh1)
+					{
+						const uint64_t shapeKey = PtrPairKey(sh0, sh1);
+						if (s->activeContactShapePairs.erase(shapeKey) > 0)
+						{
+							// actorCount 감소
+							auto it = s->activeContactActorCounts.find(actorKey);
+							if (it != s->activeContactActorCounts.end())
+							{
+								if (it->second > 0) --it->second;
+								if (it->second == 0)
+									s->activeContactActorCounts.erase(it);
+							}
+						}
+					}
+					continue;
+				}
+
 				if (!sh0 || !sh1) continue;
 
 				const uint64_t shapeKey = PtrPairKey(sh0, sh1);
@@ -706,6 +764,19 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 		}
 
+		// !!!주의!!!주의!!!주의!!! DEADLOCK WARNING: ContactModify 콜백은 PhysX 시뮬레이션 스레드에서 호출될 수 있습니다.
+		// Step()이 scene write lock을 잡은 채로 simulate~fetch 사이에 실행되므로,
+		// 이 콜백 내에서 Raycast(), Overlap() 등 scene lock이 필요한 함수를 호출하면 데드락이 발생할 수 있습니다.
+		// 
+		// 안전한 사용:
+		//   - ContactModifyPair의 데이터만 읽고 수정
+		//   - 로컬 변수/메모리만 접근
+		//   - scene lock이 필요 없는 작업만 수행
+		//
+		// !!!위험!!!위험!!!위험!!!위험한 사용 (데드락 위험):
+		//   - world->Raycast(), world->Overlap() 등 쿼리 함수 호출
+		//   - scene에 접근하는 모든 함수 호출
+		//   - 다른 스레드와의 동기화가 필요한 작업
 		void onContactModify(PxContactModifyPair* const pairs, PxU32 count) override
 		{
 			auto s = owner.lock();
@@ -752,6 +823,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 					dst.maxImpulse = cs.getMaxImpulse(c);
 				}
 
+				// !!! 사용자 콜백 호출: 이 콜백 내에서 scene lock이 필요한 함수를 호출하지 마세요!
 				cb(pair, user);
 
 				if (pair.ignorePair)
@@ -1030,10 +1102,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (it != triMeshCache.end()) return it->second;
 		}
 
-		PxTriangleMeshDesc desc{};
-		desc.points.count = mesh.vertexCount;
-		desc.points.stride = sizeof(PxVec3);
-		desc.points.data = mesh.vertices;
+	PxTriangleMeshDesc desc{};
+	desc.points.count = mesh.vertexCount;
+	desc.points.stride = sizeof(Vec3); // Vec3의 실제 크기 사용 (PxVec3와 레이아웃이 다를 수 있음)
+	desc.points.data = mesh.vertices;
 
 		if (mesh.indices32)
 		{
@@ -1091,10 +1163,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (it != convexMeshCache.end()) return it->second;
 		}
 
-		PxConvexMeshDesc desc{};
-		desc.points.count = mesh.vertexCount;
-		desc.points.stride = sizeof(PxVec3);
-		desc.points.data = mesh.vertices;
+	PxConvexMeshDesc desc{};
+	desc.points.count = mesh.vertexCount;
+	desc.points.stride = sizeof(Vec3); // Vec3의 실제 크기 사용 (PxVec3와 레이아웃이 다를 수 있음)
+	desc.points.data = mesh.vertices;
 		desc.flags |= PxConvexFlag::eCOMPUTE_CONVEX;
 		if (mesh.shiftVertices)
 			desc.flags |= PxConvexFlag::eSHIFT_VERTICES;
@@ -1275,35 +1347,6 @@ static inline PxForceMode::Enum ToPxForceMode(ForceMode m)
 	case ForceMode::Acceleration:   return PxForceMode::eACCELERATION;
 	default:                        return PxForceMode::eFORCE;
 	}
-}
-
-static void ApplyRbDesc(PxRigidDynamic& body, const RigidBodyDesc& rb)
-{
-	body.userData = rb.userData;
-
-	body.setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !rb.gravityEnabled);
-
-	body.setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, rb.isKinematic);
-	body.setLinearDamping(rb.linearDamping);
-	body.setAngularDamping(rb.angularDamping);
-
-	if (rb.maxLinearVelocity > 0.0f)  body.setMaxLinearVelocity(rb.maxLinearVelocity);
-	if (rb.maxAngularVelocity > 0.0f) body.setMaxAngularVelocity(rb.maxAngularVelocity);
-
-	body.setSolverIterationCounts(
-		static_cast<PxU32>(std::max(1u, rb.solverPositionIterations)),
-		static_cast<PxU32>(std::max(1u, rb.solverVelocityIterations)));
-
-	if (rb.sleepThreshold >= 0.0f) body.setSleepThreshold(rb.sleepThreshold);
-	if (rb.stabilizationThreshold >= 0.0f) body.setStabilizationThreshold(rb.stabilizationThreshold);
-
-	body.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, rb.enableCCD);
-	body.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_SPECULATIVE_CCD, rb.enableSpeculativeCCD);
-
-	body.setRigidDynamicLockFlags(ToPxLockFlags(rb.lockFlags));
-
-	if (!rb.startAwake)
-		body.putToSleep();
 }
 
 static void ApplyMass(PxRigidDynamic& body, const RigidBodyDesc& rb)
@@ -1606,7 +1649,7 @@ public:
 		if (capsule.alignYAxis)
 		{
 			Quat align = FromPx(CapsuleAlignQuatPx());
-			q = align * q;
+			q = q * align; // 쿼리 쪽(q = q * align)과 순서 통일
 		}
 		return AddShapeCommon(geom, capsule, localPos, q);
 	}
@@ -1621,7 +1664,7 @@ public:
 		PxTriangleMesh* tm = s->GetOrCreateTriangleMesh(mesh);
 		if (!tm) return false;
 
-		PxMeshGeometryFlags gflags;
+		PxMeshGeometryFlags gflags{}; // 초기화 필수: 미초기화 시 랜덤 플래그로 인한 크래시 위험
 		if (mesh.doubleSidedQueries) gflags |= PxMeshGeometryFlag::eDOUBLE_SIDED;
 
 		const PxMeshScale scale(ToPx(mesh.scale));
@@ -1674,7 +1717,7 @@ public:
 		PxHeightField* heightField = s->GetOrCreateHeightField(hf);
 		if (!heightField) return false;
 
-		PxMeshGeometryFlags gflags;
+		PxMeshGeometryFlags gflags{}; // 초기화 필수: 미초기화 시 랜덤 플래그로 인한 크래시 위험
 		if (hf.doubleSidedQueries) gflags |= PxMeshGeometryFlag::eDOUBLE_SIDED;
 		const PxHeightFieldGeometry geom(heightField, gflags, hf.heightScale, hf.rowScale, hf.colScale);
 		if (!geom.isValid()) return false;

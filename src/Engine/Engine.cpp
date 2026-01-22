@@ -519,6 +519,7 @@ namespace Alice
 		// ============================================= 물리 시스템 생성 =============================================
 		// PhysicsSystem 생성 (ECS 브릿지) - 씬 로드 이후, RefreshPhysicsForCurrentWorld 호출 전
 		pImpl->m_physicsSystem = std::make_unique<PhysicsSystem>(pImpl->m_world);
+		pImpl->m_physicsSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 		ALICE_LOG_INFO("Engine::Initialize: PhysicsSystem created.");
 
 		// World::Clear() 호출 전 콜백 설정 (물리 시스템 정리 강제)
@@ -831,8 +832,8 @@ namespace Alice
 			pImpl->m_physMaxSubsteps = settings.maxSubsteps;
 			// accum은 유지 (프레임 드롭 방지)
 
-			// PhysicsSystem에 물리 월드 설정 (이미 있지만 재설정)
-			if (pImpl->m_physicsSystem)
+			// PhysicsSystem에 물리 월드 설정 (이미 같은 월드면 재설정 생략 - 불필요한 전체 재초기화 방지)
+			if (pImpl->m_physicsSystem && pImpl->m_physicsSystem->GetPhysicsWorld() != existingWorld)
 			{
 				pImpl->m_physicsSystem->SetPhysicsWorld(existingWorld);
 			}
@@ -996,6 +997,46 @@ namespace Alice
 			case PhysicsEventType::TriggerExit:
 				// TODO: 게임 시스템으로 전달
 				break;
+			case PhysicsEventType::JointBreak:
+			{
+				// jointUserData는 PhysicsSystem이 MakeUserData(epoch, entityId)로 넣었음
+				// 조인트를 소유한 엔티티 (조인트 컴포넌트가 붙어있는 엔티티)
+				EntityId jointOwner = InvalidEntityId;
+				if (e.jointUserData)
+				{
+					jointOwner = pImpl->m_world.ExtractEntityIdFromUserData(e.jointUserData);
+				}
+
+				// 연결된 두 액터의 엔티티
+				EntityId actorAEntity = InvalidEntityId;
+				EntityId actorBEntity = InvalidEntityId;
+				if (e.userDataA)
+				{
+					actorAEntity = pImpl->m_world.ExtractEntityIdFromUserData(e.userDataA);
+				}
+				if (e.userDataB)
+				{
+					actorBEntity = pImpl->m_world.ExtractEntityIdFromUserData(e.userDataB);
+				}
+
+				// 로그 출력 (필요하면 나중에 게임 시스템/스크립트 이벤트로 전달 가능)
+				if (jointOwner != InvalidEntityId)
+				{
+					ALICE_LOG_INFO("[Physics] JointBreak: jointOwner=%llu, ActorA=%llu, ActorB=%llu",
+						(unsigned long long)jointOwner,
+						(unsigned long long)actorAEntity,
+						(unsigned long long)actorBEntity);
+
+					// PhysicsSystem에 조인트가 부러졌음을 알려서 컴포넌트의 jointHandle을 null로 설정
+					// (다음 Update에서 감지하여 재생성하거나 정리 가능)
+					if (pImpl->m_physicsSystem)
+					{
+						// PhysicsSystem에 조인트 정리 요청 (필요시 구현)
+						// 현재는 로그만 남기고, 다음 Update에서 컴포넌트 변경 감지로 자동 정리됨
+					}
+				}
+				break;
+			}
 			}
 		}
 

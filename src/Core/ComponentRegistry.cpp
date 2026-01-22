@@ -8,9 +8,11 @@
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_MeshColliderComponent.h"
 #include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "PhysX/Components/Phy_CCTComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
+#include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/IPhysicsWorld.h"
 #include "Components/EffectComponent.h"
 #include "Components/TrailEffectComponent.h"
@@ -58,7 +60,8 @@ namespace Alice
             .constructor<>()
             .property("position", &TransformComponent::position)
             .property("rotation", &TransformComponent::rotation)
-            .property("scale", &TransformComponent::scale);
+            .property("scale", &TransformComponent::scale)
+            .property("enabled", &TransformComponent::enabled);
 
         // === MaterialComponent 등록 ===
         rttr::registration::class_<MaterialComponent>("MaterialComponent")
@@ -236,6 +239,12 @@ namespace Alice
                 rttr::value("Capsule", ColliderType::Capsule)
                 );
 
+        rttr::registration::enumeration<MeshColliderType>("MeshColliderType")
+            (
+                rttr::value("Triangle", MeshColliderType::Triangle),
+                rttr::value("Convex", MeshColliderType::Convex)
+                );
+
         // === RigidBodyLockFlags enum 등록 ===
         rttr::registration::enumeration<RigidBodyLockFlags>("RigidBodyLockFlags")
             (
@@ -287,6 +296,25 @@ namespace Alice
             .property("queryMask", &Phy_ColliderComponent::queryMask)
             .property("ignoreLayers", &Phy_ColliderComponent::ignoreLayers)
             .property("isTrigger", &Phy_ColliderComponent::isTrigger);
+
+        // === Phy_MeshColliderComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
+        rttr::registration::class_<Phy_MeshColliderComponent>("Phy_MeshColliderComponent")
+            .constructor<>()
+            .property("type", &Phy_MeshColliderComponent::type)
+            .property("staticFriction", &Phy_MeshColliderComponent::staticFriction)
+            .property("dynamicFriction", &Phy_MeshColliderComponent::dynamicFriction)
+            .property("restitution", &Phy_MeshColliderComponent::restitution)
+            .property("layerBits", &Phy_MeshColliderComponent::layerBits)
+            .property("collideMask", &Phy_MeshColliderComponent::collideMask)
+            .property("queryMask", &Phy_MeshColliderComponent::queryMask)
+            .property("ignoreLayers", &Phy_MeshColliderComponent::ignoreLayers)
+            .property("isTrigger", &Phy_MeshColliderComponent::isTrigger)
+            .property("meshAssetPath", &Phy_MeshColliderComponent::meshAssetPath)
+            .property("flipNormals", &Phy_MeshColliderComponent::flipNormals)
+            .property("doubleSidedQueries", &Phy_MeshColliderComponent::doubleSidedQueries)
+            .property("validate", &Phy_MeshColliderComponent::validate)
+            .property("shiftVertices", &Phy_MeshColliderComponent::shiftVertices)
+            .property("vertexLimit", &Phy_MeshColliderComponent::vertexLimit);
 
         // === Phy_TerrainHeightFieldComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
         rttr::registration::class_<Phy_TerrainHeightFieldComponent>("Phy_TerrainHeightFieldComponent")
@@ -367,6 +395,15 @@ namespace Alice
         rttr::registration::class_<Phy_SettingsComponent>("Phy_SettingsComponent")
             .constructor<>()
             .property("enablePhysics", &Phy_SettingsComponent::enablePhysics)
+            .property("enableGroundPlane", &Phy_SettingsComponent::enableGroundPlane)
+            .property("groundStaticFriction", &Phy_SettingsComponent::groundStaticFriction)
+            .property("groundDynamicFriction", &Phy_SettingsComponent::groundDynamicFriction)
+            .property("groundRestitution", &Phy_SettingsComponent::groundRestitution)
+            .property("groundLayerBits", &Phy_SettingsComponent::groundLayerBits)
+            .property("groundCollideMask", &Phy_SettingsComponent::groundCollideMask)
+            .property("groundQueryMask", &Phy_SettingsComponent::groundQueryMask)
+            .property("groundIgnoreLayers", &Phy_SettingsComponent::groundIgnoreLayers)
+            .property("groundIsTrigger", &Phy_SettingsComponent::groundIsTrigger)
             .property("gravity", &Phy_SettingsComponent::gravity)
             .property("fixedDt", &Phy_SettingsComponent::fixedDt)
             .property("maxSubsteps", &Phy_SettingsComponent::maxSubsteps)
@@ -374,6 +411,150 @@ namespace Alice
             .property("layerQueryMatrix", &Phy_SettingsComponent::layerQueryMatrix)
             .property("layerNames", &Phy_SettingsComponent::layerNames)
             .property("filterRevision", &Phy_SettingsComponent::filterRevision);
+
+        // === Joint enums 등록 ===
+        rttr::registration::enumeration<Phy_JointType>("Phy_JointType")
+            (
+                rttr::value("Fixed", Phy_JointType::Fixed),
+                rttr::value("Revolute", Phy_JointType::Revolute),
+                rttr::value("Prismatic", Phy_JointType::Prismatic),
+                rttr::value("Distance", Phy_JointType::Distance),
+                rttr::value("Spherical", Phy_JointType::Spherical),
+                rttr::value("D6", Phy_JointType::D6)
+            );
+
+        rttr::registration::enumeration<Phy_D6Motion>("Phy_D6Motion")
+            (
+                rttr::value("Locked", Phy_D6Motion::Locked),
+                rttr::value("Limited", Phy_D6Motion::Limited),
+                rttr::value("Free", Phy_D6Motion::Free)
+            );
+
+        // === Joint 설정 타입 등록 ===
+        rttr::registration::class_<Phy_JointFrame>("Phy_JointFrame")
+            .constructor<>()
+            .property("position", &Phy_JointFrame::position)
+            .property("rotation", &Phy_JointFrame::rotation);
+
+        rttr::registration::class_<Phy_RevoluteJointSettings>("Phy_RevoluteJointSettings")
+            .constructor<>()
+            .property("enableLimit", &Phy_RevoluteJointSettings::enableLimit)
+            .property("lowerLimit", &Phy_RevoluteJointSettings::lowerLimit)
+            .property("upperLimit", &Phy_RevoluteJointSettings::upperLimit)
+            .property("limitStiffness", &Phy_RevoluteJointSettings::limitStiffness)
+            .property("limitDamping", &Phy_RevoluteJointSettings::limitDamping)
+            .property("limitRestitution", &Phy_RevoluteJointSettings::limitRestitution)
+            .property("limitBounceThreshold", &Phy_RevoluteJointSettings::limitBounceThreshold)
+            .property("enableDrive", &Phy_RevoluteJointSettings::enableDrive)
+            .property("driveVelocity", &Phy_RevoluteJointSettings::driveVelocity)
+            .property("driveForceLimit", &Phy_RevoluteJointSettings::driveForceLimit)
+            .property("driveFreeSpin", &Phy_RevoluteJointSettings::driveFreeSpin)
+            .property("driveLimitsAreForces", &Phy_RevoluteJointSettings::driveLimitsAreForces);
+
+        rttr::registration::class_<Phy_PrismaticJointSettings>("Phy_PrismaticJointSettings")
+            .constructor<>()
+            .property("enableLimit", &Phy_PrismaticJointSettings::enableLimit)
+            .property("lowerLimit", &Phy_PrismaticJointSettings::lowerLimit)
+            .property("upperLimit", &Phy_PrismaticJointSettings::upperLimit)
+            .property("limitStiffness", &Phy_PrismaticJointSettings::limitStiffness)
+            .property("limitDamping", &Phy_PrismaticJointSettings::limitDamping)
+            .property("limitRestitution", &Phy_PrismaticJointSettings::limitRestitution)
+            .property("limitBounceThreshold", &Phy_PrismaticJointSettings::limitBounceThreshold);
+
+        rttr::registration::class_<Phy_DistanceJointSettings>("Phy_DistanceJointSettings")
+            .constructor<>()
+            .property("minDistance", &Phy_DistanceJointSettings::minDistance)
+            .property("maxDistance", &Phy_DistanceJointSettings::maxDistance)
+            .property("tolerance", &Phy_DistanceJointSettings::tolerance)
+            .property("enableMinDistance", &Phy_DistanceJointSettings::enableMinDistance)
+            .property("enableMaxDistance", &Phy_DistanceJointSettings::enableMaxDistance)
+            .property("enableSpring", &Phy_DistanceJointSettings::enableSpring)
+            .property("stiffness", &Phy_DistanceJointSettings::stiffness)
+            .property("damping", &Phy_DistanceJointSettings::damping);
+
+        rttr::registration::class_<Phy_SphericalJointSettings>("Phy_SphericalJointSettings")
+            .constructor<>()
+            .property("enableLimit", &Phy_SphericalJointSettings::enableLimit)
+            .property("yLimitAngle", &Phy_SphericalJointSettings::yLimitAngle)
+            .property("zLimitAngle", &Phy_SphericalJointSettings::zLimitAngle)
+            .property("limitStiffness", &Phy_SphericalJointSettings::limitStiffness)
+            .property("limitDamping", &Phy_SphericalJointSettings::limitDamping)
+            .property("limitRestitution", &Phy_SphericalJointSettings::limitRestitution)
+            .property("limitBounceThreshold", &Phy_SphericalJointSettings::limitBounceThreshold);
+
+        rttr::registration::class_<Phy_D6JointDriveSettings>("Phy_D6JointDriveSettings")
+            .constructor<>()
+            .property("stiffness", &Phy_D6JointDriveSettings::stiffness)
+            .property("damping", &Phy_D6JointDriveSettings::damping)
+            .property("forceLimit", &Phy_D6JointDriveSettings::forceLimit)
+            .property("isAcceleration", &Phy_D6JointDriveSettings::isAcceleration);
+
+        rttr::registration::class_<Phy_D6LinearLimitSettings>("Phy_D6LinearLimitSettings")
+            .constructor<>()
+            .property("lower", &Phy_D6LinearLimitSettings::lower)
+            .property("upper", &Phy_D6LinearLimitSettings::upper)
+            .property("stiffness", &Phy_D6LinearLimitSettings::stiffness)
+            .property("damping", &Phy_D6LinearLimitSettings::damping)
+            .property("restitution", &Phy_D6LinearLimitSettings::restitution)
+            .property("bounceThreshold", &Phy_D6LinearLimitSettings::bounceThreshold);
+
+        rttr::registration::class_<Phy_D6TwistLimitSettings>("Phy_D6TwistLimitSettings")
+            .constructor<>()
+            .property("lower", &Phy_D6TwistLimitSettings::lower)
+            .property("upper", &Phy_D6TwistLimitSettings::upper)
+            .property("stiffness", &Phy_D6TwistLimitSettings::stiffness)
+            .property("damping", &Phy_D6TwistLimitSettings::damping)
+            .property("restitution", &Phy_D6TwistLimitSettings::restitution)
+            .property("bounceThreshold", &Phy_D6TwistLimitSettings::bounceThreshold);
+
+        rttr::registration::class_<Phy_D6SwingLimitSettings>("Phy_D6SwingLimitSettings")
+            .constructor<>()
+            .property("yAngle", &Phy_D6SwingLimitSettings::yAngle)
+            .property("zAngle", &Phy_D6SwingLimitSettings::zAngle)
+            .property("stiffness", &Phy_D6SwingLimitSettings::stiffness)
+            .property("damping", &Phy_D6SwingLimitSettings::damping)
+            .property("restitution", &Phy_D6SwingLimitSettings::restitution)
+            .property("bounceThreshold", &Phy_D6SwingLimitSettings::bounceThreshold);
+
+        rttr::registration::class_<Phy_D6JointSettings>("Phy_D6JointSettings")
+            .constructor<>()
+            .property("driveLimitsAreForces", &Phy_D6JointSettings::driveLimitsAreForces)
+            .property("motionX", &Phy_D6JointSettings::motionX)
+            .property("motionY", &Phy_D6JointSettings::motionY)
+            .property("motionZ", &Phy_D6JointSettings::motionZ)
+            .property("motionTwist", &Phy_D6JointSettings::motionTwist)
+            .property("motionSwing1", &Phy_D6JointSettings::motionSwing1)
+            .property("motionSwing2", &Phy_D6JointSettings::motionSwing2)
+            .property("linearLimitX", &Phy_D6JointSettings::linearLimitX)
+            .property("linearLimitY", &Phy_D6JointSettings::linearLimitY)
+            .property("linearLimitZ", &Phy_D6JointSettings::linearLimitZ)
+            .property("twistLimit", &Phy_D6JointSettings::twistLimit)
+            .property("swingLimit", &Phy_D6JointSettings::swingLimit)
+            .property("driveX", &Phy_D6JointSettings::driveX)
+            .property("driveY", &Phy_D6JointSettings::driveY)
+            .property("driveZ", &Phy_D6JointSettings::driveZ)
+            .property("driveSwing", &Phy_D6JointSettings::driveSwing)
+            .property("driveTwist", &Phy_D6JointSettings::driveTwist)
+            .property("driveSlerp", &Phy_D6JointSettings::driveSlerp)
+            .property("drivePose", &Phy_D6JointSettings::drivePose)
+            .property("driveLinearVelocity", &Phy_D6JointSettings::driveLinearVelocity)
+            .property("driveAngularVelocity", &Phy_D6JointSettings::driveAngularVelocity);
+
+        // === Phy_JointComponent 등록 (jointHandle 내부용 제외) ===
+        rttr::registration::class_<Phy_JointComponent>("Phy_JointComponent")
+            .constructor<>()
+            .property("type", &Phy_JointComponent::type)
+            .property("targetName", &Phy_JointComponent::targetName)
+            .property("frameA", &Phy_JointComponent::frameA)
+            .property("frameB", &Phy_JointComponent::frameB)
+            .property("collideConnected", &Phy_JointComponent::collideConnected)
+            .property("breakForce", &Phy_JointComponent::breakForce)
+            .property("breakTorque", &Phy_JointComponent::breakTorque)
+            .property("revolute", &Phy_JointComponent::revolute)
+            .property("prismatic", &Phy_JointComponent::prismatic)
+            .property("distance", &Phy_JointComponent::distance)
+            .property("spherical", &Phy_JointComponent::spherical)
+            .property("d6", &Phy_JointComponent::d6);
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();
