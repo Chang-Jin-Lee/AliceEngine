@@ -18,16 +18,18 @@ namespace Alice
     {
         struct CBParams
         {
-            XMFLOAT4 params0;     // (emitterX, emitterY, emitterRadius, spawnJitter)
+            XMFLOAT4 params0;     // (emitterX, emitterY, emitterZ, emitterRadius)
             XMFLOAT4 params1;     // (colorR, colorG, colorB, particleSizePx)
-            XMFLOAT4 time;        // (timeSec, dtSec, particleCount, 0)
+            XMFLOAT4 time;        // (timeSec, dtSec, particleCount, spawnJitter)
             XMFLOAT4 resolution;  // (w, h, invW, invH)
+            XMFLOAT4X4 viewProj;  // View * Projection 행렬
+            XMFLOAT4 cameraPos;   // (cameraX, cameraY, cameraZ, 0)
         };
 
         struct ParticleInit
         {
-            XMFLOAT2 pos;
-            XMFLOAT2 vel;
+            XMFLOAT3 pos;   // 월드 좌표
+            XMFLOAT3 vel;   // 월드 좌표 기준 속도
             float life;
             float seed;
         };
@@ -91,12 +93,6 @@ namespace Alice
             return false;
         }
 
-        if (!CreateComputeShader())
-        {
-            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateComputeShader failed.");
-            return false;
-        }
-
         // 기본 파티클 셰이더 세트 등록
         if (!RegisterParticleShaderSet("Particle",
                                        ComputeEffectShader::ParticleClearCS,
@@ -117,6 +113,52 @@ namespace Alice
             return false;
         }
 
+        // 추가 파티클 프리셋 등록
+        if (!RegisterParticleShaderSet("Sparks",
+                                       ComputeEffectShader::ParticleClearCS,
+                                       ComputeEffectShader::SparksUpdateCS,
+                                       ComputeEffectShader::SparksDrawCS))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: RegisterParticleShaderSet(Sparks) failed.");
+            return false;
+        }
+
+        if (!RegisterParticleShaderSet("Smoke",
+                                       ComputeEffectShader::ParticleClearCS,
+                                       ComputeEffectShader::SmokeUpdateCS,
+                                       ComputeEffectShader::SmokeDrawCS))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: RegisterParticleShaderSet(Smoke) failed.");
+            return false;
+        }
+
+        if (!RegisterParticleShaderSet("Vortex",
+                                       ComputeEffectShader::ParticleClearCS,
+                                       ComputeEffectShader::VortexUpdateCS,
+                                       ComputeEffectShader::VortexDrawCS))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: RegisterParticleShaderSet(Vortex) failed.");
+            return false;
+        }
+
+        if (!RegisterParticleShaderSet("Snow",
+                                       ComputeEffectShader::ParticleClearCS,
+                                       ComputeEffectShader::SnowUpdateCS,
+                                       ComputeEffectShader::SnowDrawCS))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: RegisterParticleShaderSet(Snow) failed.");
+            return false;
+        }
+
+        if (!RegisterParticleShaderSet("Explosion",
+                                       ComputeEffectShader::ParticleClearCS,
+                                       ComputeEffectShader::ExplosionUpdateCS,
+                                       ComputeEffectShader::ExplosionDrawCS))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: RegisterParticleShaderSet(Explosion) failed.");
+            return false;
+        }
+
         if (!CreateConstantBuffer())
         {
             ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateConstantBuffer failed.");
@@ -132,6 +174,12 @@ namespace Alice
         if (!CreateParticleBuffers(m_particleCount))
         {
             ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateParticleBuffers failed.");
+            return false;
+        }
+
+        if (!CreateLinearSampler())
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateLinearSampler failed.");
             return false;
         }
 
@@ -195,48 +243,106 @@ namespace Alice
         m_params1.w = std::max(sizePx, 1.0f);
     }
 
-    void ComputeEffectSystem::Execute(const World& world)
+    bool ComputeEffectSystem::HasActiveEffect() const
+    {
+        return m_hasActiveEffect;
+    }
+
+    void ComputeEffectSystem::Execute(const World& world, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraPos, ID3D11ShaderResourceView* sceneDepthSRV)
     {
         if (!m_constantBuffer || !m_outputUAV || !m_particleUAV || !m_particleSRV)
         {
             ALICE_LOG_ERRORF("ComputeEffectSystem::Execute: resources not initialized");
+            m_hasActiveEffect = false;
             return;
         }
 
-        // ComputeEffectComponent를 찾아서 활성화된 이펙트 실행
-        std::string activeShaderName;
+        // 카메라 정보 저장
+        m_viewProj = viewProj;
+        m_cameraPos = cameraPos;
+
+        // 여러 이펙트 동시 지원: 모든 활성화된 ComputeEffectComponent 처리
+        std::vector<std::pair<EntityId, std::pair<std::string, const ComputeEffectComponent*>>> activeEffects;
+        
         for (auto&& [entityId, effect] : world.GetComponents<ComputeEffectComponent>())
         {
-            if (effect.enabled && !effect.shaderName.empty())
-            {
-                // 등록된 파티클 셰이더 세트가 있는지 확인
-                if (m_particleShaderSets.find(effect.shaderName) != m_particleShaderSets.end())
-                {
-                    activeShaderName = effect.shaderName;
-                    break;
-                }
-            }
+            if (!effect.enabled || effect.shaderName.empty())
+                continue;
+
+            // 등록된 파티클 셰이더 세트가 있는지 확인
+            if (m_particleShaderSets.find(effect.shaderName) == m_particleShaderSets.end())
+                continue;
+
+            activeEffects.push_back({ entityId, { effect.shaderName, &effect } });
         }
 
-        if (activeShaderName.empty())
+        // entityId로 정렬하여 일관된 순서 보장
+        std::sort(activeEffects.begin(), activeEffects.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+
+        if (activeEffects.empty())
+        {
+            m_hasActiveEffect = false;
             return;
+        }
+
+        // 첫 번째 이펙트만 처리 (여러 이펙트 지원은 나중에 확장)
+        // TODO: 여러 이펙트를 동시에 지원하려면 이펙트별 버퍼를 따로 두거나 emitter 리스트를 StructuredBuffer로 넘겨야 함
+        const auto& [activeShaderName, activeEffect] = activeEffects[0].second;
 
         // 해당 셰이더 세트 가져오기
         auto it = m_particleShaderSets.find(activeShaderName);
         if (it == m_particleShaderSets.end())
+        {
+            m_hasActiveEffect = false;
             return;
+        }
 
         const ParticleShaderSet& shaderSet = it->second;
         if (!shaderSet.clearShader || !shaderSet.updateShader || !shaderSet.drawShader)
+        {
+            m_hasActiveEffect = false;
             return;
+        }
+
+        m_hasActiveEffect = true;
+
+        // 인스펙터 값을 CS 상수버퍼로 매핑
+        // effectParams는 이제 월드 좌표 (x, y, z)로 사용
+        {
+            const float ex  = activeEffect->effectParams.x;  // 월드 X
+            const float ey  = activeEffect->effectParams.y;  // 월드 Y
+            const float ez  = activeEffect->effectParams.z;  // 월드 Z
+            const float rad = ClampFloat(activeEffect->intensity * 0.5f, 0.01f, 5.0f);  // 반경 (intensity 기반)
+            m_params0 = XMFLOAT4(ex, ey, ez, rad);  // emitterX, emitterY, emitterZ, radius
+
+            const float inten = ClampFloat(activeEffect->intensity, 0.0f, 10.0f);
+            const float brightness = 0.25f + inten * 0.25f; // 0.25 .. 2.75
+            const float sizePx = 1.0f + inten * 2.0f;       // 1 .. 21 px
+
+            XMFLOAT3 baseColor(1.0f, 1.0f, 0.0f);
+            if (activeShaderName == "Sparks")        baseColor = XMFLOAT3(1.0f, 0.55f, 0.12f);
+            else if (activeShaderName == "Smoke")    baseColor = XMFLOAT3(0.65f, 0.65f, 0.65f);
+            else if (activeShaderName == "Vortex")   baseColor = XMFLOAT3(0.45f, 0.20f, 1.0f);
+            else if (activeShaderName == "Snow")     baseColor = XMFLOAT3(0.95f, 0.98f, 1.0f);
+            else if (activeShaderName == "Explosion")baseColor = XMFLOAT3(1.0f, 0.85f, 0.25f);
+
+            m_params1 = XMFLOAT4(baseColor.x * brightness, baseColor.y * brightness, baseColor.z * brightness, sizePx);
+        }
 
         UpdateConstantBuffer();
 
         DispatchClear(shaderSet.clearShader.Get());
         DispatchParticlesUpdate(shaderSet.updateShader.Get());
-        DispatchParticlesDraw(shaderSet.drawShader.Get());
+        DispatchParticlesDraw(shaderSet.drawShader.Get(), sceneDepthSRV);
 
         UnbindCS();
+
+        // 모든 UAV slot을 확실히 unbind (UAV와 SRV 동시 바인딩 충돌 방지)
+        // DirectX11에서는 같은 리소스를 UAV와 SRV로 동시에 바인딩할 수 없음
+        // D3D11_1_UAV_SLOT_COUNT = 64이지만, 일반적으로 8개면 충분
+        ID3D11UnorderedAccessView* nullUAVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->CSSetUnorderedAccessViews(0, 8, nullUAVs, nullptr);
     }
 
     bool ComputeEffectSystem::CreateComputeShader()
@@ -354,9 +460,20 @@ namespace Alice
         return true;
     }
 
+    std::vector<std::string> ComputeEffectSystem::GetRegisteredShaderNames() const
+    {
+        std::vector<std::string> names;
+        names.reserve(m_particleShaderSets.size());
+        for (const auto& [name, shaderSet] : m_particleShaderSets)
+        {
+            names.push_back(name);
+        }
+        return names;
+    }
+
     bool ComputeEffectSystem::CreateParticleBuffers(std::uint32_t particleCount)
     {
-        static_assert(sizeof(ParticleInit) == 24, "ParticleInit must match HLSL Particle layout (24 bytes).");
+        static_assert(sizeof(ParticleInit) == 32, "ParticleInit must match HLSL Particle layout (32 bytes: float3 pos + float3 vel + float life + float seed).");
 
         std::vector<ParticleInit> init(particleCount);
         for (std::uint32_t i = 0; i < particleCount; ++i)
@@ -364,8 +481,8 @@ namespace Alice
             float s = (float)i * 0.6180339887f;
             s -= std::floor(s);
 
-            init[i].pos  = XMFLOAT2(0.0f, 0.0f);
-            init[i].vel  = XMFLOAT2(0.0f, 0.0f);
+            init[i].pos  = XMFLOAT3(0.0f, 0.0f, 0.0f);
+            init[i].vel  = XMFLOAT3(0.0f, 0.0f, 0.0f);
             init[i].life = 0.0f;
             init[i].seed = s;
         }
@@ -417,6 +534,34 @@ namespace Alice
         return true;
     }
 
+    bool ComputeEffectSystem::CreateLinearSampler()
+    {
+        D3D11_SAMPLER_DESC desc = {};
+        // Depth는 Point 샘플러 사용 (Linear는 깊이 경계를 흐리게 만들어 오클루전 아티팩트 발생)
+        desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+        desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        desc.MipLODBias = 0.0f;
+        desc.MaxAnisotropy = 1;
+        desc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+        desc.BorderColor[0] = 0.0f;
+        desc.BorderColor[1] = 0.0f;
+        desc.BorderColor[2] = 0.0f;
+        desc.BorderColor[3] = 0.0f;
+        desc.MinLOD = 0.0f;
+        desc.MaxLOD = D3D11_FLOAT32_MAX;
+
+        HRESULT hr = m_device->CreateSamplerState(&desc, m_linearSampler.GetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::CreateLinearSampler: CreateSamplerState failed.");
+            return false;
+        }
+
+        return true;
+    }
+
     void ComputeEffectSystem::UpdateConstantBuffer()
     {
         LARGE_INTEGER now{};
@@ -434,8 +579,10 @@ namespace Alice
         CBParams cb{};
         cb.params0    = m_params0;
         cb.params1    = m_params1;
-        cb.time       = XMFLOAT4(m_timeSec, m_dtSec, (float)m_particleCount, 0.0f);
+        cb.time       = XMFLOAT4(m_timeSec, m_dtSec, (float)m_particleCount, 0.25f);  // spawnJitter를 time.w로 이동
         cb.resolution = XMFLOAT4(w, h, 1.0f / w, 1.0f / h);
+        XMStoreFloat4x4(&cb.viewProj, XMMatrixTranspose(m_viewProj));
+        cb.cameraPos  = XMFLOAT4(m_cameraPos.x, m_cameraPos.y, m_cameraPos.z, 0.0f);
 
         D3D11_MAPPED_SUBRESOURCE mapped{};
         HRESULT hr = m_context->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
@@ -484,15 +631,21 @@ namespace Alice
         m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
     }
 
-    void ComputeEffectSystem::DispatchParticlesDraw(ID3D11ComputeShader* drawShader)
+    void ComputeEffectSystem::DispatchParticlesDraw(ID3D11ComputeShader* drawShader, ID3D11ShaderResourceView* sceneDepthSRV)
     {
         if (!drawShader) return;
         
         m_context->CSSetShader(drawShader, nullptr, 0);
         m_context->CSSetConstantBuffers(0, 1, m_constantBuffer.GetAddressOf());
+        
+        if (m_linearSampler)
+        {
+            ID3D11SamplerState* samplers[] = { m_linearSampler.Get() };
+            m_context->CSSetSamplers(0, 1, samplers);
+        }
 
-        ID3D11ShaderResourceView* srv = m_particleSRV.Get();
-        m_context->CSSetShaderResources(0, 1, &srv);
+        ID3D11ShaderResourceView* srvs[2] = { m_particleSRV.Get(), sceneDepthSRV };
+        m_context->CSSetShaderResources(0, 2, srvs);
 
         ID3D11UnorderedAccessView* uav = m_outputUAV.Get();
         m_context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
@@ -500,8 +653,8 @@ namespace Alice
         UINT tg = (m_particleCount + 255) / 256;
         m_context->Dispatch(tg, 1, 1);
 
-        ID3D11ShaderResourceView* nullSRV = nullptr;
-        m_context->CSSetShaderResources(0, 1, &nullSRV);
+        ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
+        m_context->CSSetShaderResources(0, 2, nullSRVs);
 
         ID3D11UnorderedAccessView* nullUAV = nullptr;
         m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
@@ -514,11 +667,21 @@ namespace Alice
         ID3D11Buffer* nullCB = nullptr;
         m_context->CSSetConstantBuffers(0, 1, &nullCB);
 
-        ID3D11ShaderResourceView* nullSRV = nullptr;
-        m_context->CSSetShaderResources(0, 1, &nullSRV);
+        ID3D11SamplerState* nullSampler = nullptr;
+        m_context->CSSetSamplers(0, 1, &nullSampler);
 
-        ID3D11UnorderedAccessView* nullUAV = nullptr;
-        m_context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+        ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
+        m_context->CSSetShaderResources(0, 2, nullSRVs);
+
+        // 모든 UAV slot을 확실히 unbind (UAV와 SRV 동시 바인딩 충돌 방지)
+        // DirectX11에서는 같은 리소스를 UAV와 SRV로 동시에 바인딩할 수 없음
+        // D3D11_1_UAV_SLOT_COUNT = 64이지만, 일반적으로 8개면 충분하지만 안전을 위해 전체 슬롯 unbind
+        // 참고: Compute Shader는 최대 8개 UAV slot을 지원 (D3D11_FEATURE_D3D11_OPTIONS::ComputeShadersPlusRawAndStructuredBuffersViaShader4X)
+        ID3D11UnorderedAccessView* nullUAVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->CSSetUnorderedAccessViews(0, 8, nullUAVs, nullptr);
+        
+        // 추가 보장: OMSetRenderTargetsAndUnorderedAccessViews도 확인
+        // (Compute shader에서는 사용하지 않지만, 혹시 모를 충돌 방지)
     }
 
     bool ComputeEffectSystem::CreateUnorderedAccessViews(std::uint32_t width, std::uint32_t height)
@@ -529,7 +692,7 @@ namespace Alice
         texDesc.Height             = height;
         texDesc.MipLevels          = 1;
         texDesc.ArraySize          = 1;
-        texDesc.Format             = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        texDesc.Format             = DXGI_FORMAT_R16G16B16A16_FLOAT;
         texDesc.SampleDesc.Count   = 1;
         texDesc.SampleDesc.Quality = 0;
         texDesc.Usage              = D3D11_USAGE_DEFAULT;
@@ -545,7 +708,7 @@ namespace Alice
 
         // UAV 생성
         D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-        uavDesc.Format        = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        uavDesc.Format        = DXGI_FORMAT_R16G16B16A16_FLOAT;
         uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
         uavDesc.Texture2D.MipSlice = 0;
 
@@ -562,7 +725,7 @@ namespace Alice
 
         // SRV 생성 (결과를 읽기 위해)
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-        srvDesc.Format                    = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        srvDesc.Format                    = DXGI_FORMAT_R16G16B16A16_FLOAT;
         srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
         srvDesc.Texture2D.MostDetailedMip = 0;
         srvDesc.Texture2D.MipLevels       = 1;

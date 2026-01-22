@@ -1229,11 +1229,6 @@ namespace Alice
 
 		// ============================================= 컴퓨트 이펙트 실행 =============================================
 		// ComputeEffectComponent를 가진 엔티티들의 컴퓨트 셰이더를 실행
-		if (pImpl->m_computeEffectSystem)
-		{
-			pImpl->m_computeEffectSystem->Execute(pImpl->m_world);
-		}
-
 		// ============================================= 렌더링 =============================================
 		// Forward/Deferred 렌더링 모드에 따라 분기
 		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
@@ -1251,16 +1246,6 @@ namespace Alice
 				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
 				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands
 			);
-			
-			// 에디터 모드: 뷰포트 렌더 타겟에 파티클 오버레이 합성
-			if (pImpl->m_editorMode && pImpl->m_computeEffectSystem)
-			{
-				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
-				if (particleSRV)
-				{
-					pImpl->m_forwardRenderSystem->RenderParticleOverlayToViewport(particleSRV);
-				}
-			}
 		}
 		else
 		{
@@ -1270,21 +1255,80 @@ namespace Alice
 				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
 				pImpl->m_editorMode, pImpl->m_isPlaying
 			);
+		}
+
+		// 렌더 직후: DSV만 unbind (depth SRV 읽기 전 필수)
+		// DirectX11에서는 같은 리소스를 DSV와 SRV로 동시에 바인딩할 수 없음
+		// RTV는 유지 (RestoreBackBuffer에서 설정한 백버퍼 RTV 유지)
+		ID3D11RenderTargetView* currentRTV = nullptr;
+		ID3D11DepthStencilView* currentDSV = nullptr;
+		pImpl->m_renderDevice->GetImmediateContext()->OMGetRenderTargets(1, &currentRTV, &currentDSV);
+		if (currentRTV)
+		{
+			// RTV는 유지하고 DSV만 nullptr로 설정
+			pImpl->m_renderDevice->GetImmediateContext()->OMSetRenderTargets(1, &currentRTV, nullptr);
+			currentRTV->Release(); // OMGetRenderTargets가 AddRef를 호출하므로 Release 필요
+		}
+		if (currentDSV)
+		{
+			currentDSV->Release(); // OMGetRenderTargets가 AddRef를 호출하므로 Release 필요
+		}
+
+		// ============================================= 컴퓨트 이펙트 (렌더링 이후 실행 - depth가 최신 상태) =============================================
+		// 씬 전환 중이거나 리소스가 유효하지 않으면 스킵 (안전성 보장)
+		if (pImpl->m_computeEffectSystem && 
+		    ((pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem) || 
+		     (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)))
+		{
+			// 렌더에 사용한 카메라와 동일한 카메라 행렬 사용 (에디터 뷰포트 카메라와 메인 카메라가 다를 수 있으므로 주의)
+			// TODO: 렌더 시스템에서 실제로 사용한 카메라 행렬을 반환하도록 개선하면 더 정확함
+			EntityId mainCamId = pImpl->m_world.GetMainCameraEntityId();
+			DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
+			DirectX::XMFLOAT3 cameraPos(0.0f, 0.0f, -5.0f);
 			
-			// 에디터 모드: Deferred의 뷰포트 렌더 타겟에 파티클 오버레이 합성
-			if (pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_deferredRenderSystem)
+			if (mainCamId != InvalidEntityId)
 			{
-				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
-				if (particleSRV)
+				viewProj = pImpl->m_camera.GetViewProjectionMatrix();
+				cameraPos = pImpl->m_camera.GetPosition();
+			}
+			
+			// Scene Depth SRV (depth test용) - 렌더링 이후이므로 최신 depth 사용 가능
+			// DSV는 이미 위에서 unbind했으므로 SRV로 안전하게 읽을 수 있음
+			ID3D11ShaderResourceView* depthSRV = nullptr;
+			if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+			{
+				depthSRV = pImpl->m_forwardRenderSystem->GetSceneDepthSRV();
+			}
+			else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+			{
+				depthSRV = pImpl->m_deferredRenderSystem->GetSceneDepthSRV();
+			}
+			
+			// Execute에 depthSRV를 직접 전달 (raw 포인터 보관 제거)
+			// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
+			pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV);
+		}
+
+		// ============================================= 파티클 오버레이 합성 =============================================
+		// 에디터 모드: 뷰포트 렌더 타겟에 파티클 오버레이 합성 (CS 실행 이후 - 같은 프레임 결과 사용)
+		if (pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_computeEffectSystem->HasActiveEffect())
+		{
+			ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
+			if (particleSRV)
+			{
+				if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+				{
+					pImpl->m_forwardRenderSystem->RenderParticleOverlayToViewport(particleSRV);
+				}
+				else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
 				{
 					pImpl->m_deferredRenderSystem->RenderParticleOverlayToViewport(particleSRV);
 				}
 			}
 		}
 
-		// 파티클 오버레이 합성 (게임 모드와 에디터 모드 모두)
-		// ForwardRenderSystem이 초기화되어 있으면 사용 가능
-		if (pImpl->m_computeEffectSystem && pImpl->m_forwardRenderSystem)
+		// 게임 모드: 백버퍼에 파티클 오버레이 합성
+		if (!pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_computeEffectSystem->HasActiveEffect() && pImpl->m_forwardRenderSystem)
 		{
 			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
 			if (backBufferRTV)
@@ -1295,28 +1339,20 @@ namespace Alice
 				viewport.MaxDepth = 1.0f;
 
 				// 게임 모드에서는 톤매핑 후 오버레이
-				if (!pImpl->m_editorMode)
+				if (pImpl->m_useForwardRendering)
 				{
-					if (pImpl->m_useForwardRendering)
-					{
-						pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-					}
-					else
-					{
-						pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-					}
+					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+				}
+				else
+				{
+					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
 				}
 
-				// 파티클 오버레이 합성 (톤매핑 후 또는 에디터 모드에서 직접)
+				// 파티클 오버레이 합성 (톤매핑 후)
 				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
 				if (particleSRV)
 				{
 					pImpl->m_forwardRenderSystem->RenderParticleOverlay(particleSRV, backBufferRTV, viewport);
-				}
-				else
-				{
-					// 디버깅: SRV가 null인 경우 로그 출력 (너무 많이 찍히지 않도록 주석 처리)
-					// ALICE_LOG_WARNING("ComputeEffectSystem::GetOutputSRV() returned nullptr");
 				}
 			}
 		}

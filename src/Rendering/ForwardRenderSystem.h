@@ -194,6 +194,7 @@ namespace Alice
         // ==== 게임 뷰포트용 깊이/스텐실 ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_sceneDSV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneDepthSRV;
 
         std::uint32_t                                   m_sceneWidth  = 0;
         std::uint32_t                                   m_sceneHeight = 0;
@@ -254,6 +255,9 @@ namespace Alice
 
         /// 에디터 뷰포트 표시용(톤매핑 완료) SRV
         ID3D11ShaderResourceView* GetViewportSRV() const { return m_viewportSRV.Get(); }
+        
+        /// Scene Depth SRV (depth test용)
+        ID3D11ShaderResourceView* GetSceneDepthSRV() const { return m_sceneDepthSRV.Get(); }
 
         /// IBL 세트를 변경합니다 (Bridge/Indoor/Sample)
         /// - 씬 전환 시 호출하여 환경에 맞는 IBL을 로드합니다.
