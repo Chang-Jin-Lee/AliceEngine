@@ -2,6 +2,8 @@
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
+#include "Rendering/EffectSystem.h"
+#include "Rendering/TrailEffectRenderSystem.h"
 
 // ImGui
 #include "imgui.h"
@@ -127,6 +129,8 @@ namespace Alice
 		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
 		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+		std::unique_ptr<class EffectSystem> m_effectSystem;
+		std::unique_ptr<class TrailEffectRenderSystem> m_trailRenderSystem;
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
 		bool m_useForwardRendering = false;
@@ -473,6 +477,19 @@ namespace Alice
 
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
 		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
+
+		pImpl->m_effectSystem = std::make_unique<EffectSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_effectSystem->Initialize()) return false;
+
+		pImpl->m_trailRenderSystem = std::make_unique<TrailEffectRenderSystem>(*pImpl->m_renderDevice);
+		pImpl->m_trailRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
+		if (!pImpl->m_trailRenderSystem->Initialize()) return false;
+
+		// DeferredRenderSystem에 TrailEffectRenderSystem 주입
+		if (pImpl->m_deferredRenderSystem && pImpl->m_trailRenderSystem)
+		{
+			pImpl->m_deferredRenderSystem->SetSwordRenderSystem(pImpl->m_trailRenderSystem.get());
+		}
 
 		// ============================================= 카메라 & 스크립트 =============================================
 		// 기본 카메라 위치 설정 및 핫리로드 로드
@@ -1275,6 +1292,9 @@ namespace Alice
 		// ============================================= 오버레이 =============================================
 		// 디버그 드로우 및 ImGui(에디터 전용)
 		if (pImpl->m_debugDrawSystem) pImpl->m_debugDrawSystem->Render(pImpl->m_camera);
+		if (pImpl->m_effectSystem) pImpl->m_effectSystem->Render(pImpl->m_world, pImpl->m_camera);
+		if (pImpl->m_trailRenderSystem)pImpl->m_trailRenderSystem->Render(pImpl->m_world, pImpl->m_camera);
+		// SwordRenderSystem은 DeferredRenderSystem 내부에서 호출되므로 여기서는 호출하지 않음
 		if (pImpl->m_editorMode)      pImpl->m_editorCore.RenderDrawData();
 
 		pImpl->m_renderDevice->EndFrame();
