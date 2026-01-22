@@ -147,13 +147,31 @@ namespace Alice
         if (FAILED(m_device->CreateRenderTargetView(m_viewportTex.Get(), nullptr, m_viewportRTV.ReleaseAndGetAddressOf()))) return false;
         if (FAILED(m_device->CreateShaderResourceView(m_viewportTex.Get(), nullptr, m_viewportSRV.ReleaseAndGetAddressOf()))) return false;
 
-        // 2. Depth Texture & View (DSV)
-        D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_D24_UNORM_S8_UINT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL, 0, 0 };
+        // 2. Depth Texture & View (DSV, SRV)
+        // SRV 생성을 위해 typeless 포맷 사용
+        D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_R24G8_TYPELESS, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
         if (FAILED(m_device->CreateTexture2D(&dDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf()))) return false;
 
-        // DSV 설정 (MipSlice 0)
-        D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { dDesc.Format, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
+        // DSV 설정 (D24_UNORM_S8_UINT 포맷으로 뷰 생성)
+        D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+        dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+        dsvDesc.Texture2D.MipSlice = 0;
         if (FAILED(m_device->CreateDepthStencilView(m_sceneDepthTex.Get(), &dsvDesc, m_sceneDSV.ReleaseAndGetAddressOf()))) return false;
+
+        // Depth SRV 생성 (depth test용) - 실패해도 계속 진행 (선택적)
+        D3D11_SHADER_RESOURCE_VIEW_DESC depthSrvDesc = {};
+        depthSrvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;  // R24G8_TYPELESS의 SRV 포맷
+        depthSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        depthSrvDesc.Texture2D.MostDetailedMip = 0;
+        depthSrvDesc.Texture2D.MipLevels = 1;
+        HRESULT hrDepthSRV = m_device->CreateShaderResourceView(m_sceneDepthTex.Get(), &depthSrvDesc, m_sceneDepthSRV.ReleaseAndGetAddressOf());
+        if (FAILED(hrDepthSRV))
+        {
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateSceneRenderTarget: CreateShaderResourceView(depthSRV) failed (0x%08X) - depth test will be disabled", (unsigned)hrDepthSRV);
+            m_sceneDepthSRV.Reset();
+            return false;
+        }
 
         return true;
     }
@@ -1523,6 +1541,21 @@ namespace Alice
     {
         if (!m_particleOverlayPS || !m_quadVS || !particleSRV || !targetRTV) return;
 
+        // UAV와 SRV 동시 바인딩 충돌 방지: Compute Shader에서 사용한 UAV/SRV를 명시적으로 unbind
+        // DirectX11에서는 같은 리소스를 UAV와 SRV로 동시에 바인딩할 수 없음
+        // Compute Shader는 CS stage에서 UAV를 사용하므로, CS stage의 UAV/SRV만 unbind하면 충분
+        ID3D11UnorderedAccessView* nullUAVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        UINT uavInitialCounts[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        m_context->CSSetUnorderedAccessViews(0, 8, nullUAVs, uavInitialCounts);
+        
+        // CS에서 SRV로도 바인딩되어 있을 수 있으므로 CS SRV도 unbind
+        ID3D11ShaderResourceView* nullCSsrvs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->CSSetShaderResources(0, 8, nullCSsrvs);
+        
+        // PS의 SRV도 먼저 unbind한 후에 다시 바인딩 (안전을 위해)
+        ID3D11ShaderResourceView* nullSRVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->PSSetShaderResources(0, 8, nullSRVs);
+
         // 뷰포트 설정
         m_context->RSSetViewports(1, &viewport);
 
@@ -1535,7 +1568,7 @@ namespace Alice
         m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
         m_context->RSSetState(m_ppRasterNoCull.Get());
 
-        // 리소스 바인딩
+        // 리소스 바인딩 (UAV unbind 후에 SRV 바인딩)
         ID3D11ShaderResourceView* srv = particleSRV;
         ID3D11SamplerState* sampler = m_samplerLinear.Get();
 
@@ -1565,14 +1598,23 @@ namespace Alice
 
     void ForwardRenderSystem::RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV)
     {
-        if (!particleSRV || !m_viewportRTV) return;
+        // 씬 전환 중 리소스가 유효하지 않을 수 있으므로 모든 리소스 확인
+        if (!particleSRV) return;
+        ID3D11RenderTargetView* viewportRTV = m_viewportRTV.Get();
+        if (!viewportRTV) return;
+        if (m_sceneWidth == 0 || m_sceneHeight == 0) return;
+        if (!m_particleOverlayPS || !m_quadVS || !m_quadVB || !m_quadIB || !m_quadInputLayout) return;
         
         D3D11_VIEWPORT viewport = {};
         viewport.Width = static_cast<float>(m_sceneWidth);
         viewport.Height = static_cast<float>(m_sceneHeight);
         viewport.MaxDepth = 1.0f;
         
-        RenderParticleOverlay(particleSRV, m_viewportRTV.Get(), viewport);
+        RenderParticleOverlay(particleSRV, viewportRTV, viewport);
+        
+        // 뷰포트 RTV를 SRV로 읽을 수 있도록 BackBuffer로 복귀 (ImGui::Image가 viewportSRV를 읽기 위해 필수)
+        // DirectX11에서는 같은 리소스를 RTV와 SRV로 동시에 바인딩할 수 없음
+        RestoreBackBuffer();
     }
 }
 

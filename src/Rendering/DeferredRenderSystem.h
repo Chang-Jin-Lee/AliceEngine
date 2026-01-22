@@ -72,6 +72,9 @@ namespace Alice
 
         /// 에디터 뷰포트 표시용(톤매핑 완료) SRV
         ID3D11ShaderResourceView* GetViewportSRV() const { return m_viewportSRV.Get(); }
+        
+        /// Scene Depth SRV를 반환합니다 (depth test용)
+        ID3D11ShaderResourceView* GetSceneDepthSRV() const { return m_sceneDepthSRV.Get(); }
 
         /// IBL 세트를 변경합니다.
         bool SetIblSet(const std::string& iblDir = "Bridge", const std::string& iblName = "bridge");
@@ -248,6 +251,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneColorSRV;
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_sceneDSV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneDepthSRV;
 
         // ==== 에디터 뷰포트 표시용 LDR 결과 텍스처 (ToneMapped) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_viewportTex;

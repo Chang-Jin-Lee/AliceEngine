@@ -2385,8 +2385,8 @@ namespace Alice
 				// 트리 노드 열기
 				bool nodeOpen = ImGui::TreeNodeEx(label.c_str(), nodeFlags);
 
-				// 선택 처리
-				if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+				// 선택 처리 (더블클릭으로만 인스펙터 변경 - 드래그앤드롭을 위해)
+				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 				{
 					selectedEntity = entityId;
 				}
@@ -5041,15 +5041,21 @@ namespace Alice
 					bool changed = false;
 					changed |= ImGui::Checkbox("Enabled##ComputeEffect", &effect->enabled);
 					
-					char shaderNameBuffer[256];
-					strncpy_s(shaderNameBuffer, effect->shaderName.c_str(), sizeof(shaderNameBuffer) - 1);
-					shaderNameBuffer[sizeof(shaderNameBuffer) - 1] = '\0';
-					if (ImGui::InputText("Shader Name##ComputeEffect", shaderNameBuffer, sizeof(shaderNameBuffer))) {
-						effect->shaderName = shaderNameBuffer;
+					// 파티클 타입 콤보박스
+					const char* particleTypes[] = { "Particle", "Sparks", "Smoke", "Vortex", "Snow", "Explosion" };
+					int currentIndex = 0;
+					for (int i = 0; i < IM_ARRAYSIZE(particleTypes); ++i) {
+						if (effect->shaderName == particleTypes[i]) {
+							currentIndex = i;
+							break;
+						}
+					}
+					if (ImGui::Combo("Particle Type##ComputeEffect", &currentIndex, particleTypes, IM_ARRAYSIZE(particleTypes))) {
+						effect->shaderName = particleTypes[currentIndex];
 						changed = true;
 					}
 
-					changed |= ImGui::SliderFloat3("Effect Params##ComputeEffect", &effect->effectParams.x, 0.0f, 10.0f);
+					changed |= ImGui::SliderFloat3("Emitter Position (World)##ComputeEffect", &effect->effectParams.x, -100.0f, 100.0f);
 					changed |= ImGui::SliderFloat("Intensity##ComputeEffect", &effect->intensity, 0.0f, 10.0f);
 
 					if (ImGui::Button("Remove Compute Effect")) {
