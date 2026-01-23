@@ -11,6 +11,7 @@
 #include "Core/ImGuiEx.h"
 #include "Core/ScriptHotReload.h"
 #include "Core/ResourceManager.h"
+#include "Core/GameObject.h"
 #include "Game/FbxImporter.h"
 #include "3Dmodel/FbxModel.h"
 #include "Core/Logger.h"
@@ -20,6 +21,7 @@
 #include "Components/AdvancedAnimationComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include <set>
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
@@ -31,6 +33,9 @@
 // ImGui
 #include "imgui.h"
 #include "imgui_internal.h"
+
+#include <algorithm>
+#include <iterator>
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
@@ -40,6 +45,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <sstream>
 #include <Core/Prefab.h>
 #include <Core/IScript.h>
 #include <Core/ScriptSystem.h>
@@ -68,8 +74,8 @@ namespace Alice
 
         inline bool MaterialInspectorFilter(const std::string& propName)
         {
-            // assetPath와 albedoTexturePath는 특별 UI 처리하므로 제외
-            return propName != "assetPath" && propName != "albedoTexturePath";
+            // assetPath/albedoTexturePath/shadingMode는 특별 UI 처리하므로 제외
+            return propName != "assetPath" && propName != "albedoTexturePath" && propName != "shadingMode";
         }
 
         struct ScopedHandle
@@ -816,6 +822,8 @@ namespace Alice
         // 다른 씬을 로드하기 위해 대기 중인 경로
         bool                     g_RequestSceneLoad     = false;
         std::filesystem::path    g_NextScenePath;
+        bool                     g_ShowSceneLoadError   = false;
+        std::string              g_SceneLoadErrorMsg;
 
         // 단일 머티리얼 에셋 편집기 상태
         bool                     g_MaterialEditorOpen   = false;
@@ -1022,9 +1030,53 @@ namespace Alice
                 }
                 if (ImGui::MenuItem("Cube"))
                 {
-                    EntityId e = world.CreateCube();
-                    selectedEntity = e;
-                    g_SceneDirty   = true;
+                    // 기존에 인덱스 버퍼로 큐브를 그리던 거에서 fbx 그리는 것으로 변경
+                    //EntityId e = world.CreateCube();
+                    //selectedEntity = e;
+					//g_SceneDirty = true;
+					//ImGui::CloseCurrentPopup();
+					if (m_renderDevice)
+					{
+						std::filesystem::path fbxPath = "Resource/BasicMesh/Cube.fbx";
+
+						FbxImportOptions opt{};
+						FbxImporter importer(*m_resources, m_skinnedRegistry);
+
+						auto* d3dDevice = m_renderDevice->GetDevice();
+						FbxImportResult result = importer.Import(d3dDevice, fbxPath, opt);
+
+						if (!result.meshAssetPath.empty())
+						{
+							EntityId e = world.CreateEntity();
+							TransformComponent& t = world.AddComponent<TransformComponent>(e);
+							t.position = { 0.0f, 0.0f, 0.0f };
+							t.scale = { 1.0f, 1.0f, 1.0f };
+							t.rotation = { 0.0f, 0.0f, 0.0f };
+
+							// 스키닝 메시 컴포넌트 등록
+							SkinnedMeshComponent& skinned = world.AddComponent<SkinnedMeshComponent>(e, result.meshAssetPath);
+							skinned.instanceAssetPath = result.instanceAssetPath;
+
+							// 본이 있다고 생각하고 1개짜리 항등 행렬 팔레트를 사용합니다.
+							static DirectX::XMFLOAT4X4 s_identityBone =
+								DirectX::XMFLOAT4X4(1, 0, 0, 0,
+									0, 1, 0, 0,
+									0, 0, 1, 0,
+									0, 0, 0, 1);
+							skinned.boneMatrices = &s_identityBone;
+							skinned.boneCount = 1;
+
+							// 머티리얼 할당
+							DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+							MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+							mat.assetPath = result.materialAssetPaths.front();
+							MaterialFile::Load(mat.assetPath, mat, &ResourceManager::Get());
+
+                            world.SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
+                            selectedEntity = e;
+                            g_SceneDirty = true;
+						}
+					}
                     ImGui::CloseCurrentPopup();
                 }
                 if (ImGui::MenuItem("Camera"))
@@ -1128,12 +1180,21 @@ namespace Alice
                             skinned.boneCount    = 1;
 
                             // 첫 번째 머티리얼이 있으면 기본 머티리얼로 할당
+                            // 원래 있는 경우 없는 경우 나눠서 있는 경우는 서브 메테리얼을 만들어야 하는데, 일단은 둘다 생기도록 함.
+                            // TODO : 여기서 서브 메테리얼을 각각 다르게 설정할 수 있게 해야함 
                             if (!result.materialAssetPaths.empty())
                             {
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = result.materialAssetPaths.front();
                                 MaterialFile::Load(mat.assetPath, mat, m_resources);
+                            }
+                            else
+                            {
+								//DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+								//MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+								//mat.assetPath = "fbx has no material. default material";
+								//MaterialFile::Load(mat.assetPath, mat);
                             }
 
                             selectedEntity = e;
@@ -1877,6 +1938,17 @@ namespace Alice
                             );
                             
                             transform->scale = XMFLOAT3(matrixScale[0], matrixScale[1], matrixScale[2]);
+                            
+                            // ImGuizmo로 Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
+                            if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(selectedEntity))
+                            {
+                                rigidBody->teleport = true;
+                            }
+                            if (auto* cct = world.GetComponent<Phy_CCTComponent>(selectedEntity))
+                            {
+                                cct->teleport = true;
+                            }
+                            g_SceneDirty = true;
                         }
                     }
                 }
@@ -2072,6 +2144,8 @@ namespace Alice
             if (ImGui::RadioButton("Toon", mode == 3))      mode = 3;
             ImGui::SameLine();
             if (ImGui::RadioButton("PBR", mode == 4))       mode = 4;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("ToonPBR", mode == 5))   mode = 5;
             shadingMode = mode;
 
             Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
@@ -2082,7 +2156,7 @@ namespace Alice
 			auto& lighting = deferred.GetLightingParameters();
             
             // PBR 모드일 때 PBR 파라미터 표시
-            if (mode == 4)
+            if (mode == 4 || mode == 5)
             {
                 ImGui::Separator();
                 ImGui::Text("PBR Material Parameters");
@@ -2259,6 +2333,106 @@ namespace Alice
                 {
                     ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
                 }
+
+                // === Bloom 파라미터 ===
+                ImGui::Separator();
+                ImGui::Text("Bloom");
+                ImGui::Separator();
+
+                BloomSettings bloomSettings = deferred.GetBloomSettings();
+                bool bloomChanged = false;
+
+                // Bloom 활성화 체크박스
+                if (ImGui::Checkbox("Enable Bloom", &bloomSettings.enabled))
+                {
+                    bloomChanged = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Bloom 효과 활성화/비활성화");
+                }
+
+                // Bloom ConstantBuffer 파라미터들 (enabled일 때만 표시)
+                if (bloomSettings.enabled)
+                {
+                    // Intensity (합성 강도)
+                    if (ImGui::SliderFloat("Intensity", &bloomSettings.intensity, 0.0f, 5.0f, "%.2f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Bloom 합성 강도 (0.0 ~ 5.0)\n값이 클수록 더 밝게 합성됩니다");
+                    }
+
+                    // Threshold (밝기 추출 기준)
+                    if (ImGui::SliderFloat("Threshold", &bloomSettings.threshold, 0.0f, 5.0f, "%.2f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("밝기 추출 기준 (0.0 ~ 5.0)\n이 값보다 밝은 픽셀만 Bloom 효과가 적용됩니다");
+                    }
+
+                    // Knee (Soft threshold)
+                    if (ImGui::SliderFloat("Knee", &bloomSettings.knee, 0.0f, 1.0f, "%.2f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Soft threshold (0.0 ~ 1.0)\nBloom 경계를 부드럽게 만드는 값");
+                    }
+
+                    // Radius (Blur 크기)
+                    if (ImGui::SliderFloat("Radius", &bloomSettings.radius, 0.0f, 20.0f, "%.1f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Blur 크기 (0.0 ~ 20.0)\n값이 클수록 Bloom이 더 넓게 퍼집니다");
+                    }
+
+                    // Downsample (다운샘플링) - 1/64까지 지원
+                    const char* downsampleItems[] = { "1x (원본)", "2x (1/2)", "4x (1/4)", "8x (1/8)", "16x (1/16)", "32x (1/32)", "64x (1/64)" };
+                    int downsampleValues[] = { 1, 2, 4, 8, 16, 32, 64 };
+                    int downsampleIdx = 0;
+                    for (int i = 0; i < 7; ++i)
+                    {
+                        if (bloomSettings.downsample == downsampleValues[i])
+                        {
+                            downsampleIdx = i;
+                            break;
+                        }
+                    }
+                    if (ImGui::Combo("Downsample", &downsampleIdx, downsampleItems, IM_ARRAYSIZE(downsampleItems)))
+                    {
+                        bloomSettings.downsample = downsampleValues[downsampleIdx];
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Bloom 텍스처 다운샘플링 비율 (1x ~ 64x)\n낮을수록 고품질, 높을수록 성능 향상\n64x는 매우 작은 텍스처로 인해 품질이 낮을 수 있습니다");
+                    }
+
+                    // Clamp (Bloom 값 상한)
+                    if (ImGui::SliderFloat("Clamp", &bloomSettings.clamp, 1.0f, 20.0f, "%.1f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Bloom 값 상한 (1.0 ~ 20.0)\n과도한 Bloom을 제한합니다");
+                    }
+                }
+
+                // 설정 변경 시 즉시 반영
+                if (bloomChanged)
+                {
+                    deferred.SetBloomSettings(bloomSettings);
+                }
             }
             
         }
@@ -2335,7 +2509,7 @@ namespace Alice
             ImGui::End();
         }
 
-        // === 씬 변경사항 저장 확인 모달 ===
+		// === 씬 변경사항 저장 확인 모달 ===
         if (g_RequestSceneLoad)
         {
             // 현재 씬이 존재하고 변경사항이 있을 때만 확인 모달을 띄웁니다.
@@ -2363,47 +2537,119 @@ namespace Alice
             }
             g_RequestSceneLoad = false;
         }
+ 
+        
+
+        // === 씬 로드 에러 모달 ===
+        if (g_ShowSceneLoadError)
+        {
+            ImGui::OpenPopup("SceneLoadError");
+            g_ShowSceneLoadError = false;
+        }
+
+        if (ImGui::BeginPopupModal("SceneLoadError", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "씬 로드 실패");
+            ImGui::Separator();
+            
+            // 에러 메시지 표시 (여러 줄 지원)
+            std::istringstream iss(g_SceneLoadErrorMsg);
+            std::string line;
+            while (std::getline(iss, line))
+            {
+                ImGui::TextWrapped("%s", line.c_str());
+            }
+            
+            ImGui::Separator();
+            if (ImGui::Button("확인"))
+            {
+                g_SceneLoadErrorMsg.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
 
         if (ImGui::BeginPopupModal("SaveSceneBeforeLoad", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             Alice::ImGuiText(L"현재 씬의 변경 내용을 저장하시겠습니까?");
             ImGui::Separator();
 
-            if (ImGui::Button("Save"))
-            {
-                SaveScene(world);
-                LoadScene(world);
-                selectedEntity = InvalidEntityId;
-                ImGui::CloseCurrentPopup();
-            }
+			if (ImGui::Button("Save"))
+			{
+				SaveScene(world);
+				// 씬 로드 요청 (안전 지점에서 커밋)
+				if (sceneManager)
+				{
+					const std::filesystem::path loadAbs =
+						(m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+					if (!sceneManager->LoadSceneFileRequest(loadAbs))
+					{
+						// 요청 실패: 에러 로그 및 팝업 표시
+						const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+						ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+						
+						g_SceneLoadErrorMsg = errorMsg;
+						g_ShowSceneLoadError = true;
+						g_RequestSceneLoad = false;
+						ImGui::CloseCurrentPopup();
+						return;
+					}
+					// 성공 시 경로만 저장 (실제 로드는 엔진의 안전 지점에서 CommitPendingSceneChange로 처리됨)
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+				}
+				else
+				{
+					ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
+				}
+				selectedEntity = InvalidEntityId;
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
 
             ImGui::SameLine();
             if (ImGui::Button("Don't Save"))
             {
+                // 씬 로드 요청 (안전 지점에서 커밋)
+                if (sceneManager)
                 {
-                    ALICE_LOG_INFO("[Editor] SceneFile::Load (dont-save): \"%s\"\n",
+                    ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (dont-save): \"%s\"\n",
                         g_NextScenePath.string().c_str());
-                }
-                {
                     const std::filesystem::path loadAbs =
                         (m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
-                    SceneFile::Load(world, loadAbs);
-                }
-                EnsureSkinnedMeshesRegistered(world);
-                selectedEntity        = InvalidEntityId;
-                g_CurrentScenePath    = g_NextScenePath;
-                g_HasCurrentScenePath = true;
-                g_SceneDirty          = false;
+                    if (!sceneManager->LoadSceneFileRequest(loadAbs))
+                    {
+                        // 요청 실패: 에러 로그 및 팝업 표시
+                        const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+                        ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+                        
+                        g_SceneLoadErrorMsg = errorMsg;
+                        g_ShowSceneLoadError = true;
+                        g_RequestSceneLoad = false;
+                        return;
+                    }
+					// 성공 시 경로만 저장 (실제 로드는 엔진의 안전 지점에서 CommitPendingSceneChange로 처리됨)
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+				}
+				else
+				{
+					ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
+				}
+				selectedEntity = InvalidEntityId;
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
 
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
-            {
-                // 아무것도 하지 않고 씬 로드를 취소합니다.
-                ImGui::CloseCurrentPopup();
-            }
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel"))
+			{
+				// 아무것도 하지 않고 씬 로드를 취소합니다.
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
 
             ImGui::EndPopup();
         }
@@ -2433,7 +2679,21 @@ namespace Alice
                 }
 
                 changed |= ReflectionUI::RenderProperty(*transform, "scale", "Scale");
-                if (changed) g_SceneDirty = true;
+                changed |= ReflectionUI::RenderProperty(*transform, "enabled", "Enabled");
+                
+                // Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
+                if (changed)
+                {
+                    if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity))
+                    {
+                        rigidBody->teleport = true;
+                    }
+                    if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
+                    {
+                        cct->teleport = true;
+                    }
+                    g_SceneDirty = true;
+                }
             }
         }
     }
@@ -2586,6 +2846,32 @@ namespace Alice
                     } else if (typeName == "RectLightComponent") {
                         world.AddComponent<RectLightComponent>(_selectedEntity);
                         added = true;
+                    } else if (typeName == "EffectComponent") {
+                        world.AddComponent<EffectComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "TrailEffectComponent") {
+                        world.AddComponent<TrailEffectComponent>(_selectedEntity);
+                    } else if (typeName == "Phy_RigidBodyComponent") {
+                        world.AddComponent<Phy_RigidBodyComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_ColliderComponent") {
+                        world.AddComponent<Phy_ColliderComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_MeshColliderComponent") {
+                        world.AddComponent<Phy_MeshColliderComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_CCTComponent") {
+                        world.AddComponent<Phy_CCTComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_TerrainHeightFieldComponent") {
+                        world.AddComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_SettingsComponent") {
+                        world.AddComponent<Phy_SettingsComponent>(_selectedEntity);
+                        added = true;
+                    } else if (typeName == "Phy_JointComponent") {
+                        world.AddComponent<Phy_JointComponent>(_selectedEntity);
+                        added = true;
                     }
                     
                     if (added) {
@@ -2665,6 +2951,30 @@ namespace Alice
                 DrawEngineComponent("RectLightComponent",
                     world.GetComponent<RectLightComponent>(_selectedEntity),
                     [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
+            } else if (typeName == "EffectComponent") {
+                DrawEngineComponent("EffectComponent",
+                    world.GetComponent<EffectComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<EffectComponent>(_selectedEntity); });
+            } else if (typeName == "TrailEffectComponent") {
+                DrawEngineComponent("TrailEffectComponent",
+                    world.GetComponent<TrailEffectComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<TrailEffectComponent>(_selectedEntity); });
+            } else if (typeName == "Phy_RigidBodyComponent") {
+                DrawEngineComponent("Phy_RigidBodyComponent",
+                    world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
+            } else if (typeName == "Phy_ColliderComponent") {
+                DrawInspectorCollider(world, _selectedEntity);
+            } else if (typeName == "Phy_MeshColliderComponent") {
+                DrawInspectorMeshCollider(world, _selectedEntity);
+            } else if (typeName == "Phy_CCTComponent") {
+                DrawInspectorCharacterController(world, _selectedEntity);
+            } else if (typeName == "Phy_TerrainHeightFieldComponent") {
+                DrawInspectorTerrainHeightField(world, _selectedEntity);
+            } else if (typeName == "Phy_SettingsComponent") {
+                DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
+            } else if (typeName == "Phy_JointComponent") {
+                DrawInspectorJoint(world, _selectedEntity);
             }
             // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
         }
@@ -2811,9 +3121,27 @@ namespace Alice
             bool changed = false;
             changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter);
 
-            ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty()
-                ? "None"
-                : mat->albedoTexturePath.c_str());
+            const char* shadingItems[] = {
+                "Global",
+                "Lambert",
+                "Phong",
+                "Blinn-Phong",
+                "Toon",
+                "PBR",
+                "ToonPBR",
+                "OnlyTextureWithOutline"
+            };
+            int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
+            shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
+            if (ImGui::Combo("Shading", &shadingIndex, shadingItems, (int)std::size(shadingItems)))
+            {
+                mat->shadingMode = shadingIndex - 1;
+                changed = true;
+            }
+
+            ImGui::Separator();
+
+            ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty() ? "None" : mat->albedoTexturePath.c_str());
             if (ImGui::Button("Browse...")) {
                 wchar_t buf[MAX_PATH] = {};
                 OPENFILENAMEW ofn = { sizeof(ofn) };
@@ -2903,6 +3231,1291 @@ namespace Alice
                     world.RemoveComponent<RectLightComponent>(_selectedEntity);
                     g_SceneDirty = true;
                     return;
+                }
+
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    bool EditorCore::DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
+    {
+        bool changed = false;
+        ImGui::Text("%s", label);
+        ImGui::Indent();
+        
+        // 최대 32개 레이어를 2열로 표시
+        for (int i = 0; i < 32; i++)
+        {
+            bool bit = (mask & (1u << i)) != 0;
+            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+            std::string checkboxLabel = layerName + "##" + label + std::to_string(i);
+            
+            if (ImGui::Checkbox(checkboxLabel.c_str(), &bit))
+            {
+                if (bit)
+                    mask |= (1u << i);
+                else
+                    mask &= ~(1u << i);
+                changed = true;
+            }
+            
+            // 2열로 배치
+            if ((i + 1) % 2 == 0)
+                ImGui::SameLine();
+        }
+        
+        ImGui::Unindent();
+        return changed;
+    }
+
+    bool EditorCore::DrawLayerMaskChipEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
+    {
+        bool changed = false;
+        ImGui::Text("%s", label);
+        ImGui::Indent();
+        
+        // 현재 선택된 레이어들을 칩으로 표시
+        bool hasAnyLayers = false;
+        for (int i = 0; i < 32; ++i)
+        {
+            if ((mask & (1u << i)) != 0)
+            {
+                hasAnyLayers = true;
+                
+                // 레이어 이름
+                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                
+                // 칩 스타일 버튼 (레이어 이름) - 클릭하면 토글
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.7f, 1.0f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                
+                std::string chipLabel = layerName + "##" + label + "_chip_" + std::to_string(i);
+                if (ImGui::Button(chipLabel.c_str()))
+                {
+                    mask &= ~(1u << i); // 토글: 제거
+                    changed = true;
+                }
+                
+                ImGui::PopStyleColor(3);
+                
+                // 다음 줄로 넘어가기 위해
+                ImGui::SameLine(0.0f, 4.0f);
+            }
+        }
+        
+        // 줄바꿈이 필요하면
+        if (hasAnyLayers)
+        {
+            ImGui::NewLine();
+        }
+        
+        // + 버튼 (레이어 추가)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
+        
+        std::string addButtonLabel = "+##" + std::string(label) + "_add";
+        if (ImGui::SmallButton(addButtonLabel.c_str()))
+        {
+            ImGui::OpenPopup((std::string("AddLayer##") + label).c_str());
+        }
+        
+        ImGui::PopStyleColor(3);
+        
+        // 팝업: 레이어 선택 (선택되지 않은 레이어만 표시)
+        if (ImGui::BeginPopup((std::string("AddLayer##") + label).c_str()))
+        {
+            ImGui::Text("Add Layer");
+            ImGui::Separator();
+            
+            bool foundAny = false;
+            for (int i = 0; i < 32; ++i)
+            {
+                if ((mask & (1u << i)) == 0) // 선택되지 않은 레이어만 표시
+                {
+                    foundAny = true;
+                    std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                    if (ImGui::Selectable(layerName.c_str()))
+                    {
+                        mask |= (1u << i);
+                        changed = true;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+            }
+            
+            if (!foundAny)
+            {
+                ImGui::TextDisabled("All layers are selected");
+            }
+            
+            ImGui::EndPopup();
+        }
+        
+        ImGui::Unindent();
+        return changed;
+    }
+
+    bool EditorCore::DrawIgnoreLayersChipEditor(const char* label, uint32_t& ignoreLayers, const std::array<std::string, 32>& layerNames)
+    {
+        bool changed = false;
+        ImGui::Text("%s", label);
+        ImGui::Indent();
+        
+        // 현재 선택된 레이어들을 칩으로 표시
+        bool hasAnyLayers = false;
+        for (int i = 0; i < 32; ++i)
+        {
+            if ((ignoreLayers & (1u << i)) != 0)
+            {
+                hasAnyLayers = true;
+                
+                // 레이어 이름
+                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                
+                // 칩 스타일 버튼 (레이어 이름) - 클릭해도 아무 일도 안 일어남 (표시만)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.6f, 0.9f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                
+                std::string chipLabel = layerName + "##" + label + "_chip_" + std::to_string(i);
+                ImGui::Button(chipLabel.c_str()); // 버튼으로 표시만 (클릭 비활성화)
+                
+                ImGui::PopStyleColor(3);
+                
+                ImGui::SameLine(0.0f, 4.0f);
+                
+                // [x] 버튼 (제거용)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+                
+                std::string removeLabel = std::string(" [x]##") + label + "_remove_" + std::to_string(i);
+                if (ImGui::SmallButton(removeLabel.c_str()))
+                {
+                    ignoreLayers &= ~(1u << i);
+                    changed = true;
+                }
+                
+                ImGui::PopStyleColor(3);
+                
+                // 다음 줄로 넘어가기 위해
+                ImGui::SameLine(0.0f, 0.0f);
+            }
+        }
+        
+        // 줄바꿈이 필요하면
+        if (hasAnyLayers)
+        {
+            ImGui::NewLine();
+        }
+        
+        // + 버튼 (레이어 추가)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
+        
+        std::string addButtonLabel = "+##" + std::string(label) + "_add";
+        if (ImGui::SmallButton(addButtonLabel.c_str()))
+        {
+            ImGui::OpenPopup((std::string("AddIgnoreLayer##") + label).c_str());
+        }
+        
+        ImGui::PopStyleColor(3);
+        
+        // 팝업: 레이어 선택
+        if (ImGui::BeginPopup((std::string("AddIgnoreLayer##") + label).c_str()))
+        {
+            ImGui::Text("Select layer to ignore:");
+            ImGui::Separator();
+            
+            for (int i = 0; i < 32; ++i)
+            {
+                // 이미 추가된 레이어는 표시하지 않음
+                if ((ignoreLayers & (1u << i)) != 0)
+                    continue;
+                
+                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                std::string selectLabel = layerName + "##" + label + "_select_" + std::to_string(i);
+                
+                if (ImGui::Selectable(selectLabel.c_str()))
+                {
+                    ignoreLayers |= (1u << i);
+                    changed = true;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            
+            ImGui::EndPopup();
+        }
+        
+        ImGui::Unindent();
+        return changed;
+    }
+
+    void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* collider = world.GetComponent<Phy_ColliderComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_ColliderComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // Collider Type 선택
+                ImGui::Text("Collider Type");
+                ImGui::Indent();
+                {
+                    const char* typeLabels[] = { "Box", "Sphere", "Capsule" };
+                    int typeIndex = static_cast<int>(collider->type);
+                    if (ImGui::Combo("##ColliderType", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                    {
+                        collider->type = static_cast<ColliderType>(typeIndex);
+                        changed = true;
+                    }
+                }
+                ImGui::Unindent();
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
+                    // type, layerBits, collideMask, queryMask는 커스텀 UI로 처리
+                    return name != "type" && name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "physicsActorHandle";
+                });
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
+                    {
+                        if ((collider->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && collider->layerBits != 0)
+                    {
+                        collider->layerBits = 0;
+                        changed = true;
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            collider->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                collider->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+                
+                // Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Collide Mask", collider->collideMask, layerNames);
+                
+                // Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Query Mask", collider->queryMask, layerNames);
+                
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", collider->ignoreLayers, layerNames);
+                ImGui::Unindent();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorMeshCollider(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* meshCollider = world.GetComponent<Phy_MeshColliderComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Mesh Collider", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_MeshColliderComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                // Mesh Collider Type 선택
+                ImGui::Text("Mesh Collider Type");
+                ImGui::Indent();
+                {
+                    const char* typeLabels[] = { "Triangle", "Convex" };
+                    int typeIndex = static_cast<int>(meshCollider->type);
+                    if (ImGui::Combo("##MeshColliderType", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                    {
+                        meshCollider->type = static_cast<MeshColliderType>(typeIndex);
+                        changed = true;
+                    }
+                }
+                ImGui::Unindent();
+
+                changed |= ReflectionUI::RenderInspector(*meshCollider, [](const std::string& name) {
+                    return name != "type" && name != "layerBits" && name != "collideMask" && name != "queryMask" &&
+                           name != "ignoreLayers" && name != "physicsActorHandle" &&
+                           name != "flipNormals" && name != "doubleSidedQueries" && name != "validate" &&
+                           name != "shiftVertices" && name != "vertexLimit";
+                });
+
+                ImGui::Separator();
+                ImGui::TextUnformatted("Mesh Options");
+
+                // Mesh Asset 선택 (ComboBox로 이미 로드된 메시 목록 표시)
+                ImGui::Text("Mesh Asset");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 메시 경로
+                    std::string currentPath = meshCollider->meshAssetPath;
+                    
+                    // 동일 엔티티의 SkinnedMeshComponent 확인
+                    const auto* skinned = world.GetComponent<SkinnedMeshComponent>(_selectedEntity);
+                    bool useSkinnedMesh = currentPath.empty() && skinned && !skinned->meshAssetPath.empty();
+                    
+                    if (useSkinnedMesh)
+                        currentPath = skinned->meshAssetPath;
+
+                    // Preview 텍스트
+                    std::string preview = "Auto (Use SkinnedMeshComponent)";
+                    if (!currentPath.empty())
+                        preview = currentPath;
+
+                    if (ImGui::BeginCombo("##MeshAssetPath", preview.c_str()))
+                    {
+                        // Auto 옵션 (SkinnedMeshComponent 사용)
+                        bool isAuto = meshCollider->meshAssetPath.empty();
+                        if (ImGui::Selectable("Auto (Use SkinnedMeshComponent)", isAuto))
+                        {
+                            meshCollider->meshAssetPath.clear();
+                            changed = true;
+                        }
+                        if (isAuto)
+                            ImGui::SetItemDefaultFocus();
+
+                        // 이미 로드된 메시 목록 표시 (SkinnedMeshRegistry에서)
+                        if (m_skinnedRegistry)
+                        {
+                            // SkinnedMeshComponent가 있는 모든 엔티티를 순회하여 등록된 메시 수집
+                            std::set<std::string> registeredMeshes;
+                            auto skinnedComps = world.GetComponents<SkinnedMeshComponent>();
+                            for (const auto& [eid, comp] : skinnedComps)
+                            {
+                                if (!comp.meshAssetPath.empty())
+                                {
+                                    // 레지스트리에 실제로 등록되어 있는지 확인
+                                    if (m_skinnedRegistry->Find(comp.meshAssetPath))
+                                        registeredMeshes.insert(comp.meshAssetPath);
+                                }
+                            }
+
+                            // 등록된 메시 목록 표시
+                            for (const auto& meshPath : registeredMeshes)
+                            {
+                                bool isSelected = (currentPath == meshPath);
+                                if (ImGui::Selectable(meshPath.c_str(), isSelected))
+                                {
+                                    meshCollider->meshAssetPath = meshPath;
+                                    changed = true;
+                                }
+                                if (isSelected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        else
+                        {
+                            ImGui::TextDisabled("(SkinnedMeshRegistry not available)");
+                        }
+
+                        ImGui::EndCombo();
+                    }
+
+                    // 현재 상태 표시
+                    if (meshCollider->meshAssetPath.empty())
+                    {
+                        if (skinned && !skinned->meshAssetPath.empty())
+                        {
+                            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 
+                                "Using: %s", skinned->meshAssetPath.c_str());
+                        }
+                        else
+                        {
+                            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), 
+                                "No SkinnedMeshComponent found on this entity");
+                        }
+                    }
+                }
+                ImGui::Unindent();
+
+                if (meshCollider->type == MeshColliderType::Triangle)
+                {
+                    changed |= ImGui::Checkbox("Flip Normals", &meshCollider->flipNormals);
+                    changed |= ImGui::Checkbox("Double-Sided Queries", &meshCollider->doubleSidedQueries);
+                    changed |= ImGui::Checkbox("Validate (Debug)", &meshCollider->validate);
+                }
+                else
+                {
+                    changed |= ImGui::Checkbox("Shift Vertices", &meshCollider->shiftVertices);
+                    changed |= ImGui::InputScalar("Vertex Limit", ImGuiDataType_U32, &meshCollider->vertexLimit);
+                    changed |= ImGui::Checkbox("Validate (Debug)", &meshCollider->validate);
+                }
+
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i)
+                    {
+                        if ((meshCollider->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+
+                    if (currentLayer == -1 && meshCollider->layerBits != 0)
+                    {
+                        meshCollider->layerBits = 0;
+                        changed = true;
+                    }
+
+                    std::string preview = (currentLayer >= 0) ?
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) :
+                        "None";
+
+                    if (ImGui::BeginCombo("##MeshColliderLayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            meshCollider->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i)
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                meshCollider->layerBits = (1u << i);
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+
+                changed |= DrawLayerMaskChipEditor("Collide Mask", meshCollider->collideMask, layerNames);
+                changed |= DrawLayerMaskChipEditor("Query Mask", meshCollider->queryMask, layerNames);
+
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("MeshIgnoreLayers", meshCollider->ignoreLayers, layerNames);
+                ImGui::Unindent();
+
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Character Controller", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_CCTComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*cct, [](const std::string& name) {
+                    // layerBits, collideMask, queryMask는 커스텀 UI로 처리
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && name != "controllerHandle";
+                });
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
+                    {
+                        if ((cct->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && cct->layerBits != 0)
+                    {
+                        cct->layerBits = 0;
+                        changed = true;
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            cct->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                cct->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+                
+                // Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Collide Mask", cct->collideMask, layerNames);
+                
+                // Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Query Mask", cct->queryMask, layerNames);
+                
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", cct->ignoreLayers, layerNames);
+                ImGui::Unindent();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorPhysicsSceneSettings(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* settings = world.GetComponent<Phy_SettingsComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Physics Scene Settings", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_SettingsComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*settings, [](const std::string& name) {
+                    // layerCollideMatrix, layerQueryMatrix, layerNames는 커스텀 UI로 처리
+                    return name != "layerCollideMatrix" && name != "layerQueryMatrix" && name != "layerNames" &&
+                           name != "enableGroundPlane" && name != "groundStaticFriction" && name != "groundDynamicFriction" &&
+                           name != "groundRestitution" && name != "groundLayerBits" && name != "groundCollideMask" &&
+                           name != "groundQueryMask" && name != "groundIgnoreLayers" && name != "groundIsTrigger";
+                });
+
+                ImGui::Separator();
+                ImGui::Text("Ground Plane (y=0)");
+                changed |= ImGui::Checkbox("Enable Ground Plane", &settings->enableGroundPlane);
+
+                if (settings->enableGroundPlane)
+                {
+                    changed |= ImGui::DragFloat("Static Friction", &settings->groundStaticFriction, 0.01f, 0.0f, 10.0f);
+                    changed |= ImGui::DragFloat("Dynamic Friction", &settings->groundDynamicFriction, 0.01f, 0.0f, 10.0f);
+                    changed |= ImGui::DragFloat("Restitution", &settings->groundRestitution, 0.01f, 0.0f, 1.0f);
+                    changed |= ImGui::Checkbox("Trigger", &settings->groundIsTrigger);
+
+                    std::array<std::string, 32> layerNames = settings->layerNames;
+
+                    ImGui::Text("Layer");
+                    ImGui::Indent();
+                    {
+                        int currentLayer = -1;
+                        for (int i = 0; i < 16; ++i)
+                        {
+                            if ((settings->groundLayerBits & (1u << i)) != 0)
+                            {
+                                currentLayer = i;
+                                break;
+                            }
+                        }
+
+                        if (currentLayer == -1 && settings->groundLayerBits != 0)
+                        {
+                            settings->groundLayerBits = 0;
+                            changed = true;
+                        }
+
+                        std::string preview = (currentLayer >= 0) ?
+                            (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) :
+                            "None";
+
+                        if (ImGui::BeginCombo("##GroundLayerBits", preview.c_str()))
+                        {
+                            if (ImGui::Selectable("None", currentLayer == -1))
+                            {
+                                settings->groundLayerBits = 0;
+                                changed = true;
+                            }
+                            for (int i = 0; i < 16; ++i)
+                            {
+                                std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                                bool isSelected = (currentLayer == i);
+                                if (ImGui::Selectable(layerName.c_str(), isSelected))
+                                {
+                                    settings->groundLayerBits = (1u << i);
+                                    changed = true;
+                                }
+                                if (isSelected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                            ImGui::EndCombo();
+                        }
+                    }
+                    ImGui::Unindent();
+
+                    changed |= DrawLayerMaskChipEditor("Ground Collide Mask", settings->groundCollideMask, layerNames);
+                    changed |= DrawLayerMaskChipEditor("Ground Query Mask", settings->groundQueryMask, layerNames);
+
+                    ImGui::Text("Ground Ignore Layers");
+                    ImGui::Indent();
+                    changed |= DrawIgnoreLayersChipEditor("GroundIgnoreLayers", settings->groundIgnoreLayers, layerNames);
+                    ImGui::Unindent();
+                }
+                
+                ImGui::Separator();
+                ImGui::Text("Layer Collision Matrix");
+                ImGui::Text("(Collide Mask: Check = Collision enabled between layers)");
+                
+                // 레이어 충돌 매트릭스 편집 (최대 16개 레이어만 표시)
+                ImGui::BeginChild("LayerCollideMatrix", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
+                
+                // 행 단위로 표시: "00 | 00 [ ] 01 [ ] 02 [ ] 03 [ ]"
+                for (int i = 0; i < 16; ++i)
+                {
+                    // 행 번호 표시 (2자리로 포맷팅)
+                    char rowLabel[8];
+                    snprintf(rowLabel, sizeof(rowLabel), "%02d |", i);
+                    ImGui::Text("%s", rowLabel);
+                    ImGui::SameLine();
+                    
+                    // 해당 행의 모든 열에 대한 체크박스 표시
+                    for (int j = 0; j < 16; ++j)
+                    {
+                        bool collision = settings->layerCollideMatrix[i][j];
+                        char colLabel[8];
+                        snprintf(colLabel, sizeof(colLabel), "%02d", j);
+                        ImGui::PushID(i * 16 + j);
+                        if (ImGui::Checkbox(colLabel, &collision))
+                        {
+                            settings->layerCollideMatrix[i][j] = collision;
+                            settings->layerCollideMatrix[j][i] = collision; // 충돌은 대칭 (필수)
+                            settings->filterRevision++; // 필터 변경 감지용
+                            changed = true;
+                        }
+                        ImGui::PopID();
+                        ImGui::SameLine();
+                    }
+                    ImGui::NewLine();
+                }
+                
+                ImGui::EndChild();
+                
+                ImGui::Separator();
+                ImGui::Text("Layer Query Matrix");
+                ImGui::Text("(Query Mask: Check = Query enabled between layers)");
+                
+                // 레이어 쿼리 매트릭스 편집 (최대 16개 레이어만 표시)
+                ImGui::BeginChild("LayerQueryMatrix", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar);
+                
+                // 행 단위로 표시: "00 | 00 [ ] 01 [ ] 02 [ ] 03 [ ]"
+                for (int i = 0; i < 16; ++i)
+                {
+                    // 행 번호 표시 (2자리로 포맷팅)
+                    char rowLabel[8];
+                    snprintf(rowLabel, sizeof(rowLabel), "%02d |", i);
+                    ImGui::Text("%s", rowLabel);
+                    ImGui::SameLine();
+                    
+                    // 해당 행의 모든 열에 대한 체크박스 표시
+                    for (int j = 0; j < 16; ++j)
+                    {
+                        bool query = settings->layerQueryMatrix[i][j];
+                        char colLabel[8];
+                        snprintf(colLabel, sizeof(colLabel), "%02d", j);
+                        ImGui::PushID(10000 + i * 16 + j);
+                        if (ImGui::Checkbox(colLabel, &query))
+                        {
+                            settings->layerQueryMatrix[i][j] = query;
+                            // 쿼리는 비대칭이 유용한 경우가 많으므로 대칭 적용 제거
+                            // (예: 카메라 레이는 특정 레이어만 보고, AI는 또 다르게 봄)
+                            settings->filterRevision++; // 필터 변경 감지용
+                            changed = true;
+                        }
+                        ImGui::PopID();
+                        ImGui::SameLine();
+                    }
+                    ImGui::NewLine();
+                }
+                
+                ImGui::EndChild();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* terrain = world.GetComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Terrain Height Field", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+                
+                // 기본 프로퍼티는 ReflectionUI로
+                changed |= ReflectionUI::RenderInspector(*terrain, [](const std::string& name) {
+                    // layerBits, collideMask, queryMask, heightSamples, physicsActorHandle는 커스텀 UI로 처리
+                    return name != "layerBits" && name != "collideMask" && name != "queryMask" && 
+                           name != "heightSamples" && name != "physicsActorHandle";
+                });
+                
+                // HeightSamples 상태 표시 및 생성 버튼
+                ImGui::Separator();
+                ImGui::Text("Height Samples");
+                ImGui::Indent();
+                {
+                    const size_t expectedSamples = static_cast<size_t>(terrain->numRows) * static_cast<size_t>(terrain->numCols);
+                    const bool isValid = (terrain->numRows >= 2 && terrain->numCols >= 2) && 
+                                         (terrain->heightSamples.size() == expectedSamples);
+                    
+                    if (terrain->heightSamples.empty())
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Status: Empty (requires data)");
+                    }
+                    else if (!isValid)
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 
+                            "Status: Invalid (size: %zu, expected: %zu)", 
+                            terrain->heightSamples.size(), expectedSamples);
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 
+                            "Status: Valid (size: %zu)", 
+                            terrain->heightSamples.size());
+                    }
+                    
+                    ImGui::Text("Grid: %u x %u (total: %zu samples)", 
+                        terrain->numRows, terrain->numCols, expectedSamples);
+                    
+                    if (terrain->numRows >= 2 && terrain->numCols >= 2)
+                    {
+                        if (ImGui::Button("Generate Flat (0.0)"))
+                        {
+                            terrain->heightSamples.resize(expectedSamples, 0.0f);
+                            changed = true;
+                            g_SceneDirty = true;
+                        }
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(?)");
+                        if (ImGui::IsItemHovered())
+                        {
+                            ImGui::BeginTooltip();
+                            ImGui::Text("Generates a flat terrain with all heights set to 0.0");
+                            ImGui::EndTooltip();
+                        }
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Set numRows and numCols (>= 2) to enable generation");
+                    }
+                }
+                ImGui::Unindent();
+                
+                // 레이어 마스크 편집
+                ImGui::Separator();
+                ImGui::Text("Layer Settings");
+                
+                // Phy_SettingsComponent에서 레이어 이름 가져오기
+                std::array<std::string, 32> layerNames;
+                for (int i = 0; i < 32; ++i)
+                    layerNames[i] = "Layer " + std::to_string(i);
+                
+                const auto& settingsMap = world.GetComponents<Phy_SettingsComponent>();
+                if (!settingsMap.empty())
+                {
+                    const auto& settings = settingsMap.begin()->second;
+                    layerNames = settings.layerNames;
+                }
+                
+                // Layer Bits (이 오브젝트가 속한 레이어) - 1개만 선택 가능 (16개 레이어만 지원)
+                ImGui::Text("Layer");
+                ImGui::Indent();
+                {
+                    // 현재 선택된 레이어 찾기
+                    int currentLayer = -1;
+                    for (int i = 0; i < 16; ++i) // 16개만 확인
+                    {
+                        if ((terrain->layerBits & (1u << i)) != 0)
+                        {
+                            currentLayer = i;
+                            break;
+                        }
+                    }
+                    
+                    // 16개 이상의 레이어가 선택되어 있으면 초기화
+                    if (currentLayer == -1 && terrain->layerBits != 0)
+                    {
+                        terrain->layerBits = 0;
+                        changed = true;
+                    }
+                    
+                    // ComboBox로 레이어 선택
+                    std::string preview = (currentLayer >= 0) ? 
+                        (layerNames[currentLayer].empty() ? ("Layer " + std::to_string(currentLayer)) : layerNames[currentLayer]) : 
+                        "None";
+                    
+                    if (ImGui::BeginCombo("##LayerBits", preview.c_str()))
+                    {
+                        if (ImGui::Selectable("None", currentLayer == -1))
+                        {
+                            terrain->layerBits = 0;
+                            changed = true;
+                        }
+                        for (int i = 0; i < 16; ++i) // 16개만 표시
+                        {
+                            std::string layerName = layerNames[i].empty() ? ("Layer " + std::to_string(i)) : layerNames[i];
+                            bool isSelected = (currentLayer == i);
+                            if (ImGui::Selectable(layerName.c_str(), isSelected))
+                            {
+                                terrain->layerBits = (1u << i); // 단일 레이어만 설정
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+                
+                // Collide Mask (어떤 레이어와 충돌할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Collide Mask", terrain->collideMask, layerNames);
+                
+                // Query Mask (어떤 레이어를 쿼리할지) - 칩 UI
+                changed |= DrawLayerMaskChipEditor("Query Mask", terrain->queryMask, layerNames);
+                
+                // Ignore Layers (칩 UI)
+                ImGui::Text("Ignore Layers");
+                ImGui::Indent();
+                changed |= DrawIgnoreLayersChipEditor("IgnoreLayers", terrain->ignoreLayers, layerNames);
+                ImGui::Unindent();
+                
+                if (changed) g_SceneDirty = true;
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorJoint(World& world, const EntityId& _selectedEntity)
+    {
+        if (auto* joint = world.GetComponent<Phy_JointComponent>(_selectedEntity))
+        {
+            if (ImGui::CollapsingHeader("Joint", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+
+                if (ImGui::Button("Remove"))
+                {
+                    world.RemoveComponent<Phy_JointComponent>(_selectedEntity);
+                    g_SceneDirty = true;
+                    return;
+                }
+
+                const char* typeLabels[] = { "Fixed", "Revolute", "Prismatic", "Distance", "Spherical", "D6" };
+                int typeIndex = static_cast<int>(joint->type);
+                if (ImGui::Combo("Type", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+                {
+                    joint->type = static_cast<Phy_JointType>(typeIndex);
+                    changed = true;
+                }
+
+                // Target Entity 선택 (ComboBox)
+                ImGui::Text("Target Entity");
+                ImGui::Indent();
+                {
+                    // 현재 타겟 엔티티 찾기
+                    EntityId currentTargetId = Alice::InvalidEntityId;
+                    std::string currentTargetName = joint->targetName;
+                    if (!currentTargetName.empty())
+                    {
+                        GameObject targetGo = world.FindGameObject(currentTargetName);
+                        if (targetGo.IsValid())
+                            currentTargetId = targetGo.id();
+                    }
+
+                    // Preview 텍스트 생성
+                    std::string preview = "None";
+                    if (currentTargetId != Alice::InvalidEntityId)
+                    {
+                        std::string name = world.GetEntityName(currentTargetId);
+                        if (name.empty())
+                            name = "Entity " + std::to_string((uint32_t)currentTargetId);
+                        preview = name;
+                    }
+                    else if (!currentTargetName.empty())
+                    {
+                        preview = currentTargetName + " (not found)";
+                    }
+
+                    if (ImGui::BeginCombo("##JointTarget", preview.c_str()))
+                    {
+                        // None 옵션
+                        if (ImGui::Selectable("None", currentTargetId == Alice::InvalidEntityId))
+                        {
+                            joint->targetName.clear();
+                            changed = true;
+                        }
+                        if (currentTargetId == Alice::InvalidEntityId)
+                            ImGui::SetItemDefaultFocus();
+
+                        // 모든 엔티티 나열
+                        auto transforms = world.GetComponents<TransformComponent>();
+                        for (const auto& [entityId, transform] : transforms)
+                        {
+                            std::string name = world.GetEntityName(entityId);
+                            if (name.empty())
+                                name = "Entity " + std::to_string((uint32_t)entityId);
+
+                            bool isSelected = (currentTargetId == entityId);
+                            if (ImGui::Selectable(name.c_str(), isSelected))
+                            {
+                                joint->targetName = name;
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+
+                        ImGui::EndCombo();
+                    }
+                }
+                ImGui::Unindent();
+
+                ImGui::Separator();
+                ImGui::Text("Common");
+                changed |= ImGui::Checkbox("Collide Connected", &joint->collideConnected);
+                changed |= ImGui::DragFloat("Break Force", &joint->breakForce, 1.0f, 0.0f);
+                changed |= ImGui::DragFloat("Break Torque", &joint->breakTorque, 1.0f, 0.0f);
+
+                auto drawFrame = [&](const char* label, Phy_JointFrame& frame) -> bool
+                {
+                    bool frameChanged = false;
+                    if (ImGui::TreeNode(label))
+                    {
+                        frameChanged |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
+                        frameChanged |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    return frameChanged;
+                };
+
+                changed |= drawFrame("Frame A", joint->frameA);
+                changed |= drawFrame("Frame B", joint->frameB);
+
+                ImGui::Separator();
+                switch (joint->type)
+                {
+                case Phy_JointType::Fixed:
+                    ImGui::Text("Fixed Joint: no extra settings");
+                    break;
+                case Phy_JointType::Revolute:
+                {
+                    if (ImGui::TreeNode("Revolute Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->revolute.enableLimit);
+                        changed |= ImGui::DragFloat("Lower Limit", &joint->revolute.lowerLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Limit", &joint->revolute.upperLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->revolute.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->revolute.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->revolute.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->revolute.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    if (ImGui::TreeNode("Revolute Drive"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Drive", &joint->revolute.enableDrive);
+                        changed |= ImGui::DragFloat("Drive Velocity", &joint->revolute.driveVelocity, 0.01f);
+                        changed |= ImGui::DragFloat("Force Limit", &joint->revolute.driveForceLimit, 1.0f, 0.0f);
+                        changed |= ImGui::Checkbox("Free Spin", &joint->revolute.driveFreeSpin);
+                        changed |= ImGui::Checkbox("Drive Limits Are Forces", &joint->revolute.driveLimitsAreForces);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Prismatic:
+                {
+                    if (ImGui::TreeNode("Prismatic Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->prismatic.enableLimit);
+                        changed |= ImGui::DragFloat("Lower Limit", &joint->prismatic.lowerLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Limit", &joint->prismatic.upperLimit, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->prismatic.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->prismatic.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->prismatic.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->prismatic.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Distance:
+                {
+                    if (ImGui::TreeNode("Distance"))
+                    {
+                        changed |= ImGui::DragFloat("Min Distance", &joint->distance.minDistance, 0.01f);
+                        changed |= ImGui::DragFloat("Max Distance", &joint->distance.maxDistance, 0.01f);
+                        changed |= ImGui::DragFloat("Tolerance", &joint->distance.tolerance, 0.01f);
+                        changed |= ImGui::Checkbox("Enable Min", &joint->distance.enableMinDistance);
+                        changed |= ImGui::Checkbox("Enable Max", &joint->distance.enableMaxDistance);
+                        changed |= ImGui::Checkbox("Enable Spring", &joint->distance.enableSpring);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->distance.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->distance.damping, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::Spherical:
+                {
+                    if (ImGui::TreeNode("Spherical Limit"))
+                    {
+                        changed |= ImGui::Checkbox("Enable Limit", &joint->spherical.enableLimit);
+                        changed |= ImGui::DragFloat("Y Limit Angle", &joint->spherical.yLimitAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Z Limit Angle", &joint->spherical.zLimitAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness", &joint->spherical.limitStiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping", &joint->spherical.limitDamping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution", &joint->spherical.limitRestitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold", &joint->spherical.limitBounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case Phy_JointType::D6:
+                {
+                    const char* motionLabels[] = { "Locked", "Limited", "Free" };
+                    auto drawMotion = [&](const char* label, Phy_D6Motion& m)
+                    {
+                        int idx = static_cast<int>(m);
+                        if (ImGui::Combo(label, &idx, motionLabels, IM_ARRAYSIZE(motionLabels)))
+                        {
+                            m = static_cast<Phy_D6Motion>(idx);
+                            changed = true;
+                        }
+                    };
+
+                    if (ImGui::TreeNode("Motions"))
+                    {
+                        drawMotion("Motion X", joint->d6.motionX);
+                        drawMotion("Motion Y", joint->d6.motionY);
+                        drawMotion("Motion Z", joint->d6.motionZ);
+                        drawMotion("Motion Twist", joint->d6.motionTwist);
+                        drawMotion("Motion Swing1", joint->d6.motionSwing1);
+                        drawMotion("Motion Swing2", joint->d6.motionSwing2);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Linear Limits"))
+                    {
+                        ImGui::Text("X");
+                        changed |= ImGui::DragFloat("Lower X", &joint->d6.linearLimitX.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper X", &joint->d6.linearLimitX.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness X", &joint->d6.linearLimitX.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping X", &joint->d6.linearLimitX.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution X", &joint->d6.linearLimitX.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold X", &joint->d6.linearLimitX.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Y");
+                        changed |= ImGui::DragFloat("Lower Y", &joint->d6.linearLimitY.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Y", &joint->d6.linearLimitY.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Y", &joint->d6.linearLimitY.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Y", &joint->d6.linearLimitY.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Y", &joint->d6.linearLimitY.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Y", &joint->d6.linearLimitY.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Z");
+                        changed |= ImGui::DragFloat("Lower Z", &joint->d6.linearLimitZ.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Z", &joint->d6.linearLimitZ.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Z", &joint->d6.linearLimitZ.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Z", &joint->d6.linearLimitZ.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Z", &joint->d6.linearLimitZ.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Z", &joint->d6.linearLimitZ.bounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Angular Limits"))
+                    {
+                        ImGui::Text("Twist");
+                        changed |= ImGui::DragFloat("Lower Twist", &joint->d6.twistLimit.lower, 0.01f);
+                        changed |= ImGui::DragFloat("Upper Twist", &joint->d6.twistLimit.upper, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Twist", &joint->d6.twistLimit.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Twist", &joint->d6.twistLimit.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Twist", &joint->d6.twistLimit.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Twist", &joint->d6.twistLimit.bounceThreshold, 0.01f);
+                        ImGui::Separator();
+
+                        ImGui::Text("Swing");
+                        changed |= ImGui::DragFloat("Swing Y", &joint->d6.swingLimit.yAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Swing Z", &joint->d6.swingLimit.zAngle, 0.01f);
+                        changed |= ImGui::DragFloat("Stiffness Swing", &joint->d6.swingLimit.stiffness, 0.01f);
+                        changed |= ImGui::DragFloat("Damping Swing", &joint->d6.swingLimit.damping, 0.01f);
+                        changed |= ImGui::DragFloat("Restitution Swing", &joint->d6.swingLimit.restitution, 0.01f);
+                        changed |= ImGui::DragFloat("Bounce Threshold Swing", &joint->d6.swingLimit.bounceThreshold, 0.01f);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Drives"))
+                    {
+                        changed |= ImGui::Checkbox("Drive Limits Are Forces", &joint->d6.driveLimitsAreForces);
+
+                        auto drawDrive = [&](const char* label, Phy_D6JointDriveSettings& d)
+                        {
+                            if (ImGui::TreeNode(label))
+                            {
+                                changed |= ImGui::DragFloat("Stiffness", &d.stiffness, 0.01f);
+                                changed |= ImGui::DragFloat("Damping", &d.damping, 0.01f);
+                                changed |= ImGui::DragFloat("Force Limit", &d.forceLimit, 1.0f, 0.0f);
+                                changed |= ImGui::Checkbox("Acceleration", &d.isAcceleration);
+                                ImGui::TreePop();
+                            }
+                        };
+
+                        drawDrive("Drive X", joint->d6.driveX);
+                        drawDrive("Drive Y", joint->d6.driveY);
+                        drawDrive("Drive Z", joint->d6.driveZ);
+                        drawDrive("Drive Swing", joint->d6.driveSwing);
+                        drawDrive("Drive Twist", joint->d6.driveTwist);
+                        drawDrive("Drive Slerp", joint->d6.driveSlerp);
+                        ImGui::TreePop();
+                    }
+
+                    if (ImGui::TreeNode("Drive Target"))
+                    {
+                        changed |= drawFrame("Drive Pose", joint->d6.drivePose);
+                        changed |= ImGui::DragFloat3("Drive Linear Vel", &joint->d6.driveLinearVelocity.x, 0.01f);
+                        changed |= ImGui::DragFloat3("Drive Angular Vel", &joint->d6.driveAngularVelocity.x, 0.01f);
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
                 }
 
                 if (changed) g_SceneDirty = true;
@@ -3524,15 +5137,30 @@ namespace Alice
         g_SceneDirty = false;
     }
 
-    // 씬 로드
+    // 씬 로드 (레거시 함수 - 이제는 LoadSceneFileRequest 사용 권장)
     void EditorCore::LoadScene(World& world)
     {
-        ALICE_LOG_INFO("[Editor] Loading Scene: %s", g_NextScenePath.string().c_str());
+        // 이 함수는 더 이상 사용하지 않음. SceneManager::LoadSceneFileRequest을 사용해야 함.
+        // 하지만 호환성을 위해 남겨둠 (내부적으로는 즉시 로드)
+        ALICE_LOG_WARN("[Editor] LoadScene() is deprecated. Use SceneManager::LoadSceneFileRequest() instead.");
 
-        // 로드 실행
-        SceneFile::Load(world, m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+        const std::filesystem::path loadAbs = m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath;
+        
+        // 로드 실행 및 반환값 체크
+        if (!SceneFile::Load(world, loadAbs))
+        {
+            // 로드 실패: 에러 로그 및 팝업 표시
+            const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
+            ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+            
+            g_SceneLoadErrorMsg = errorMsg;
+            g_ShowSceneLoadError = true;
+            
+            // 후처리하지 않고 종료 (부분 로드 방지)
+            return;
+        }
 
-        // 후처리 및 상태 갱신
+        // 로드 성공: 후처리 및 상태 갱신
         EnsureSkinnedMeshesRegistered(world);
         g_CurrentScenePath = g_NextScenePath;
         g_HasCurrentScenePath = true;

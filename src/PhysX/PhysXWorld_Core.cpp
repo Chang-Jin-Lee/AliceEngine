@@ -8,10 +8,7 @@
 PhysXWorld::PhysXWorld(PhysXContext& inCtx, const Desc& desc)
 	: ctx(inCtx)
 {
-	// NOTE: Impl uses shared_from_this internally for callback owner.
-	// We create shared_ptr with a custom deleter that ensures proper init.
 	impl = std::shared_ptr<Impl>(new Impl(inCtx, desc));
-	// Repair callback owner now that we have the final shared_ptr.
 	impl->eventCb.owner = impl;
 }
 
@@ -36,14 +33,12 @@ void PhysXWorld::Step(float fixedDt)
 		impl->activeTransforms.clear();
 	}
 
+	// Keep the write lock held across simulate() -> fetchResults() so that no other
+	// thread can run queries/add/remove/release while the scene is simulating.
+	// This prevents race conditions during the simulation step.
 	{
 		SceneWriteLock wl(impl->scene, impl->enableSceneLocks);
 		impl->scene->simulate(fixedDt);
-	}
-
-	// fetch
-	{
-		SceneWriteLock wl(impl->scene, impl->enableSceneLocks);
 		impl->scene->fetchResults(true);
 	}
 

@@ -22,12 +22,19 @@ namespace Alice
         // roughness, metalness 클램핑 (RTTR로는 기본값 처리만 하므로 여기서 보정)
         outMaterial.roughness = std::clamp(outMaterial.roughness, 0.0f, 1.0f);
         outMaterial.metalness = std::clamp(outMaterial.metalness, 0.0f, 1.0f);
+        // 노말맵 강도는 0.0f 이상으로 제한
+        outMaterial.normalStrength = std::max(outMaterial.normalStrength, 0.0f);
+        // 아웃라인 두께는 음수 방지
+        outMaterial.outlineWidth = std::max(outMaterial.outlineWidth, 0.0f);
 
-        ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f tex=\"%s\"",
+        ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
             path.string().c_str(),
             outMaterial.color.x, outMaterial.color.y, outMaterial.color.z,
             outMaterial.roughness,
             outMaterial.metalness,
+            outMaterial.normalStrength,
+            outMaterial.outlineColor.x, outMaterial.outlineColor.y, outMaterial.outlineColor.z,
+            outMaterial.outlineWidth,
             outMaterial.albedoTexturePath.c_str());
 
         return result;
@@ -38,11 +45,14 @@ namespace Alice
         // RTTR 기반으로 자동 저장
         bool result = ReflectionSerializer::Save(path, material);
 
-        ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f tex=\"%s\"",
+        ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
             path.string().c_str(),
             material.color.x, material.color.y, material.color.z,
             material.roughness,
             material.metalness,
+            material.normalStrength,
+            material.outlineColor.x, material.outlineColor.y, material.outlineColor.z,
+            material.outlineWidth,
             material.albedoTexturePath.c_str());
 
         return result;
