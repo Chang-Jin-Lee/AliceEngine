@@ -418,6 +418,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+
+Resource/fbx/Alice3DGame/
+Resource/fbx/Rapi/
 *.mat
 *.alice
 Resource/Skybox/Bridge/bridgeBrdf.dds

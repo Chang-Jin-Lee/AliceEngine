@@ -18,6 +18,9 @@
 #include "Core/ReflectionUI.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/JsonRttr.h"
+#include "Components/AdvancedAnimationComponent.h"
+#include "Components/SkinnedAnimationComponent.h"
+#include "Components/SkinnedMeshComponent.h"
 #include <set>
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
@@ -1658,6 +1661,10 @@ namespace Alice
                 DrawInspectorTransform(world, selectedEntity);
                 ImGui::Separator();
 
+                // 1-1. Animation Status
+                DrawInspectorAnimationStatus(world, selectedEntity);
+                ImGui::Separator();
+
                 // 2. Scripts
                 ImGui::Text("Scripts");
                 DrawInspectorScripts(world, selectedEntity);
@@ -2687,6 +2694,61 @@ namespace Alice
                     }
                     g_SceneDirty = true;
                 }
+            }
+        }
+    }
+
+    void EditorCore::DrawInspectorAnimationStatus(World& world, const EntityId& _selectedEntity)
+    {
+        // 컴포넌트 존재 여부 확인
+        auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(_selectedEntity);
+        auto* stdAnim = world.GetComponent<SkinnedAnimationComponent>(_selectedEntity);
+        auto* mesh    = world.GetComponent<SkinnedMeshComponent>(_selectedEntity);
+
+        // 표시할 내용이 없으면 리턴
+        if (!mesh && !advAnim && !stdAnim)
+            return;
+
+        if (ImGui::CollapsingHeader("Animation Status", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            // 1. 메시 정보
+            if (mesh)
+            {
+                ImGui::Text("Mesh Asset: %s", mesh->meshAssetPath.c_str());
+            }
+
+            ImGui::Separator();
+
+            // 2. 애니메이션 모드 표시
+            if (advAnim && advAnim->enabled)
+            {
+                // 고급 애니메이션 활성 상태
+                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Mode: Advanced Animation");
+                ImGui::Checkbox("Enabled##Adv", &advAnim->enabled);
+                ImGui::SameLine();
+                ImGui::Checkbox("Playing##Adv", &advAnim->playing);
+
+                ImGui::Text("Active Layers:");
+                ImGui::Indent();
+                if (advAnim->base.enabled) ImGui::Text("- Base Layer");
+                if (advAnim->upper.enabled) ImGui::Text("- Upper Layer");
+                if (advAnim->ik.enabled) ImGui::Text("- IK Active");
+                ImGui::Unindent();
+            }
+            else if (stdAnim)
+            {
+                // 일반 애니메이션 활성 상태 (고급이 없거나 꺼져있을 때)
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Mode: Standard Animation");
+
+                ImGui::Checkbox("Playing##Std", &stdAnim->playing);
+                ImGui::SliderFloat("Speed##Std", &stdAnim->speed, 0.0f, 5.0f);
+                ImGui::Text("Clip Index: %d", stdAnim->clipIndex);
+                ImGui::Text("Time: %.2f", stdAnim->timeSec);
+            }
+            else
+            {
+                // 애니메이션 컴포넌트 없음
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Mode: Static (No Animation)");
             }
         }
     }

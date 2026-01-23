@@ -20,6 +20,7 @@
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
