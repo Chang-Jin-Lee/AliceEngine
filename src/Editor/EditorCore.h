@@ -79,7 +79,7 @@ namespace Alice
 		void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
 
-		// 물리잇
+		// 물리
 		bool DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames);
 		bool DrawLayerMaskChipEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames);
 		bool DrawIgnoreLayersChipEditor(const char* label, uint32_t& ignoreLayers, const std::array<std::string, 32>& layerNames);		

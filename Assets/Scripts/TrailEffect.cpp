@@ -1,23 +1,23 @@
-#include "SwordSlashEffect.h"
+#include "TrailEffect.h"
 #include "Core/World.h"
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
 #include "Components/TransformComponent.h"
-#include "Components/SwordEffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 #include <cmath>
 #include <DirectXMath.h>
 
 namespace Alice
 {
-    REGISTER_SCRIPT(SwordSlashEffect);
+    REGISTER_SCRIPT(TrailEffect);
 
-    void SwordSlashEffect::Awake()
+    void TrailEffect::Awake()
     {
-        // Awake에서 SwordEffectComponent 추가 (AddScript 직후에도 바로 추가됨)
-        auto* effect = GetComponent<SwordEffectComponent>();
+        // Awake에서 TrailEffectComponent 추가 (AddScript 직후에도 바로 추가됨)
+        auto* effect = GetComponent<TrailEffectComponent>();
         if (!effect)
         {
-            effect = &AddComponent<SwordEffectComponent>();
+            effect = &AddComponent<TrailEffectComponent>();
             effect->color = DirectX::XMFLOAT3(0.8f, 0.2f, 0.9f);
             effect->alpha = 1.0f;
             effect->enabled = true;
@@ -27,7 +27,7 @@ namespace Alice
         }
     }
 
-    void SwordSlashEffect::Start()
+    void TrailEffect::Start()
     {
         auto* transform = this->transform();
         if (!transform)
@@ -37,10 +37,10 @@ namespace Alice
         }
 
         // SwordEffectComponent가 없으면 추가 (Awake에서 추가되지 않은 경우 대비)
-        auto* effect = GetComponent<SwordEffectComponent>();
+        auto* effect = GetComponent<TrailEffectComponent>();
 		if (!effect)
 		{
-			effect = &AddComponent<SwordEffectComponent>();
+			effect = &AddComponent<TrailEffectComponent>();
 			effect->color = DirectX::XMFLOAT3(0.8f, 0.2f, 0.9f);
 			effect->alpha = 1.0f;
 			effect->enabled = true;
@@ -59,12 +59,12 @@ namespace Alice
         m_prevPosition = transform->position;
 
         AddTrailSample(effect, m_rootPoint, m_tipPoint, m_currentTime);
-        ALICE_LOG_INFO("[SwordSlashEffect] 트레일 기반 검기 효과 초기화 완료");
+        ALICE_LOG_INFO("[TrailEffect] 트레일 기반 검기 효과 초기화 완료");
     }
 
-    void SwordSlashEffect::Update(float deltaTime)
+    void TrailEffect::Update(float deltaTime)
     {
-        auto* effect = GetComponent<SwordEffectComponent>();
+        auto* effect = GetComponent<TrailEffectComponent>();
         if (!effect) return;
 
         // Inspector 속성 동기화
@@ -128,9 +128,9 @@ namespace Alice
         UpdateTrailLength(effect);
     }
 
-    void SwordSlashEffect::OnDestroy()
+    void TrailEffect::OnDestroy()
     {
-        auto* effect = GetComponent<SwordEffectComponent>();
+        auto* effect = GetComponent<TrailEffectComponent>();
         if (effect)
         {
             effect->trailSamples.clear();
@@ -138,7 +138,7 @@ namespace Alice
         }
     }
 
-    void SwordSlashEffect::AddTrailSample(SwordEffectComponent* effect, const DirectX::XMFLOAT3& rootPos, const DirectX::XMFLOAT3& tipPos, float currentTime)
+    void TrailEffect::AddTrailSample(TrailEffectComponent* effect, const DirectX::XMFLOAT3& rootPos, const DirectX::XMFLOAT3& tipPos, float currentTime)
     {
         if (!effect) return;
 
@@ -175,7 +175,7 @@ namespace Alice
         }
     }
    
-    void SwordSlashEffect::UpdateTrailLength(SwordEffectComponent* effect)
+    void TrailEffect::UpdateTrailLength(TrailEffectComponent* effect)
     {
         if (!effect || effect->trailSamples.empty()) 
         {

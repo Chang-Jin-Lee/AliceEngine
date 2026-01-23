@@ -481,21 +481,21 @@ namespace Alice
 
 		if (!pImpl->m_deferredRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
 
-	pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
-	if (!pImpl->m_debugDrawSystem->Initialize()) return false;
-	
-	pImpl->m_effectSystem = std::make_unique<EffectSystem>(*pImpl->m_renderDevice);
-	if (!pImpl->m_effectSystem->Initialize()) return false;
+		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
 
-	pImpl->m_trailRenderSystem = std::make_unique<TrailEffectRenderSystem>(*pImpl->m_renderDevice);
-	pImpl->m_trailRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
-	if (!pImpl->m_trailRenderSystem->Initialize()) return false;
+		pImpl->m_effectSystem = std::make_unique<EffectSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_effectSystem->Initialize()) return false;
 
-	// DeferredRenderSystem에 TrailEffectRenderSystem 주입
-	if (pImpl->m_deferredRenderSystem && pImpl->m_trailRenderSystem)
-	{
+		pImpl->m_trailRenderSystem = std::make_unique<TrailEffectRenderSystem>(*pImpl->m_renderDevice);
+		pImpl->m_trailRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
+		if (!pImpl->m_trailRenderSystem->Initialize()) return false;
+
+		// DeferredRenderSystem에 TrailEffectRenderSystem 주입
+		if (pImpl->m_deferredRenderSystem && pImpl->m_trailRenderSystem)
+		{
 			pImpl->m_deferredRenderSystem->SetSwordRenderSystem(pImpl->m_trailRenderSystem.get());
-	}
+		}
 
 	// ============================================= UI 시스템 초기화 (씬 로드 전에 초기화 필요) =============================================
 	// UIWorldManager 초기화를 씬 로드 전으로 이동
@@ -521,7 +521,7 @@ namespace Alice
 
 	ScriptHotReload_Load();
 
-	// ============================================= 씬 관리 =============================================
+		// ============================================= 씬 관리 =============================================
 		// 씬 매니저 생성 및 초기 씬 로드
 		pImpl->m_resourceManager.Clear();
 		pImpl->m_sceneManager = std::make_unique<SceneManager>(pImpl->m_world, pImpl->m_resourceManager);

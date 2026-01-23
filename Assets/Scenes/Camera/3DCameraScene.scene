@@ -28,7 +28,7 @@
                     "z": 0.9999999403953552
                 }
             },
-            "id": 1
+            "id": 2
         },
         {
             "Material": {
@@ -40,7 +40,14 @@
                     "z": 0.8957529067993164
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 1.5499999523162842,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "Scripts": [
                 {
@@ -57,7 +64,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 12.057997880503535
+                "timeSec": 251.26065981434658
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -66,13 +73,13 @@
             },
             "Transform": {
                 "position": {
-                    "x": 3.03008770942688,
+                    "x": 10.471385955810547,
                     "y": 0.0,
                     "z": -6.848544120788574
                 },
                 "rotation": {
-                    "x": 0.0,
-                    "y": 1.6924633979797363,
+                    "x": -0.0,
+                    "y": 1.6924632787704468,
                     "z": 0.0
                 },
                 "scale": {
@@ -81,7 +88,7 @@
                     "z": 0.05000000074505806
                 }
             },
-            "id": 2,
+            "id": 3,
             "name": "Rapi"
         },
         {
@@ -192,7 +199,14 @@
                     "z": 0.0
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "Scripts": [
                 {
@@ -226,7 +240,8 @@
                         "m_shakeAmplitude": 0.5,
                         "m_shakeDecay": 2.0,
                         "m_shakeDuration": 2.200000047683716,
-                        "m_shakeFrequency": 20.0
+                        "m_shakeFrequency": 20.0,
+                        "m_sholderOffset": 4.0
                     }
                 }
             ],
@@ -247,7 +262,7 @@
                     "z": 1.0
                 }
             },
-            "id": 3,
+            "id": 4,
             "name": "MainCamera"
         },
         {
@@ -255,12 +270,19 @@
                 "albedoTexturePath": "",
                 "assetPath": "",
                 "color": {
-                    "x": 0.17374515533447266,
-                    "y": 0.17374515533447266,
-                    "z": 0.17374515533447266
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
                 },
                 "metalness": 0.0,
-                "roughness": 1.0
+                "outlineColor": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "outlineWidth": -5.079999923706055,
+                "roughness": 1.0,
+                "shadingMode": -1
             },
             "Transform": {
                 "position": {
@@ -279,7 +301,7 @@
                     "z": 118.77100372314453
                 }
             },
-            "id": 4,
+            "id": 5,
             "name": "Ground"
         },
         {
@@ -292,7 +314,14 @@
                     "z": 1.0
                 },
                 "metalness": 1.0,
-                "roughness": 0.0
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.0,
+                "shadingMode": -1
             },
             "Scripts": [
                 {
@@ -322,7 +351,7 @@
                     "z": 1.0
                 }
             },
-            "id": 5,
+            "id": 6,
             "name": "Entity5"
         },
         {
@@ -335,13 +364,20 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1768.6909299232066
+                "timeSec": 2007.8935918570496
             },
             "SkinnedMesh": {
                 "boneCount": 67,
@@ -365,7 +401,7 @@
                     "z": 0.07999999821186066
                 }
             },
-            "id": 6
+            "id": 7
         },
         {
             "Material": {
@@ -377,7 +413,14 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -407,7 +450,7 @@
                     "z": 5.0
                 }
             },
-            "id": 7
+            "id": 8
         },
         {
             "SkinnedAnimation": {
@@ -438,7 +481,7 @@
                     "z": 0.04000000283122063
                 }
             },
-            "id": 8,
+            "id": 9,
             "name": "Enemy"
         },
         {
@@ -446,7 +489,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1673.4845811282285
+                "timeSec": 1912.6872430620715
             },
             "SkinnedMesh": {
                 "boneCount": 16,
@@ -470,7 +513,7 @@
                     "z": 0.029999999329447746
                 }
             },
-            "id": 9
+            "id": 10
         },
         {
             "Camera": {
@@ -498,7 +541,7 @@
                     "z": 1.0
                 }
             },
-            "id": 10,
+            "id": 11,
             "name": "Camera1"
         },
         {
@@ -527,7 +570,7 @@
                     "z": 0.9999999403953552
                 }
             },
-            "id": 11,
+            "id": 12,
             "name": "Camera2"
         },
         {
@@ -556,7 +599,7 @@
                     "z": 1.0
                 }
             },
-            "id": 12,
+            "id": 13,
             "name": "Camera3"
         },
         {
@@ -585,7 +628,7 @@
                     "z": 1.0
                 }
             },
-            "id": 13,
+            "id": 14,
             "name": "Camera4"
         },
         {
@@ -614,8 +657,57 @@
                     "z": 1.0
                 }
             },
-            "id": 14,
+            "id": 15,
             "name": "Camera5"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/Alice_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.0010000000474974513,
+                "roughness": 0.5,
+                "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 4,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 183.49615519330837
+            },
+            "SkinnedMesh": {
+                "boneCount": 248,
+                "instanceAssetPath": "Assets/Fbx/Alice.fbxasset",
+                "meshAssetPath": "Alice"
+            },
+            "Transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 16
         }
     ],
     "version": 1

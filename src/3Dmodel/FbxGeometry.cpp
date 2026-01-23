@@ -1,4 +1,4 @@
-﻿#include "FbxGeometry.h"
+#include "FbxGeometry.h"
 #include "../Core/Helper.h"
 
 #include <assimp/scene.h>
@@ -7,6 +7,8 @@
 #include <queue>
 #include <algorithm>
 #include <numeric>
+#include <map>
+#include <cmath>
 #if __has_include(<execution>)
 #include <execution>
 #define FBX_HAS_EXECUTION 1
@@ -229,6 +231,61 @@ bool FbxGeometryBuilder::Build(ID3D11Device* device, const aiScene* scene)
             m_->indices[e.iOff + f * 3 + 2] = offset + face.mIndices[2];
         }
     });
+
+    // [3.5] 스무스 노멀 계산 (아웃라인 끊김 방지)
+    // 위치가 같은 버텍스들의 노멀을 평균내어 스무스 노멀 생성
+    {
+        // 위치 비교를 위한 간단한 헬퍼 구조체 (Map 키용)
+        struct Vec3Key {
+            DirectX::XMFLOAT3 v;
+            bool operator<(const Vec3Key& o) const {
+                const float epsilon = 1e-5f;
+                if (abs(v.x - o.v.x) > epsilon) return v.x < o.v.x;
+                if (abs(v.y - o.v.y) > epsilon) return v.y < o.v.y;
+                return v.z < o.v.z - epsilon;
+            }
+        };
+
+        // 위치별로 노멀을 누적할 맵 생성
+        std::map<Vec3Key, DirectX::XMFLOAT3> normalAccumulator;
+        std::map<Vec3Key, int> normalCount; // 평균 계산을 위한 카운트
+
+        // 모든 버텍스를 순회하며 위치가 같은 녀석들의 노멀을 더함
+        for (const auto& v : m_->bindVertices)
+        {
+            Vec3Key key{ v.pos };
+            normalAccumulator[key].x += v.n.x;
+            normalAccumulator[key].y += v.n.y;
+            normalAccumulator[key].z += v.n.z;
+            normalCount[key]++;
+        }
+
+        // 누적된 노멀을 정규화(Normalize)하여 평균 방향(스무스 노멀) 계산 후 적용
+        for (auto& v : m_->bindVertices)
+        {
+            Vec3Key key{ v.pos };
+            auto it = normalAccumulator.find(key);
+            if (it != normalAccumulator.end() && normalCount[key] > 0)
+            {
+                DirectX::XMFLOAT3 smoothAvg = it->second;
+                // 평균 계산 (누적된 값을 개수로 나눔)
+                int count = normalCount[key];
+                smoothAvg.x /= count;
+                smoothAvg.y /= count;
+                smoothAvg.z /= count;
+                
+                // 벡터 정규화 (길이를 1로)
+                DirectX::XMVECTOR smoothVec = DirectX::XMVector3Normalize(
+                    DirectX::XMLoadFloat3(&smoothAvg));
+                DirectX::XMStoreFloat3(&v.smoothNormal, smoothVec);
+            }
+            else
+            {
+                // 평균을 구할 수 없으면 원본 노멀 사용
+                v.smoothNormal = v.n;
+            }
+        }
+    }
 
     // [4] GPU 버퍼 생성
     auto CreateBuf = [&](const void* data, UINT size, UINT bind, ID3D11Buffer** out) {

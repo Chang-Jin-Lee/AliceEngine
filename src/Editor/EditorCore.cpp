@@ -1042,9 +1042,53 @@ namespace Alice
                 }
                 if (ImGui::MenuItem("Cube"))
                 {
-                    EntityId e = world.CreateCube();
-                    selectedEntity = e;
-                    g_SceneDirty   = true;
+                    // 기존에 인덱스 버퍼로 큐브를 그리던 거에서 fbx 그리는 것으로 변경
+                    //EntityId e = world.CreateCube();
+                    //selectedEntity = e;
+					//g_SceneDirty = true;
+					//ImGui::CloseCurrentPopup();
+					if (m_renderDevice)
+					{
+						std::filesystem::path fbxPath = "Resource/BasicMesh/Cube.fbx";
+
+						FbxImportOptions opt{};
+						FbxImporter importer(*m_resources, m_skinnedRegistry);
+
+						auto* d3dDevice = m_renderDevice->GetDevice();
+						FbxImportResult result = importer.Import(d3dDevice, fbxPath, opt);
+
+						if (!result.meshAssetPath.empty())
+						{
+							EntityId e = world.CreateEntity();
+							TransformComponent& t = world.AddComponent<TransformComponent>(e);
+							t.position = { 0.0f, 0.0f, 0.0f };
+							t.scale = { 1.0f, 1.0f, 1.0f };
+							t.rotation = { 0.0f, 0.0f, 0.0f };
+
+							// 스키닝 메시 컴포넌트 등록
+							SkinnedMeshComponent& skinned = world.AddComponent<SkinnedMeshComponent>(e, result.meshAssetPath);
+							skinned.instanceAssetPath = result.instanceAssetPath;
+
+							// 본이 있다고 생각하고 1개짜리 항등 행렬 팔레트를 사용합니다.
+							static DirectX::XMFLOAT4X4 s_identityBone =
+								DirectX::XMFLOAT4X4(1, 0, 0, 0,
+									0, 1, 0, 0,
+									0, 0, 1, 0,
+									0, 0, 0, 1);
+							skinned.boneMatrices = &s_identityBone;
+							skinned.boneCount = 1;
+
+							// 머티리얼 할당
+							DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+							MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+							mat.assetPath = result.materialAssetPaths.front();
+							MaterialFile::Load(mat.assetPath, mat, &ResourceManager::Get());
+
+                            world.SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
+                            selectedEntity = e;
+                            g_SceneDirty = true;
+						}
+					}
                     ImGui::CloseCurrentPopup();
                 }
                 if (ImGui::MenuItem("Camera"))
@@ -2366,6 +2410,106 @@ namespace Alice
                 {
                     ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
                 }
+
+                // === Bloom 파라미터 ===
+                ImGui::Separator();
+                ImGui::Text("Bloom");
+                ImGui::Separator();
+
+                BloomSettings bloomSettings = deferred.GetBloomSettings();
+                bool bloomChanged = false;
+
+                // Bloom 활성화 체크박스
+                if (ImGui::Checkbox("Enable Bloom", &bloomSettings.enabled))
+                {
+                    bloomChanged = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Bloom 효과 활성화/비활성화");
+                }
+
+                // Bloom ConstantBuffer 파라미터들 (enabled일 때만 표시)
+                if (bloomSettings.enabled)
+                {
+                    // Intensity (합성 강도)
+                    if (ImGui::SliderFloat("Intensity", &bloomSettings.intensity, 0.0f, 5.0f, "%.2f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Bloom 합성 강도 (0.0 ~ 5.0)\n값이 클수록 더 밝게 합성됩니다");
+                    }
+
+                    // Threshold (밝기 추출 기준)
+                    if (ImGui::SliderFloat("Threshold", &bloomSettings.threshold, 0.0f, 5.0f, "%.2f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("밝기 추출 기준 (0.0 ~ 5.0)\n이 값보다 밝은 픽셀만 Bloom 효과가 적용됩니다");
+                    }
+
+                    // Knee (Soft threshold)
+                    if (ImGui::SliderFloat("Knee", &bloomSettings.knee, 0.0f, 1.0f, "%.2f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Soft threshold (0.0 ~ 1.0)\nBloom 경계를 부드럽게 만드는 값");
+                    }
+
+                    // Radius (Blur 크기)
+                    if (ImGui::SliderFloat("Radius", &bloomSettings.radius, 0.0f, 20.0f, "%.1f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Blur 크기 (0.0 ~ 20.0)\n값이 클수록 Bloom이 더 넓게 퍼집니다");
+                    }
+
+                    // Downsample (다운샘플링) - 1/64까지 지원
+                    const char* downsampleItems[] = { "1x (원본)", "2x (1/2)", "4x (1/4)", "8x (1/8)", "16x (1/16)", "32x (1/32)", "64x (1/64)" };
+                    int downsampleValues[] = { 1, 2, 4, 8, 16, 32, 64 };
+                    int downsampleIdx = 0;
+                    for (int i = 0; i < 7; ++i)
+                    {
+                        if (bloomSettings.downsample == downsampleValues[i])
+                        {
+                            downsampleIdx = i;
+                            break;
+                        }
+                    }
+                    if (ImGui::Combo("Downsample", &downsampleIdx, downsampleItems, IM_ARRAYSIZE(downsampleItems)))
+                    {
+                        bloomSettings.downsample = downsampleValues[downsampleIdx];
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Bloom 텍스처 다운샘플링 비율 (1x ~ 64x)\n낮을수록 고품질, 높을수록 성능 향상\n64x는 매우 작은 텍스처로 인해 품질이 낮을 수 있습니다");
+                    }
+
+                    // Clamp (Bloom 값 상한)
+                    if (ImGui::SliderFloat("Clamp", &bloomSettings.clamp, 1.0f, 20.0f, "%.1f"))
+                    {
+                        bloomChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Bloom 값 상한 (1.0 ~ 20.0)\n과도한 Bloom을 제한합니다");
+                    }
+                }
+
+                // 설정 변경 시 즉시 반영
+                if (bloomChanged)
+                {
+                    deferred.SetBloomSettings(bloomSettings);
+                }
             }
             
         }
@@ -3117,7 +3261,8 @@ namespace Alice
                 "Blinn-Phong",
                 "Toon",
                 "PBR",
-                "ToonPBR"
+                "ToonPBR",
+                "OnlyTextureWithOutline"
             };
             int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
             shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
@@ -3127,9 +3272,9 @@ namespace Alice
                 changed = true;
             }
 
-            ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty()
-                ? "None"
-                : mat->albedoTexturePath.c_str());
+            ImGui::Separator();
+
+            ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty() ? "None" : mat->albedoTexturePath.c_str());
             if (ImGui::Button("Browse...")) {
                 wchar_t buf[MAX_PATH] = {};
                 OPENFILENAMEW ofn = { sizeof(ofn) };
