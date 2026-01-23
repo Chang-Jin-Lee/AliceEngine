@@ -38,8 +38,6 @@
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
-#include "Game/AnimBlueprintSystem.h"
-#include "Game/AdvancedAnimSystem.h"
 #include "Audio/AudioSystem.h"
 #include "Audio/SoundManager.h"
 
@@ -134,8 +132,6 @@ namespace Alice
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
-		AnimBlueprintSystem m_animBlueprintSystem{ m_skinnedMeshRegistry };
-		AdvancedAnimSystem m_advancedAnimSystem{ m_skinnedMeshRegistry };
 		AudioSystem m_audioSystem;
 		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
 	};
@@ -285,7 +281,6 @@ namespace Alice
 		}
 
 		// 시스템에 ResourceManager 바인딩
-		pImpl->m_animBlueprintSystem.SetResourceManager(&pImpl->m_resourceManager);
 		pImpl->m_audioSystem.SetResourceManager(&pImpl->m_resourceManager);
 
 		// 사운드 초기화
@@ -794,7 +789,7 @@ namespace Alice
 				}
 
 				// === Socket / SoundBox 기즈모 ===
-				// Socket: AnimBlueprintSystem 이 계산한 소켓 world 행렬을 작은 XYZ 축으로 시각화
+				// Socket: 애니메이션 시스템이 계산한 소켓 world 행렬을 작은 XYZ 축으로 시각화
 				for (const auto& [entityId, socketComp] : pImpl->m_world.GetComponents<SocketComponent>())
 				{
 					for (const auto& s : socketComp.sockets)
@@ -829,6 +824,10 @@ namespace Alice
 				// SoundBox: 월드 기준 AABB 를 박스로 시각화
 				for (const auto& [entityId, box] : pImpl->m_world.GetComponents<SoundBoxComponent>())
 				{
+					// 선택된 엔티티 또는 debugDraw가 켜져있을 때만 그림
+					if (entityId != pImpl->m_selectedEntity && !box.debugDraw)
+						continue;
+
 					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
 					DirectX::XMFLOAT3 p = t ? t->position : DirectX::XMFLOAT3(0, 0, 0);
 					DirectX::XMFLOAT3 s = t ? t->scale : DirectX::XMFLOAT3(1, 1, 1);
@@ -855,14 +854,65 @@ namespace Alice
 
 					AddBoxLines(corners, col);
 				}
+
+				// AudioSource: 감쇠 반경 시각화
+				auto DrawRing = [&](const DirectX::XMFLOAT3& center, float radius, const DirectX::XMFLOAT3& axisX, const DirectX::XMFLOAT3& axisZ, const DirectX::XMFLOAT4& color)
+				{
+					const int segments = 24;
+					const float step = DirectX::XM_2PI / segments;
+					
+					DirectX::XMFLOAT3 prev;
+					// 초기점: center + axisX * radius
+					{
+						using namespace DirectX;
+						XMVECTOR c = XMLoadFloat3(&center);
+						XMVECTOR ax = XMLoadFloat3(&axisX);
+						XMVECTOR p = c + ax * radius;
+						XMStoreFloat3(&prev, p);
+					}
+
+					for (int i = 1; i <= segments; ++i)
+					{
+						float angle = step * i;
+						float c = cosf(angle);
+						float s = sinf(angle);
+
+						using namespace DirectX;
+						XMVECTOR cent = XMLoadFloat3(&center);
+						XMVECTOR ax = XMLoadFloat3(&axisX);
+						XMVECTOR az = XMLoadFloat3(&axisZ);
+						
+						XMVECTOR currVec = cent + (ax * c * radius) + (az * s * radius);
+						DirectX::XMFLOAT3 curr;
+						XMStoreFloat3(&curr, currVec);
+
+						dbg->AddLine(prev, curr, color);
+						prev = curr;
+					}
+				};
+
+				for (const auto& [entityId, src] : pImpl->m_world.GetComponents<AudioSourceComponent>())
+				{
+					if (!src.is3D) continue;
+					if (entityId != pImpl->m_selectedEntity && !src.debugDraw) continue;
+
+					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
+					if (!t) continue;
+
+					// Min Distance (Green)
+					DrawRing(t->position, src.minDistance, { 1,0,0 }, { 0,0,1 }, { 0,1,0,1 }); // XZ plane
+					DrawRing(t->position, src.minDistance, { 0,1,0 }, { 1,0,0 }, { 0,1,0,1 }); // YX plane
+
+					// Max Distance (Red)
+					DrawRing(t->position, src.maxDistance, { 1,0,0 }, { 0,0,1 }, { 1,0,0,1 }); // XZ plane
+					DrawRing(t->position, src.maxDistance, { 0,1,0 }, { 1,0,0 }, { 1,0,0,1 }); // YX plane
+				}
 			}
 		}
 
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
-		// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
-		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
-		pImpl->m_animBlueprintSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		// Advanced/Blueprint 제거하고 기본 SkinnedAnimationSystem만 사용
 		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
