@@ -157,13 +157,23 @@ namespace Alice
                 }
                 else
                 {
+                    // SFX: loop=false면 중첩 재생 가능 (Fire-and-forget)
                     Sound::PlaySFX(rt.key, src.volume, src.pitch, src.loop);
                 }
             };
 
             auto play3D = [&]() {
-                Sound::Play3DInstance(rt.instanceId, rt.key, src.loop);
-                rt.playing3D = true;
+                const auto* tr = world.GetComponent<TransformComponent>(id);
+                DirectX::XMFLOAT3 pos = tr ? tr->position : DirectX::XMFLOAT3{ 0,0,0 };
+                
+                // 3D 재생:
+                // - Loop인 경우: instanceId를 사용하여 하나만 재생 및 추적
+                // - Loop가 아닌 경우: 매번 새로운 사운드 발사 (중첩 가능), instanceId 사용 안함(추적 안함)
+                std::wstring idForPlay = src.loop ? rt.instanceId : L""; 
+                
+                Sound::Play3D(idForPlay, rt.key, pos, src.volume, src.pitch, src.loop);
+                
+                if (src.loop) rt.playing3D = true;
             };
 
             if ((src.playOnStart && !rt.started) || src.requestPlay)
@@ -179,7 +189,7 @@ namespace Alice
             {
                 if (src.is3D)
                 {
-                    Sound::Stop3DInstance(rt.instanceId);
+                    Sound::Stop3D(rt.instanceId);
                     rt.playing3D = false;
                 }
                 else
@@ -190,11 +200,12 @@ namespace Alice
                 src.requestStop = false;
             }
 
-            if (src.is3D && rt.playing3D)
+            // 위치 업데이트 (Looping 3D 사운드만)
+            if (src.is3D && rt.playing3D && src.loop)
             {
                 if (auto* tr = world.GetComponent<TransformComponent>(id))
                 {
-                    Sound::Update3DInstance(rt.instanceId, tr->position, src.volume, src.minDistance, src.maxDistance);
+                    Sound::Update3D(rt.instanceId, tr->position, src.volume, src.minDistance, src.maxDistance);
                 }
             }
         }
@@ -226,9 +237,14 @@ namespace Alice
             const bool inside = IsInsideBox(box, tr, listenerPos);
 
             if (inside && !rt.wasInside && box.playOnEnter)
-                Sound::Play3DInstance(rt.instanceId, rt.key, box.loop);
+            {
+                const DirectX::XMFLOAT3 srcPos = tr ? tr->position : listenerPos;
+                Sound::Play3D(rt.instanceId, rt.key, srcPos, 0.0f, 1.0f, box.loop);
+            }
             if (!inside && rt.wasInside && box.stopOnExit)
-                Sound::Stop3DInstance(rt.instanceId);
+            {
+                Sound::Stop3D(rt.instanceId);
+            }
 
             rt.wasInside = inside;
 
@@ -237,7 +253,7 @@ namespace Alice
                 const float w = CenterWeight01(box, tr, listenerPos);
                 const float vol = box.edgeVolume + (box.centerVolume - box.edgeVolume) * w;
                 const DirectX::XMFLOAT3 srcPos = tr ? tr->position : DirectX::XMFLOAT3(0, 0, 0);
-                Sound::Update3DInstance(rt.instanceId, srcPos, vol, box.minDistance, box.maxDistance);
+                Sound::Update3D(rt.instanceId, srcPos, vol, box.minDistance, box.maxDistance);
             }
         }
 

@@ -37,6 +37,9 @@ namespace Alice
         // 3D 감쇠
         float minDistance{ 1.0f };
         float maxDistance{ 50.0f };
+
+        // 디버그 드로우 활성화 여부
+        bool debugDraw{ false };
     };
 }
 
