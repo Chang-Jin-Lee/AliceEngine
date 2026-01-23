@@ -86,7 +86,9 @@ namespace Alice
                                const float& metalness,
                                const bool& useTexture,
                                const bool& enableNormalMap,
-                               int shadingMode);
+                               int shadingMode,
+                               const DirectX::XMFLOAT3& outlineColor = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
+                               float outlineWidth = 0.01f);
 
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
@@ -151,6 +153,8 @@ namespace Alice
         // 섀도우 맵 깊이 바이어스 전용 RS
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_shadowRasterizerState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_shadowRasterizerStateReversed;
+        // 아웃라인용 (Cull Front) 래스터라이저
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rsCullFront;
 
         // 머티리얼 전용 텍스처 캐시 (경로 -> SRV)
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> m_textureCache;

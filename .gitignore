@@ -418,6 +418,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+
+Resource/fbx/Alice3DGame/
+Resource/fbx/Rapi/
 *.mat
 *.alice
 Resource/Skybox/Bridge/bridgeBrdf.dds
@@ -441,3 +445,6 @@ Resource/Skybox/Sample/BakerSampleEnvHDR.dds
 Resource/Skybox/Sample/BakerSampleEnvMDR.dds
 Resource/Skybox/Sample/BakerSampleSpecularHDR.dds
 Resource/Skybox/Sample/BakerSampleSpecularMDR.dds
+
+
+Resource/Test/

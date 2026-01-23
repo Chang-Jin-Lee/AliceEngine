@@ -21,6 +21,7 @@
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
@@ -31,6 +32,8 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 #include "Components/ComputeEffectComponent.h"
 
 
@@ -78,8 +81,8 @@ namespace Alice
         /// 빈 게임 오브젝트를 생성합니다 (Transform만 가짐)
         EntityId CreateEmpty();
         
-        /// 큐브 게임 오브젝트를 생성합니다 (Transform + Material)
-        EntityId CreateCube();
+		/// 큐브 게임 오브젝트를 생성합니다 (Transform + Material)
+		EntityId CreateCube();
         
         /// 카메라 게임 오브젝트를 생성합니다 (Transform + Camera)
         EntityId CreateCamera();

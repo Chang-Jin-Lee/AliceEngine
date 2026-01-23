@@ -18,6 +18,9 @@
 #include "Core/ReflectionUI.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/JsonRttr.h"
+#include "Components/AdvancedAnimationComponent.h"
+#include "Components/SkinnedAnimationComponent.h"
+#include "Components/SkinnedMeshComponent.h"
 #include <set>
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
@@ -1968,65 +1971,111 @@ namespace Alice
 				ImGui::EndPopup();
 			}
 
-			ImGui::Separator();
-
-			// 오브젝트 생성 메뉴 버튼
-			if (ImGui::Button("Create"))
-			{
-				ImGui::OpenPopup("CreateObjectPopup");
-			}
-			if (ImGui::BeginPopup("CreateObjectPopup"))
-			{
-				if (ImGui::MenuItem("Empty"))
-				{
-					EntityId e = world.CreateEmpty();
+            // 오브젝트 생성 메뉴 버튼
+            if (ImGui::Button("Create"))
+            {
+                ImGui::OpenPopup("CreateObjectPopup");
+            }
+            if (ImGui::BeginPopup("CreateObjectPopup"))
+            {
+                if (ImGui::MenuItem("Empty"))
+                {
+                    EntityId e = world.CreateEmpty();
 					PushCommand(std::make_unique<CreateEntityCommand>(e, "Empty"));
-					selectedEntity = e;
-					g_SceneDirty = true;
-					ImGui::CloseCurrentPopup();
-				}
+                    selectedEntity = e;
+                    g_SceneDirty   = true;
+                    ImGui::CloseCurrentPopup();
+                }
 				if (ImGui::MenuItem("Cube"))
 				{
-					EntityId e = world.CreateCube();
-					PushCommand(std::make_unique<CreateEntityCommand>(e, "Cube"));
-					selectedEntity = e;
-					g_SceneDirty = true;
+					bool created = false;
+
+					if (m_renderDevice)
+					{
+						std::filesystem::path fbxPath = "Resource/BasicMesh/Cube.fbx";
+
+						FbxImportOptions opt{};
+						FbxImporter importer(*m_resources, m_skinnedRegistry);
+
+						auto* d3dDevice = m_renderDevice->GetDevice();
+						FbxImportResult result = importer.Import(d3dDevice, fbxPath, opt);
+
+						if (!result.meshAssetPath.empty())
+						{
+							EntityId e = world.CreateEntity();
+
+							TransformComponent& t = world.AddComponent<TransformComponent>(e);
+							t.position = { 0.0f, 0.0f, 0.0f };
+							t.scale = { 1.0f, 1.0f, 1.0f };
+							t.rotation = { 0.0f, 0.0f, 0.0f };
+
+							SkinnedMeshComponent& skinned =
+								world.AddComponent<SkinnedMeshComponent>(e, result.meshAssetPath);
+							skinned.instanceAssetPath = result.instanceAssetPath;
+
+							static DirectX::XMFLOAT4X4 s_identityBone =
+								DirectX::XMFLOAT4X4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+							skinned.boneMatrices = &s_identityBone;
+							skinned.boneCount = 1;
+
+							DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+							MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+
+							if (!result.materialAssetPaths.empty())
+							{
+								mat.assetPath = result.materialAssetPaths.front();
+								MaterialFile::Load(mat.assetPath, mat, &ResourceManager::Get());
+							}
+
+							world.SetEntityName(e, "Cube"); // 혹은 "Entity123" 정책이면 그대로
+							
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "Cube"));
+
+							selectedEntity = e;
+							g_SceneDirty = true;
+							created = true;
+						}
+					}
+
+					// created=false면 보통 팝업 유지 + 에러 표시가 더 좋긴 한데,
+					// 일단 기존 동작 유지하려면 닫아도 됨.
 					ImGui::CloseCurrentPopup();
 				}
-				if (ImGui::MenuItem("Camera"))
-				{
-					EntityId e = world.CreateCamera();
+
+                if (ImGui::MenuItem("Camera"))
+                {
+                    EntityId e = world.CreateCamera();
 					PushCommand(std::make_unique<CreateEntityCommand>(e, "Camera"));
-					selectedEntity = e;
-					g_SceneDirty = true;
-					ImGui::CloseCurrentPopup();
-				}
-				if (ImGui::MenuItem("Point Light"))
-				{
-					EntityId e = world.CreatePointLight();
+                    selectedEntity = e;
+                    g_SceneDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Point Light"))
+                {
+                    EntityId e = world.CreatePointLight();
 					PushCommand(std::make_unique<CreateEntityCommand>(e, "Point Light"));
-					selectedEntity = e;
-					g_SceneDirty = true;
-					ImGui::CloseCurrentPopup();
-				}
-				if (ImGui::MenuItem("Spot Light"))
-				{
-					EntityId e = world.CreateSpotLight();
+                    selectedEntity = e;
+                    g_SceneDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Spot Light"))
+                {
+                    EntityId e = world.CreateSpotLight();
 					PushCommand(std::make_unique<CreateEntityCommand>(e, "Spot Light"));
-					selectedEntity = e;
-					g_SceneDirty = true;
-					ImGui::CloseCurrentPopup();
-				}
-				if (ImGui::MenuItem("Rect Light"))
-				{
-					EntityId e = world.CreateRectLight();
+                    selectedEntity = e;
+                    g_SceneDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Rect Light"))
+                {
+                    EntityId e = world.CreateRectLight();
 					PushCommand(std::make_unique<CreateEntityCommand>(e, "Rect Light"));
-					selectedEntity = e;
-					g_SceneDirty = true;
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
-			}
+                    selectedEntity = e;
+                    g_SceneDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
 
 			ImGui::Separator();
 
@@ -2097,14 +2146,23 @@ namespace Alice
 							skinned.boneMatrices = &s_identityBone;
 							skinned.boneCount = 1;
 
-							// 첫 번째 머티리얼이 있으면 기본 머티리얼로 할당
-							if (!result.materialAssetPaths.empty())
-							{
-								DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-								MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
-								mat.assetPath = result.materialAssetPaths.front();
-								MaterialFile::Load(mat.assetPath, mat, m_resources);
-							}
+                            // 첫 번째 머티리얼이 있으면 기본 머티리얼로 할당
+                            // 원래 있는 경우 없는 경우 나눠서 있는 경우는 서브 메테리얼을 만들어야 하는데, 일단은 둘다 생기도록 함.
+                            // TODO : 여기서 서브 메테리얼을 각각 다르게 설정할 수 있게 해야함 
+                            if (!result.materialAssetPaths.empty())
+                            {
+                                DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+                                MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+                                mat.assetPath = result.materialAssetPaths.front();
+                                MaterialFile::Load(mat.assetPath, mat, m_resources);
+                            }
+                            else
+                            {
+								//DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+								//MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+								//mat.assetPath = "fbx has no material. default material";
+								//MaterialFile::Load(mat.assetPath, mat);
+                            }
 
 							selectedEntity = e;
 							g_SceneDirty = true;
@@ -2910,10 +2968,14 @@ namespace Alice
 					DrawInspectorTransform(world, selectedEntity);
 					ImGui::Separator();
 
-					// 2. Scripts
-					ImGui::Text("Scripts");
-					DrawInspectorScripts(world, selectedEntity);
-					ImGui::Separator();
+                // 1-1. Animation Status
+                DrawInspectorAnimationStatus(world, selectedEntity);
+                ImGui::Separator();
+
+                // 2. Scripts
+                ImGui::Text("Scripts");
+                DrawInspectorScripts(world, selectedEntity);
+                ImGui::Separator();
 
 					// 3. Material
 					DrawInspectorMaterial(world, selectedEntity);
@@ -3912,150 +3974,159 @@ namespace Alice
 					-1.0f,
 					1.0f);
 
-				// === Skybox 선택 ===
-				ImGui::Separator();
-				ImGui::Text("Skybox");
 
-				// 스카이박스 선택 상태를 저장할 변수 (static으로 유지)
-				static int skyboxChoice = 3; // 기본값: Baker (Sample) - 인덱스 3
+				// === Skybox ===
+				ImGui::Separator();
+				ImGui::TextUnformatted("Skybox");
+
+				static int  skyboxChoice = 3; // 0 Off, 1 Bridge, 2 Indoor, 3 Baker
+				static int  lastSkyboxChoice = -1;
+				static bool lastForward = false;
+
 				const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker" };
 
-				if (useForwardRendering)
-				{
-					if (ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems)))
+				auto ApplySkybox = [&](auto& renderer)
 					{
-						// 스카이박스 변경
-						if (skyboxChoice == 0) // Off
+						if (skyboxChoice == 0)
 						{
-							// 스카이박스 비활성화
-							forward.SetSkyboxEnabled(false);
+							renderer.SetSkyboxEnabled(false);
+							return;
 						}
-						else
+
+						renderer.SetSkyboxEnabled(true);
+						switch (skyboxChoice)
 						{
-							// 스카이박스 활성화 및 IBL 세트 로드
-							forward.SetSkyboxEnabled(true);
-							switch (skyboxChoice)
-							{
-							case 1: // Bridge
-								forward.SetIblSet("Bridge", "bridge");
-								break;
-							case 2: // Indoor
-								forward.SetIblSet("Indoor", "indoor");
-								break;
-							case 3: // Baker (Sample)
-								forward.SetIblSet("Sample", "BakerSample");
-								break;
-							default:
-								break;
-							}
+						case 1: renderer.SetIblSet("Bridge", "bridge");       break;
+						case 2: renderer.SetIblSet("Indoor", "indoor");       break;
+						case 3: renderer.SetIblSet("Sample", "BakerSample");  break;
+						default: break;
 						}
-					}
-					// Off일 때만 배경색 편집
-					if (skyboxChoice == 0)
+					};
+
+				auto EditBgIfOff = [&](auto& renderer)
 					{
-						DirectX::XMFLOAT4 bgColor = forward.GetBackgroundColor();
+						if (skyboxChoice != 0) return;
+
+						DirectX::XMFLOAT4 bgColor = renderer.GetBackgroundColor();
 						if (ImGui::ColorEdit4("Background Color", &bgColor.x))
-						{
-							forward.SetBackgroundColor(bgColor);
-						}
-					}
-				}
-				else
+							renderer.SetBackgroundColor(bgColor);
+					};
+
+				bool skyboxChanged = ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems));
+				bool rendererChanged = (lastForward != useForwardRendering);
+
+				// 선택 변경 or 렌더러 토글 변경 시 반영 (초기 1회 포함)
+				if (skyboxChanged || rendererChanged || lastSkyboxChoice != skyboxChoice)
 				{
-					if (ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems)))
-					{
-						// 스카이박스 변경
-						if (skyboxChoice == 0) // Off
-						{
-							// 스카이박스 비활성화
-							deferred.SetSkyboxEnabled(false);
-						}
-						else
-						{
-							// 스카이박스 활성화 및 IBL 세트 로드
-							deferred.SetSkyboxEnabled(true);
-							switch (skyboxChoice)
-							{
-							case 1: // Bridge
-								deferred.SetIblSet("Bridge", "bridge");
-								break;
-							case 2: // Indoor
-								deferred.SetIblSet("Indoor", "indoor");
-								break;
-							case 3: // Baker (Sample)
-								deferred.SetIblSet("Sample", "BakerSample");
-								break;
-							default:
-								break;
-							}
-						}
-					}
-					// Off일 때만 배경색 편집
-					if (skyboxChoice == 0)
-					{
-						DirectX::XMFLOAT4 bgColor = deferred.GetBackgroundColor();
-						if (ImGui::ColorEdit4("Background Color", &bgColor.x))
-						{
-							deferred.SetBackgroundColor(bgColor);
-						}
-					}
+					if (useForwardRendering) ApplySkybox(forward);
+					else                     ApplySkybox(deferred);
+
+					lastSkyboxChoice = skyboxChoice;
+					lastForward = useForwardRendering;
 				}
 
-				// === Post-Process 파라미터 (Exposure, Max HDR Nits) ===
+				if (useForwardRendering) EditBgIfOff(forward);
+				else                     EditBgIfOff(deferred);
+
+
+				// === Post-Process (Exposure, Max HDR Nits) ===
 				ImGui::Separator();
-				ImGui::Text("Post-Process");
+				ImGui::TextUnformatted("Post-Process");
 				ImGui::Separator();
 
 				float exposure = 0.0f;
 				float maxHDRNits = 1000.0f;
 
-				if (useForwardRendering)
+				auto DrawPostProcess = [&](auto& renderer)
+					{
+						renderer.GetPostProcessParams(exposure, maxHDRNits);
+
+						bool changed = false;
+
+						changed |= ImGui::SliderFloat("Exposure", &exposure, -3.0f, 3.0f, "%.2f");
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Exposure 값: -3.0 (어두움) ~ 3.0 (밝음)\n0.0 = 1.0배 (기본값)");
+
+						changed |= ImGui::SliderFloat("Max HDR Nits", &maxHDRNits, 100.0f, 10000.0f, "%.0f nits");
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
+
+						if (changed)
+							renderer.SetPostProcessParams(exposure, maxHDRNits);
+					};
+
+				if (useForwardRendering) DrawPostProcess(forward);
+				else                     DrawPostProcess(deferred);
+
+
+				// === Bloom (Deferred 전용) ===
+				if (!useForwardRendering)
 				{
-					forward.GetPostProcessParams(exposure, maxHDRNits);
+					ImGui::Separator();
+					ImGui::TextUnformatted("Bloom");
+					ImGui::Separator();
 
-					if (ImGui::SliderFloat("Exposure", &exposure, -3.0f, 3.0f, "%.2f"))
-					{
-						forward.SetPostProcessParams(exposure, maxHDRNits);
-					}
+					BloomSettings bloomSettings = deferred.GetBloomSettings();
+					bool bloomChanged = false;
+
+					if (ImGui::Checkbox("Enable Bloom", &bloomSettings.enabled))
+						bloomChanged = true;
+
 					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("Bloom 효과 활성화/비활성화");
+
+					if (bloomSettings.enabled)
 					{
-						ImGui::SetTooltip("Exposure 값: -3.0 (어두움) ~ 3.0 (밝음)\n0.0 = 1.0배 (기본값)");
+						if (ImGui::SliderFloat("Intensity", &bloomSettings.intensity, 0.0f, 5.0f, "%.2f"))
+							bloomChanged = true;
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Bloom 합성 강도 (0.0 ~ 5.0)\n값이 클수록 더 밝게 합성됩니다");
+
+						if (ImGui::SliderFloat("Threshold", &bloomSettings.threshold, 0.0f, 5.0f, "%.2f"))
+							bloomChanged = true;
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("밝기 추출 기준 (0.0 ~ 5.0)\n이 값보다 밝은 픽셀만 Bloom이 적용됩니다");
+
+						if (ImGui::SliderFloat("Knee", &bloomSettings.knee, 0.0f, 1.0f, "%.2f"))
+							bloomChanged = true;
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Soft threshold (0.0 ~ 1.0)\nBloom 경계를 부드럽게 만드는 값");
+
+						if (ImGui::SliderFloat("Radius", &bloomSettings.radius, 0.0f, 20.0f, "%.1f"))
+							bloomChanged = true;
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Blur 크기 (0.0 ~ 20.0)\n값이 클수록 더 넓게 퍼집니다");
+
+						const char* downsampleItems[] = {
+							"1x (원본)", "2x (1/2)", "4x (1/4)", "8x (1/8)",
+							"16x (1/16)", "32x (1/32)", "64x (1/64)"
+						};
+						const int downsampleValues[] = { 1, 2, 4, 8, 16, 32, 64 };
+
+						int downsampleIdx = 0;
+						for (int i = 0; i < 7; ++i)
+						{
+							if (bloomSettings.downsample == downsampleValues[i]) { downsampleIdx = i; break; }
+						}
+
+						if (ImGui::Combo("Downsample", &downsampleIdx, downsampleItems, IM_ARRAYSIZE(downsampleItems)))
+						{
+							bloomSettings.downsample = downsampleValues[downsampleIdx];
+							bloomChanged = true;
+						}
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Bloom 다운샘플링 (1x ~ 64x)\n높을수록 성능↑ 품질↓");
+
+						if (ImGui::SliderFloat("Clamp", &bloomSettings.clamp, 1.0f, 20.0f, "%.1f"))
+							bloomChanged = true;
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Bloom 값 상한 (1.0 ~ 20.0)\n과도한 Bloom을 제한합니다");
 					}
 
-					if (ImGui::SliderFloat("Max HDR Nits", &maxHDRNits, 100.0f, 10000.0f, "%.0f nits"))
-					{
-						forward.SetPostProcessParams(exposure, maxHDRNits);
-					}
-					if (ImGui::IsItemHovered())
-					{
-						ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
-					}
+					if (bloomChanged)
+						deferred.SetBloomSettings(bloomSettings);
 				}
-				else
-				{
-					deferred.GetPostProcessParams(exposure, maxHDRNits);
 
-					if (ImGui::SliderFloat("Exposure", &exposure, -3.0f, 3.0f, "%.2f"))
-					{
-						deferred.SetPostProcessParams(exposure, maxHDRNits);
-					}
-					if (ImGui::IsItemHovered())
-					{
-						ImGui::SetTooltip("Exposure 값: -3.0 (어두움) ~ 3.0 (밝음)\n0.0 = 1.0배 (기본값)");
-					}
-
-					if (ImGui::SliderFloat("Max HDR Nits", &maxHDRNits, 100.0f, 10000.0f, "%.0f nits"))
-					{
-						deferred.SetPostProcessParams(exposure, maxHDRNits);
-					}
-					if (ImGui::IsItemHovered())
-					{
-						ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
-					}
-				}
-
-			}
-			ImGui::End();
 
 			// === Material Asset Editor (.mat 더블클릭 시) ===
 			if (g_MaterialEditorOpen)
@@ -4409,50 +4480,95 @@ namespace Alice
 						};
 						changed = true;
 					}
+					bool changed = false;
 
-					if (ReflectionUI::RenderProperty(*transform, "scale", "Scale").changed)
-						changed = true;
-					if (ReflectionUI::RenderProperty(*transform, "enabled", "Enabled").changed)
-						changed = true;
+					// Transform 편집 시작/종료 추적용 (멤버로 두는 게 정석)
+					static bool isEditing = false;
+					static EntityId lastEditedEntity = {};
+					static TransformCommand::TransformData editStartTransform{};
 
-					// Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
+					bool anyTransformItemActive = false;
+					bool anyTransformItemActivated = false;
+
+					// ---- Position
+					{
+						auto r = ReflectionUI::RenderProperty(*transform, "position", "Position");
+						changed |= r.changed;
+						anyTransformItemActive |= ImGui::IsItemActive();
+						anyTransformItemActivated |= ImGui::IsItemActivated();
+					}
+
+					// ---- Rotation
+					{
+						auto r = ReflectionUI::RenderProperty(*transform, "rotation", "Rotation");
+						changed |= r.changed;
+						anyTransformItemActive |= ImGui::IsItemActive();
+						anyTransformItemActivated |= ImGui::IsItemActivated();
+					}
+
+					// ---- Scale
+					{
+						auto r = ReflectionUI::RenderProperty(*transform, "scale", "Scale");
+						changed |= r.changed;
+						anyTransformItemActive |= ImGui::IsItemActive();
+						anyTransformItemActivated |= ImGui::IsItemActivated();
+					}
+
+					// ---- Enabled
+					{
+						auto r = ReflectionUI::RenderProperty(*transform, "enabled", "Enabled");
+						changed |= r.changed;
+						anyTransformItemActive |= ImGui::IsItemActive();
+						anyTransformItemActivated |= ImGui::IsItemActivated();
+					}
+
+					// === 편집 시작 감지 (Transform 위젯 중 하나라도 막 활성화됐을 때)
+					if (!isEditing && anyTransformItemActivated)
+					{
+						isEditing = true;
+						lastEditedEntity = _selectedEntity;
+
+						editStartTransform.position = transform->position;
+						editStartTransform.rotation = transform->rotation;
+						editStartTransform.scale = transform->scale;
+						editStartTransform.enabled = transform->enabled;
+					}
+
+					// === Transform 변경 시: 물리 텔레포트 + dirty
 					if (changed)
 					{
 						if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity))
-						{
 							rigidBody->teleport = true;
-						}
+
 						if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
-						{
 							cct->teleport = true;
-						}
+
 						g_SceneDirty = true;
 					}
 
-					// 편집 종료 감지: IsItemActive가 false가 되고 이전에 편집 중이었을 때
-					if (isEditing && lastEditedEntity == _selectedEntity && !ImGui::IsAnyItemActive())
+					// === 편집 종료 감지: Transform 위젯이 더 이상 Active가 아닐 때
+					if (isEditing && lastEditedEntity == _selectedEntity && !anyTransformItemActive)
 					{
-						// 편집 종료: TransformCommand push
 						TransformCommand::TransformData newTransform;
 						newTransform.position = transform->position;
 						newTransform.rotation = transform->rotation;
 						newTransform.scale = transform->scale;
 						newTransform.enabled = transform->enabled;
 
-						// Transform이 실제로 변경되었는지 확인 (float 비교는 epsilon 사용)
-						constexpr float kFloatEpsilon = 1e-6f;
-						auto FloatNotEqual = [](float a, float b) { return std::fabs(a - b) > kFloatEpsilon; };
-						
+						// float 비교(너무 타이트하면 커맨드가 과하게 쌓임)
+						constexpr float kEps = 1e-5f;
+						auto NE = [](float a, float b) { return std::fabs(a - b) > kEps; };
+
 						bool hasChanged =
-							FloatNotEqual(editStartTransform.position.x, newTransform.position.x) ||
-							FloatNotEqual(editStartTransform.position.y, newTransform.position.y) ||
-							FloatNotEqual(editStartTransform.position.z, newTransform.position.z) ||
-							FloatNotEqual(editStartTransform.rotation.x, newTransform.rotation.x) ||
-							FloatNotEqual(editStartTransform.rotation.y, newTransform.rotation.y) ||
-							FloatNotEqual(editStartTransform.rotation.z, newTransform.rotation.z) ||
-							FloatNotEqual(editStartTransform.scale.x, newTransform.scale.x) ||
-							FloatNotEqual(editStartTransform.scale.y, newTransform.scale.y) ||
-							FloatNotEqual(editStartTransform.scale.z, newTransform.scale.z) ||
+							NE(editStartTransform.position.x, newTransform.position.x) ||
+							NE(editStartTransform.position.y, newTransform.position.y) ||
+							NE(editStartTransform.position.z, newTransform.position.z) ||
+							NE(editStartTransform.rotation.x, newTransform.rotation.x) ||
+							NE(editStartTransform.rotation.y, newTransform.rotation.y) ||
+							NE(editStartTransform.rotation.z, newTransform.rotation.z) ||
+							NE(editStartTransform.scale.x, newTransform.scale.x) ||
+							NE(editStartTransform.scale.y, newTransform.scale.y) ||
+							NE(editStartTransform.scale.z, newTransform.scale.z) ||
 							(editStartTransform.enabled != newTransform.enabled);
 
 						if (hasChanged)
@@ -4463,9 +4579,8 @@ namespace Alice
 
 						isEditing = false;
 					}
-				}
-			}
-		}
+
+            
 
 		void EditorCore::DrawInspectorScripts(World & world, const EntityId & _selectedEntity)
 		{
@@ -4562,192 +4677,118 @@ namespace Alice
 					}
 				}
 
-				for (const auto& compType : componentTypes) {
+				struct CompUIEntry
+				{
+					bool (*Has)(World&, EntityId);
+					bool (*Add)(World&, EntityId); // 성공하면 true
+				};
+
+				static const std::unordered_map<std::string, CompUIEntry> kCompUI = {
+					{ "CameraComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<CameraComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<CameraComponent>(e); return true; }
+					}},
+					{ "TransformComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<TransformComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<TransformComponent>(e); return true; }
+					}},
+					{ "MaterialComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<MaterialComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<MaterialComponent>(e); return true; }
+					}},
+					{ "PointLightComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<PointLightComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<PointLightComponent>(e); return true; }
+					}},
+					{ "SpotLightComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<SpotLightComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<SpotLightComponent>(e); return true; }
+					}},
+					{ "RectLightComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<RectLightComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<RectLightComponent>(e); return true; }
+					}},
+
+					// Effect / ComputeEffect 둘 다 지원
+					{ "EffectComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<EffectComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<EffectComponent>(e); return true; }
+					}},
+					{ "ComputeEffectComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<ComputeEffectComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<ComputeEffectComponent>(e); return true; }
+					}},
+					{ "TrailEffectComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<TrailEffectComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<TrailEffectComponent>(e); return true; }
+					}},
+
+					// Physics
+					{ "Phy_RigidBodyComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<Phy_RigidBodyComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<Phy_RigidBodyComponent>(e); return true; }
+					}},
+					{ "Phy_ColliderComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<Phy_ColliderComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<Phy_ColliderComponent>(e); return true; }
+					}},
+					{ "Phy_MeshColliderComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<Phy_MeshColliderComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<Phy_MeshColliderComponent>(e); return true; }
+					}},
+					{ "Phy_CCTComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<Phy_CCTComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<Phy_CCTComponent>(e); return true; }
+					}},
+					{ "Phy_TerrainHeightFieldComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<Phy_TerrainHeightFieldComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<Phy_TerrainHeightFieldComponent>(e); return true; }
+					}},
+					{ "Phy_SettingsComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<Phy_SettingsComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<Phy_SettingsComponent>(e); return true; }
+					}},
+					{ "Phy_JointComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<Phy_JointComponent>(e) != nullptr; },
+						[](World& w, EntityId e) { w.AddComponent<Phy_JointComponent>(e); return true; }
+					}},
+
+					// Skinned (주의: ctor 인자 정책 필요)
+					{ "SkinnedMeshComponent", {
+						[](World& w, EntityId e) { return w.GetComponent<SkinnedMeshComponent>(e) != nullptr; },
+						[](World& w, EntityId e) {
+						// 빈 경로 생성이 안전한지 프로젝트 정책에 따라 다름 (가능하면 "Pick Asset"로)
+						w.AddComponent<SkinnedMeshComponent>(e, "");
+						return true;
+					}
+				}},
+				{ "SkinnedAnimationComponent", {
+					[](World& w, EntityId e) { return w.GetComponent<SkinnedAnimationComponent>(e) != nullptr; },
+					[](World& w, EntityId e) { w.AddComponent<SkinnedAnimationComponent>(e); return true; }
+				}},
+				};
+
+				for (const auto& compType : componentTypes)
+				{
 					std::string typeName = compType.get_name().to_string();
 
-					// 이미 해당 컴포넌트가 있는지 확인하여 UI에 반영
-					bool hasComponent = false;
-					if (typeName == "CameraComponent") {
-						hasComponent = (world.GetComponent<CameraComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "CameraFollowComponent") {
-						hasComponent = (world.GetComponent<CameraFollowComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "CameraSpringArmComponent") {
-						hasComponent = (world.GetComponent<CameraSpringArmComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "CameraLookAtComponent") {
-						hasComponent = (world.GetComponent<CameraLookAtComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "CameraShakeComponent") {
-						hasComponent = (world.GetComponent<CameraShakeComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "CameraBlendComponent") {
-						hasComponent = (world.GetComponent<CameraBlendComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "CameraInputComponent") {
-						hasComponent = (world.GetComponent<CameraInputComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "TransformComponent") {
-						hasComponent = (world.GetComponent<TransformComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "MaterialComponent") {
-						hasComponent = (world.GetComponent<MaterialComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "PointLightComponent") {
-						hasComponent = (world.GetComponent<PointLightComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "SpotLightComponent") {
-						hasComponent = (world.GetComponent<SpotLightComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "RectLightComponent") {
-						hasComponent = (world.GetComponent<RectLightComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "Phy_RigidBodyComponent") {
-						hasComponent = (world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "Phy_ColliderComponent") {
-						hasComponent = (world.GetComponent<Phy_ColliderComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "Phy_MeshColliderComponent") {
-						hasComponent = (world.GetComponent<Phy_MeshColliderComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "Phy_CCTComponent") {
-						hasComponent = (world.GetComponent<Phy_CCTComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "Phy_TerrainHeightFieldComponent") {
-						hasComponent = (world.GetComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "Phy_SettingsComponent") {
-						hasComponent = (world.GetComponent<Phy_SettingsComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "Phy_JointComponent") {
-						hasComponent = (world.GetComponent<Phy_JointComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "SkinnedMeshComponent") {
-						hasComponent = (world.GetComponent<SkinnedMeshComponent>(_selectedEntity) != nullptr);
-					}
-					else if (typeName == "SkinnedAnimationComponent") {
-						hasComponent = (world.GetComponent<SkinnedAnimationComponent>(_selectedEntity) != nullptr);
-					}
+					auto it = kCompUI.find(typeName);
+					if (it == kCompUI.end())
+						continue; // 등록 안 된 타입은 스킵 (또는 "지원 안 함" 표기)
 
-					// 이미 존재하는 컴포넌트는 비활성화
-					if (hasComponent) {
-						ImGui::BeginDisabled();
-					}
+					bool has = it->second.Has(world, _selectedEntity);
 
-					if (ImGui::Selectable(typeName.c_str(), false) && !hasComponent) {
-						// rttr을 통해 컴포넌트 추가 (템플릿 기반이므로 직접 호출은 어려움)
-						// 대신 World에 헬퍼 함수가 필요하거나, 여기서 직접 타입별 분기 처리
-						// 일단 간단하게 World::AddComponentByName 같은 함수를 사용하거나,
-						// 타입별 분기는 최소한으로 유지
-						// 임시로 알려진 타입들만 처리 (추후 개선 가능)
-						bool added = false;
-						if (typeName == "CameraComponent") {
-							world.AddComponent<CameraComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "CameraFollowComponent") {
-							world.AddComponent<CameraFollowComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "CameraSpringArmComponent") {
-							world.AddComponent<CameraSpringArmComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "CameraLookAtComponent") {
-							world.AddComponent<CameraLookAtComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "CameraShakeComponent") {
-							world.AddComponent<CameraShakeComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "CameraBlendComponent") {
-							world.AddComponent<CameraBlendComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "CameraInputComponent") {
-							world.AddComponent<CameraInputComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "TransformComponent") {
-							world.AddComponent<TransformComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "MaterialComponent") {
-							world.AddComponent<MaterialComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "PointLightComponent") {
-							world.AddComponent<PointLightComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "SpotLightComponent") {
-							world.AddComponent<SpotLightComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "RectLightComponent") {
-							world.AddComponent<RectLightComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "ComputeEffectComponent") {
-							world.AddComponent<ComputeEffectComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "Phy_RigidBodyComponent") {
-							world.AddComponent<Phy_RigidBodyComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "Phy_ColliderComponent") {
-							world.AddComponent<Phy_ColliderComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "Phy_MeshColliderComponent") {
-							world.AddComponent<Phy_MeshColliderComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "Phy_CCTComponent") {
-							world.AddComponent<Phy_CCTComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "Phy_TerrainHeightFieldComponent") {
-							world.AddComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "Phy_SettingsComponent") {
-							world.AddComponent<Phy_SettingsComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "Phy_JointComponent") {
-							world.AddComponent<Phy_JointComponent>(_selectedEntity);
-							added = true;
-						}
-						else if (typeName == "SkinnedMeshComponent") {
-							// SkinnedMeshComponent는 meshAssetPath가 필요하므로 빈 경로로 생성
-							// 사용자는 나중에 인스펙터에서 경로를 설정할 수 있음
-							world.AddComponent<SkinnedMeshComponent>(_selectedEntity, "");
-							added = true;
-						}
-						else if (typeName == "SkinnedAnimationComponent") {
-							world.AddComponent<SkinnedAnimationComponent>(_selectedEntity);
-							added = true;
-						}
-
-						if (added) {
+					if (ImGui::Selectable(typeName.c_str(), false,
+						has ? ImGuiSelectableFlags_Disabled : 0))
+					{
+						if (!has && it->second.Add(world, _selectedEntity))
 							g_SceneDirty = true;
-						}
 					}
 
-					if (hasComponent) {
-						ImGui::EndDisabled();
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("이 컴포넌트는 이미 추가되어 있습니다.");
-						}
-					}
+					if (has && ImGui::IsItemHovered())
+						ImGui::SetTooltip("이 컴포넌트는 이미 추가되어 있습니다.");
 				}
-				ImGui::EndCombo();
-			}
+
 
 
 			// 엔진 컴포넌트 표시 - rttr으로 등록된 모든 컴포넌트 타입을 자동으로 처리
@@ -4782,97 +4823,70 @@ namespace Alice
 				}
 			}
 
-			// 각 컴포넌트 타입별로 UI 표시 (타입별 분기 처리 필요)
-			for (const auto& compType : displayComponentTypes) {
-				std::string typeName = compType.get_name().to_string();
-
-				// 타입별로 컴포넌트 가져오기 및 제거 함수 호출
-				if (typeName == "CameraComponent") {
-					DrawEngineComponent("CameraComponent",
-						world.GetComponent<CameraComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "CameraFollowComponent") {
-					DrawEngineComponent("CameraFollowComponent",
-						world.GetComponent<CameraFollowComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraFollowComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "CameraSpringArmComponent") {
-					DrawEngineComponent("CameraSpringArmComponent",
-						world.GetComponent<CameraSpringArmComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraSpringArmComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "CameraLookAtComponent") {
-					DrawEngineComponent("CameraLookAtComponent",
-						world.GetComponent<CameraLookAtComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraLookAtComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "CameraShakeComponent") {
-					DrawEngineComponent("CameraShakeComponent",
-						world.GetComponent<CameraShakeComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraShakeComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "CameraBlendComponent") {
-					DrawEngineComponent("CameraBlendComponent",
-						world.GetComponent<CameraBlendComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraBlendComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "CameraInputComponent") {
-					DrawEngineComponent("CameraInputComponent",
-						world.GetComponent<CameraInputComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraInputComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "PointLightComponent") {
-					DrawEngineComponent("PointLightComponent",
-						world.GetComponent<PointLightComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<PointLightComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "SpotLightComponent") {
-					DrawEngineComponent("SpotLightComponent",
-						world.GetComponent<SpotLightComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<SpotLightComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "RectLightComponent") {
-					DrawEngineComponent("RectLightComponent",
-						world.GetComponent<RectLightComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "Phy_RigidBodyComponent") {
-					DrawEngineComponent("Phy_RigidBodyComponent",
-						world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); },
-						_selectedEntity, typeName);
-				}
-				else if (typeName == "Phy_ColliderComponent") {
-					DrawInspectorCollider(world, _selectedEntity);
-				}
-				else if (typeName == "Phy_MeshColliderComponent") {
-					DrawInspectorMeshCollider(world, _selectedEntity);
-				}
-				else if (typeName == "Phy_CCTComponent") {
-					DrawInspectorCharacterController(world, _selectedEntity);
-				}
-				else if (typeName == "Phy_TerrainHeightFieldComponent") {
-					DrawInspectorTerrainHeightField(world, _selectedEntity);
-				}
-				else if (typeName == "Phy_SettingsComponent") {
-					DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
-				}
-				else if (typeName == "Phy_JointComponent") {
-					DrawInspectorJoint(world, _selectedEntity);
-				}
-				// 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
-			}
+        // 각 컴포넌트 타입별로 UI 표시 (타입별 분기 처리 필요)
+        for (const auto& compType : displayComponentTypes) {
+            std::string typeName = compType.get_name().to_string();
+            
+            // 타입별로 컴포넌트 가져오기 및 제거 함수 호출
+            if (typeName == "CameraComponent") {
+                DrawEngineComponent("CameraComponent",
+                    world.GetComponent<CameraComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<CameraComponent>(_selectedEntity); });
+            } else if (typeName == "CameraFollowComponent") {
+                DrawEngineComponent("CameraFollowComponent",
+                    world.GetComponent<CameraFollowComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<CameraFollowComponent>(_selectedEntity); });
+            } else if (typeName == "CameraSpringArmComponent") {
+                DrawEngineComponent("CameraSpringArmComponent",
+                    world.GetComponent<CameraSpringArmComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<CameraSpringArmComponent>(_selectedEntity); });
+            } else if (typeName == "CameraLookAtComponent") {
+                DrawEngineComponent("CameraLookAtComponent",
+                    world.GetComponent<CameraLookAtComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<CameraLookAtComponent>(_selectedEntity); });
+            } else if (typeName == "CameraShakeComponent") {
+                DrawEngineComponent("CameraShakeComponent",
+                    world.GetComponent<CameraShakeComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<CameraShakeComponent>(_selectedEntity); });
+            } else if (typeName == "CameraBlendComponent") {
+                DrawEngineComponent("CameraBlendComponent",
+                    world.GetComponent<CameraBlendComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<CameraBlendComponent>(_selectedEntity); });
+            } else if (typeName == "CameraInputComponent") {
+                DrawEngineComponent("CameraInputComponent",
+                    world.GetComponent<CameraInputComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<CameraInputComponent>(_selectedEntity); });
+            } else if (typeName == "PointLightComponent") {
+                DrawEngineComponent("PointLightComponent",
+                    world.GetComponent<PointLightComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<PointLightComponent>(_selectedEntity); });
+            } else if (typeName == "SpotLightComponent") {
+                DrawEngineComponent("SpotLightComponent",
+                    world.GetComponent<SpotLightComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<SpotLightComponent>(_selectedEntity); });
+            } else if (typeName == "RectLightComponent") {
+                DrawEngineComponent("RectLightComponent",
+                    world.GetComponent<RectLightComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
+            } else if (typeName == "Phy_RigidBodyComponent") {
+                DrawEngineComponent("Phy_RigidBodyComponent",
+                    world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
+                    [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
+            } else if (typeName == "Phy_ColliderComponent") {
+                DrawInspectorCollider(world, _selectedEntity);
+            } else if (typeName == "Phy_MeshColliderComponent") {
+                DrawInspectorMeshCollider(world, _selectedEntity);
+            } else if (typeName == "Phy_CCTComponent") {
+                DrawInspectorCharacterController(world, _selectedEntity);
+            } else if (typeName == "Phy_TerrainHeightFieldComponent") {
+                DrawInspectorTerrainHeightField(world, _selectedEntity);
+            } else if (typeName == "Phy_SettingsComponent") {
+                DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
+            } else if (typeName == "Phy_JointComponent") {
+                DrawInspectorJoint(world, _selectedEntity);
+            }
+            // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
+        }
 
 			// List Scripts
 			if (auto* scripts = world.GetScripts(_selectedEntity);
@@ -5053,86 +5067,94 @@ namespace Alice
 				}
 				changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter).changed;
 
-				const char* shadingItems[] = {
-					"Global",
-					"Lambert",
-					"Phong",
-					"Blinn-Phong",
-					"Toon",
-					"PBR",
-					"ToonPBR"
+            const char* shadingItems[] = {
+                "Global",
+                "Lambert",
+                "Phong",
+                "Blinn-Phong",
+                "Toon",
+                "PBR",
+                "ToonPBR",
+                "OnlyTextureWithOutline"
+            };
+            int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
+            shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
+            if (ImGui::Combo("Shading", &shadingIndex, shadingItems, (int)std::size(shadingItems)))
+            {
+                mat->shadingMode = shadingIndex - 1;
+                changed = true;
+            }
+
+			auto IsImageExt = [](std::string ext)
+				{
+					std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+					return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".dds" || ext == ".tga" || ext == ".bmp";
 				};
-				int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
-				shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
-				if (ImGui::Combo("Shading", &shadingIndex, shadingItems, (int)std::size(shadingItems)))
-				{
-					mat->shadingMode = shadingIndex - 1;
-					changed = true;
-				}
 
-				ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty()
-					? "None"
-					: mat->albedoTexturePath.c_str());
-
-				// 텍스처 경로 필드에 드롭 타겟 추가
-				if (ImGui::BeginDragDropTarget())
+			auto NormalizeToLogicalIfPossible = [&](const std::filesystem::path& p) -> std::string
 				{
-					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
+					// 기본은 입력 경로 문자열
+					std::string out = p.string();
+
+					// 가능하면 "논리 경로"로 변환
+					if (m_resources)
 					{
-						const char* pathStr = static_cast<const char*>(payload->Data);
-						std::filesystem::path droppedPath(pathStr);
-						std::string ext = droppedPath.extension().string();
+						// 여기 API는 프로젝트에 맞는 "하나"로 통일해라.
+						// 아래는 예시: static 함수가 진짜 맞다면 이걸로.
+						std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(p);
 
-						// 이미지 파일인지 확인
-						std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-						if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".dds" || ext == ".tga" || ext == ".bmp")
-						{
-							// 논리 경로로 변환 (ResourceManager 사용)
-							std::string logicalPath = droppedPath.string();
-							if (m_resources)
-							{
-								// 절대 경로를 논리 경로로 변환 시도
-								std::filesystem::path logical = m_resources->NormalizeResourcePathAbsoluteToLogical(droppedPath);
-								if (!logical.empty())
-								{
-									logicalPath = logical.string();
-								}
-							}
-							mat->albedoTexturePath = logicalPath;
-							changed = true;
-							g_SceneDirty = true;
-						}
+						// 변환 성공 + 논리 경로(상대 경로)면 적용
+						if (!logical.empty() && !logical.is_absolute())
+							out = logical.string();
 					}
-					ImGui::EndDragDropTarget();
-				}
+					return out;
+				};
 
-				if (ImGui::Button("Browse...")) {
-					wchar_t buf[MAX_PATH] = {};
-					OPENFILENAMEW ofn = { sizeof(ofn) };
-					ofn.hwndOwner = m_hwnd;
-					ofn.lpstrFilter = L"Images\0*.png;*.jpg;*.jpeg;*.dds\0All\0*.*\0";
-					ofn.lpstrFile = buf;
-					ofn.nMaxFile = MAX_PATH;
-					ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-					if (GetOpenFileNameW(&ofn)) {
-						std::filesystem::path absolutePath = buf;
-						
-						// 절대 경로를 논리 경로로 변환
-						std::string logicalPath = absolutePath.string();
-						if (m_resources)
-						{
-							// NormalizeResourcePathAbsoluteToLogical는 static 함수이므로 인스턴스 불필요
-							std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(absolutePath);
-							if (!logical.empty() && !logical.is_absolute())
-							{
-								logicalPath = logical.string();
-							}
-						}
-						
-						mat->albedoTexturePath = logicalPath;
-						changed = true;
+			auto ApplyAlbedoPath = [&](const std::filesystem::path& anyPath)
+				{
+					if (!IsImageExt(anyPath.extension().string()))
+						return;
+
+					mat->albedoTexturePath = NormalizeToLogicalIfPossible(anyPath);
+					changed = true;
+					g_SceneDirty = true;
+				};
+
+			// ---- UI
+			ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty() ? "None" : mat->albedoTexturePath.c_str());
+
+			// 드롭 타겟
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
+				{
+					// payload가 널 종결 문자열이라는 전제(너희 쪽에서 보장해야 함)
+					const char* pathStr = static_cast<const char*>(payload->Data);
+					if (pathStr && pathStr[0] != '\0')
+					{
+						ApplyAlbedoPath(std::filesystem::path(pathStr));
 					}
 				}
+				ImGui::EndDragDropTarget();
+			}
+
+			// Browse
+			if (ImGui::Button("Browse..."))
+			{
+				wchar_t buf[MAX_PATH] = {};
+				OPENFILENAMEW ofn = { sizeof(ofn) };
+				ofn.hwndOwner = m_hwnd;
+				ofn.lpstrFilter = L"Images\0*.png;*.jpg;*.jpeg;*.dds;*.tga;*.bmp\0All\0*.*\0";
+				ofn.lpstrFile = buf;
+				ofn.nMaxFile = MAX_PATH;
+				ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+
+				if (GetOpenFileNameW(&ofn))
+				{
+					ApplyAlbedoPath(std::filesystem::path(buf));
+				}
+			}
+
 
 				if (changed) {
 					g_SceneDirty = true;
