@@ -273,11 +273,11 @@ namespace Alice
 		ComPtr<ID3DBlob> vsBlob, psBlob;
 
 		// 1. VS 컴파일 및 생성
-		if (FAILED(D3DCompile(TrailEffectShader::g_SwordEffectVS, std::strlen(TrailEffectShader::g_SwordEffectVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
+		if (FAILED(D3DCompile(TrailEffectShader::g_TrailEffectVS, std::strlen(TrailEffectShader::g_TrailEffectVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), nullptr))) return false;
 		if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vertexShader.ReleaseAndGetAddressOf()))) return false;
 
 		// 2. PS 컴파일 및 생성
-		if (FAILED(D3DCompile(TrailEffectShader::g_SwordEffectPS, std::strlen(TrailEffectShader::g_SwordEffectPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
+		if (FAILED(D3DCompile(TrailEffectShader::g_TrailEffectPS, std::strlen(TrailEffectShader::g_TrailEffectPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) return false;
 		if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_pixelShader.ReleaseAndGetAddressOf()))) return false;
 
 		// 3. Input Layout 생성

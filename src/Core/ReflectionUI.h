@@ -236,6 +236,11 @@ namespace Alice
                 {
                     changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f);
                 }
+                else if (propName == "normalStrength")
+                {
+                    // 노말맵 강도 조절: 0.0f ~ 5.0f 범위
+                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 5.0f);
+                }
                 else
                 {
                     changed |= Detail::RenderProperty(prop, inst);

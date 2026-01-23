@@ -5,8 +5,8 @@ namespace Alice
 {
 	class TrailEffectShader {
 	public:
-		inline static const char* g_SwordEffectVS = R"(
-cbuffer CBPerSwordEffectVS : register(b0)
+		inline static const char* g_TrailEffectVS = R"(
+cbuffer CBPerTrailEffectVS : register(b0)
 {
     float4x4 gViewProj;     // View * Projection 행렬
     float3   gCameraPos;    // 카메라 위치 (월드 좌표)
@@ -51,7 +51,7 @@ VSOutput main(VSInput input)
 }
 )";
 
-        inline static const char* g_SwordEffectPS = R"(
+        inline static const char* g_TrailEffectPS = R"(
 Texture2D gSwordTexture : register(t20);
 SamplerState gSwordSampler : register(s0);
 
@@ -63,7 +63,7 @@ struct PSInput
     float  Age : TEXCOORD2;
 };
 
-cbuffer CBPerSwordEffectPS : register(b1)
+cbuffer CBPerTrailEffectPS : register(b1)
 {
     float3   gColor;
     float    gFadeDuration;
