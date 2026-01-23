@@ -27,13 +27,20 @@ namespace Alice
     /// @note RTTR 기반으로 렌더링하는 유틸리티 클래스
     namespace ReflectionUI
     {
+        /// UI 편집 이벤트 정보
+        struct UIEditEvent
+        {
+            bool changed = false;              // 값이 변경되었는지
+            bool activated = false;            // 편집이 시작되었는지 (IsItemActivated)
+            bool deactivatedAfterEdit = false; // 편집이 끝났는지 (IsItemDeactivatedAfterEdit)
+        };
         namespace Detail
         {
             /// @param obj 인스턴스
             /// @param label 렌더링할 라벨
             /// @param world World 포인터 (엔티티 참조 드래그 앤 드롭용, 선택적)
-            /// @return 변경 여부
-            inline bool RenderProperty(const rttr::property& prop, rttr::instance& obj, 
+            /// @return UI 편집 이벤트 정보
+            inline UIEditEvent RenderProperty(const rttr::property& prop, rttr::instance& obj, 
                                       const std::string& label = "", World* world = nullptr)
             {
                 rttr::type propType = prop.get_type();
@@ -42,55 +49,65 @@ namespace Alice
 
                 rttr::variant value = prop.get_value(obj);
                 if (!value.is_valid())
-                    return false;
+                    return UIEditEvent{};
 
-                bool changed = false;
+                UIEditEvent event{};
 
                 if (propType == rttr::type::get<bool>())
                 {
                     bool val = value.to_bool();
+                    event.activated = ImGui::IsItemActivated();
                     if (ImGui::Checkbox(displayName.c_str(), &val))
                     {
                         prop.set_value(obj, val);
-                        changed = true;
+                        event.changed = true;
                     }
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<int>())
                 {
                     int val = value.to_int();
+                    event.activated = ImGui::IsItemActivated();
                     if (ImGui::DragInt(displayName.c_str(), &val))
                     {
                         prop.set_value(obj, val);
-                        changed = true;
+                        event.changed = true;
                     }
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<uint32_t>())
                 {
                     // uint32_t는 비트마스크로 처리 가능하지만, 일단 일반 int로 표시
                     int val = static_cast<int>(value.to_uint32());
+                    event.activated = ImGui::IsItemActivated();
                     if (ImGui::DragInt(displayName.c_str(), &val, 1.0f, 0, INT_MAX))
                     {
                         prop.set_value(obj, static_cast<uint32_t>(val));
-                        changed = true;
+                        event.changed = true;
                     }
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<float>())
                 {
                     float val = value.to_float();
+                    event.activated = ImGui::IsItemActivated();
                     if (ImGui::DragFloat(displayName.c_str(), &val, 0.01f))
                     {
                         prop.set_value(obj, val);
-                        changed = true;
+                        event.changed = true;
                     }
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<double>())
                 {
                     float val = static_cast<float>(value.to_double());
+                    event.activated = ImGui::IsItemActivated();
                     if (ImGui::DragFloat(displayName.c_str(), &val, 0.01f))
                     {
                         prop.set_value(obj, static_cast<double>(val));
-                        changed = true;
+                        event.changed = true;
                     }
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<std::string>())
                 {
@@ -99,11 +116,13 @@ namespace Alice
                     strncpy_s(buffer, val.c_str(), sizeof(buffer) - 1);
                     
                     // InputText 렌더링
+                    event.activated = ImGui::IsItemActivated();
                     if (ImGui::InputText(displayName.c_str(), buffer, sizeof(buffer)))
                     {
                         prop.set_value(obj, std::string(buffer));
-                        changed = true;
+                        event.changed = true;
                     }
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                     
                     // 드래그앤드롭 지원 감지
                     std::string propNameLower = propName;
@@ -146,7 +165,7 @@ namespace Alice
                                     }
                                     
                                     prop.set_value(obj, entityName);
-                                    changed = true;
+                                    event.changed = true;
                                 }
                             }
                         }
@@ -169,7 +188,7 @@ namespace Alice
                                     {
                                         // .scene 파일이 아니면 무시
                                         ImGui::EndDragDropTarget();
-                                        return changed;
+                                        return event;
                                     }
                                 }
                                 
@@ -234,7 +253,7 @@ namespace Alice
                                 }
                                 
                                 prop.set_value(obj, logicalPath);
-                                changed = true;
+                                event.changed = true;
                             }
                         }
                         
@@ -260,19 +279,23 @@ namespace Alice
                             
                             if (isColor)
                             {
+                                event.activated = ImGui::IsItemActivated();
                                 if (ImGui::ColorEdit3(displayName.c_str(), &float3->x))
                                 {
                                     prop.set_value(obj, *float3);
-                                    changed = true;
+                                    event.changed = true;
                                 }
+                                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                             }
                             else
                             {
+                                event.activated = ImGui::IsItemActivated();
                                 if (ImGui::DragFloat3(displayName.c_str(), &float3->x, 0.1f))
                                 {
                                     prop.set_value(obj, *float3);
-                                    changed = true;
+                                    event.changed = true;
                                 }
+                                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                             }
                         }
                     }
@@ -288,19 +311,23 @@ namespace Alice
                             
                             if (isColor)
                             {
+                                event.activated = ImGui::IsItemActivated();
                                 if (ImGui::ColorEdit4(displayName.c_str(), &float4->x))
                                 {
                                     prop.set_value(obj, *float4);
-                                    changed = true;
+                                    event.changed = true;
                                 }
+                                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                             }
                             else
                             {
+                                event.activated = ImGui::IsItemActivated();
                                 if (ImGui::DragFloat4(displayName.c_str(), &float4->x, 0.1f))
                                 {
                                     prop.set_value(obj, *float4);
-                                    changed = true;
+                                    event.changed = true;
                                 }
+                                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                             }
                         }
                     }
@@ -310,16 +337,23 @@ namespace Alice
                         if (ImGui::TreeNode(displayName.c_str()))
                         {
                             rttr::instance inst = value;
+                            UIEditEvent subEvent{};
                             for (auto& subProp : classType.get_properties())
                             {
-                                RenderProperty(subProp, inst, "", world);
+                                UIEditEvent e = RenderProperty(subProp, inst, "", world);
+                                subEvent.changed |= e.changed;
+                                subEvent.activated |= e.activated;
+                                subEvent.deactivatedAfterEdit |= e.deactivatedAfterEdit;
                             }
+                            event.changed |= subEvent.changed;
+                            event.activated |= subEvent.activated;
+                            event.deactivatedAfterEdit |= subEvent.deactivatedAfterEdit;
                             ImGui::TreePop();
                         }
                     }
                 }
 
-                return changed;
+                return event;
             }
 
             /// @param prop 프로퍼티
@@ -327,8 +361,8 @@ namespace Alice
             /// @param minVal 최소값
             /// @param maxVal 최대값
             /// @param label 렌더링할 라벨
-            /// @return 변경 여부
-            inline bool RenderPropertyWithRange(const rttr::property& prop, rttr::instance& obj,
+            /// @return UI 편집 이벤트 정보
+            inline UIEditEvent RenderPropertyWithRange(const rttr::property& prop, rttr::instance& obj,
                                                float minVal, float maxVal,
                                                const std::string& label = "", World* world = nullptr)
             {
@@ -343,34 +377,37 @@ namespace Alice
 
                 rttr::variant value = prop.get_value(obj);
                 if (!value.is_valid())
-                    return false;
+                    return UIEditEvent{};
 
                 float val = propType == rttr::type::get<float>() ? 
                            value.to_float() : static_cast<float>(value.to_double());
                 
+                UIEditEvent event{};
+                event.activated = ImGui::IsItemActivated();
                 if (ImGui::SliderFloat(displayName.c_str(), &val, minVal, maxVal))
                 {
                     if (propType == rttr::type::get<float>())
                         prop.set_value(obj, val);
                     else
                         prop.set_value(obj, static_cast<double>(val));
-                    return true;
+                    event.changed = true;
                 }
-                return false;
+                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                return event;
             }
         }
 
         /// @param obj 인스턴스
         /// @param filter 필터 함수
         /// @param world World 포인터 (엔티티 참조 드래그 앤 드롭용, 선택적)
-        /// @return 변경 여부
+        /// @return UI 편집 이벤트 정보 (모든 프로퍼티의 이벤트를 OR 연산)
         template<typename T>
-        bool RenderInspector(T& obj, const std::function<bool(const std::string&)>& filter = nullptr, World* world = nullptr)
+        UIEditEvent RenderInspector(T& obj, const std::function<bool(const std::string&)>& filter = nullptr, World* world = nullptr)
         {
             rttr::type t = rttr::type::get(obj);
             rttr::instance inst = obj;
 
-            bool changed = false;
+            UIEditEvent result{};
             for (auto& prop : t.get_properties())
             {
                 std::string propName = prop.get_name().to_string();
@@ -380,27 +417,32 @@ namespace Alice
                     continue;
 
                 // 그 외 프로퍼티는 자동으로 렌더링
+                UIEditEvent event;
                 if (propName == "roughness" || propName == "metalness")
                 {
-                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
                 }
                 else
                 {
-                    changed |= Detail::RenderProperty(prop, inst, "", world);
+                    event = Detail::RenderProperty(prop, inst, "", world);
                 }
+                
+                result.changed |= event.changed;
+                result.activated |= event.activated;
+                result.deactivatedAfterEdit |= event.deactivatedAfterEdit;
             }
 
-            return changed;
+            return result;
         }
 
         /// @param obj 인스턴스
         /// @param propName 프로퍼티 이름
         /// @param label 렌더링할 라벨
         /// @param world World 포인터 (엔티티 참조 드래그 앤 드롭용, 선택적)
-        /// @return 변경 여부
+        /// @return UI 편집 이벤트 정보
         // 프로퍼티 렌더링
         template<typename T>
-        bool RenderProperty(T& obj, const std::string& propName, const std::string& label = "", World* world = nullptr)
+        UIEditEvent RenderProperty(T& obj, const std::string& propName, const std::string& label = "", World* world = nullptr)
         {
             rttr::type t = rttr::type::get(obj);
             rttr::instance inst = obj;
@@ -409,7 +451,7 @@ namespace Alice
             if (!prop.is_valid())
             {
                 OutputDebugStringA(("Type Not Registered: " + std::string(typeid(T).name()) + "\n").c_str());
-                return false;
+                return UIEditEvent{};
             }
 
             return Detail::RenderProperty(prop, inst, label.empty() ? propName : label, world);
@@ -419,14 +461,14 @@ namespace Alice
         /// @param obj 인스턴스
         /// @param labelMap 렌더링할 라벨 맵
         /// @param world World 포인터 (엔티티 참조 드래그 앤 드롭용, 선택적)
-        /// @return 변경 여부
+        /// @return UI 편집 이벤트 정보
         template<typename T>
-        bool RenderInspectorWithLabels(T& obj, const std::unordered_map<std::string, std::string>& labelMap, World* world = nullptr)
+        UIEditEvent RenderInspectorWithLabels(T& obj, const std::unordered_map<std::string, std::string>& labelMap, World* world = nullptr)
         {
             rttr::type t = rttr::type::get(obj);
             rttr::instance inst = obj;
 
-            bool changed = false;
+            UIEditEvent result{};
             for (auto& prop : t.get_properties())
             {
                 std::string propName = prop.get_name().to_string();
@@ -437,17 +479,22 @@ namespace Alice
                     displayLabel = it->second;
 
                 // roughness, metalness는 자동으로 SliderFloat로 렌더링
+                UIEditEvent event;
                 if (propName == "roughness" || propName == "metalness")
                 {
-                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
                 }
                 else
                 {
-                    changed |= Detail::RenderProperty(prop, inst, displayLabel, world);
+                    event = Detail::RenderProperty(prop, inst, displayLabel, world);
                 }
+                
+                result.changed |= event.changed;
+                result.activated |= event.activated;
+                result.deactivatedAfterEdit |= event.deactivatedAfterEdit;
             }
 
-            return changed;
+            return result;
         }
     }
 }
