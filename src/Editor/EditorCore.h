@@ -84,9 +84,11 @@ namespace Alice
 		bool DrawLayerMaskChipEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames);
 		bool DrawIgnoreLayersChipEditor(const char* label, uint32_t& ignoreLayers, const std::array<std::string, 32>& layerNames);		
 		void DrawInspectorCollider(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorMeshCollider(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorCharacterController(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorPhysicsSceneSettings(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorJoint(World& world, const EntityId& _selectedEntity);
 
 		/// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
 		void DrawDirectoryNode(World& world,

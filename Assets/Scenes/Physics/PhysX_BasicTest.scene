@@ -54,26 +54,26 @@
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 50.0,
-                    "z": 21.0
+                    "x": -4.044521331787109,
+                    "y": 21.286785125732422,
+                    "z": 37.552467346191406
                 },
                 "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": -0.041798047721385956,
-                    "z": -2.993072986602783
+                    "x": -1.5707954168319702,
+                    "y": -2.226491689682007,
+                    "z": 0.8929948210716248
                 },
                 "scale": {
-                    "x": 0.9999999403953552,
-                    "y": 0.9999983310699463,
-                    "z": 0.9999974966049194
+                    "x": 0.9999998807907104,
+                    "y": 0.9999989867210388,
+                    "z": 0.9999974370002747
                 }
             },
-            "id": 66,
-            "name": "DropBox"
+            "name": "DropBoxa"
         },
         {
             "PhysicsSceneSettings": {
+                "enableGroundPlane": true,
                 "enablePhysics": true,
                 "filterRevision": 0,
                 "fixedDt": 0.01666666753590107,
@@ -82,6 +82,14 @@
                     -9.8100004196167,
                     0.0
                 ],
+                "groundCollideMask": 4294967295,
+                "groundDynamicFriction": 0.5,
+                "groundIgnoreLayers": 0,
+                "groundIsTrigger": false,
+                "groundLayerBits": 1,
+                "groundQueryMask": 4294967295,
+                "groundRestitution": 0.0,
+                "groundStaticFriction": 0.5,
                 "layerCollideMatrix": [
                     [
                         true,
@@ -2303,14 +2311,14 @@
                     "enabled": true,
                     "name": "SceneSwitchExample",
                     "props": {
-                        "m_targetName1": "FbxTestScene",
+                        "m_targetName1": "Physics/PhysX_GimmickTest",
                         "m_targetName2": "Physics/PhysX_RapiTest"
                     }
                 }
             ],
             "TerrainHeightField": {
                 "centerPivot": true,
-                "colScale": 10.0,
+                "colScale": 100.0,
                 "collideMask": 4294967295,
                 "doubleSidedQueries": true,
                 "dynamicFriction": 0.5,
@@ -2318,11 +2326,11 @@
                 "heightScale": 0.009999999776482582,
                 "ignoreLayers": 0,
                 "layerBits": 1,
-                "numCols": 4,
-                "numRows": 4,
+                "numCols": 10,
+                "numRows": 10,
                 "queryMask": 4294967295,
                 "restitution": 0.0,
-                "rowScale": 10.0,
+                "rowScale": 100.0,
                 "staticFriction": 0.5
             },
             "Transform": {
@@ -2337,13 +2345,12 @@
                     "z": 0.0
                 },
                 "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
+                    "x": 100.0,
+                    "y": 0.10000000149011612,
+                    "z": 100.0
                 }
             },
-            "id": 67,
-            "name": "GameObject4"
+            "name": "Ground"
         },
         {
             "Collider": {
@@ -2399,22 +2406,21 @@
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 40.0,
-                    "z": 20.5
+                    "x": 1.1850684881210327,
+                    "y": 8.35261058807373,
+                    "z": 25.009519577026367
                 },
                 "rotation": {
-                    "x": -0.0,
-                    "y": 0.0,
-                    "z": 0.0
+                    "x": -3.7955362586217234e-06,
+                    "y": -0.00949300266802311,
+                    "z": 1.5707998275756836
                 },
                 "scale": {
                     "x": 1.0,
                     "y": 1.0,
-                    "z": 1.0
+                    "z": 0.9999940991401672
                 }
             },
-            "id": 68,
             "name": "DropBox2"
         },
         {
@@ -2438,6 +2444,197 @@
                 "staticFriction": 0.5,
                 "type": "Box"
             },
+            "Joint": {
+                "breakForce": 0.0,
+                "breakTorque": 0.0,
+                "collideConnected": false,
+                "d6": {
+                    "driveAngularVelocity": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "driveLimitsAreForces": true,
+                    "driveLinearVelocity": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "drivePose": {
+                        "position": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "rotation": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        }
+                    },
+                    "driveSlerp": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveSwing": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveTwist": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveX": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveY": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveZ": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "linearLimitX": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "linearLimitY": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "linearLimitZ": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "motionSwing1": "Locked",
+                    "motionSwing2": "Locked",
+                    "motionTwist": "Locked",
+                    "motionX": "Locked",
+                    "motionY": "Locked",
+                    "motionZ": "Locked",
+                    "swingLimit": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "yAngle": 1.570796251296997,
+                        "zAngle": 1.570796251296997
+                    },
+                    "twistLimit": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -3.1415927410125732,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 3.1415927410125732
+                    }
+                },
+                "distance": {
+                    "damping": 0.0,
+                    "enableMaxDistance": true,
+                    "enableMinDistance": false,
+                    "enableSpring": false,
+                    "maxDistance": 0.0,
+                    "minDistance": 0.0,
+                    "stiffness": 0.0,
+                    "tolerance": 0.0
+                },
+                "frameA": {
+                    "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    }
+                },
+                "frameB": {
+                    "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    }
+                },
+                "prismatic": {
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "lowerLimit": -1.0,
+                    "upperLimit": 1.0
+                },
+                "revolute": {
+                    "driveForceLimit": 0.0,
+                    "driveFreeSpin": false,
+                    "driveLimitsAreForces": true,
+                    "driveVelocity": 0.0,
+                    "enableDrive": false,
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "lowerLimit": -3.1415927410125732,
+                    "upperLimit": 3.1415927410125732
+                },
+                "spherical": {
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "yLimitAngle": 1.570796251296997,
+                    "zLimitAngle": 1.570796251296997
+                },
+                "targetName": "B",
+                "type": "Fixed"
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 1.0,
+                    "y": 0.7019608020782471,
+                    "z": 0.7019608020782471
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
             "RigidBody": {
                 "angularDamping": 0.05000000074505806,
                 "density": 1.0,
@@ -2456,18 +2653,18 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 30.0,
-                    "z": 20.0
+                    "x": 6.152325630187988,
+                    "y": 0.9999823570251465,
+                    "z": 19.431705474853516
                 },
                 "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": -0.041798047721385956,
-                    "z": -2.993072986602783
+                    "x": -1.9778958630922716e-06,
+                    "y": 0.045071639120578766,
+                    "z": -4.435268238012213e-06
                 },
                 "scale": {
                     "x": 0.9999999403953552,
@@ -2475,8 +2672,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 69,
-            "name": "DropBox"
+            "name": "C"
         },
         {
             "Collider": {
@@ -2499,6 +2695,197 @@
                 "staticFriction": 0.5,
                 "type": "Box"
             },
+            "Joint": {
+                "breakForce": 0.0,
+                "breakTorque": 0.0,
+                "collideConnected": false,
+                "d6": {
+                    "driveAngularVelocity": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "driveLimitsAreForces": true,
+                    "driveLinearVelocity": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "drivePose": {
+                        "position": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "rotation": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        }
+                    },
+                    "driveSlerp": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveSwing": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveTwist": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveX": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveY": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveZ": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "linearLimitX": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "linearLimitY": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "linearLimitZ": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "motionSwing1": "Locked",
+                    "motionSwing2": "Locked",
+                    "motionTwist": "Locked",
+                    "motionX": "Locked",
+                    "motionY": "Locked",
+                    "motionZ": "Locked",
+                    "swingLimit": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "yAngle": 1.570796251296997,
+                        "zAngle": 1.570796251296997
+                    },
+                    "twistLimit": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -3.1415927410125732,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 3.1415927410125732
+                    }
+                },
+                "distance": {
+                    "damping": 0.0,
+                    "enableMaxDistance": true,
+                    "enableMinDistance": false,
+                    "enableSpring": false,
+                    "maxDistance": 0.0,
+                    "minDistance": 0.0,
+                    "stiffness": 0.0,
+                    "tolerance": 0.0
+                },
+                "frameA": {
+                    "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    }
+                },
+                "frameB": {
+                    "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    }
+                },
+                "prismatic": {
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "lowerLimit": -1.0,
+                    "upperLimit": 1.0
+                },
+                "revolute": {
+                    "driveForceLimit": 0.0,
+                    "driveFreeSpin": false,
+                    "driveLimitsAreForces": true,
+                    "driveVelocity": 0.0,
+                    "enableDrive": false,
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "lowerLimit": -3.1415927410125732,
+                    "upperLimit": 3.1415927410125732
+                },
+                "spherical": {
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "yLimitAngle": 1.570796251296997,
+                    "zLimitAngle": 1.570796251296997
+                },
+                "targetName": "A",
+                "type": "Fixed"
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.7019608020782471,
+                    "y": 1.0,
+                    "z": 0.7019608020782471
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
             "RigidBody": {
                 "angularDamping": 0.05000000074505806,
                 "density": 1.0,
@@ -2517,18 +2904,18 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 20.0,
-                    "z": 19.5
+                    "x": -1.4200377464294434,
+                    "y": 0.9999973177909851,
+                    "z": 19.192670822143555
                 },
                 "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": -0.041798047721385956,
-                    "z": -2.993072986602783
+                    "x": -1.7861780179373454e-06,
+                    "y": -0.09663853794336319,
+                    "z": -4.874828846368473e-06
                 },
                 "scale": {
                     "x": 0.9999999403953552,
@@ -2536,8 +2923,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 70,
-            "name": "DropBox"
+            "name": "B"
         },
         {
             "Collider": {
@@ -2560,6 +2946,197 @@
                 "staticFriction": 0.5,
                 "type": "Box"
             },
+            "Joint": {
+                "breakForce": 0.0,
+                "breakTorque": 0.0,
+                "collideConnected": false,
+                "d6": {
+                    "driveAngularVelocity": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "driveLimitsAreForces": true,
+                    "driveLinearVelocity": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "drivePose": {
+                        "position": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "rotation": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        }
+                    },
+                    "driveSlerp": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveSwing": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveTwist": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveX": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveY": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "driveZ": {
+                        "damping": 0.0,
+                        "forceLimit": 0.0,
+                        "isAcceleration": false,
+                        "stiffness": 0.0
+                    },
+                    "linearLimitX": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "linearLimitY": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "linearLimitZ": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -1.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 1.0
+                    },
+                    "motionSwing1": "Locked",
+                    "motionSwing2": "Locked",
+                    "motionTwist": "Locked",
+                    "motionX": "Locked",
+                    "motionY": "Locked",
+                    "motionZ": "Locked",
+                    "swingLimit": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "yAngle": 1.570796251296997,
+                        "zAngle": 1.570796251296997
+                    },
+                    "twistLimit": {
+                        "bounceThreshold": -1.0,
+                        "damping": 0.0,
+                        "lower": -3.1415927410125732,
+                        "restitution": -1.0,
+                        "stiffness": 0.0,
+                        "upper": 3.1415927410125732
+                    }
+                },
+                "distance": {
+                    "damping": 0.0,
+                    "enableMaxDistance": true,
+                    "enableMinDistance": false,
+                    "enableSpring": false,
+                    "maxDistance": 0.0,
+                    "minDistance": 0.0,
+                    "stiffness": 0.0,
+                    "tolerance": 0.0
+                },
+                "frameA": {
+                    "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    }
+                },
+                "frameB": {
+                    "position": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    }
+                },
+                "prismatic": {
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "lowerLimit": -1.0,
+                    "upperLimit": 1.0
+                },
+                "revolute": {
+                    "driveForceLimit": 0.0,
+                    "driveFreeSpin": false,
+                    "driveLimitsAreForces": true,
+                    "driveVelocity": 0.0,
+                    "enableDrive": false,
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "lowerLimit": -3.1415927410125732,
+                    "upperLimit": 3.1415927410125732
+                },
+                "spherical": {
+                    "enableLimit": false,
+                    "limitBounceThreshold": -1.0,
+                    "limitDamping": 0.0,
+                    "limitRestitution": -1.0,
+                    "limitStiffness": 0.0,
+                    "yLimitAngle": 1.570796251296997,
+                    "zLimitAngle": 1.570796251296997
+                },
+                "targetName": "C",
+                "type": "Fixed"
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.7019608020782471,
+                    "y": 0.7019608020782471,
+                    "z": 1.0
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
             "RigidBody": {
                 "angularDamping": 0.05000000074505806,
                 "density": 1.0,
@@ -2578,18 +3155,18 @@
                 "solverVelocityIterations": 1,
                 "stabilizationThreshold": -1.0,
                 "startAwake": true,
-                "teleport": true
+                "teleport": false
             },
             "Transform": {
                 "position": {
-                    "x": 0.0,
-                    "y": 10.0,
-                    "z": 19.0
+                    "x": -8.322295188903809,
+                    "y": 1.0000323057174683,
+                    "z": 18.368528366088867
                 },
                 "rotation": {
-                    "x": 1.3694243431091309,
-                    "y": -0.041798047721385956,
-                    "z": -2.993072986602783
+                    "x": 3.5466862300381763e-06,
+                    "y": -0.0003150334523525089,
+                    "z": -1.1906688087037764e-05
                 },
                 "scale": {
                     "x": 0.9999999403953552,
@@ -2597,8 +3174,7 @@
                     "z": 0.9999974966049194
                 }
             },
-            "id": 71,
-            "name": "DropBox"
+            "name": "A"
         }
     ],
     "version": 1

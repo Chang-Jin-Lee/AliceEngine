@@ -125,6 +125,8 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.cpp
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
     
     #PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -142,24 +144,30 @@ set(ENGINE_SOURCES
      ${ALICE_SRC_DIR}/UI/UISceneManager.cpp
 
      #UI Component
-     ${ALICE_SRC_DIR}/UI/IUIComponent.cpp
-
+    ${ALICE_SRC_DIR}/UI/IUIComponent.cpp
+	${ALICE_SRC_DIR}/UI/UITransform.cpp
+	${ALICE_SRC_DIR}/UI/UI_ImageComponent.cpp
+	
+	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.cpp
+	${ALICE_SRC_DIR}/UI/IUIScript.cpp
+	${ALICE_SRC_DIR}/UI/UI_InputComponent.cpp
+	
      #UI Object
-      ${ALICE_SRC_DIR}/UI/UIBase.cpp
+     ${ALICE_SRC_DIR}/UI/UIBase.cpp
+	 ${ALICE_SRC_DIR}/UI/UIImage.cpp
+	 ${ALICE_SRC_DIR}/UI/UIButton.cpp
+	
+	#UI IUIScripts
+	${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
+	${ALICE_SRC_DIR}/UI/UIScriptFactory.cpp
 
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
-	${ALICE_SRC_DIR}/UI/UITransform.cpp
-	${ALICE_SRC_DIR}/UI/UI_ImageComponent.cpp
-	${ALICE_SRC_DIR}/UI/UIImage.cpp
-	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.cpp
-	${ALICE_SRC_DIR}/UI/IUIScript.cpp
-	${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
-	${ALICE_SRC_DIR}/UI/UIScriptFactory.cpp
-	${ALICE_SRC_DIR}/UI/UI_InputComponent.cpp
-	${ALICE_SRC_DIR}/UI/UIButton.cpp
+	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
+
 )
 
 set(ENGINE_HEADERS
@@ -221,6 +229,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
     ${ALICE_SRC_DIR}/Components/SpotLightComponent.h
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
+    ${ALICE_SRC_DIR}/Components/TrailEffectComponent.h
+    ${ALICE_SRC_DIR}/Components/EffectComponent.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
@@ -240,12 +250,15 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
     ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
     
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
-
+    ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+    
     #PhysX 물리
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
@@ -263,6 +276,10 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_MeshColliderComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_JointComponent.h
+
 
      #UI
     ${ALICE_SRC_DIR}/UI/UIWorldManager.h
@@ -289,6 +306,7 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.h
 	${ALICE_SRC_DIR}/UI/UI_InputComponent.h
 	${ALICE_SRC_DIR}/UI/UIButton.h
+
 )
 
 # [변경] AliceEngine -> Engine

@@ -45,5 +45,6 @@ struct Phy_TerrainHeightFieldComponent
 
     // 내부 사용: 물리 액터 핸들 (PhysicsSystem이 관리)
     // HeightField는 항상 RigidStatic으로 생성됨
-    void* physicsActorHandle = nullptr; // IPhysicsActor*를 void*로 저장
+    // 직접 접근 금지: PhysicsSystem::ValidateAndGetActor()를 통해 접근하세요
+    IPhysicsActor* physicsActorHandle = nullptr; // 타입 안전 핸들 (worldEpoch 검증 + IsValid() 강제)
 };

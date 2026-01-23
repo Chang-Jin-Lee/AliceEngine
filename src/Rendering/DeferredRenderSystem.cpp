@@ -16,8 +16,10 @@
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include "Components/TrailEffectComponent.h"
 #include "Rendering/ShaderCode/CommonShaderCode.h"
 #include "Rendering/ShaderCode/DeferredShader.h"
+#include "Rendering/TrailEffectRenderSystem.h"
 #include <fstream>
 #include <sstream>
 
@@ -983,6 +985,7 @@ namespace Alice
         for (const auto& [id, tr] : transforms)
         {
             if (cameraEntities.contains(id)) continue;
+            if (!tr.enabled) continue;
             hasObjects = true;
             minP.x = (std::min)(minP.x, tr.position.x); minP.y = (std::min)(minP.y, tr.position.y); minP.z = (std::min)(minP.z, tr.position.z);
             maxP.x = (std::max)(maxP.x, tr.position.x); maxP.y = (std::max)(maxP.y, tr.position.y); maxP.z = (std::max)(maxP.z, tr.position.z);
@@ -1056,6 +1059,7 @@ namespace Alice
             {
                 if (cameraEntities.contains(id)) continue;
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
+                if (!tr.enabled) continue;
 
                 XMMATRIX worldM = BuildWorldMatrix(tr);
 
@@ -1124,8 +1128,14 @@ namespace Alice
         // G-Buffer 패스
         PassGBuffer(world, camera, skinnedCommands, cameraEntities, shadingMode, editorMode, isPlaying);
 
-        // Deferred Light 패스
+        // Deferred Light 패스 (IBL 포함)
         PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
+
+        // TrailEffectRenderSystem 렌더링 (IBL 패스 이후)
+        if (m_trailRenderSystem)
+        {
+            m_trailRenderSystem->Render(world, camera);
+        }
 
         // 스카이박스 렌더링
         if (m_skyboxEnabled)
@@ -1219,6 +1229,7 @@ namespace Alice
         {
             if (cameraEntities.contains(id)) continue;
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
+            if (!transform.enabled) continue;
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
             
@@ -1841,7 +1852,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.pointCount >= MaxPointLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             auto& dst = data.pointLights[data.pointCount++];
             dst.position = tr->position;
@@ -1856,7 +1867,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.spotCount >= MaxSpotLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
             XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
@@ -1883,7 +1894,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.rectCount >= MaxRectLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
             XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
