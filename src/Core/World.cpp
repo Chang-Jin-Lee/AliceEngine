@@ -2,8 +2,18 @@
 #include "Core/GameObject.h"
 #include "Core/ScriptFactory.h"
 #include "Core/ThreadSafety.h"
+#include "Components/IDComponent.h"
+#include <random>
 
 namespace Alice {
+	// GUID 생성 함수
+	static std::uint64_t NewGuid()
+	{
+		static std::mt19937_64 rng{ std::random_device{}() };
+		static std::uniform_int_distribution<std::uint64_t> dist;
+		return dist(rng);
+	}
+
 	void World::Clear()
 	{
 		ThreadSafety::AssertMainThread();
@@ -33,6 +43,7 @@ namespace Alice {
 		m_scripts.clear();
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
+		InvalidateChildrenCache();
 
 		// 3. World Epoch 증가 (씬 전환 시 이전 userData 무효화)
 		//    EntityId는 재사용하지 않고 단조 증가하여 안전성 보장
@@ -67,6 +78,11 @@ namespace Alice {
 		const EntityId newId = m_nextEntityId++;
 		// SlotMap: 새로 생성된 엔티티의 generation을 0으로 초기화합니다.
 		m_entityGenerations[newId] = 0;
+		
+		// IDComponent 자동 추가 (GUID 할당)
+		auto& idComp = AddComponent<IDComponent>(newId);
+		idComp.guid = NewGuid();
+		
 		return newId;
 	}
 
@@ -99,6 +115,9 @@ namespace Alice {
 		}
 
 		m_names.erase(id);
+		
+		// children 캐시 무효화
+		InvalidateChildrenCache();
 		
 		// 모든 엔진 컴포넌트 저장소에서 해당 엔티티 제거
 		for (auto& [typeIndex, storage] : m_engineStorages)
@@ -362,10 +381,98 @@ namespace Alice {
 	const IPhysicsWorld* World::GetPhysicsWorld() const { return m_physicsWorld.get(); }
 	//========================================================
 
+	// Transform 행렬 계산 헬퍼 (EditorCore와 동일한 로직)
+	namespace
+	{
+		inline DirectX::XMMATRIX BuildRotYPR_Rad(const DirectX::XMFLOAT3& rotation)
+		{
+			return DirectX::XMMatrixRotationRollPitchYaw(rotation.x, rotation.y, rotation.z);
+		}
+
+		inline DirectX::XMMATRIX BuildLocalMatrix(const TransformComponent& transform)
+		{
+			DirectX::XMMATRIX S = DirectX::XMMatrixScaling(transform.scale.x, transform.scale.y, transform.scale.z);
+			DirectX::XMMATRIX R = BuildRotYPR_Rad(transform.rotation);
+			DirectX::XMMATRIX T = DirectX::XMMatrixTranslation(transform.position.x, transform.position.y, transform.position.z);
+			return S * R * T;
+		}
+
+		inline DirectX::XMMATRIX ComputeWorldMatrix(const World& world, EntityId entityId)
+		{
+			std::vector<DirectX::XMMATRIX> matrixStack;
+			EntityId currentId = entityId;
+
+			while (currentId != InvalidEntityId)
+			{
+				const TransformComponent* t = world.GetComponent<TransformComponent>(currentId);
+				if (t)
+				{
+					DirectX::XMMATRIX localMatrix = BuildLocalMatrix(*t);
+					matrixStack.push_back(localMatrix);
+					currentId = t->parent;
+				}
+				else
+				{
+					break;
+				}
+			}
+
+			DirectX::XMMATRIX worldMatrix = DirectX::XMMatrixIdentity();
+			for (const auto& m : matrixStack)
+			{
+				worldMatrix = worldMatrix * m;
+			}
+
+			return worldMatrix;
+		}
+
+		inline DirectX::XMFLOAT3 QuaternionToYPR_Rad(DirectX::FXMVECTOR q)
+		{
+			DirectX::XMFLOAT4 qq;
+			DirectX::XMStoreFloat4(&qq, q);
+			const float x = qq.x, y = qq.y, z = qq.z, w = qq.w;
+
+			float sinp = 2.0f * (w * x - y * z);
+			float pitch = (std::abs(sinp) >= 1.0f)
+				? std::copysign(DirectX::XM_PIDIV2, sinp)
+				: std::asin(sinp);
+
+			float siny_cosp = 2.0f * (w * y + x * z);
+			float cosy_cosp = 1.0f - 2.0f * (x * x + y * y);
+			float yaw = std::atan2(siny_cosp, cosy_cosp);
+
+			float sinr_cosp = 2.0f * (w * z + x * y);
+			float cosr_cosp = 1.0f - 2.0f * (x * x + z * z);
+			float roll = std::atan2(sinr_cosp, cosr_cosp);
+
+			return DirectX::XMFLOAT3(pitch, yaw, roll);
+		}
+
+		inline bool DecomposeLocalMatrix(const DirectX::XMMATRIX& localMatrix, DirectX::XMFLOAT3& position, DirectX::XMFLOAT3& rotation, DirectX::XMFLOAT3& scale)
+		{
+			DirectX::XMVECTOR s, q, t;
+			if (!DirectX::XMMatrixDecompose(&s, &q, &t, localMatrix))
+				return false;
+
+			DirectX::XMStoreFloat3(&position, t);
+			DirectX::XMStoreFloat3(&scale, s);
+			rotation = QuaternionToYPR_Rad(q);
+			return true;
+		}
+	}
+
 	// 부모-자식 관계 관리
-	void World::SetParent(EntityId child, EntityId parent)
+	void World::SetParent(EntityId child, EntityId parent, bool keepWorld)
 	{
 		if (child == InvalidEntityId)
+			return;
+		
+		auto* childTransform = GetComponent<TransformComponent>(child);
+		if (!childTransform)
+			return;
+
+		EntityId oldParent = childTransform->parent;
+		if (oldParent == parent)
 			return;
 		
 		// 순환 참조 방지: parent가 child의 자식인지 확인
@@ -383,13 +490,43 @@ namespace Alice {
 				checkParent = checkTransform->parent;
 			}
 		}
-		
-		auto* childTransform = GetComponent<TransformComponent>(child);
-		if (!childTransform)
-			return;
+
+		DirectX::XMMATRIX childWorld = DirectX::XMMatrixIdentity();
+		DirectX::XMMATRIX newParentWorldInv = DirectX::XMMatrixIdentity();
+
+		if (keepWorld)
+		{
+			// 현재 월드 위치 계산
+			childWorld = ComputeWorldMatrix(*this, child);
+			
+			// 새 부모의 월드 행렬 계산
+			DirectX::XMMATRIX newParentWorld = (parent != InvalidEntityId)
+				? ComputeWorldMatrix(*this, parent)
+				: DirectX::XMMatrixIdentity();
+			
+			// 역행렬 계산
+			DirectX::XMVECTOR det;
+			newParentWorldInv = DirectX::XMMatrixInverse(&det, newParentWorld);
+		}
+
+		// children 캐시 무효화
+		InvalidateChildrenCache();
 		
 		// 새 부모 설정
 		childTransform->parent = parent;
+
+		if (keepWorld)
+		{
+			// 새 로컬 행렬 계산: NewLocal = OldWorld * inverse(NewParentWorld)
+			DirectX::XMMATRIX newLocal = childWorld * newParentWorldInv;
+			DirectX::XMFLOAT3 p, r, s;
+			if (DecomposeLocalMatrix(newLocal, p, r, s))
+			{
+				childTransform->position = p;
+				childTransform->rotation = r;
+				childTransform->scale = s;
+			}
+		}
 	}
 
 	EntityId World::GetParent(EntityId child) const
@@ -402,6 +539,14 @@ namespace Alice {
 
 	std::vector<EntityId> World::GetChildren(EntityId parent) const
 	{
+		// 캐시 확인
+		auto it = m_children.find(parent);
+		if (it != m_children.end())
+		{
+			return it->second;
+		}
+
+		// 캐시 미스: 전체 스캔하여 캐시 구축
 		std::vector<EntityId> children;
 		const auto& transforms = GetComponents<TransformComponent>();
 		for (const auto& [entityId, transform] : transforms)
@@ -411,6 +556,9 @@ namespace Alice {
 				children.push_back(entityId);
 			}
 		}
+
+		// 캐시에 저장
+		m_children[parent] = children;
 		return children;
 	}
 

@@ -775,22 +775,61 @@ namespace Alice
 			EntityId childId;
 			EntityId oldParent;
 			EntityId newParent;
+			TransformComponent oldLocal;
+			TransformComponent newLocal;
+			bool hasLocalSnapshots;
 			mutable std::string description;
 
+			// 하이라키 드래그용: Transform 스냅샷 포함
+			SetParentCommand(EntityId child, EntityId oldP, EntityId newP, 
+				const TransformComponent& oldT, const TransformComponent& newT)
+				: childId(child), oldParent(oldP), newParent(newP), 
+				  oldLocal(oldT), newLocal(newT), hasLocalSnapshots(true)
+			{
+				description = "Set Parent";
+			}
+
+			// 레거시 호환용: Transform 스냅샷 없음 (keepWorld=false로 동작)
 			SetParentCommand(EntityId child, EntityId oldP, EntityId newP)
-				: childId(child), oldParent(oldP), newParent(newP)
+				: childId(child), oldParent(oldP), newParent(newP), hasLocalSnapshots(false)
 			{
 				description = "Set Parent";
 			}
 
 			void Execute(World& world, EntityId& selectedEntity) override
 			{
-				world.SetParent(childId, newParent);
+				if (hasLocalSnapshots)
+				{
+					// 저장된 로컬 값 사용
+					world.SetParent(childId, newParent, false);
+					if (auto* t = world.GetComponent<TransformComponent>(childId))
+					{
+						*t = newLocal;
+					}
+				}
+				else
+				{
+					// 레거시: keepWorld=false
+					world.SetParent(childId, newParent, false);
+				}
 			}
 
 			void Undo(World& world, EntityId& selectedEntity) override
 			{
-				world.SetParent(childId, oldParent);
+				if (hasLocalSnapshots)
+				{
+					// 저장된 로컬 값 사용
+					world.SetParent(childId, oldParent, false);
+					if (auto* t = world.GetComponent<TransformComponent>(childId))
+					{
+						*t = oldLocal;
+					}
+				}
+				else
+				{
+					// 레거시: keepWorld=false
+					world.SetParent(childId, oldParent, false);
+				}
 			}
 
 			const char* GetDescription() const override
@@ -2440,13 +2479,26 @@ namespace Alice
 							// 기존 부모 가져오기
 							EntityId oldParent = world.GetParent(draggedId);
 
-							// 새 부모 설정 (순환 참조 방지로 실패할 수 있음)
-							world.SetParent(draggedId, entityId);
+							// Transform 스냅샷 저장 (Undo용)
+							TransformComponent oldTransform;
+							if (auto* t = world.GetComponent<TransformComponent>(draggedId))
+							{
+								oldTransform = *t;
+							}
+
+							// 새 부모 설정 (keepWorld=true: 월드 위치 유지)
+							world.SetParent(draggedId, entityId, true);
 							
 							// 성공 여부 확인 후에만 Undo 커맨드 추가
 							if (world.GetParent(draggedId) == entityId)
 							{
-								PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, entityId));
+								// 새 Transform 스냅샷 저장
+								TransformComponent newTransform;
+								if (auto* t = world.GetComponent<TransformComponent>(draggedId))
+								{
+									newTransform = *t;
+								}
+								PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, entityId, oldTransform, newTransform));
 								g_SceneDirty = true;
 							}
 						}
@@ -3261,9 +3313,10 @@ namespace Alice
 									switch (objectSnapType)
 									{
 									case ObjectSnapType::Center:
-										// 중심점 스냅: 거리를 명시적으로 계산하여 bestSnapDist 업데이트
+										// 중심점 스냅: 월드 위치 계산
 										{
-											XMVECTOR centerPos = XMLoadFloat3(&otherTransform.position);
+											XMMATRIX otherWorld = ComputeWorldMatrix(world, eid);
+											XMVECTOR centerPos = otherWorld.r[3]; // 월드 위치 (translation 부분)
 											XMVECTOR diff = currentPos - centerPos;
 											float dist = XMVectorGetX(XMVector3Length(diff));
 											if (dist < bestSnapDist)

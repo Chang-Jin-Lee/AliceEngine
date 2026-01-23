@@ -8,6 +8,8 @@
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
 #include "Core/ThreadSafety.h"
+#include "Components/IDComponent.h"
+#include <random>
 
 #include <fstream>
 #include <string>
@@ -29,6 +31,35 @@ namespace Alice
 {
     namespace
     {
+        // GUID 생성 함수
+        static std::uint64_t NewGuid()
+        {
+            static std::mt19937_64 rng{ std::random_device{}() };
+            static std::uniform_int_distribution<std::uint64_t> dist;
+            return dist(rng);
+        }
+
+        // GUID 파싱 (JSON string 또는 number)
+        static std::uint64_t ParseGuid(const JsonRttr::json& j)
+        {
+            if (j.is_string())
+            {
+                try
+                {
+                    return std::stoull(j.get<std::string>());
+                }
+                catch (...)
+                {
+                    return NewGuid();
+                }
+            }
+            else if (j.is_number_unsigned())
+            {
+                return j.get<std::uint64_t>();
+            }
+            return NewGuid();
+        }
+
         // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
         // 1개짜리 항등 본 팔레트입니다. (정적인 메시처럼 렌더링되도록 함)
         static DirectX::XMFLOAT4X4 g_IdentityBone(
@@ -262,11 +293,21 @@ namespace Alice
             if (!name.empty())
                 outEntity["name"] = name;
             
-            // Parent 관계 저장 (순환 참조 방지를 위해 나중에 복원)
+            // GUID 저장
+            if (const auto* idComp = world.GetComponent<IDComponent>(id); idComp)
+            {
+                // uint64는 JSON에서 string으로 저장 (호환성)
+                outEntity["guid"] = std::to_string(idComp->guid);
+            }
+            
+            // Parent 관계 저장 (GUID 기반)
             EntityId parentId = world.GetParent(id);
             if (parentId != InvalidEntityId)
             {
-                outEntity["_parentId"] = static_cast<std::uint32_t>(parentId);
+                if (const auto* parentIdComp = world.GetComponent<IDComponent>(parentId); parentIdComp)
+                {
+                    outEntity["_parentGuid"] = std::to_string(parentIdComp->guid);
+                }
             }
             
             if (const auto* transform = world.GetComponent<TransformComponent>(id); transform)
@@ -441,7 +482,7 @@ namespace Alice
             return true;
         }
 
-        static bool ApplyEntity(World& world, const JsonRttr::json& e)
+        static bool ApplyEntity(World& world, const JsonRttr::json& e, std::unordered_map<std::uint64_t, EntityId>& guidToEntity, std::vector<std::pair<EntityId, std::uint64_t>>& pendingParents)
         {
             if (!e.is_object()) return false;
 
@@ -450,6 +491,25 @@ namespace Alice
             const std::string name = e.value("name", std::string{});
             if (!name.empty())
                 world.SetEntityName(id, name);
+
+            // IDComponent: GUID 로드 또는 생성
+            auto& idComp = world.GetComponent<IDComponent>(id);
+            if (auto itGuid = e.find("guid"); itGuid != e.end())
+            {
+                idComp->guid = ParseGuid(*itGuid);
+            }
+            else
+            {
+                idComp->guid = NewGuid();
+            }
+            guidToEntity[idComp->guid] = id;
+
+            // Parent GUID 저장 (나중에 연결)
+            if (auto itParentGuid = e.find("_parentGuid"); itParentGuid != e.end())
+            {
+                std::uint64_t parentGuid = ParseGuid(*itParentGuid);
+                pendingParents.push_back({ id, parentGuid });
+            }
 
             // Transform
             TransformComponent& t = world.AddComponent<TransformComponent>(id);
@@ -701,9 +761,26 @@ namespace Alice
 
             world.Clear();
 
+            // 2-pass 로드: GUID 기반 parent 복원
+            std::unordered_map<std::uint64_t, EntityId> guidToEntity;
+            std::vector<std::pair<EntityId, std::uint64_t>> pendingParents;
+
+            // PASS 1: 엔티티 생성 + 컴포넌트 복원 + GUID 맵 생성
             for (const auto& e : *itEntities)
-                if (!ApplyEntity(world, e))
+            {
+                if (!ApplyEntity(world, e, guidToEntity, pendingParents))
                     return false;
+            }
+
+            // PASS 2: parent 연결 (keepWorld=false, 로드이므로)
+            for (const auto& [childId, parentGuid] : pendingParents)
+            {
+                auto it = guidToEntity.find(parentGuid);
+                if (it != guidToEntity.end())
+                {
+                    world.SetParent(childId, it->second, false);
+                }
+            }
 
             return true;
         }
