@@ -199,6 +199,10 @@ namespace Alice
         std::uint32_t                                   m_sceneWidth  = 0;
         std::uint32_t                                   m_sceneHeight = 0;
 
+        // 이번 프레임에 실제로 사용한 카메라 정보 (ComputeEffect용)
+        DirectX::XMMATRIX                               m_lastViewProj = DirectX::XMMatrixIdentity();
+        DirectX::XMFLOAT3                                m_lastCameraPos{0, 0, 0};
+
         bool CreateSceneRenderTarget(std::uint32_t width, std::uint32_t height);
 
         // ==== 섀도우 맵 리소스 (단일 Directional Light) ====
@@ -258,6 +262,11 @@ namespace Alice
         
         /// Scene Depth SRV (depth test용)
         ID3D11ShaderResourceView* GetSceneDepthSRV() const { return m_sceneDepthSRV.Get(); }
+
+        /// 이번 프레임에 실제로 사용한 카메라 View-Projection 행렬을 반환합니다 (ComputeEffect용)
+        const DirectX::XMMATRIX& GetLastViewProj() const { return m_lastViewProj; }
+        /// 이번 프레임에 실제로 사용한 카메라 월드 위치를 반환합니다 (ComputeEffect용)
+        const DirectX::XMFLOAT3& GetLastCameraPos() const { return m_lastCameraPos; }
 
         /// IBL 세트를 변경합니다 (Bridge/Indoor/Sample)
         /// - 씬 전환 시 호출하여 환경에 맞는 IBL을 로드합니다.

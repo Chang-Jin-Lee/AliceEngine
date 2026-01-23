@@ -235,7 +235,17 @@ namespace Alice
             .property("enabled", &ComputeEffectComponent::enabled)
             .property("shaderName", &ComputeEffectComponent::shaderName)
             .property("effectParams", &ComputeEffectComponent::effectParams)
-            .property("intensity", &ComputeEffectComponent::intensity);
+            .property("intensity", &ComputeEffectComponent::intensity)
+            .property("useTransform", &ComputeEffectComponent::useTransform)
+            .property("localOffset", &ComputeEffectComponent::localOffset)
+            .property("radius", &ComputeEffectComponent::radius)
+            .property("color", &ComputeEffectComponent::color)
+            .property("sizePx", &ComputeEffectComponent::sizePx)
+            .property("gravity", &ComputeEffectComponent::gravity)
+            .property("drag", &ComputeEffectComponent::drag)
+            .property("lifeMin", &ComputeEffectComponent::lifeMin)
+            .property("lifeMax", &ComputeEffectComponent::lifeMax)
+            .property("depthTest", &ComputeEffectComponent::depthTest);
 
         // === ColliderType enum 등록 ===
         rttr::registration::enumeration<ColliderType>("ColliderType")

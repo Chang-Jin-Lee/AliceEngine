@@ -11,6 +11,7 @@
 #include <DirectXMath.h>
 
 #include "Core/World.h"
+#include "Components/TransformComponent.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 
 namespace Alice
@@ -34,7 +35,8 @@ namespace Alice
         /// \param viewProj View * Projection 행렬
         /// \param cameraPos 카메라 월드 위치
         /// \param sceneDepthSRV Scene Depth SRV (depth test용, nullptr 가능)
-        void Execute(const World& world, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraPos, ID3D11ShaderResourceView* sceneDepthSRV);
+        /// \param dtSec 델타 타임 (초)
+        void Execute(const World& world, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraPos, ID3D11ShaderResourceView* sceneDepthSRV, float dtSec);
 
         /// 파티클 출력 텍스처의 SRV를 반환합니다.
         ID3D11ShaderResourceView* GetOutputSRV() const { return m_outputSRV.Get(); }
@@ -60,6 +62,7 @@ namespace Alice
         bool CreateUnorderedAccessViews(std::uint32_t width, std::uint32_t height);
         bool CreateParticleBuffers(std::uint32_t particleCount);
         bool CreateLinearSampler();
+        bool CreateDummyDepthTexture();
 
         void UpdateConstantBuffer();
         void DispatchClear(ID3D11ComputeShader* clearShader);
@@ -99,6 +102,10 @@ namespace Alice
         // Linear Sampler State (실제로는 Point 샘플러 - depth는 Point 샘플링이 정확함)
         Microsoft::WRL::ComPtr<ID3D11SamplerState> m_linearSampler;
 
+        // 더미 depth 텍스처 (depthSRV가 nullptr일 때 사용)
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> m_dummyDepthTexture;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_dummyDepthSRV;
+
         // 파티클 버퍼
         Microsoft::WRL::ComPtr<ID3D11Buffer>              m_particleBuffer;
         Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView> m_particleUAV;
@@ -115,10 +122,8 @@ namespace Alice
         bool m_hasActiveEffect = false;
 
         // 시간 관리
-        LARGE_INTEGER m_qpcFreq{};
-        LARGE_INTEGER m_qpcPrev{};
         float m_timeSec = 0.0f;
-        float m_dtSec   = 0.0f;
+        float m_dtSec = 0.0f;
 
         std::uint32_t m_width  = 0;
         std::uint32_t m_height = 0;

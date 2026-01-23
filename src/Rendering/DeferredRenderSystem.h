@@ -76,6 +76,11 @@ namespace Alice
         /// Scene Depth SRV를 반환합니다 (depth test용)
         ID3D11ShaderResourceView* GetSceneDepthSRV() const { return m_sceneDepthSRV.Get(); }
 
+        /// 이번 프레임에 실제로 사용한 카메라 View-Projection 행렬을 반환합니다 (ComputeEffect용)
+        const DirectX::XMMATRIX& GetLastViewProj() const { return m_lastViewProj; }
+        /// 이번 프레임에 실제로 사용한 카메라 월드 위치를 반환합니다 (ComputeEffect용)
+        const DirectX::XMFLOAT3& GetLastCameraPos() const { return m_lastCameraPos; }
+
         /// IBL 세트를 변경합니다.
         bool SetIblSet(const std::string& iblDir = "Bridge", const std::string& iblName = "bridge");
 
@@ -260,6 +265,10 @@ namespace Alice
 
         std::uint32_t                                   m_sceneWidth  = 0;
         std::uint32_t                                   m_sceneHeight = 0;
+
+        // 이번 프레임에 실제로 사용한 카메라 정보 (ComputeEffect용)
+        DirectX::XMMATRIX                               m_lastViewProj = DirectX::XMMatrixIdentity();
+        DirectX::XMFLOAT3                                m_lastCameraPos{0, 0, 0};
 
         // ==== 샘플러 상태 ====
         Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_samplerState;

@@ -5229,7 +5229,7 @@ namespace Alice
 					changed |= ImGui::Checkbox("Enabled##ComputeEffect", &effect->enabled);
 					
 					// 파티클 타입 콤보박스
-					const char* particleTypes[] = { "Particle", "Sparks", "Smoke", "Vortex", "Snow", "Explosion" };
+					const char* particleTypes[] = { "Particle", "ParticleEffect", "Sparks", "Smoke", "Vortex", "Snow", "Explosion" };
 					int currentIndex = 0;
 					for (int i = 0; i < IM_ARRAYSIZE(particleTypes); ++i) {
 						if (effect->shaderName == particleTypes[i]) {
@@ -5242,8 +5242,34 @@ namespace Alice
 						changed = true;
 					}
 
-					changed |= ImGui::SliderFloat3("Emitter Position (World)##ComputeEffect", &effect->effectParams.x, -100.0f, 100.0f);
+					// 위치 소스 선택
+					changed |= ImGui::Checkbox("Use Transform##ComputeEffect", &effect->useTransform);
+					
+					if (effect->useTransform) {
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat3("Local Offset##ComputeEffect", &effect->localOffset.x, -10.0f, 10.0f);
+						ImGui::Unindent();
+					} else {
+						changed |= ImGui::SliderFloat3("Emitter Position (World)##ComputeEffect", &effect->effectParams.x, -100.0f, 100.0f);
+					}
+
+					// 이미터 파라미터
+					changed |= ImGui::SliderFloat("Radius##ComputeEffect", &effect->radius, 0.01f, 5.0f);
+					changed |= ImGui::ColorEdit3("Color##ComputeEffect", &effect->color.x);
+					changed |= ImGui::SliderFloat("Size (px)##ComputeEffect", &effect->sizePx, 1.0f, 50.0f);
 					changed |= ImGui::SliderFloat("Intensity##ComputeEffect", &effect->intensity, 0.0f, 10.0f);
+
+					// 물리/수명 파라미터
+					if (ImGui::TreeNode("Physics##ComputeEffect")) {
+						changed |= ImGui::SliderFloat3("Gravity##ComputeEffect", &effect->gravity.x, -10.0f, 10.0f);
+						changed |= ImGui::SliderFloat("Drag##ComputeEffect", &effect->drag, 0.0f, 1.0f);
+						changed |= ImGui::SliderFloat("Life Min##ComputeEffect", &effect->lifeMin, 0.1f, 5.0f);
+						changed |= ImGui::SliderFloat("Life Max##ComputeEffect", &effect->lifeMax, 0.1f, 10.0f);
+						ImGui::TreePop();
+					}
+
+					// 기타 설정
+					changed |= ImGui::Checkbox("Depth Test##ComputeEffect", &effect->depthTest);
 
 					if (ImGui::Button("Remove Compute Effect")) {
 						world.RemoveComponent<ComputeEffectComponent>(_selectedEntity);

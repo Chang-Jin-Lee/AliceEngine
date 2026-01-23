@@ -1280,17 +1280,20 @@ namespace Alice
 		    ((pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem) || 
 		     (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)))
 		{
-			// 렌더에 사용한 카메라와 동일한 카메라 행렬 사용 (에디터 뷰포트 카메라와 메인 카메라가 다를 수 있으므로 주의)
-			// TODO: 렌더 시스템에서 실제로 사용한 카메라 행렬을 반환하도록 개선하면 더 정확함
-			EntityId mainCamId = pImpl->m_world.GetMainCameraEntityId();
-			DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
-			DirectX::XMFLOAT3 cameraPos(0.0f, 0.0f, -5.0f);
-			
-			if (mainCamId != InvalidEntityId)
-			{
-				viewProj = pImpl->m_camera.GetViewProjectionMatrix();
-				cameraPos = pImpl->m_camera.GetPosition();
-			}
+		// 렌더 시스템에서 실제로 사용한 카메라 행렬 사용 (에디터 뷰포트 카메라와 메인 카메라 불일치 해결)
+		DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
+		DirectX::XMFLOAT3 cameraPos(0.0f, 0.0f, -5.0f);
+		
+		if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+		{
+			viewProj = pImpl->m_forwardRenderSystem->GetLastViewProj();
+			cameraPos = pImpl->m_forwardRenderSystem->GetLastCameraPos();
+		}
+		else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+		{
+			viewProj = pImpl->m_deferredRenderSystem->GetLastViewProj();
+			cameraPos = pImpl->m_deferredRenderSystem->GetLastCameraPos();
+		}
 			
 			// Scene Depth SRV (depth test용) - 렌더링 이후이므로 최신 depth 사용 가능
 			// DSV는 이미 위에서 unbind했으므로 SRV로 안전하게 읽을 수 있음
@@ -1304,9 +1307,10 @@ namespace Alice
 				depthSRV = pImpl->m_deferredRenderSystem->GetSceneDepthSRV();
 			}
 			
-			// Execute에 depthSRV를 직접 전달 (raw 포인터 보관 제거)
-			// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
-			pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV);
+		// Execute에 depthSRV와 dt를 직접 전달
+		// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
+		float dtSec = pImpl->m_timer.DeltaTime();
+		pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV, dtSec);
 		}
 
 		// ============================================= 파티클 오버레이 합성 =============================================

@@ -1162,6 +1162,10 @@ namespace Alice
     {
         if (!m_device || !m_context) return;
 
+        // 실제로 사용한 카메라 정보 저장 (ComputeEffect용)
+        m_lastViewProj = camera.GetViewProjectionMatrix();
+        m_lastCameraPos = camera.GetPosition();
+
         // Viewport 설정
         D3D11_VIEWPORT vp{};
         vp.Width = (float)m_sceneWidth; vp.Height = (float)m_sceneHeight; vp.MaxDepth = 1.0f;
