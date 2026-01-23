@@ -1332,13 +1332,15 @@ namespace Alice
             viewport.MaxDepth = 1.0f;
             
             // Bloom 패스 (enabled일 때만)
-            ID3D11ShaderResourceView* toneInputSRV = m_sceneColorSRV.Get();
             if (m_bloomSettings.enabled)
             {
-                RenderBloomPass(m_sceneColorSRV.Get(), viewport);
-                toneInputSRV = m_postBloomSRV.Get(); // Bloom 합성 결과를 톤매핑 입력으로 사용
+                RenderBloomPass(m_sceneColorSRV.Get(), m_viewportRTV.Get(), viewport);
             }
-            RenderToneMapping(toneInputSRV, m_viewportRTV.Get(), viewport);
+            else
+            {
+                // Bloom이 꺼져있으면 씬 컬러를 바로 톤매핑
+                RenderToneMapping(m_sceneColorSRV.Get(), m_viewportRTV.Get(), viewport);
+            }
         }
 
         // 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
@@ -2322,22 +2324,22 @@ namespace Alice
         m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
         m_context->RSSetState(m_ppRasterNoCull.Get());
 
+        // 상수 버퍼 업데이트 (실제 노출값 적용)
         PostProcessCB cbData = {};
         GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
 
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
         {
-            memcpy(mapped.pData, &cbData, sizeof(PostProcessCB));
+            std::memcpy(mapped.pData, &cbData, sizeof(PostProcessCB));
             m_context->Unmap(m_cbPostProcess.Get(), 0);
         }
 
-        // 리소스 바인딩
-        ID3D11ShaderResourceView* srv = inputSRV;
+        // 리소스 바인딩 (입력 텍스처 사용)
         ID3D11SamplerState* sampler = m_samplerLinear.Get();
         ID3D11Buffer* cb = m_cbPostProcess.Get();
 
-        m_context->PSSetShaderResources(0, 1, &srv);
+        m_context->PSSetShaderResources(0, 1, &inputSRV);
         m_context->PSSetSamplers(0, 1, &sampler);
         m_context->PSSetConstantBuffers(2, 1, &cb); // register(b2)에 맞춰 슬롯 2 사용
 
@@ -2356,279 +2358,293 @@ namespace Alice
         m_context->PSSetShaderResources(0, 1, &nullSRV);
     }
 
-    void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, const D3D11_VIEWPORT& viewport)
-    {
-        if (!m_bloomSettings.enabled || !sourceSRV) return;
-        if (!m_bloomBrightPassPS || !m_bloomDownsamplePS || !m_bloomBlurPassPS_H || !m_bloomBlurPassPS_V || !m_bloomUpsamplePS || !m_bloomCompositePS) return;
+	void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+	{
+		if (!m_bloomSettings.enabled || !sourceSRV || !targetRTV) return;
+		if (!m_bloomBrightPassPS || !m_bloomDownsamplePS || !m_bloomBlurPassPS_H || !m_bloomBlurPassPS_V || !m_bloomUpsamplePS || !m_bloomCompositePS) return;
 
-        // 상태 설정
-        float blendFactor[4] = { 0, 0, 0, 0 };
-        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
-        m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
-        m_context->RSSetState(m_ppRasterNoCull.Get());
+		// 상태 설정
+		float blendFactor[4] = { 0, 0, 0, 0 };
+		m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+		m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+		m_context->RSSetState(m_ppRasterNoCull.Get());
 
-        // Quad 설정
-        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        m_context->IASetInputLayout(m_quadInputLayout.Get());
-        m_context->IASetVertexBuffers(0, 1, m_quadVB.GetAddressOf(), &m_quadStride, &m_quadOffset);
-        m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
-        m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
+		// Quad 설정
+		m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		m_context->IASetInputLayout(m_quadInputLayout.Get());
+		m_context->IASetVertexBuffers(0, 1, m_quadVB.GetAddressOf(), &m_quadStride, &m_quadOffset);
+		m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+		m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
 
-        ID3D11Buffer* cbBloom = m_cbBloom.Get();
-        ID3D11SamplerState* sampler = m_samplerLinear.Get();
-        ID3D11ShaderResourceView* nullSRVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-        
-        // 블러 반복 횟수 (기본값: 1회, 필요시 BloomSettings에 추가 가능)
-        const int blurIterations = 1;
+		ID3D11Buffer* cbBloom = m_cbBloom.Get();
+		ID3D11SamplerState* sampler = m_samplerLinear.Get();
+		ID3D11ShaderResourceView* nullSRVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 
-        // ========== 1. Bright Pass: sourceSRV → level0 A ==========
-        {
-            std::uint32_t level0Width = m_bloomLevelWidth[0];
-            std::uint32_t level0Height = m_bloomLevelHeight[0];
-            D3D11_VIEWPORT level0Viewport = { 0.0f, 0.0f, (float)level0Width, (float)level0Height, 0.0f, 1.0f };
-            
-            float texelSizeX = (level0Width > 0) ? (1.0f / level0Width) : 1.0f;
-            float texelSizeY = (level0Height > 0) ? (1.0f / level0Height) : 1.0f;
-            
-            BloomCB bloomCB = {};
-            bloomCB.threshold = m_bloomSettings.threshold;
-            bloomCB.knee = m_bloomSettings.knee;
-            bloomCB.intensity = m_bloomSettings.intensity;
-            bloomCB.radius = m_bloomSettings.radius;
-            bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
-            bloomCB.downsample = m_bloomSettings.downsample;
-            
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-            {
-                memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
-                m_context->Unmap(m_cbBloom.Get(), 0);
-            }
-            
-            m_context->RSSetViewports(1, &level0Viewport);
-            m_context->OMSetRenderTargets(1, m_bloomLevelRTV[0][0].GetAddressOf(), nullptr); // level0 A
-            m_context->PSSetShaderResources(0, 1, &sourceSRV);
-            m_context->PSSetSamplers(0, 1, &sampler);
-            m_context->PSSetConstantBuffers(3, 1, &cbBloom);
-            m_context->PSSetShader(m_bloomBrightPassPS.Get(), nullptr, 0);
-            m_context->DrawIndexed(m_quadIndexCount, 0, 0);
-            
-            m_context->PSSetShaderResources(0, 8, nullSRVs);
-        }
+		// 블러 반복 횟수 (기본값: 1회, 필요시 BloomSettings에 추가 가능)
+		const int blurIterations = 1;
 
-        // ========== 2. Downsample Chain: level(i-1) A → level(i) A (i=1..4) ==========
-        for (int level = 1; level < BLOOM_LEVEL_COUNT; ++level)
-        {
-            std::uint32_t prevWidth = m_bloomLevelWidth[level - 1];
-            std::uint32_t prevHeight = m_bloomLevelHeight[level - 1];
-            std::uint32_t currWidth = m_bloomLevelWidth[level];
-            std::uint32_t currHeight = m_bloomLevelHeight[level];
-            
-            // 입력 텍스처의 텍셀 크기
-            float inputTexelSizeX = (prevWidth > 0) ? (1.0f / prevWidth) : 1.0f;
-            float inputTexelSizeY = (prevHeight > 0) ? (1.0f / prevHeight) : 1.0f;
-            
-            BloomCB bloomCB = {};
-            bloomCB.threshold = m_bloomSettings.threshold;
-            bloomCB.knee = m_bloomSettings.knee;
-            bloomCB.intensity = m_bloomSettings.intensity;
-            bloomCB.radius = m_bloomSettings.radius;
-            bloomCB.texelSize = DirectX::XMFLOAT2(inputTexelSizeX, inputTexelSizeY);
-            bloomCB.downsample = m_bloomSettings.downsample;
-            
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-            {
-                memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
-                m_context->Unmap(m_cbBloom.Get(), 0);
-            }
-            
-            D3D11_VIEWPORT currViewport = { 0.0f, 0.0f, (float)currWidth, (float)currHeight, 0.0f, 1.0f };
-            m_context->RSSetViewports(1, &currViewport);
-            
-            // level(i-1) A → level(i) A
-            ID3D11ShaderResourceView* inputSRV = m_bloomLevelSRV[level - 1][0].Get(); // 이전 레벨 A
-            m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][0].GetAddressOf(), nullptr); // 현재 레벨 A
-            
-            m_context->PSSetShaderResources(0, 1, &inputSRV);
-            m_context->PSSetConstantBuffers(3, 1, &cbBloom);
-            m_context->PSSetShader(m_bloomDownsamplePS.Get(), nullptr, 0);
-            m_context->DrawIndexed(m_quadIndexCount, 0, 0);
-            
-            m_context->PSSetShaderResources(0, 8, nullSRVs);
-        }
+		// ========== 1. Bright Pass: sourceSRV → level0 A ==========
+		{
+			std::uint32_t level0Width = m_bloomLevelWidth[0];
+			std::uint32_t level0Height = m_bloomLevelHeight[0];
+			D3D11_VIEWPORT level0Viewport = { 0.0f, 0.0f, (float)level0Width, (float)level0Height, 0.0f, 1.0f };
 
-        // ========== 3. Blur per Level: level i에서 A↔B로 (H then V) * blurIterations ==========
-        for (int level = 0; level < BLOOM_LEVEL_COUNT; ++level)
-        {
-            std::uint32_t levelWidth = m_bloomLevelWidth[level];
-            std::uint32_t levelHeight = m_bloomLevelHeight[level];
-            
-            float texelSizeX = (levelWidth > 0) ? (1.0f / levelWidth) : 1.0f;
-            float texelSizeY = (levelHeight > 0) ? (1.0f / levelHeight) : 1.0f;
-            
-            BloomCB bloomCB = {};
-            bloomCB.threshold = m_bloomSettings.threshold;
-            bloomCB.knee = m_bloomSettings.knee;
-            bloomCB.intensity = m_bloomSettings.intensity;
-            bloomCB.radius = m_bloomSettings.radius;
-            bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
-            bloomCB.downsample = m_bloomSettings.downsample;
-            
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-            {
-                memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
-                m_context->Unmap(m_cbBloom.Get(), 0);
-            }
-            
-            D3D11_VIEWPORT levelViewport = { 0.0f, 0.0f, (float)levelWidth, (float)levelHeight, 0.0f, 1.0f };
-            m_context->RSSetViewports(1, &levelViewport);
-            
-            int pingPongIndex = 0; // 0=A, 1=B
-            
-            for (int iteration = 0; iteration < blurIterations; ++iteration)
-            {
-                // Horizontal Blur: A → B
-                ID3D11ShaderResourceView* inputSRV = m_bloomLevelSRV[level][pingPongIndex].Get();
-                int outputPingPong = 1 - pingPongIndex;
-                
-                m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][outputPingPong].GetAddressOf(), nullptr);
-                m_context->PSSetShaderResources(0, 1, &inputSRV);
-                m_context->PSSetConstantBuffers(3, 1, &cbBloom);
-                m_context->PSSetShader(m_bloomBlurPassPS_H.Get(), nullptr, 0);
-                m_context->DrawIndexed(m_quadIndexCount, 0, 0);
-                
-                m_context->PSSetShaderResources(0, 8, nullSRVs);
-                
-                // Vertical Blur: B → A
-                pingPongIndex = outputPingPong;
-                inputSRV = m_bloomLevelSRV[level][pingPongIndex].Get();
-                outputPingPong = 1 - pingPongIndex;
-                
-                m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][outputPingPong].GetAddressOf(), nullptr);
-                m_context->PSSetShaderResources(0, 1, &inputSRV);
-                m_context->PSSetConstantBuffers(3, 1, &cbBloom);
-                m_context->PSSetShader(m_bloomBlurPassPS_V.Get(), nullptr, 0);
-                m_context->DrawIndexed(m_quadIndexCount, 0, 0);
-                
-                m_context->PSSetShaderResources(0, 8, nullSRVs);
-                
-                pingPongIndex = outputPingPong;
-            }
-        }
+			float texelSizeX = (level0Width > 0) ? (1.0f / level0Width) : 1.0f;
+			float texelSizeY = (level0Height > 0) ? (1.0f / level0Height) : 1.0f;
 
-        // ========== 4. Upsample+Add: level4 → level3 → ... → level0 (합성) ==========
-        // Additive Blend State 사용 (기존 m_blendStateAdditive 사용)
-        if (!m_blendStateAdditive)
-        {
-            ALICE_LOG_ERRORF("Additive blend state not available for bloom upsample");
-            return;
-        }
-        
-        // 레벨 4부터 레벨 0까지 역순으로 업샘플링+합성
-        for (int level = BLOOM_LEVEL_COUNT - 1; level > 0; --level)
-        {
-            std::uint32_t lowResWidth = m_bloomLevelWidth[level];
-            std::uint32_t lowResHeight = m_bloomLevelHeight[level];
-            std::uint32_t highResWidth = m_bloomLevelWidth[level - 1];
-            std::uint32_t highResHeight = m_bloomLevelHeight[level - 1];
-            
-            // 저해상도 텍스처의 텍셀 크기 (업샘플링용)
-            float texelSizeX = (lowResWidth > 0) ? (1.0f / lowResWidth) : 1.0f;
-            float texelSizeY = (lowResHeight > 0) ? (1.0f / lowResHeight) : 1.0f;
-            
-            BloomCB bloomCB = {};
-            bloomCB.threshold = m_bloomSettings.threshold;
-            bloomCB.knee = m_bloomSettings.knee;
-            bloomCB.intensity = m_bloomSettings.intensity;
-            bloomCB.radius = m_bloomSettings.radius;
-            bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
-            bloomCB.downsample = m_bloomSettings.downsample;
-            
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-            {
-                memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
-                m_context->Unmap(m_cbBloom.Get(), 0);
-            }
-            
-            D3D11_VIEWPORT highResViewport = { 0.0f, 0.0f, (float)highResWidth, (float)highResHeight, 0.0f, 1.0f };
-            m_context->RSSetViewports(1, &highResViewport);
-            
-            // Additive Blending 활성화 (고해상도 텍스처에 저해상도를 더하기)
-            m_context->OMSetBlendState(m_blendStateAdditive.Get(), blendFactor, 0xFFFFFFFF);
-            
-            // 저해상도 텍스처만 바인딩 (업샘플링할 소스)
-            // 고해상도 텍스처는 이미 RTV에 바인딩되어 있으므로 Additive Blending으로 자동 합성됨
-            ID3D11ShaderResourceView* lowResSRV = m_bloomLevelSRV[level][0].Get(); // 현재 레벨의 블러 결과 (A)
-            //ID3D11RenderTargetView* renderpassRTV = 
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			m_context->RSSetViewports(1, &level0Viewport);
+			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[0][0].GetAddressOf(), nullptr); // level0 A
+			m_context->PSSetShaderResources(0, 1, &sourceSRV);
+			m_context->PSSetSamplers(0, 1, &sampler);
+			m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+			m_context->PSSetShader(m_bloomBrightPassPS.Get(), nullptr, 0);
+			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+		}
+
+		// ========== 2. Downsample Chain: level(i-1) A → level(i) A (i=1..4) ==========
+		for (int level = 1; level < BLOOM_LEVEL_COUNT; ++level)
+		{
+			std::uint32_t prevWidth = m_bloomLevelWidth[level - 1];
+			std::uint32_t prevHeight = m_bloomLevelHeight[level - 1];
+			std::uint32_t currWidth = m_bloomLevelWidth[level];
+			std::uint32_t currHeight = m_bloomLevelHeight[level];
+
+			// 입력 텍스처의 텍셀 크기
+			float inputTexelSizeX = (prevWidth > 0) ? (1.0f / prevWidth) : 1.0f;
+			float inputTexelSizeY = (prevHeight > 0) ? (1.0f / prevHeight) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(inputTexelSizeX, inputTexelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			D3D11_VIEWPORT currViewport = { 0.0f, 0.0f, (float)currWidth, (float)currHeight, 0.0f, 1.0f };
+			m_context->RSSetViewports(1, &currViewport);
+
+			// level(i-1) A → level(i) A
+			ID3D11ShaderResourceView* inputSRV = m_bloomLevelSRV[level - 1][0].Get(); // 이전 레벨 A
+			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][0].GetAddressOf(), nullptr); // 현재 레벨 A
+
+			m_context->PSSetShaderResources(0, 1, &inputSRV);
+			m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+			m_context->PSSetShader(m_bloomDownsamplePS.Get(), nullptr, 0);
+			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+		}
+
+		// ========== 3. Blur per Level: level i에서 A↔B로 (H then V) * blurIterations ==========
+		for (int level = 0; level < BLOOM_LEVEL_COUNT; ++level)
+		{
+			std::uint32_t levelWidth = m_bloomLevelWidth[level];
+			std::uint32_t levelHeight = m_bloomLevelHeight[level];
+
+			float texelSizeX = (levelWidth > 0) ? (1.0f / levelWidth) : 1.0f;
+			float texelSizeY = (levelHeight > 0) ? (1.0f / levelHeight) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			D3D11_VIEWPORT levelViewport = { 0.0f, 0.0f, (float)levelWidth, (float)levelHeight, 0.0f, 1.0f };
+			m_context->RSSetViewports(1, &levelViewport);
+
+			int pingPongIndex = 0; // 0=A, 1=B
+
+			for (int iteration = 0; iteration < blurIterations; ++iteration)
+			{
+				// Horizontal Blur: A → B
+				ID3D11ShaderResourceView* inputSRV = m_bloomLevelSRV[level][pingPongIndex].Get();
+				int outputPingPong = 1 - pingPongIndex;
+
+				m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][outputPingPong].GetAddressOf(), nullptr);
+				m_context->PSSetShaderResources(0, 1, &inputSRV);
+				m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+				m_context->PSSetShader(m_bloomBlurPassPS_H.Get(), nullptr, 0);
+				m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+				m_context->PSSetShaderResources(0, 8, nullSRVs);
+
+				// Vertical Blur: B → A
+				pingPongIndex = outputPingPong;
+				inputSRV = m_bloomLevelSRV[level][pingPongIndex].Get();
+				outputPingPong = 1 - pingPongIndex;
+
+				m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][outputPingPong].GetAddressOf(), nullptr);
+				m_context->PSSetShaderResources(0, 1, &inputSRV);
+				m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+				m_context->PSSetShader(m_bloomBlurPassPS_V.Get(), nullptr, 0);
+				m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+				m_context->PSSetShaderResources(0, 8, nullSRVs);
+
+				pingPongIndex = outputPingPong;
+			}
+		}
+
+		// ========== 4. Upsample+Add: level4 → level3 → ... → level0 (합성) ==========
+		// Additive Blend State 사용 (기존 m_blendStateAdditive 사용)
+		if (!m_blendStateAdditive)
+		{
+			ALICE_LOG_ERRORF("Additive blend state not available for bloom upsample");
+			return;
+		}
+
+		// 레벨 4부터 레벨 0까지 역순으로 업샘플링+합성
+		for (int level = BLOOM_LEVEL_COUNT - 1; level > 0; --level)
+		{
+			std::uint32_t lowResWidth = m_bloomLevelWidth[level];
+			std::uint32_t lowResHeight = m_bloomLevelHeight[level];
+			std::uint32_t highResWidth = m_bloomLevelWidth[level - 1];
+			std::uint32_t highResHeight = m_bloomLevelHeight[level - 1];
+
+			// 저해상도 텍스처의 텍셀 크기 (업샘플링용)
+			float texelSizeX = (lowResWidth > 0) ? (1.0f / lowResWidth) : 1.0f;
+			float texelSizeY = (lowResHeight > 0) ? (1.0f / lowResHeight) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			D3D11_VIEWPORT highResViewport = { 0.0f, 0.0f, (float)highResWidth, (float)highResHeight, 0.0f, 1.0f };
+			m_context->RSSetViewports(1, &highResViewport);
+
+			// Additive Blending 활성화 (고해상도 텍스처에 저해상도를 더하기)
+			m_context->OMSetBlendState(m_blendStateAdditive.Get(), blendFactor, 0xFFFFFFFF);
+
+			// 저해상도 텍스처만 바인딩 (업샘플링할 소스)
+			// 고해상도 텍스처는 이미 RTV에 바인딩되어 있으므로 Additive Blending으로 자동 합성됨
+			ID3D11ShaderResourceView* lowResSRV = m_bloomLevelSRV[level][0].Get(); // 현재 레벨의 블러 결과 (A)
+			//ID3D11RenderTargetView* renderpassRTV = 
 
 
-            // 이전 레벨의 RTV에 업샘플링 결과를 렌더링 (Additive Blending으로 기존 값에 더하기)
-            m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level - 1][0].GetAddressOf(), nullptr);
-            m_context->PSSetShaderResources(0, 1, &lowResSRV);
-            m_context->PSSetConstantBuffers(3, 1, &cbBloom);
-            m_context->PSSetShader(m_bloomUpsamplePS.Get(), nullptr, 0);
-            m_context->DrawIndexed(m_quadIndexCount, 0, 0);
-            
-            m_context->PSSetShaderResources(0, 8, nullSRVs);
-        }
-        
-        // Additive Blending 비활성화
-        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+			// 이전 레벨의 RTV에 업샘플링 결과를 렌더링 (Additive Blending으로 기존 값에 더하기)
+			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level - 1][0].GetAddressOf(), nullptr);
+			m_context->PSSetShaderResources(0, 1, &lowResSRV);
+			m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+			m_context->PSSetShader(m_bloomUpsamplePS.Get(), nullptr, 0);
+			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
 
-        // ========== 5. Composite: Scene + level0(bloom) → m_postBloomRTV (HDR 합성 결과) ==========
-        {
-            m_context->RSSetViewports(1, &viewport);
-            m_context->OMSetRenderTargets(1, m_postBloomRTV.GetAddressOf(), nullptr);
-            
-            ID3D11ShaderResourceView* sceneSRV = sourceSRV;
-            ID3D11ShaderResourceView* bloomSRV = m_bloomLevelSRV[0][0].Get(); // level0의 최종 bloom 결과
-            ID3D11ShaderResourceView* compositeSRVs[2] = { sceneSRV, bloomSRV };
-            
-            m_context->PSSetShaderResources(0, 2, compositeSRVs);
-            
-            // PostProcess CB 업데이트 (나중에 톤매핑에서 사용)
-            ID3D11Buffer* cbPostProcess = m_cbPostProcess.Get();
-            PostProcessCB postProcessCB = {};
-            GetPostProcessParams(postProcessCB.exposure, postProcessCB.maxHDRNits);
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-            {
-                memcpy(mapped.pData, &postProcessCB, sizeof(PostProcessCB));
-                m_context->Unmap(m_cbPostProcess.Get(), 0);
-            }
-            
-            // Bloom CB 업데이트 (최종 합성용)
-            std::uint32_t level0Width = m_bloomLevelWidth[0];
-            std::uint32_t level0Height = m_bloomLevelHeight[0];
-            float texelSizeX = (level0Width > 0) ? (1.0f / level0Width) : 1.0f;
-            float texelSizeY = (level0Height > 0) ? (1.0f / level0Height) : 1.0f;
-            
-            BloomCB bloomCB = {};
-            bloomCB.threshold = m_bloomSettings.threshold;
-            bloomCB.knee = m_bloomSettings.knee;
-            bloomCB.intensity = m_bloomSettings.intensity;
-            bloomCB.radius = m_bloomSettings.radius;
-            bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
-            bloomCB.downsample = m_bloomSettings.downsample;
-            
-            if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-            {
-                memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
-                m_context->Unmap(m_cbBloom.Get(), 0);
-            }
-            
-            m_context->PSSetConstantBuffers(2, 1, &cbPostProcess);
-            m_context->PSSetConstantBuffers(3, 1, &cbBloom);
-            m_context->PSSetShader(m_bloomCompositePS.Get(), nullptr, 0);
-            m_context->DrawIndexed(m_quadIndexCount, 0, 0);
-            
-            // 리소스 해제
-            ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
-            m_context->PSSetShaderResources(0, 2, nullSRVs2);
-        }
-    }
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+		}
+
+		// Additive Blending 비활성화
+		m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+
+		// ========== 5. Composite: Scene + Bloom → PostBloomTex (HDR) ==========
+		// 톤매핑과 합성을 분리합니다. 여기서는 HDR 상태로 합치기만 합니다.
+		{
+			// 뷰포트를 전체 씬 크기로 설정
+			D3D11_VIEWPORT sceneViewport = { 0.0f, 0.0f, (float)m_sceneWidth, (float)m_sceneHeight, 0.0f, 1.0f };
+			m_context->RSSetViewports(1, &sceneViewport);
+			
+			// 타겟을 Viewport가 아닌 중간 HDR 버퍼(m_postBloomRTV)로 변경
+			m_context->OMSetRenderTargets(1, m_postBloomRTV.GetAddressOf(), nullptr);
+
+			ID3D11ShaderResourceView* sceneSRV = sourceSRV;
+			ID3D11ShaderResourceView* bloomSRV = m_bloomLevelSRV[0][0].Get(); // level0의 최종 bloom 결과
+			ID3D11ShaderResourceView* compositeSRVs[2] = { sceneSRV, bloomSRV };
+
+			m_context->PSSetShaderResources(0, 2, compositeSRVs);
+
+			// [중요] 합성 단계에서는 Exposure를 1.0으로 강제하여 색상 변형 방지
+			// 실제 노출 보정은 다음 단계인 RenderToneMapping에서 수행함
+			PostProcessCB postProcessCB = {};
+			float tempExposure;
+			GetPostProcessParams(tempExposure, postProcessCB.maxHDRNits);
+			postProcessCB.exposure = 1.0f; // 합성 단계에서는 노출 적용 안 함 (중립값)
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				std::memcpy(mapped.pData, &postProcessCB, sizeof(PostProcessCB));
+				m_context->Unmap(m_cbPostProcess.Get(), 0);
+			}
+
+			// Bloom CB 업데이트 (최종 합성용)
+			std::uint32_t level0Width = m_bloomLevelWidth[0];
+			std::uint32_t level0Height = m_bloomLevelHeight[0];
+			float texelSizeX = (level0Width > 0) ? (1.0f / level0Width) : 1.0f;
+			float texelSizeY = (level0Height > 0) ? (1.0f / level0Height) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				std::memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			// 셰이더 및 버퍼 바인딩
+			ID3D11Buffer* cbPostProcess = m_cbPostProcess.Get();
+			ID3D11Buffer* cbBloom = m_cbBloom.Get();
+			m_context->PSSetConstantBuffers(2, 1, &cbPostProcess);
+			m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+			m_context->PSSetShader(m_bloomCompositePS.Get(), nullptr, 0);
+			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+			// SRV 해제 (ToneMapping에서 입력으로 쓰기 위해 필수)
+			ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
+			m_context->PSSetShaderResources(0, 2, nullSRVs2);
+		}
+
+		// ========== 6. Final Tone Mapping: PostBloomTex(HDR) → TargetRTV(LDR) ==========
+		// 합성된 HDR 텍스처를 입력으로 받아 실제 Exposure를 적용하고 LDR로 변환
+		RenderToneMapping(m_postBloomSRV.Get(), targetRTV, viewport);
+	}
 }
-
