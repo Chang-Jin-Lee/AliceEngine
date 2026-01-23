@@ -1,6 +1,7 @@
-﻿#include "Core/Material.h"
+#include "Core/Material.h"
 #include "Core/ReflectionSerializer.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
+#include "Core/ResourceManager.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -13,41 +14,48 @@
 
 namespace Alice
 {
-    namespace MaterialFile
+    bool MaterialFile::Load(const std::filesystem::path& path, MaterialComponent& outMaterial, ResourceManager* rm)
     {
-        bool Load(const std::filesystem::path& path, MaterialComponent& outMaterial)
-        {
-            // RTTR 기반으로 자동 로드
-            bool result = ReflectionSerializer::Load(path, outMaterial);
-            
-            // roughness, metalness 클램핑 (RTTR로는 기본값 처리만 하므로 여기서 보정)
-            outMaterial.roughness = std::clamp(outMaterial.roughness, 0.0f, 1.0f);
-            outMaterial.metalness = std::clamp(outMaterial.metalness, 0.0f, 1.0f);
+        // RTTR 기반으로 자동 로드
+        bool result = ReflectionSerializer::Load(path, outMaterial);
 
-            ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f tex=\"%s\"",
-                           path.string().c_str(),
-                           outMaterial.color.x, outMaterial.color.y, outMaterial.color.z,
-                           outMaterial.roughness,
-                           outMaterial.metalness,
-                           outMaterial.albedoTexturePath.c_str());
+        // roughness, metalness 클램핑 (RTTR로는 기본값 처리만 하므로 여기서 보정)
+        outMaterial.roughness = std::clamp(outMaterial.roughness, 0.0f, 1.0f);
+        outMaterial.metalness = std::clamp(outMaterial.metalness, 0.0f, 1.0f);
+        // 노말맵 강도는 0.0f 이상으로 제한
+        outMaterial.normalStrength = std::max(outMaterial.normalStrength, 0.0f);
+        // 아웃라인 두께는 음수 방지
+        outMaterial.outlineWidth = std::max(outMaterial.outlineWidth, 0.0f);
 
-            return result;
-        }
+        ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
+            path.string().c_str(),
+            outMaterial.color.x, outMaterial.color.y, outMaterial.color.z,
+            outMaterial.roughness,
+            outMaterial.metalness,
+            outMaterial.normalStrength,
+            outMaterial.outlineColor.x, outMaterial.outlineColor.y, outMaterial.outlineColor.z,
+            outMaterial.outlineWidth,
+            outMaterial.albedoTexturePath.c_str());
 
-        bool Save(const std::filesystem::path& path, const MaterialComponent& material)
-        {
-            // RTTR 기반으로 자동 저장
-            bool result = ReflectionSerializer::Save(path, material);
+        return result;
+    }
 
-            ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f tex=\"%s\"",
-                           path.string().c_str(),
-                           material.color.x, material.color.y, material.color.z,
-                           material.roughness,
-                           material.metalness,
-                           material.albedoTexturePath.c_str());
+    bool MaterialFile::Save(const std::filesystem::path& path, const MaterialComponent& material)
+    {
+        // RTTR 기반으로 자동 저장
+        bool result = ReflectionSerializer::Save(path, material);
 
-            return result;
-        }
+        ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
+            path.string().c_str(),
+            material.color.x, material.color.y, material.color.z,
+            material.roughness,
+            material.metalness,
+            material.normalStrength,
+            material.outlineColor.x, material.outlineColor.y, material.outlineColor.z,
+            material.outlineWidth,
+            material.albedoTexturePath.c_str());
+
+        return result;
     }
 }
 

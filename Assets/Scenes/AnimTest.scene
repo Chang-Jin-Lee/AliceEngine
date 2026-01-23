@@ -1,0 +1,469 @@
+{
+    "entities": [
+        {
+            "AdvancedAnimation": {
+                "additive": {
+                    "alpha": 1.0,
+                    "autoAdvance": false,
+                    "clip": "Recoil",
+                    "enabled": true,
+                    "loop": false,
+                    "refClip": "Idle",
+                    "speed": 1.0,
+                    "time": 0.0750834047794342
+                },
+                "aim": {
+                    "enabled": false,
+                    "weight": 1.0,
+                    "yawRad": 0.0
+                },
+                "base": {
+                    "autoAdvance": true,
+                    "blend01": 0.00016131301526911557,
+                    "clipA": "Idle",
+                    "clipB": "Walk",
+                    "enabled": true,
+                    "layerAlpha": 1.0,
+                    "loopA": true,
+                    "loopB": true,
+                    "speedA": 1.0,
+                    "speedB": 1.0,
+                    "timeA": 0.0,
+                    "timeB": 0.0
+                },
+                "enabled": true,
+                "ik": {
+                    "chainLength": 3,
+                    "enabled": false,
+                    "targetMS": {
+                        "x": 0.0,
+                        "y": 1.2000000476837158,
+                        "z": 0.20000000298023224
+                    },
+                    "tipBone": "Hand_L",
+                    "weight": 1.0
+                },
+                "playing": true,
+                "procedural": {
+                    "seed": 0,
+                    "strength": 0.0,
+                    "timeSec": 0.0
+                },
+                "upper": {
+                    "autoAdvance": true,
+                    "blend01": 0.0,
+                    "clipA": "Aim",
+                    "clipB": "",
+                    "enabled": false,
+                    "layerAlpha": 0.0,
+                    "loopA": true,
+                    "loopB": true,
+                    "speedA": 1.0,
+                    "speedB": 1.0,
+                    "timeA": 0.0,
+                    "timeB": 0.0
+                }
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Transform": {
+                "position": {
+                    "x": -5.538904190063477,
+                    "y": 0.0,
+                    "z": 1.1190078258514404
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 456.98590087890625,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 0.9999998807907104,
+                    "z": 0.9999998807907104
+                }
+            },
+            "id": 1
+        },
+        {
+            "AdvancedAnimation": {
+                "additive": {
+                    "alpha": 1.0,
+                    "autoAdvance": true,
+                    "clip": "",
+                    "enabled": false,
+                    "loop": false,
+                    "refClip": "",
+                    "speed": 1.0,
+                    "time": 0.0
+                },
+                "aim": {
+                    "enabled": false,
+                    "weight": 1.0,
+                    "yawRad": 0.0
+                },
+                "base": {
+                    "autoAdvance": true,
+                    "blend01": 0.04314253479242325,
+                    "clipA": "Rapi整合ReIm_arm|IdleIdle",
+                    "clipB": "Rapi整合ReIm_arm|IdleWalk",
+                    "enabled": true,
+                    "layerAlpha": 1.0,
+                    "loopA": true,
+                    "loopB": true,
+                    "speedA": 1.0,
+                    "speedB": 1.0,
+                    "timeA": 0.0,
+                    "timeB": 0.0
+                },
+                "enabled": true,
+                "ik": {
+                    "chainLength": 3,
+                    "enabled": false,
+                    "targetMS": {
+                        "x": 0.0,
+                        "y": 1.2000000476837158,
+                        "z": 0.20000000298023224
+                    },
+                    "tipBone": "Hand_L",
+                    "weight": 1.0
+                },
+                "playing": true,
+                "procedural": {
+                    "seed": 0,
+                    "strength": 0.0,
+                    "timeSec": 0.0
+                },
+                "upper": {
+                    "autoAdvance": true,
+                    "blend01": 0.0,
+                    "clipA": "Aim",
+                    "clipB": "",
+                    "enabled": false,
+                    "layerAlpha": 0.0,
+                    "loopA": true,
+                    "loopB": true,
+                    "speedA": 1.0,
+                    "speedB": 1.0,
+                    "timeA": 0.0,
+                    "timeB": 0.0
+                }
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/Rapi_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Scripts": [
+                {
+                    "enabled": false,
+                    "name": "CharacterAnimatorComponent",
+                    "props": {
+                        "m_additiveClip": "Recoil",
+                        "m_additiveDuration": 0.25,
+                        "m_additiveRefClip": "Idle",
+                        "m_aimWeight": 1.0,
+                        "m_aimYawDeg": 0.0,
+                        "m_attackClip": "Attack01",
+                        "m_attackDuration": 1.5,
+                        "m_attackHitTime": 0.699999988079071,
+                        "m_blendSpeed": 8.0,
+                        "m_crouchClip": "CrouchDown",
+                        "m_crouchDuration": 1.0,
+                        "m_crouchFireClip": "CrouchFire",
+                        "m_enableAdditive": false,
+                        "m_enableAim": false,
+                        "m_enableFootIK": true,
+                        "m_enableIK": false,
+                        "m_enableUpperLayer": false,
+                        "m_gravity": 18.0,
+                        "m_idleClip": "Rapi整合ReIm_arm|Idle",
+                        "m_ikChainLength": 3,
+                        "m_ikLiftSpeed": 5.0,
+                        "m_ikTargetLocal": {
+                            "x": 0.0,
+                            "y": 1.2000000476837158,
+                            "z": 0.20000000298023224
+                        },
+                        "m_ikTipBone": "Hand_L",
+                        "m_ikWeight": 1.0,
+                        "m_jumpSpeed": 6.5,
+                        "m_leftFootBasePos": {
+                            "x": -0.20000000298023224,
+                            "y": 0.0,
+                            "z": 0.10000000149011612
+                        },
+                        "m_leftFootBone": "Ball_L",
+                        "m_maxLiftHeight": 0.5,
+                        "m_moveSpeed": 10.0,
+                        "m_runClip": "Rapi整合ReIm_arm|Run",
+                        "m_runMultiplier": 1.600000023841858,
+                        "m_socketName": "WeaponPoint",
+                        "m_socketParentBone": "Hand_R",
+                        "m_socketPos": {
+                            "x": 0.10000000149011612,
+                            "y": 0.05000000074505806,
+                            "z": 0.0
+                        },
+                        "m_socketRotDeg": {
+                            "x": 0.0,
+                            "y": 90.0,
+                            "z": 0.0
+                        },
+                        "m_socketScale": {
+                            "x": 1.0,
+                            "y": 1.0,
+                            "z": 1.0
+                        },
+                        "m_upperClip": "Aim",
+                        "m_walkClip": "Rapi整合ReIm_arm|Walk",
+                        "m_weaponObjName": "Weapon"
+                    }
+                }
+            ],
+            "SkinnedMesh": {
+                "boneCount": 180,
+                "instanceAssetPath": "Assets/Fbx/Rapi.fbxasset",
+                "meshAssetPath": "Rapi"
+            },
+            "Transform": {
+                "position": {
+                    "x": -2.0916202068328857,
+                    "y": 0.0,
+                    "z": 2.6078124046325684
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": -1.5707963705062866,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.04999971017241478,
+                    "y": 0.05000000074505806,
+                    "z": 0.05000000074505806
+                }
+            },
+            "id": 2
+        },
+        {
+            "AdvancedAnimation": {
+                "additive": {
+                    "alpha": 1.0,
+                    "autoAdvance": false,
+                    "clip": "Recoil",
+                    "enabled": false,
+                    "loop": false,
+                    "refClip": "Idle",
+                    "speed": 1.0,
+                    "time": 0.0665782019495964
+                },
+                "aim": {
+                    "enabled": false,
+                    "weight": 1.0,
+                    "yawRad": 0.0
+                },
+                "base": {
+                    "autoAdvance": true,
+                    "blend01": 3.0948503990657628e-06,
+                    "clipA": "alice-Apose_arm|Swing",
+                    "clipB": "alice-Apose_arm|Swing",
+                    "enabled": true,
+                    "layerAlpha": 1.0,
+                    "loopA": false,
+                    "loopB": true,
+                    "speedA": 1.0,
+                    "speedB": 1.0,
+                    "timeA": 0.30000001192092896,
+                    "timeB": 0.30000001192092896
+                },
+                "enabled": true,
+                "ik": {
+                    "chainLength": 3,
+                    "enabled": false,
+                    "targetMS": {
+                        "x": 0.0,
+                        "y": 1.2000000476837158,
+                        "z": 0.20000000298023224
+                    },
+                    "tipBone": "Hand_L",
+                    "weight": 1.0
+                },
+                "playing": true,
+                "procedural": {
+                    "seed": 0,
+                    "strength": 0.0,
+                    "timeSec": 0.0
+                },
+                "upper": {
+                    "autoAdvance": true,
+                    "blend01": 0.0,
+                    "clipA": "Aim",
+                    "clipB": "",
+                    "enabled": false,
+                    "layerAlpha": 0.0,
+                    "loopA": true,
+                    "loopB": true,
+                    "speedA": 1.0,
+                    "speedB": 1.0,
+                    "timeA": 0.0,
+                    "timeB": 0.0
+                }
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/Alice_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "CharacterAnimatorComponent",
+                    "props": {
+                        "m_additiveClip": "Recoil",
+                        "m_additiveDuration": 0.25,
+                        "m_additiveRefClip": "Idle",
+                        "m_aimWeight": 1.0,
+                        "m_aimYawDeg": 0.0,
+                        "m_attackClip": "alice-Apose_arm|Swing",
+                        "m_attackDuration": 1.5,
+                        "m_attackHitTime": 0.699999988079071,
+                        "m_blendSpeed": 8.0,
+                        "m_crouchClip": "alice-Apose_arm|Crouch",
+                        "m_crouchDuration": 1.0,
+                        "m_crouchFireClip": "alice-Apose_arm|Shoot",
+                        "m_enableAdditive": true,
+                        "m_enableAim": false,
+                        "m_enableFootIK": false,
+                        "m_enableIK": false,
+                        "m_enableUpperLayer": false,
+                        "m_gravity": 18.0,
+                        "m_idleClip": "alice-Apose_arm|Idle",
+                        "m_ikChainLength": 3,
+                        "m_ikLiftSpeed": 5.0,
+                        "m_ikTargetLocal": {
+                            "x": 0.0,
+                            "y": 1.2000000476837158,
+                            "z": 0.20000000298023224
+                        },
+                        "m_ikTipBone": "Hand_L",
+                        "m_ikWeight": 1.0,
+                        "m_jumpSpeed": 6.5,
+                        "m_leftFootBasePos": {
+                            "x": -0.20000000298023224,
+                            "y": 0.0,
+                            "z": 0.10000000149011612
+                        },
+                        "m_leftFootBone": "足ＩＫ.L",
+                        "m_maxLiftHeight": 0.5,
+                        "m_moveSpeed": 1.6100000143051147,
+                        "m_runClip": "alice-Apose_arm|Run",
+                        "m_runMultiplier": 1.600000023841858,
+                        "m_socketName": "WeaponPoint",
+                        "m_socketParentBone": "手首.R",
+                        "m_socketPos": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "m_socketRotDeg": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "m_socketScale": {
+                            "x": 1.0,
+                            "y": 1.0,
+                            "z": 1.0
+                        },
+                        "m_upperClip": "Aim",
+                        "m_walkClip": "alice-Apose_arm|Walk",
+                        "m_weaponObjName": "Wonderland"
+                    }
+                }
+            ],
+            "SkinnedMesh": {
+                "boneCount": 248,
+                "instanceAssetPath": "Assets/Fbx/Alice.fbxasset",
+                "meshAssetPath": "Alice"
+            },
+            "Transform": {
+                "position": {
+                    "x": -0.20878779888153076,
+                    "y": 0.0,
+                    "z": -0.08538030087947845
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 4.7123894691467285,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.9999958872795105,
+                    "y": 0.9999998807907104,
+                    "z": 0.9999998807907104
+                }
+            },
+            "id": 3,
+            "name": "Alice"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/AmazingWonderland_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
+            },
+            "SkinnedMesh": {
+                "boneCount": 1,
+                "instanceAssetPath": "Assets/Fbx/AmazingWonderland.fbxasset",
+                "meshAssetPath": "AmazingWonderland"
+            },
+            "Transform": {
+                "position": {
+                    "x": -0.02541981264948845,
+                    "y": 0.0979834571480751,
+                    "z": 0.03980041295289993
+                },
+                "rotation": {
+                    "x": 2.9235928058624268,
+                    "y": 0.5380570888519287,
+                    "z": 2.347113847732544
+                },
+                "scale": {
+                    "x": 0.009999999776482582,
+                    "y": 0.009999999776482582,
+                    "z": 0.009999999776482582
+                }
+            },
+            "id": 4,
+            "name": "Wonderland"
+        }
+    ],
+    "version": 1
+}
