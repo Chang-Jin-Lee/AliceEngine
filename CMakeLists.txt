@@ -247,6 +247,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
     #Components
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
     ${ALICE_SRC_DIR}/PhysX/Components/Phy_SettingsComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
@@ -257,6 +258,15 @@ set(ENGINE_HEADERS
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
+
+	${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
 )
 
 # [변경] AliceEngine -> Engine
