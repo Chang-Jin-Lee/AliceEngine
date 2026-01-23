@@ -420,5 +420,5 @@ FodyWeavers.xsd
 *.msp
 
 
-Resource\fbx\Alice3DGame\*.*
-Resource\fbx\Rapi\*.*
+Resource/fbx/Alice3DGame/
+Resource/fbx/Rapi/
