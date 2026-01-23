@@ -188,6 +188,12 @@ namespace Alice
             }
         }
         CreateBloomResources(width, height);
+        
+        // Post-Bloom 합성 리소스 리사이즈
+        m_postBloomTex.Reset();
+        m_postBloomRTV.Reset();
+        m_postBloomSRV.Reset();
+        CreatePostBloomResources(width, height);
     }
 
     bool DeferredRenderSystem::CreateGBuffer(std::uint32_t width, std::uint32_t height)
@@ -1317,14 +1323,13 @@ namespace Alice
             viewport.MaxDepth = 1.0f;
             
             // Bloom 패스 (enabled일 때만)
+            ID3D11ShaderResourceView* toneInputSRV = m_sceneColorSRV.Get();
             if (m_bloomSettings.enabled)
             {
-                RenderBloomPass(m_sceneColorSRV.Get(), m_viewportRTV.Get(), viewport);
+                RenderBloomPass(m_sceneColorSRV.Get(), viewport);
+                toneInputSRV = m_postBloomSRV.Get(); // Bloom 합성 결과를 톤매핑 입력으로 사용
             }
-            else
-			{
-				RenderToneMapping(m_viewportRTV.Get(), viewport);
-			}
+            RenderToneMapping(toneInputSRV, m_viewportRTV.Get(), viewport);
         }
 
         // 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
@@ -2203,9 +2208,9 @@ namespace Alice
         }
     }
 
-    void DeferredRenderSystem::RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+    void DeferredRenderSystem::RenderToneMapping(ID3D11ShaderResourceView* inputSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
     {
-        if (!m_toneMappingPS || !m_quadVS || !m_sceneColorSRV || !targetRTV) return;
+        if (!m_toneMappingPS || !m_quadVS || !inputSRV || !targetRTV) return;
 
         // 뷰포트 설정
         m_context->RSSetViewports(1, &viewport);
@@ -2230,7 +2235,7 @@ namespace Alice
         }
 
         // 리소스 바인딩
-        ID3D11ShaderResourceView* srv = m_sceneColorSRV.Get();
+        ID3D11ShaderResourceView* srv = inputSRV;
         ID3D11SamplerState* sampler = m_samplerLinear.Get();
         ID3D11Buffer* cb = m_cbPostProcess.Get();
 
@@ -2253,9 +2258,9 @@ namespace Alice
         m_context->PSSetShaderResources(0, 1, &nullSRV);
     }
 
-    void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+    void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, const D3D11_VIEWPORT& viewport)
     {
-        if (!m_bloomSettings.enabled || !sourceSRV || !targetRTV) return;
+        if (!m_bloomSettings.enabled || !sourceSRV) return;
         if (!m_bloomBrightPassPS || !m_bloomDownsamplePS || !m_bloomBlurPassPS_H || !m_bloomBlurPassPS_V || !m_bloomUpsamplePS || !m_bloomCompositePS) return;
 
         // 상태 설정
@@ -2475,10 +2480,10 @@ namespace Alice
         // Additive Blending 비활성화
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
 
-        // ========== 5. Composite: Scene + level0(bloom) → targetRTV (톤매핑 포함) ==========
+        // ========== 5. Composite: Scene + level0(bloom) → m_postBloomRTV (HDR 합성 결과) ==========
         {
             m_context->RSSetViewports(1, &viewport);
-            m_context->OMSetRenderTargets(1, &targetRTV, nullptr);
+            m_context->OMSetRenderTargets(1, m_postBloomRTV.GetAddressOf(), nullptr);
             
             ID3D11ShaderResourceView* sceneSRV = sourceSRV;
             ID3D11ShaderResourceView* bloomSRV = m_bloomLevelSRV[0][0].Get(); // level0의 최종 bloom 결과
@@ -2486,7 +2491,7 @@ namespace Alice
             
             m_context->PSSetShaderResources(0, 2, compositeSRVs);
             
-            // PostProcess CB 업데이트 (톤매핑용)
+            // PostProcess CB 업데이트 (나중에 톤매핑에서 사용)
             ID3D11Buffer* cbPostProcess = m_cbPostProcess.Get();
             PostProcessCB postProcessCB = {};
             GetPostProcessParams(postProcessCB.exposure, postProcessCB.maxHDRNits);
@@ -2517,15 +2522,14 @@ namespace Alice
                 m_context->Unmap(m_cbBloom.Get(), 0);
             }
             
-            m_context->PSSetShaderResources(0, 0, m_postBloomSRV.GetAddressOf());
             m_context->PSSetConstantBuffers(2, 1, &cbPostProcess);
             m_context->PSSetConstantBuffers(3, 1, &cbBloom);
             m_context->PSSetShader(m_bloomCompositePS.Get(), nullptr, 0);
             m_context->DrawIndexed(m_quadIndexCount, 0, 0);
             
-            //// 리소스 해제
-            //ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
-            //m_context->PSSetShaderResources(0, 2, nullSRVs2);
+            // 리소스 해제
+            ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
+            m_context->PSSetShaderResources(0, 2, nullSRVs2);
         }
     }
 }
