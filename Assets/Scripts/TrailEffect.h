@@ -7,14 +7,14 @@
 
 namespace Alice
 {
-    class SwordEffectComponent;
+    class TrailEffectComponent;
     /// 트레일/리본 기반 검기 이펙트 스크립트
     /// - 무기의 루트/팁 지점을 시간에 따라 샘플링
     /// - Triangle Strip으로 리본 메쉬 생성
     /// - Age 기반 페이드 아웃 효과
-    class SwordSlashEffect : public IScript
+    class TrailEffect : public IScript
     {
-        ALICE_BODY(SwordSlashEffect);
+        ALICE_BODY(TrailEffect);
 
     public:
         void Awake() override;
@@ -32,8 +32,8 @@ namespace Alice
         ALICE_PROPERTY(float, m_moveSpeed, 2.0f);           // 자동 이동 속도
 
     private:
-        void AddTrailSample(SwordEffectComponent* effect, const DirectX::XMFLOAT3& rootPos, const DirectX::XMFLOAT3& tipPos, float currentTime);
-        void UpdateTrailLength(SwordEffectComponent* effect);
+        void AddTrailSample(TrailEffectComponent* effect, const DirectX::XMFLOAT3& rootPos, const DirectX::XMFLOAT3& tipPos, float currentTime);
+        void UpdateTrailLength(TrailEffectComponent* effect);
 
         float m_currentTime;          // 현재 시간 (초)
         float m_lastSampleTime;       // 마지막 샘플링 시간

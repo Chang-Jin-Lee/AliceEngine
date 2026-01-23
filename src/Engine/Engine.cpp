@@ -1267,7 +1267,7 @@ namespace Alice
 		}
 
 		// 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑까지 수행
-		if (!pImpl->m_editorMode)
+		//if (!pImpl->m_editorMode)
 		{
 			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
 			if (backBufferRTV)
