@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // Windows.h의 min/max 매크로 충돌 방지 (RTTR 헤더와의 충돌 방지)
 #ifndef NOMINMAX
@@ -127,8 +127,6 @@ namespace Alice
                           std::string& pvdHost,
                           int& pvdPort);
 
-		void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
-		void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
 		template<typename T>
 		void DrawEngineComponent(const char* label, T* comp, std::function<void()> removeFn, const EntityId& _selectedEntity, const std::string& compTypeName)
 		{
@@ -217,15 +215,11 @@ namespace Alice
 				}
 			}
 		}
-		
-		
-		
-		
+
+		void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorAnimationStatus(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorComputeEffect(World& world, const EntityId& _selectedEntity);
-        void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
-        void DrawInspectorAnimationStatus(World& world, const EntityId& _selectedEntity);
-        void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
-        void DrawEngineComponent(const char* label, auto* comp, auto removeFn);
         void DrawInspectorMaterial(World& world, const EntityId& _selectedEntity);
         void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);

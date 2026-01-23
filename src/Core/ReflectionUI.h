@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -427,7 +427,7 @@ namespace Alice
                 else if (propName == "normalStrength")
                 {
                     // 노말맵 강도 조절: 0.0f ~ 5.0f 범위
-                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 5.0f);
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 5.0f, "", world);
                 }
                 else
                 {
