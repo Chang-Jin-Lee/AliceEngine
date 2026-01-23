@@ -16,6 +16,7 @@
 #include "Components/ComponentStorage.h"
 
 // 컴포넌트 헤더들
+#include "Components/IDComponent.h"
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
@@ -64,7 +65,8 @@ namespace Alice
         
         // ==== 부모-자식 관계 관리 ====
         /// 엔티티의 부모를 설정합니다. 순환 참조를 방지합니다.
-        void SetParent(EntityId child, EntityId parent);
+        /// @param keepWorld true면 월드 위치를 유지하고 로컬을 재계산, false면 관계만 변경
+        void SetParent(EntityId child, EntityId parent, bool keepWorld = false);
         /// 엔티티의 부모를 가져옵니다. InvalidEntityId면 부모 없음
         EntityId GetParent(EntityId child) const;
         /// 엔티티의 모든 자식을 가져옵니다.
@@ -459,6 +461,13 @@ namespace Alice
         // SlotMap 기반 유효성 검사 (EntityId -> Generation)
         // 엔티티가 생성될 때 0으로 시작하고, 파괴될 때마다 증가합니다.
         std::unordered_map<EntityId, std::uint32_t> m_entityGenerations;
+
+        // children 캐시 (parent -> children vector)
+        // InvalidEntityId는 루트 엔티티들을 의미
+        mutable std::unordered_map<EntityId, std::vector<EntityId>> m_children;
+        
+        // children 캐시 무효화 (SetParent, DestroyEntity, Clear에서 호출)
+        void InvalidateChildrenCache() const { m_children.clear(); }
     };
 
     template <typename T>
