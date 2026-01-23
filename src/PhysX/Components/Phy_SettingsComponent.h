@@ -15,6 +15,21 @@ struct Phy_SettingsComponent
 {
     bool enablePhysics = true;
 
+    // Ground Plane (y=0) toggle
+    bool enableGroundPlane = true;
+
+    // Ground Plane material
+    float groundStaticFriction = 0.5f;
+    float groundDynamicFriction = 0.5f;
+    float groundRestitution = 0.0f;
+
+    // Ground Plane filtering
+    uint32_t groundLayerBits = 1u << 0;
+    uint32_t groundCollideMask = 0xFFFFFFFFu;
+    uint32_t groundQueryMask = 0xFFFFFFFFu;
+    uint32_t groundIgnoreLayers = 0u;
+    bool groundIsTrigger = false;
+
     // Transform이 DirectX 기준이니까 gravity도 XMFLOAT3로
     DirectX::XMFLOAT3 gravity = { 0.0f, -9.81f, 0.0f };
 

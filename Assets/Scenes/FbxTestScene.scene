@@ -427,6 +427,19 @@
                     "y": 0.029999999329447746,
                     "z": 0.029999999329447746
                 }
+            }
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/Wonderland_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "roughness": 0.5
             },
             "id": 10
         }

@@ -19,10 +19,12 @@
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Rendering/RenderTypes.h"
 
+
+
 namespace Alice
 {
     class ResourceManager;
-    
+    class TrailEffectRenderSystem;
     /// 디퍼드 렌더링 시스템입니다.
     /// - G-Buffer 패스: 지오메트리 정보를 G-Buffer에 렌더링
     /// - Deferred Light 패스: G-Buffer를 읽어서 조명 계산
@@ -96,6 +98,8 @@ namespace Alice
 
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }
         const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
+
+        void SetSwordRenderSystem(TrailEffectRenderSystem* pSwordRenderSystem) { m_trailRenderSystem = pSwordRenderSystem; }
 
     private:
 
@@ -174,11 +178,11 @@ namespace Alice
         // 텍스처 로딩
         ID3D11ShaderResourceView* GetOrCreateTexture(const std::string& path);
         
-
     private:
         ID3D11RenderDevice& m_renderDevice;
         ResourceManager*     m_resources { nullptr };
         SkinnedMeshRegistry* m_skinnedRegistry { nullptr };
+        class TrailEffectRenderSystem* m_trailRenderSystem { nullptr };
 
         Microsoft::WRL::ComPtr<ID3D11Device>           m_device;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext>    m_context;

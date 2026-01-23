@@ -30,14 +30,18 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 
 
 // 물리 컴포넌트들
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_MeshColliderComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "PhysX/Components/Phy_CCTComponent.h"
+#include "PhysX/Components/Phy_JointComponent.h"
 
 class IPhysicsWorld; // 물리 인터페이스 전방선언
 
