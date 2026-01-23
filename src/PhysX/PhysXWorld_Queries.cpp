@@ -1,5 +1,6 @@
 ﻿// PhysXWorld_Queries.cpp
 #include "PhysXWorld_Internal.h"
+#include "Core/Logger.h"
 
 // ============================================================
 //  Queries
@@ -46,11 +47,18 @@ bool PhysXWorld::Raycast(const Vec3& origin, const Vec3& dir, float maxDist, Ray
 
 bool PhysXWorld::RaycastEx(const Vec3& origin, const Vec3& dir, float maxDist, RaycastHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers) const
 {
+	// 출력 초기화 (ContactModify 가드보다 먼저) - 유령 히트 방지
+	outHit = RaycastHit{};
+	
 	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
-	thread_local bool inContactModifyCallback = false;
-	if (inContactModifyCallback)
+	if (physxwrap_detail::IsInContactModifyCallback())
 	{
-		// ContactModify 콜백 내에서는 쿼리 호출 불가 (데드락 위험)
+		uint32_t count = ++physxwrap_detail::g_blockedQueryCount;
+		// 첫 1회 또는 100회마다 경고 (로그 폭탄 방지)
+		if (count == 1 || count % 100 == 0)
+		{
+			ALICE_LOG_WARN("[PhysXWorld] RaycastEx called inside ContactModify callback! This will cause deadlock. (blocked count: %u)", count);
+		}
 		return false;
 	}
 	
@@ -76,11 +84,20 @@ bool PhysXWorld::RaycastEx(const Vec3& origin, const Vec3& dir, float maxDist, R
 
 uint32_t PhysXWorld::RaycastAll(const Vec3& origin, const Vec3& dir, float maxDist, std::vector<RaycastHit>& outHits, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, uint32_t maxHits) const
 {
-	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
-	thread_local bool inContactModifyCallback = false;
-	if (inContactModifyCallback) return 0;
-	
+	// 출력 초기화 (ContactModify 가드보다 먼저) - 유령 히트 방지
 	outHits.clear();
+	
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	if (physxwrap_detail::IsInContactModifyCallback())
+	{
+		uint32_t count = ++physxwrap_detail::g_blockedQueryCount;
+		// 첫 1회 또는 100회마다 경고 (로그 폭탄 방지)
+		if (count == 1 || count % 100 == 0)
+		{
+			ALICE_LOG_WARN("[PhysXWorld] RaycastAll called inside ContactModify callback! This will cause deadlock. (blocked count: %u)", count);
+		}
+		return 0;
+	}
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
 	PxVec3 unitDir;
@@ -120,11 +137,17 @@ static inline void FillOverlapHit(const PxOverlapHit& h, OverlapHit& out)
 
 uint32_t PhysXWorld::OverlapBox(const Vec3& center, const Quat& rot, const Vec3& halfExtents, std::vector<OverlapHit>& outHits, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, uint32_t maxHits) const
 {
-	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
-	thread_local bool inContactModifyCallback = false;
-	if (inContactModifyCallback) return 0;
-	
+	// 출력 초기화 (ContactModify 가드보다 먼저) - 유령 히트 방지
 	outHits.clear();
+	
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	if (physxwrap_detail::IsInContactModifyCallback())
+	{
+		#ifdef _DEBUG
+		ALICE_LOG_ERRORF("[PhysXWorld] OverlapBox called inside ContactModify callback! This will cause deadlock.");
+		#endif
+		return 0;
+	}
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
 	std::vector<PxOverlapHit> hits(maxHits);
@@ -156,11 +179,17 @@ uint32_t PhysXWorld::OverlapBox(const Vec3& center, const Quat& rot, const Vec3&
 
 uint32_t PhysXWorld::OverlapSphere(const Vec3& center, float radius, std::vector<OverlapHit>& outHits, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, uint32_t maxHits) const
 {
-	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
-	thread_local bool inContactModifyCallback = false;
-	if (inContactModifyCallback) return 0;
-	
+	// 출력 초기화 (ContactModify 가드보다 먼저) - 유령 히트 방지
 	outHits.clear();
+	
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	if (physxwrap_detail::IsInContactModifyCallback())
+	{
+		#ifdef _DEBUG
+		ALICE_LOG_ERRORF("[PhysXWorld] OverlapSphere called inside ContactModify callback! This will cause deadlock.");
+		#endif
+		return 0;
+	}
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
 	std::vector<PxOverlapHit> hits(maxHits);
@@ -192,11 +221,17 @@ uint32_t PhysXWorld::OverlapSphere(const Vec3& center, float radius, std::vector
 
 uint32_t PhysXWorld::OverlapCapsule(const Vec3& center, const Quat& rot, float radius, float halfHeight, std::vector<OverlapHit>& outHits, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, uint32_t maxHits, bool alignYAxis) const
 {
-	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
-	thread_local bool inContactModifyCallback = false;
-	if (inContactModifyCallback) return 0;
-	
+	// 출력 초기화 (ContactModify 가드보다 먼저) - 유령 히트 방지
 	outHits.clear();
+	
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	if (physxwrap_detail::IsInContactModifyCallback())
+	{
+		#ifdef _DEBUG
+		ALICE_LOG_ERRORF("[PhysXWorld] OverlapCapsule called inside ContactModify callback! This will cause deadlock.");
+		#endif
+		return 0;
+	}
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
 	std::vector<PxOverlapHit> hits(maxHits);
@@ -246,9 +281,17 @@ static inline void FillSweepHit(const PxSweepHit& h, SweepHit& out)
 
 bool PhysXWorld::SweepBox(const Vec3& origin, const Quat& rot, const Vec3& halfExtents, const Vec3& dir, float maxDist, SweepHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers) const
 {
+	// 출력 초기화 (ContactModify 가드보다 먼저) - 유령 히트 방지
+	outHit = SweepHit{};
+	
 	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
-	thread_local bool inContactModifyCallback = false;
-	if (inContactModifyCallback) return false;
+	if (physxwrap_detail::IsInContactModifyCallback())
+	{
+		#ifdef _DEBUG
+		ALICE_LOG_ERRORF("[PhysXWorld] SweepBox called inside ContactModify callback! This will cause deadlock.");
+		#endif
+		return false;
+	}
 	
 	if (!impl || !impl->scene) return false;
 
@@ -278,9 +321,17 @@ bool PhysXWorld::SweepBox(const Vec3& origin, const Quat& rot, const Vec3& halfE
 
 bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, float maxDist, SweepHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers) const
 {
+	// 출력 초기화 (ContactModify 가드보다 먼저) - 유령 히트 방지
+	outHit = SweepHit{};
+	
 	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
-	thread_local bool inContactModifyCallback = false;
-	if (inContactModifyCallback) return false;
+	if (physxwrap_detail::IsInContactModifyCallback())
+	{
+		#ifdef _DEBUG
+		ALICE_LOG_ERRORF("[PhysXWorld] SweepSphere called inside ContactModify callback! This will cause deadlock.");
+		#endif
+		return false;
+	}
 	
 	if (!impl || !impl->scene) return false;
 
@@ -310,9 +361,17 @@ bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, 
 
 bool PhysXWorld::SweepCapsule(const Vec3& origin, const Quat& rot, float radius, float halfHeight, const Vec3& dir, float maxDist, SweepHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, bool alignYAxis) const
 {
+	// 출력 초기화 (ContactModify 가드보다 먼저) - 유령 히트 방지
+	outHit = SweepHit{};
+	
 	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
-	thread_local bool inContactModifyCallback = false;
-	if (inContactModifyCallback) return false;
+	if (physxwrap_detail::IsInContactModifyCallback())
+	{
+		#ifdef _DEBUG
+		ALICE_LOG_ERRORF("[PhysXWorld] SweepCapsule called inside ContactModify callback! This will cause deadlock.");
+		#endif
+		return false;
+	}
 	
 	if (!impl || !impl->scene) return false;
 
@@ -355,6 +414,9 @@ bool PhysXWorld::RaycastQ(
 	const Vec3& origin, const Vec3& dir, float maxDist,
 	RaycastHit& outHit, const SceneQueryFilter& f) const
 {
+	// 출력 초기화 - 유령 히트 방지
+	outHit = RaycastHit{};
+	
 	if (!impl || !impl->scene) return false;
 
 	PxVec3 unitDir;
@@ -550,6 +612,9 @@ bool PhysXWorld::SweepBoxQ(
 	const Vec3& origin, const Quat& rot, const Vec3& halfExtents,
 	const Vec3& dir, float maxDist, SweepHit& outHit, const SceneQueryFilter& f) const
 {
+	// 출력 초기화 - 유령 히트 방지
+	outHit = SweepHit{};
+	
 	if (!impl || !impl->scene) return false;
 
 	PxVec3 unitDir;
@@ -584,6 +649,9 @@ bool PhysXWorld::SweepSphereQ(
 	const Vec3& origin, float radius,
 	const Vec3& dir, float maxDist, SweepHit& outHit, const SceneQueryFilter& f) const
 {
+	// 출력 초기화 - 유령 히트 방지
+	outHit = SweepHit{};
+	
 	if (!impl || !impl->scene) return false;
 
 	PxVec3 unitDir;
@@ -618,6 +686,9 @@ bool PhysXWorld::SweepCapsuleQ(
 	const Vec3& origin, const Quat& rot, float radius, float halfHeight,
 	const Vec3& dir, float maxDist, SweepHit& outHit, const SceneQueryFilter& f, bool alignYAxis) const
 {
+	// 출력 초기화 - 유령 히트 방지
+	outHit = SweepHit{};
+	
 	if (!impl || !impl->scene) return false;
 
 	PxVec3 unitDir;

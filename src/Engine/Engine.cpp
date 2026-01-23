@@ -1307,10 +1307,12 @@ namespace Alice
 				depthSRV = pImpl->m_deferredRenderSystem->GetSceneDepthSRV();
 			}
 			
-		// Execute에 depthSRV와 dt를 직접 전달
+		// Execute에 depthSRV, near/far, dt를 직접 전달
 		// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
 		float dtSec = pImpl->m_timer.DeltaTime();
-		pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV, dtSec);
+		float nearPlane = pImpl->m_camera.GetNearPlane();
+		float farPlane = pImpl->m_camera.GetFarPlane();
+		pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV, nearPlane, farPlane, dtSec);
 		}
 
 		// ============================================= 파티클 오버레이 합성 =============================================
