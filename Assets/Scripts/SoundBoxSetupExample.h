@@ -12,6 +12,7 @@ namespace Alice
 
     public:
         void Start() override;
+        void Update(float dt) override;
 
     public:
         // 사운드 박스용 기본 파라미터를 에디터에서 바로 조절
@@ -19,6 +20,9 @@ namespace Alice
         ALICE_PROPERTY(bool,        loop,         true);
         ALICE_PROPERTY(float,       minDistance,  1.0f);
         ALICE_PROPERTY(float,       maxDistance, 30.0f);
+        
+        // [Alice] 에디터에서 체크하면 디버그 박스가 보입니다.
+        ALICE_PROPERTY(bool,        debugDraw,    false);
     };
 }
 

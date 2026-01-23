@@ -57,7 +57,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 12.057997880503535
+                "timeSec": 65.28625077893957
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -226,7 +226,8 @@
                         "m_shakeAmplitude": 0.5,
                         "m_shakeDecay": 2.0,
                         "m_shakeDuration": 2.200000047683716,
-                        "m_shakeFrequency": 20.0
+                        "m_shakeFrequency": 20.0,
+                        "m_sholderOffset": 4.0
                     }
                 }
             ],
@@ -341,7 +342,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1768.6909299232066
+                "timeSec": 1821.9191828216426
             },
             "SkinnedMesh": {
                 "boneCount": 67,
@@ -446,7 +447,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1673.4845811282285
+                "timeSec": 1726.7128340266645
             },
             "SkinnedMesh": {
                 "boneCount": 16,
@@ -616,6 +617,40 @@
             },
             "id": 14,
             "name": "Camera5"
+        },
+        {
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SoundBoxSetupExample",
+                    "props": {
+                        "debugDraw": false,
+                        "loop": true,
+                        "maxDistance": 39.130001068115234,
+                        "minDistance": 10.3100004196167,
+                        "soundPath": "Resource/Sound/CaliforniaGirls.wav"
+                    }
+                }
+            ],
+            "Transform": {
+                "position": {
+                    "x": -15.881107330322266,
+                    "y": 1.4291400909423828,
+                    "z": -9.27734088897705
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 15,
+            "name": "SoundBox"
         }
     ],
     "version": 1
