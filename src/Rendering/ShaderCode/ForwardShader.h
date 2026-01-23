@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace Alice
 {
@@ -19,6 +19,15 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 struct VSInput
@@ -42,12 +51,16 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
 
-    float4 worldPos = mul(float4(input.Position, 1.0f), gWorld);
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
+    
+    // 아웃라인: 모든 쉐이딩 모드에서 normal 방향으로 확장 (아웃라인 두께가 0보다 클 때만)
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (N * gOutlineWidth) : float3(0, 0, 0);
+    
+    float4 worldPos = mul(float4(input.Position + posOffset, 1.0f), gWorld);
     float4 viewPos  = mul(worldPos, gView);
     output.Position = mul(viewPos, gProj);
 
     output.WorldPos = worldPos.xyz;
-    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
     output.Normal = N;
     // 정적 지오메트리(큐브 등)는 탄젠트/바이탄젠트가 없으므로
     // 노말에서 임의의 직교 기저를 만들어 노말맵(TBN) 계산이 가능하게 합니다.
@@ -75,6 +88,15 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 cbuffer CBBones : register(b2)
@@ -93,6 +115,7 @@ struct VSInput
     uint4  BoneIndices  : BLENDINDICES;
     float4 BoneWeights  : BLENDWEIGHT;
     float2 TexCoord     : TEXCOORD0;
+    float3 SmoothNormal : SMOOTHNORMAL; // 아웃라인용 스무스 노멀
 };
 
 struct VSOutput
@@ -131,12 +154,20 @@ VSOutput main(VSInput input)
     float3 skinnedT = normalize(mul(tL, M3));
     float3 skinnedB = normalize(mul(bL, M3));
 
-    float4 worldPos = mul(skinnedPos, gWorld);
+    float3 N = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    
+    // 아웃라인: 스무스 노멀 방향으로 확장 (하드 엣지 모델의 아웃라인 끊김 방지)
+    // 스무스 노멀도 스키닝 변환을 적용해야 함
+    float3 skinnedSmoothN = normalize(mul(input.SmoothNormal, M3));
+    float3 smoothN = normalize(mul(float4(skinnedSmoothN, 0.0f), gWorld).xyz);
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
+    
+    float4 worldPos = mul(float4(skinnedPos.xyz + posOffset, 1.0f), gWorld);
     float4 viewPos  = mul(worldPos, gView);
     output.Position = mul(viewPos, gProj);
 
     output.WorldPos = worldPos.xyz;
-    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.Normal   = N;
     output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
     output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
     output.TexCoord = input.TexCoord;
@@ -145,8 +176,7 @@ VSOutput main(VSInput input)
 }
 )";
 
-        // PBR Pixel Shader
-        inline static const char* PBRPS = R"(
+        inline static const char* PBRPS_Part1 = R"(
 Texture2D gDiffuseMap  : register(t0);
 Texture2D gNormalMap   : register(t1);
 Texture2D gSpecularMap : register(t2);
@@ -173,6 +203,15 @@ cbuffer CBPerObject : register(b0)
     float    gMetalness;
     int      gUseTexture;
     int      gEnableNormalMap;
+    int      gShadingMode;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 cbuffer CBLighting : register(b1)
@@ -192,13 +231,13 @@ cbuffer CBLighting : register(b1)
     float  gFillLightIntensity;
 
     float3 gCameraPos;
-    float  gPad1;
+    float  gPad2;
 
     float4 gMaterialDiffuse;   // rgb: diffuse color
     float4 gMaterialSpecular;  // rgb: specular color, a: shininess
 
-    int    gShadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon
-    int3   gPad2;
+    int    gShadingMode2;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon, 4: PBR, 5: ToonPBR
+    int3   gPad3;
 
     float4x4 gLightViewProj;   // 섀도우 맵 계산용 라이트 뷰-프로젝션
 
@@ -265,7 +304,9 @@ struct PSInput
     float3 TangentW : TEXCOORD3;
     float3 BitanW   : TEXCOORD4;
 };
+)";
 
+    inline static const char* PBRPS_Part2 = R"(
 float ComputeAttenuation(float dist, float range)
 {
     float r = max(range, 0.001f);
@@ -343,12 +384,39 @@ float3 EvaluatePBRLight(float3 N, float3 V, float3 L, float3 albedo, float metal
     return (diffuseTerm + specularTerm) * lightColor * NdotL;
 }
 
+float ToonLevel(float n)
+{
+    if (n > 0.95f) return 1.0f;
+    if (n > 0.5f)  return 0.7f;
+    if (n > 0.2f)  return 0.4f;
+    return 0.1f;
+}
+
 float4 main(PSInput input) : SV_TARGET
 {
+    // 아웃라인 패스 감지: Width가 0보다 크면 아웃라인용 드로우콜임
+    if (gOutlineWidth > 0.0f)
+    {
+        // 아웃라인 색상 반환 (Unlit)
+        return float4(gOutlineColor, 1.0f);
+    }
+    
 	float4 textureColor = gDiffuseMap.Sample(gSampler, input.TexCoord);
     float alphaTex = textureColor.a * gMaterialColor.a;
     // 알파 블렌딩
     clip(alphaTex - 0.1f);
+
+    // shadingMode == 6: TextureOnly (빛의 영향을 받지 않는 텍스처만 반환)
+    if (gShadingMode == 6)
+    {
+        float3 albedo = gMaterialColor.rgb;
+        if (gUseTexture != 0)
+        {
+            float3 texSample = textureColor.rgb;
+            albedo *= texSample;
+        }
+        return float4(albedo, alphaTex);
+    }
 
     float3 N = normalize(input.Normal);
     if (gEnableNormalMap != 0)
@@ -537,9 +605,10 @@ float4 main(PSInput input) : SV_TARGET
         return float4(toonColor, alphaTex);
     }
 
-    // === PBR 경로 (shadingMode == 4) ===
-    if (gShadingMode == 4)
+    // === PBR 경로 (shadingMode == 4, 5) ===
+    if (gShadingMode == 4 || gShadingMode == 5)
     {
+        const bool toonPbr = (gShadingMode == 5);
         float roughness = saturate(gRoughness);
         float metalness = saturate(gMetalness);
 
@@ -549,7 +618,16 @@ float4 main(PSInput input) : SV_TARGET
         float3 Lo = 0.0f;
 
         float3 lightColor = gKeyLightColor * gKeyLightIntensity;
-        Lo += EvaluatePBRLight(Np, Vp, Lp, albedo, metalness, roughness, lightColor) * shadow;
+        {
+            float NdotL = max(dot(Np, Lp), 0.0f);
+            float3 lit = EvaluatePBRLight(Np, Vp, Lp, albedo, metalness, roughness, lightColor);
+            if (toonPbr && NdotL > 0.0f)
+            {
+                float level = ToonLevel(NdotL);
+                lit *= level / max(NdotL, 1e-4f);
+            }
+            Lo += lit * shadow;
+        }
 
         [loop] for (int i = 0; i < g_PointLightCount; ++i)
         {
@@ -559,7 +637,14 @@ float4 main(PSInput input) : SV_TARGET
             float3 L = (dist > 0.0001f) ? (toLight / dist) : float3(0, 0, 1);
             float atten = ComputeAttenuation(dist, pl.range);
             float3 lc = pl.color * pl.intensity * atten;
-            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            float NdotL = max(dot(Np, L), 0.0f);
+            float3 lit = EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            if (toonPbr && NdotL > 0.0f)
+            {
+                float level = ToonLevel(NdotL);
+                lit *= level / max(NdotL, 1e-4f);
+            }
+            Lo += lit;
         }
 
         [loop] for (int i = 0; i < g_SpotLightCount; ++i)
@@ -571,7 +656,14 @@ float4 main(PSInput input) : SV_TARGET
             float atten = ComputeAttenuation(dist, sl.range);
             float spot = ComputeSpotFactor(L, sl.direction, sl.innerCos, sl.outerCos);
             float3 lc = sl.color * sl.intensity * atten * spot;
-            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            float NdotL = max(dot(Np, L), 0.0f);
+            float3 lit = EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            if (toonPbr && NdotL > 0.0f)
+            {
+                float level = ToonLevel(NdotL);
+                lit *= level / max(NdotL, 1e-4f);
+            }
+            Lo += lit;
         }
 
         [loop] for (int i = 0; i < g_RectLightCount; ++i)
@@ -584,7 +676,14 @@ float4 main(PSInput input) : SV_TARGET
             float facing = ComputeRectFactor(L, rl.direction);
             float areaScale = max(rl.width * rl.height, 0.01f);
             float3 lc = rl.color * rl.intensity * atten * facing * areaScale;
-            Lo += EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            float NdotL = max(dot(Np, L), 0.0f);
+            float3 lit = EvaluatePBRLight(Np, Vp, L, albedo, metalness, roughness, lc);
+            if (toonPbr && NdotL > 0.0f)
+            {
+                float level = ToonLevel(NdotL);
+                lit *= level / max(NdotL, 1e-4f);
+            }
+            Lo += lit;
         }
 
         float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metalness);

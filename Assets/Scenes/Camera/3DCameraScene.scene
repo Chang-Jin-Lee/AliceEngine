@@ -242,7 +242,8 @@
                         "m_shakeAmplitude": 0.5,
                         "m_shakeDecay": 2.0,
                         "m_shakeDuration": 2.200000047683716,
-                        "m_shakeFrequency": 20.0
+                        "m_shakeFrequency": 20.0,
+                        "m_sholderOffset": 4.0
                     }
                 }
             ],
@@ -271,9 +272,9 @@
                 "albedoTexturePath": "",
                 "assetPath": "",
                 "color": {
-                    "x": 0.17374515533447266,
-                    "y": 0.17374515533447266,
-                    "z": 0.17374515533447266
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
                 },
                 "metalness": 0.0,
                 "normalStrength": 1.0,

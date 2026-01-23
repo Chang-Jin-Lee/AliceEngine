@@ -55,6 +55,16 @@ namespace Alice
                         changed = true;
                     }
                 }
+                else if (propType == rttr::type::get<uint32_t>())
+                {
+                    // uint32_t는 비트마스크로 처리 가능하지만, 일단 일반 int로 표시
+                    int val = static_cast<int>(value.to_uint32());
+                    if (ImGui::DragInt(displayName.c_str(), &val, 1.0f, 0, INT_MAX))
+                    {
+                        prop.set_value(obj, static_cast<uint32_t>(val));
+                        changed = true;
+                    }
+                }
                 else if (propType == rttr::type::get<float>())
                 {
                     float val = value.to_float();
@@ -225,6 +235,11 @@ namespace Alice
                 if (propName == "roughness" || propName == "metalness")
                 {
                     changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f);
+                }
+                else if (propName == "normalStrength")
+                {
+                    // 노말맵 강도 조절: 0.0f ~ 5.0f 범위
+                    changed |= Detail::RenderPropertyWithRange(prop, inst, 0.0f, 5.0f);
                 }
                 else
                 {
