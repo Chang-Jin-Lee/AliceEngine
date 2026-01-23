@@ -1105,7 +1105,7 @@ namespace Alice
 			}
 		}
 
-		void ReloadScripts_FromButton(World& world)
+		bool ReloadScripts_FromButton(World& world)
 		{
 			using namespace std::filesystem;
 
@@ -1123,7 +1123,7 @@ namespace Alice
 			{
 				ALICE_LOG_ERRORF("Reload Scripts: ScriptsBuild/CMakeLists.txt not found. path=\"%s\"",
 					(scriptsCMakePath).string().c_str());
-				return;
+				return false;
 			}
 
 #ifdef _DEBUG
@@ -1139,13 +1139,16 @@ namespace Alice
 			cmdConfig += scriptsRoot.wstring();
 			cmdConfig += L"\" -B \"";
 			cmdConfig += scriptsBuildDir.wstring();
-			cmdConfig += L"\" || pause";
+			cmdConfig += L"\"";
 
 			// Configure 실행
-			if (ExecuteCommandWithConsole(cmdConfig) != 0)
+			int configResult = ExecuteCommandWithConsole(cmdConfig);
+			if (configResult != 0)
 			{
-				ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed.");
-				return;
+				ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed (exit code: %d).", configResult);
+				// 실패 시에만 pause 실행 (사용자가 에러를 볼 수 있도록)
+				ExecuteCommandWithConsole(L"pause");
+				return false;
 			}
 
 			// ----------------------------------------------------------------------
@@ -1155,13 +1158,16 @@ namespace Alice
 			cmdBuild += scriptsBuildDir.wstring();
 			cmdBuild += L"\" --config ";
 			cmdBuild += kConfig;
-			cmdBuild += L" --target AliceScripts || pause";
+			cmdBuild += L" --target AliceScripts";
 
 			// Build 실행
-			if (ExecuteCommandWithConsole(cmdBuild) != 0)
+			int buildResult = ExecuteCommandWithConsole(cmdBuild);
+			if (buildResult != 0)
 			{
-				ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed.");
-				return;
+				ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed (exit code: %d).", buildResult);
+				// 실패 시에만 pause 실행 (사용자가 에러를 볼 수 있도록)
+				ExecuteCommandWithConsole(L"pause");
+				return false;
 			}
 
 			// 4) ScriptsBuild/build/<Config>/AliceScripts.dll 을 실행 파일 옆으로 복사
@@ -1170,7 +1176,7 @@ namespace Alice
 			{
 				ALICE_LOG_ERRORF("Reload Scripts: built DLL not found: \"%s\"",
 					builtDll.string().c_str());
-				return;
+				return false;
 			}
 
 			// RTTR shared DLL도 같이 복사해 둡니다. (스크립트 RTTR 등록이 엔진에서 보이려면 필수)
@@ -1210,7 +1216,7 @@ namespace Alice
 					builtDll.string().c_str(),
 					targetDll.string().c_str(),
 					ecCopy.message().c_str());
-				return;
+				return false;
 			}
 
 			ALICE_LOG_INFO("Reload Scripts: copied \"%s\" -> \"%s\"",
@@ -1218,10 +1224,15 @@ namespace Alice
 				targetDll.string().c_str());
 
 			// 6) 새 DLL 로드
-			ScriptHotReload_Reload();
+			if (!ScriptHotReload_Reload())
+			{
+				ALICE_LOG_ERRORF("Reload Scripts: ScriptHotReload_Reload() failed.");
+				return false;
+			}
 
 			// 새 DLL의 vtable/RTTR이 준비된 뒤에 인스턴스를 다시 만듭니다.
 			RestoreScripts(world, snaps);
+			return true;
 		}
 
 		// 빌드/배포용 간단 파일 유틸 (에러는 로그로 남기고, 실패는 false 반환)
@@ -1803,6 +1814,16 @@ namespace Alice
 		std::string& pvdHost,
 		int& pvdPort)
 	{
+		// SceneManager에서 현재 씬 파일 경로를 조회하여 g_CurrentScenePath 업데이트
+		if (sceneManager)
+		{
+			const auto& currentScenePath = sceneManager->GetCurrentSceneFilePath();
+			if (!currentScenePath.empty() && currentScenePath != g_CurrentScenePath)
+			{
+				g_CurrentScenePath = currentScenePath;
+				g_HasCurrentScenePath = true;
+			}
+		}
 		// === Undo 키 입력 처리 (전역) ===
 		ImGuiIO& io = ImGui::GetIO();
 		const bool isTextInputActive = io.WantTextInput || ImGui::IsAnyItemActive();
@@ -1906,7 +1927,21 @@ namespace Alice
 			{
 				if (ImGui::Button("Play"))
 				{
-					isPlaying = true;
+					// 플레이 전에 스크립트 리로드 실행
+					ALICE_LOG_INFO("Play button pressed: Starting script reload...");
+					bool reloadSuccess = ReloadScripts_FromButton(world);
+					if (!reloadSuccess)
+					{
+						// 스크립트 리로드 실패 시 경고 표시 및 게임 실행 중단
+						ALICE_LOG_ERRORF("Play button: Script reload failed. Game will NOT start.");
+						ImGui::OpenPopup("ScriptReloadFailed");
+						// isPlaying은 설정하지 않음 (게임 실행 안 함)
+					}
+					else
+					{
+						ALICE_LOG_INFO("Play button: Script reload succeeded. Starting game...");
+						isPlaying = true;
+					}
 				}
 			}
 			else
@@ -1915,6 +1950,22 @@ namespace Alice
 				{
 					isPlaying = false;
 				}
+			}
+
+			// 스크립트 리로드 실패 경고 팝업
+			if (ImGui::BeginPopupModal("ScriptReloadFailed", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::Text("Script Reload Failed!");
+				ImGui::Separator();
+				ImGui::Text("Failed to reload scripts before starting the game.");
+				ImGui::Text("Please check the console for error details.");
+				ImGui::Text("The game will not start until scripts are reloaded successfully.");
+				ImGui::Separator();
+				if (ImGui::Button("OK", ImVec2(120, 0)))
+				{
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
 			}
 
 			ImGui::Separator();
