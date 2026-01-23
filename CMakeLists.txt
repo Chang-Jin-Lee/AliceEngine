@@ -110,6 +110,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Helper.cpp
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
     ${ALICE_SRC_DIR}/Core/Input.cpp
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.cpp
 
     # FBX/3D 모델 로더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
@@ -125,6 +126,8 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.cpp
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
     
     #PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -141,6 +144,8 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
+	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
 	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
 )
 
@@ -182,6 +187,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Singleton.h
     ${ALICE_SRC_DIR}/Core/Helper.h
     ${ALICE_SRC_DIR}/Core/Vertex.h
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
     
@@ -194,6 +200,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/CameraLookAtComponent.h
     ${ALICE_SRC_DIR}/Components/CameraShakeComponent.h
     ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
+    ${ALICE_SRC_DIR}/Components/AdvancedAnimationComponent.h
+    ${ALICE_SRC_DIR}/Components/AdvancedAnimator.h
     ${ALICE_SRC_DIR}/Components/MaterialComponent.h
     ${ALICE_SRC_DIR}/Components/PointLightComponent.h
     ${ALICE_SRC_DIR}/Components/RectLightComponent.h
@@ -202,6 +210,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
     ${ALICE_SRC_DIR}/Components/SpotLightComponent.h
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
+    ${ALICE_SRC_DIR}/Components/TrailEffectComponent.h
+    ${ALICE_SRC_DIR}/Components/EffectComponent.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
@@ -221,12 +231,15 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
     ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
     
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
-
+    ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+    
     #PhysX 물리
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
@@ -239,6 +252,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
     #Components
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
     ${ALICE_SRC_DIR}/PhysX/Components/Phy_SettingsComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
@@ -249,6 +263,15 @@ set(ENGINE_HEADERS
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
+
+	${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
 	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
 	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
@@ -262,6 +285,11 @@ add_library(Engine STATIC
 
 # [설정] Engine에 RTTR 연결 (PUBLIC: 엔진을 쓰는 프로젝트도 RTTR 사용 가능)
 target_link_libraries(Engine PUBLIC RTTR::Core)
+
+if(MSVC)
+    # ComponentRegistry.cpp의 RTTR 등록이 커져서 obj가 커짐
+    target_compile_options(Engine PRIVATE /bigobj)
+endif()
 
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
@@ -280,7 +308,7 @@ set(APP_HEADERS
     ${ALICE_SRC_DIR}/Game/FbxImporter.h
     ${ALICE_SRC_DIR}/Game/FbxAsset.h
     ${ALICE_SRC_DIR}/Game/SkinnedMeshSystem.h
-    ${ALICE_SRC_DIR}/Game/SkinnedAnimationSystem.h
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.h
 )
 
 # 1. Launch (에디터/툴 모드) 엔트리 포인트

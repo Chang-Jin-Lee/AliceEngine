@@ -14,6 +14,8 @@
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/IPhysicsWorld.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 
 using namespace DirectX;
 
@@ -69,7 +71,10 @@ namespace Alice
             .property("metalness", &MaterialComponent::metalness)
             .property("shadingMode", &MaterialComponent::shadingMode)
             .property("assetPath", &MaterialComponent::assetPath)
-            .property("albedoTexturePath", &MaterialComponent::albedoTexturePath);
+            .property("albedoTexturePath", &MaterialComponent::albedoTexturePath)
+            .property("normalStrength", &MaterialComponent::normalStrength)
+            .property("outlineColor", &MaterialComponent::outlineColor)
+            .property("outlineWidth", &MaterialComponent::outlineWidth);
 
         // === SkinnedMeshComponent 등록 ===
         // boneMatrices는 뼈 행렬을 나타내는 프로퍼티
@@ -88,6 +93,64 @@ namespace Alice
             .property("timeSec", &SkinnedAnimationComponent::timeSec);
         
         // palette는 팔레트를 나타내는 프로퍼티
+
+        // === AdvancedAnimationComponent 등록 ===
+        rttr::registration::class_<AdvancedAnimLayer>("AdvancedAnimLayer")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimLayer::enabled)
+            .property("autoAdvance", &AdvancedAnimLayer::autoAdvance)
+            .property("clipA", &AdvancedAnimLayer::clipA)
+            .property("clipB", &AdvancedAnimLayer::clipB)
+            .property("timeA", &AdvancedAnimLayer::timeA)
+            .property("timeB", &AdvancedAnimLayer::timeB)
+            .property("speedA", &AdvancedAnimLayer::speedA)
+            .property("speedB", &AdvancedAnimLayer::speedB)
+            .property("loopA", &AdvancedAnimLayer::loopA)
+            .property("loopB", &AdvancedAnimLayer::loopB)
+            .property("blend01", &AdvancedAnimLayer::blend01)
+            .property("layerAlpha", &AdvancedAnimLayer::layerAlpha);
+
+        rttr::registration::class_<AdvancedAnimAdditive>("AdvancedAnimAdditive")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimAdditive::enabled)
+            .property("autoAdvance", &AdvancedAnimAdditive::autoAdvance)
+            .property("clip", &AdvancedAnimAdditive::clip)
+            .property("refClip", &AdvancedAnimAdditive::refClip)
+            .property("time", &AdvancedAnimAdditive::time)
+            .property("speed", &AdvancedAnimAdditive::speed)
+            .property("loop", &AdvancedAnimAdditive::loop)
+            .property("alpha", &AdvancedAnimAdditive::alpha);
+
+        rttr::registration::class_<AdvancedAnimProcedural>("AdvancedAnimProcedural")
+            .constructor<>()
+            .property("strength", &AdvancedAnimProcedural::strength)
+            .property("seed", &AdvancedAnimProcedural::seed)
+            .property("timeSec", &AdvancedAnimProcedural::timeSec);
+
+        rttr::registration::class_<AdvancedAnimIK>("AdvancedAnimIK")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimIK::enabled)
+            .property("tipBone", &AdvancedAnimIK::tipBone)
+            .property("chainLength", &AdvancedAnimIK::chainLength)
+            .property("targetMS", &AdvancedAnimIK::targetMS)
+            .property("weight", &AdvancedAnimIK::weight);
+
+        rttr::registration::class_<AdvancedAnimAim>("AdvancedAnimAim")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimAim::enabled)
+            .property("yawRad", &AdvancedAnimAim::yawRad)
+            .property("weight", &AdvancedAnimAim::weight);
+
+        rttr::registration::class_<AdvancedAnimationComponent>("AdvancedAnimationComponent")
+            .constructor<>()
+            .property("enabled", &AdvancedAnimationComponent::enabled)
+            .property("playing", &AdvancedAnimationComponent::playing)
+            .property("base", &AdvancedAnimationComponent::base)
+            .property("upper", &AdvancedAnimationComponent::upper)
+            .property("additive", &AdvancedAnimationComponent::additive)
+            .property("procedural", &AdvancedAnimationComponent::procedural)
+            .property("ik", &AdvancedAnimationComponent::ik)
+            .property("aim", &AdvancedAnimationComponent::aim);
 
         // === CameraComponent 등록 ===
         rttr::registration::class_<CameraComponent>("CameraComponent")
@@ -345,6 +408,23 @@ namespace Alice
             .property("layerBits", &Phy_TerrainHeightFieldComponent::layerBits)
             .property("ignoreLayers", &Phy_TerrainHeightFieldComponent::ignoreLayers);
 
+        // === EffectComponent 등록 ===
+        rttr::registration::class_<EffectComponent>("EffectComponent")
+            .constructor<>()
+            .property("color", &EffectComponent::color)
+            .property("size", &EffectComponent::size)
+            .property("enabled", &EffectComponent::enabled)
+            .property("alpha", &EffectComponent::alpha);
+
+	// === TrailEffectComponent 등록 (trailSamples는 내부용이므로 등록하지 않음) ===
+	rttr::registration::class_<TrailEffectComponent>("TrailEffectComponent")
+		.constructor<>()
+		.property("color", &TrailEffectComponent::color)
+		.property("alpha", &TrailEffectComponent::alpha)
+		.property("enabled", &TrailEffectComponent::enabled)
+		.property("maxSamples", &TrailEffectComponent::maxSamples)
+		.property("sampleInterval", &TrailEffectComponent::sampleInterval)
+		.property("fadeDuration", &TrailEffectComponent::fadeDuration);
         // === CCTNonWalkableMode enum 등록 ===
         rttr::registration::enumeration<CCTNonWalkableMode>("CCTNonWalkableMode")
             (

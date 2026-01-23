@@ -4,6 +4,7 @@
 #include "Core/ThreadSafety.h"
 #include "Components/IDComponent.h"
 #include <random>
+#include <Game/FbxImporter.h>
 
 namespace Alice {
 	// GUID 생성 함수
@@ -343,7 +344,7 @@ namespace Alice {
 		c.primary = !hasCamera;
 
 		SetEntityName(e, "Camera" + std::to_string(camIndex));
-		return e;
+		return e;	
 	}
 
 	EntityId World::CreatePointLight()

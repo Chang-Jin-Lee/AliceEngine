@@ -2,6 +2,8 @@
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
+#include "Rendering/EffectSystem.h"
+#include "Rendering/TrailEffectRenderSystem.h"
 
 // ImGui
 #include "imgui.h"
@@ -38,7 +40,7 @@
 #include "Editor/ViewportPicker.h"
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
-#include "Game/SkinnedAnimationSystem.h"
+#include "Core/AdvancedAnimSystem.h"
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 #include "PhysX/PhysicsSystem.h" // 물리 시스템
@@ -56,6 +58,8 @@
 #include "Game/FbxAsset.h"
 #include <dxgi1_3.h>
 #include <unordered_set>
+
+#include "3DModel/FbxModel.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -128,6 +132,8 @@ namespace Alice
 		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
 		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+		std::unique_ptr<class EffectSystem> m_effectSystem;
+		std::unique_ptr<class TrailEffectRenderSystem> m_trailRenderSystem;
 		std::unique_ptr<ComputeEffectSystem> m_computeEffectSystem;
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
@@ -140,7 +146,7 @@ namespace Alice
 		// Skinned FBX 메시 렌더링용 레지스트리/시스템
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
-		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		AdvancedAnimSystem  m_advancedAnimSystem{ m_skinnedMeshRegistry };
 		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
 	};
 	namespace
@@ -475,6 +481,19 @@ namespace Alice
 
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
 		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
+
+		pImpl->m_effectSystem = std::make_unique<EffectSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_effectSystem->Initialize()) return false;
+
+		pImpl->m_trailRenderSystem = std::make_unique<TrailEffectRenderSystem>(*pImpl->m_renderDevice);
+		pImpl->m_trailRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
+		if (!pImpl->m_trailRenderSystem->Initialize()) return false;
+
+		// DeferredRenderSystem에 TrailEffectRenderSystem 주입
+		if (pImpl->m_deferredRenderSystem && pImpl->m_trailRenderSystem)
+		{
+			pImpl->m_deferredRenderSystem->SetSwordRenderSystem(pImpl->m_trailRenderSystem.get());
+		}
 
 		// Compute Effect System 설정
 		pImpl->m_computeEffectSystem = std::make_unique<ComputeEffectSystem>(*pImpl->m_renderDevice);
@@ -1194,8 +1213,8 @@ namespace Alice
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
 		// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
-		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
-		
+		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+
 		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
 		{
 			FbxImporter importer(pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
@@ -1379,7 +1398,17 @@ namespace Alice
 				}
 				else
 				{
-					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
+					ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
+					//pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					if (deferred->GetBloomSettings().enabled)
+					{
+						deferred->RenderBloomPass(sceneSRV, backBufferRTV, viewport);
+					}
+					else
+					{
+						deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
+					}
 				}
 			}
 		}
@@ -1388,6 +1417,9 @@ namespace Alice
 		// ============================================= 오버레이 =============================================
 		// 디버그 드로우 및 ImGui(에디터 전용)
 		if (pImpl->m_debugDrawSystem) pImpl->m_debugDrawSystem->Render(pImpl->m_camera);
+		if (pImpl->m_effectSystem) pImpl->m_effectSystem->Render(pImpl->m_world, pImpl->m_camera);
+		if (pImpl->m_trailRenderSystem)pImpl->m_trailRenderSystem->Render(pImpl->m_world, pImpl->m_camera);
+		// SwordRenderSystem은 DeferredRenderSystem 내부에서 호출되므로 여기서는 호출하지 않음
 		if (pImpl->m_editorMode)      pImpl->m_editorCore.RenderDrawData();
 
 		pImpl->m_renderDevice->EndFrame();
