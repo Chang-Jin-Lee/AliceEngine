@@ -2,6 +2,7 @@
 #include "Core/GameObject.h"
 #include "Core/ScriptFactory.h"
 #include "Core/ThreadSafety.h"
+#include <Game/FbxImporter.h>
 
 namespace Alice {
 	void World::Clear()
