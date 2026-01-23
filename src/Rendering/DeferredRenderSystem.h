@@ -161,7 +161,10 @@ namespace Alice
                                float metalness,
                                bool useTexture,
                                bool enableNormalMap,
-                               int shadingMode);
+                               int shadingMode,
+                               float normalStrength = 1.0f,
+                               const DirectX::XMFLOAT3& outlineColor = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
+                               float outlineWidth = 0.00f);
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
                               bool enableFillLight,
@@ -271,6 +274,8 @@ namespace Alice
         // Shadow depth bias RS
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_shadowRasterizerState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_shadowRasterizerStateReversed;
+        // 아웃라인용 (Cull Front) 래스터라이저
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_rsCullFront;
 
         // ==== 깊이/스텐실 상태 ====
         Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_depthStencilState;

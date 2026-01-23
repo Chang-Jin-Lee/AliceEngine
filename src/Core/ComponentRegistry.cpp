@@ -71,7 +71,10 @@ namespace Alice
             .property("metalness", &MaterialComponent::metalness)
             .property("shadingMode", &MaterialComponent::shadingMode)
             .property("assetPath", &MaterialComponent::assetPath)
-            .property("albedoTexturePath", &MaterialComponent::albedoTexturePath);
+            .property("albedoTexturePath", &MaterialComponent::albedoTexturePath)
+            .property("normalStrength", &MaterialComponent::normalStrength)
+            .property("outlineColor", &MaterialComponent::outlineColor)
+            .property("outlineWidth", &MaterialComponent::outlineWidth);
 
         // === SkinnedMeshComponent 등록 ===
         // boneMatrices는 뼈 행렬을 나타내는 프로퍼티

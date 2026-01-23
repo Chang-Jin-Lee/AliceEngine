@@ -270,7 +270,8 @@ namespace Alice
             {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
             {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
             {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0}
+            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"SMOOTHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 96, D3D11_INPUT_PER_VERTEX_DATA, 0}
         };
         if (FAILED(m_device->CreateInputLayout(skinnedLayout, ARRAYSIZE(skinnedLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_gBufferSkinnedInputLayout.ReleaseAndGetAddressOf())))
             return false;
@@ -364,7 +365,8 @@ namespace Alice
                 {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
                 {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
                 {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
-                {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0}
+                {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"SMOOTHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 96, D3D11_INPUT_PER_VERTEX_DATA, 0}
             };
             if (FAILED(m_device->CreateInputLayout(skinnedLayoutT,
                                                    ARRAYSIZE(skinnedLayoutT),
@@ -815,6 +817,13 @@ namespace Alice
                 return false;
         }
 
+        // 아웃라인용 Rasterizer State (Cull Front)
+        // - 정점을 법선 방향으로 확장한 뒤, 뒷면(Back Face)을 그리면 원본 물체 뒤로 테두리가 나타납니다.
+        D3D11_RASTERIZER_DESC outlineDesc = rsDesc;
+        outlineDesc.CullMode = D3D11_CULL_FRONT;    // 앞면을 제거하고 뒷면을 그림
+        if (FAILED(m_device->CreateRasterizerState(&outlineDesc, m_rsCullFront.ReleaseAndGetAddressOf())))
+            return false;
+
         return true;
     }
 
@@ -1060,7 +1069,7 @@ namespace Alice
                 if (flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
                 else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
 
-                UpdatePerObjectCB(worldM, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0);
+                UpdatePerObjectCB(worldM, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0, 1.0f);
                 m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
             }
         }
@@ -1086,7 +1095,7 @@ namespace Alice
                 else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
 
                 UpdateBonesCB(cmd.bones, cmd.boneCount);
-                UpdatePerObjectCB(cmd.world, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0);
+                UpdatePerObjectCB(cmd.world, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0, 1.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
             }
         }
@@ -1228,11 +1237,20 @@ namespace Alice
             ID3D11ShaderResourceView* texSRV = nullptr;
             
             // MaterialComponent가 있으면 값 적용
+            XMFLOAT3 outlineColor = {0,0,0};
+            float outlineWidth = 0.0f;
+            float normalStrength = 1.0f;
+            int objectShadingMode = shadingMode;
+            
             const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id);
             if (mat) {
                 color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
                 rough = mat->roughness; 
                 metal = mat->metalness;
+                normalStrength = mat->normalStrength;
+                outlineColor = mat->outlineColor;
+                outlineWidth = mat->outlineWidth;
+                if (mat->shadingMode >= 0) objectShadingMode = mat->shadingMode;
                 if (!mat->albedoTexturePath.empty()) {
                     texSRV = GetOrCreateTexture(mat->albedoTexturePath);
                     useTex = (texSRV != nullptr);
@@ -1243,11 +1261,23 @@ namespace Alice
             ID3D11ShaderResourceView* srvs[] = { texSRV, nullptr }; // 정적 메시는 노말맵 현재 null
             m_context->PSSetShaderResources(0, 2, srvs);
 
-            // CB 업데이트 (재질 정보 포함)
-            const int objectShadingMode = (mat && mat->shadingMode >= 0) ? mat->shadingMode : shadingMode;
-            UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false, objectShadingMode);
-
+            // Pass 1. 원본 물체 그리기 (아웃라인 두께 0으로 강제)
+            UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false, 
+                              objectShadingMode, normalStrength, outlineColor, 0.0f); // width = 0
             m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
+
+            // Pass 2. 아웃라인 그리기 (설정된 경우만)
+            if (outlineWidth > 0.0f)
+            {
+                m_context->RSSetState(m_rsCullFront.Get()); // 뒷면 그리기
+                
+                // 아웃라인 값 적용
+                UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false, 
+                                  objectShadingMode, normalStrength, outlineColor, outlineWidth);
+                m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
+                
+                m_context->RSSetState(m_rasterizerState.Get()); // 상태 복구
+            }
         }
         
         // 2. 스키닝 메시 렌더링
@@ -1288,12 +1318,23 @@ namespace Alice
                         m_context->PSSetShaderResources(0, 2, srvs);
 
                         const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
-                        UpdatePerObjectCB(cmd.world, view, proj, color,
-                                          cmd.roughness, cmd.metalness,
-                                          (diff != nullptr), (norm != nullptr),
-                                          objectShadingMode);
-
+                        
+                        // Pass 1. 원본
+                        UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                          (diff != nullptr), (norm != nullptr), objectShadingMode, 
+                                          cmd.normalStrength, cmd.outlineColor, 0.0f); // width 0
                         m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+
+                        // Pass 2. 아웃라인
+                        if (cmd.outlineWidth > 0.0f)
+                        {
+                            m_context->RSSetState(m_rsCullFront.Get());
+                            UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                              (diff != nullptr), (norm != nullptr), objectShadingMode, 
+                                              cmd.normalStrength, cmd.outlineColor, cmd.outlineWidth);
+                            m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                            m_context->RSSetState(m_rasterizerState.Get());
+                        }
                     }
                 }
                 else
@@ -1304,12 +1345,23 @@ namespace Alice
                     m_context->PSSetShaderResources(0, 2, srvs);
 
                     const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
-                    UpdatePerObjectCB(cmd.world, view, proj, color,
-                                      cmd.roughness, cmd.metalness,
-                                      (diff != nullptr), false,
-                                      objectShadingMode);
-
+                    
+                    // Pass 1. 원본
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                      (diff != nullptr), false, objectShadingMode, 
+                                      cmd.normalStrength, cmd.outlineColor, 0.0f);
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+
+                    // Pass 2. 아웃라인
+                    if (cmd.outlineWidth > 0.0f)
+                    {
+                        m_context->RSSetState(m_rsCullFront.Get());
+                        UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                          (diff != nullptr), false, objectShadingMode, 
+                                          cmd.normalStrength, cmd.outlineColor, cmd.outlineWidth);
+                        m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                        m_context->RSSetState(m_rasterizerState.Get());
+                    }
                 }
             }
         }
@@ -1564,7 +1616,8 @@ namespace Alice
             // PerObject CB
             const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
             const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
-            UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, true, true, objectShadingMode);
+            XMFLOAT3 outlineColor = cmd.outlineColor;
+            float outlineWidth = cmd.outlineWidth;
 
             // FBX 서브셋 머티리얼이 있으면 그걸 우선 사용 (Forward와 동일)
             std::shared_ptr<SkinnedMeshGPU> mesh =
@@ -1587,9 +1640,19 @@ namespace Alice
 
                     // enableNormalMap은 "노말 SRV가 존재할 때만" 켜는게 안정적입니다.
                     const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
-                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr), objectShadingMode);
-
+                    
+                    // Pass 1. 원본
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr), objectShadingMode, cmd.normalStrength, outlineColor, 0.0f);
                     m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                    
+                    // Pass 2. 아웃라인
+                    if (outlineWidth > 0.0f)
+                    {
+                        m_context->RSSetState(m_rsCullFront.Get());
+                        UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr), objectShadingMode, cmd.normalStrength, outlineColor, outlineWidth);
+                        m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                        m_context->RSSetState(m_rasterizerState.Get());
+                    }
                 }
             }
             else
@@ -1599,8 +1662,19 @@ namespace Alice
                 ID3D11ShaderResourceView* srvs01[2] = { diff, nullptr };
                 m_context->PSSetShaderResources(0, 2, srvs01);
                 const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
-                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false, objectShadingMode);
+                
+                // [Pass 1] 원본
+                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false, objectShadingMode, cmd.normalStrength, outlineColor, 0.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                
+                // [Pass 2] 아웃라인
+                if (outlineWidth > 0.0f)
+                {
+                    m_context->RSSetState(m_rsCullFront.Get());
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false, objectShadingMode, cmd.normalStrength, outlineColor, outlineWidth);
+                    m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                    m_context->RSSetState(m_rasterizerState.Get());
+                }
             }
         }
 
@@ -1706,7 +1780,10 @@ namespace Alice
                                                  float metalness,
                                                  bool useTexture,
                                                  bool enableNormalMap,
-                                                 int shadingMode)
+                                                 int shadingMode,
+                                                 float normalStrength,
+                                                 const XMFLOAT3& outlineColor,
+                                                 float outlineWidth)
     {
         struct CBPerObjectData
         {
@@ -1719,7 +1796,17 @@ namespace Alice
             int      gUseTexture;
             int      gEnableNormalMap;
             int      gShadingMode;
-            int      gPad[3];
+            int      gPad0;
+            // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+            float    gPad1[2];        // Offset: 232 -> 240
+            // 노말맵 강도 조절
+            float    gNormalStrength; // Offset: 240 -> 244
+            float    gPad2;           // Offset: 244 -> 248
+            // [중요] HLSL에서 float3는 16바이트 경계를 걸칠 수 없음.
+            // 현재 248번지이므로, 12바이트짜리 outlineColor가 들어갈 수 없어 256번지로 밀림.
+            float    gPadAlign[2];    // Offset: 248 -> 256 (8바이트 패딩)
+            XMFLOAT3 gOutlineColor;   // Offset: 256 -> 268
+            float    gOutlineWidth;   // Offset: 268 -> 272
         };
 
         D3D11_MAPPED_SUBRESOURCE mapped;
@@ -1735,6 +1822,17 @@ namespace Alice
             data->gUseTexture = useTexture ? 1 : 0;
             data->gEnableNormalMap = enableNormalMap ? 1 : 0;
             data->gShadingMode = shadingMode;
+            data->gPad0 = 0;
+            // 패딩 초기화 (안전하게 0으로)
+            data->gPad1[0] = 0.0f;
+            data->gPad1[1] = 0.0f;
+            data->gNormalStrength = normalStrength;
+            data->gPad2 = 0.0f;
+            // 패딩 초기화 (안전하게 0으로)
+            data->gPadAlign[0] = 0.0f;
+            data->gPadAlign[1] = 0.0f;
+            data->gOutlineColor = outlineColor;
+            data->gOutlineWidth = outlineWidth;
             m_context->Unmap(m_cbPerObject.Get(), 0);
         }
 

@@ -1027,9 +1027,53 @@ namespace Alice
                 }
                 if (ImGui::MenuItem("Cube"))
                 {
-                    EntityId e = world.CreateCube();
-                    selectedEntity = e;
-                    g_SceneDirty   = true;
+                    // 기존에 인덱스 버퍼로 큐브를 그리던 거에서 fbx 그리는 것으로 변경
+                    //EntityId e = world.CreateCube();
+                    //selectedEntity = e;
+					//g_SceneDirty = true;
+					//ImGui::CloseCurrentPopup();
+					if (m_renderDevice)
+					{
+						std::filesystem::path fbxPath = "Resource/BasicMesh/Cube.fbx";
+
+						FbxImportOptions opt{};
+						FbxImporter importer(*m_resources, m_skinnedRegistry);
+
+						auto* d3dDevice = m_renderDevice->GetDevice();
+						FbxImportResult result = importer.Import(d3dDevice, fbxPath, opt);
+
+						if (!result.meshAssetPath.empty())
+						{
+							EntityId e = world.CreateEntity();
+							TransformComponent& t = world.AddComponent<TransformComponent>(e);
+							t.position = { 0.0f, 0.0f, 0.0f };
+							t.scale = { 1.0f, 1.0f, 1.0f };
+							t.rotation = { 0.0f, 0.0f, 0.0f };
+
+							// 스키닝 메시 컴포넌트 등록
+							SkinnedMeshComponent& skinned = world.AddComponent<SkinnedMeshComponent>(e, result.meshAssetPath);
+							skinned.instanceAssetPath = result.instanceAssetPath;
+
+							// 본이 있다고 생각하고 1개짜리 항등 행렬 팔레트를 사용합니다.
+							static DirectX::XMFLOAT4X4 s_identityBone =
+								DirectX::XMFLOAT4X4(1, 0, 0, 0,
+									0, 1, 0, 0,
+									0, 0, 1, 0,
+									0, 0, 0, 1);
+							skinned.boneMatrices = &s_identityBone;
+							skinned.boneCount = 1;
+
+							// 머티리얼 할당
+							DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+							MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+							mat.assetPath = result.materialAssetPaths.front();
+							MaterialFile::Load(mat.assetPath, mat, &ResourceManager::Get());
+
+                            world.SetEntityName(e, "Entity" + std::to_string((std::uint32_t)e));
+                            selectedEntity = e;
+                            g_SceneDirty = true;
+						}
+					}
                     ImGui::CloseCurrentPopup();
                 }
                 if (ImGui::MenuItem("Camera"))
@@ -2922,7 +2966,8 @@ namespace Alice
                 "Blinn-Phong",
                 "Toon",
                 "PBR",
-                "ToonPBR"
+                "ToonPBR",
+                "OnlyTextureWithOutline"
             };
             int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
             shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
@@ -2932,9 +2977,9 @@ namespace Alice
                 changed = true;
             }
 
-            ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty()
-                ? "None"
-                : mat->albedoTexturePath.c_str());
+            ImGui::Separator();
+
+            ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty() ? "None" : mat->albedoTexturePath.c_str());
             if (ImGui::Button("Browse...")) {
                 wchar_t buf[MAX_PATH] = {};
                 OPENFILENAMEW ofn = { sizeof(ofn) };

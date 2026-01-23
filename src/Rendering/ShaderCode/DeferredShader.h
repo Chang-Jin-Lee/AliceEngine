@@ -19,7 +19,18 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 struct VSInput
@@ -43,11 +54,15 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
     
-    float4 posW = mul(float4(input.Position, 1.0f), gWorld);
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
+    
+    // 아웃라인: 모든 쉐이딩 모드에서 normal 방향으로 확장 (아웃라인 두께가 0보다 클 때만)
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (N * gOutlineWidth) : float3(0, 0, 0);
+    
+    float4 posW = mul(float4(input.Position + posOffset, 1.0f), gWorld);
     output.Position = mul(mul(posW, gView), gProj);
     output.WorldPos = posW.xyz;
     
-    float3 N = normalize(mul(float4(input.Normal, 0.0f), gWorld).xyz);
     output.Normal = N;
     
     float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
@@ -75,7 +90,18 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 cbuffer CBBones : register(b2)
@@ -95,6 +121,7 @@ struct VSInput
     uint4  BoneIndices  : BLENDINDICES;
     float4 BoneWeights  : BLENDWEIGHT;
     float2 TexCoord     : TEXCOORD0;
+    float3 SmoothNormal : SMOOTHNORMAL; // 아웃라인용 스무스 노멀
 };
 
 struct VSOutput
@@ -125,11 +152,19 @@ VSOutput main(VSInput input)
     float3 skinnedT = normalize(mul(input.Tangent, M3));
     float3 skinnedB = normalize(mul(input.Binormal, M3));
     
-    float4 posW = mul(skinnedPos, gWorld);
+    float3 N = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    
+    // 아웃라인: 스무스 노멀 방향으로 확장 (하드 엣지 모델의 아웃라인 끊김 방지)
+    // 스무스 노멀도 스키닝 변환을 적용해야 함
+    float3 skinnedSmoothN = normalize(mul(input.SmoothNormal, M3));
+    float3 smoothN = normalize(mul(float4(skinnedSmoothN, 0.0f), gWorld).xyz);
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
+    
+    float4 posW = mul(float4(skinnedPos.xyz + posOffset, 1.0f), gWorld);
     output.Position = mul(mul(posW, gView), gProj);
     output.WorldPos = posW.xyz;
     
-    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.Normal   = N;
     output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
     output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
     output.TexCoord = input.TexCoord;
@@ -151,7 +186,18 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 struct VertexOut
@@ -181,6 +227,26 @@ GBufferOut main(VertexOut pIn)
 {
     GBufferOut gOut;
     
+    // 아웃라인 패스 감지: Width가 0보다 크면 아웃라인용 드로우콜임
+    if (gOutlineWidth > 0.0f)
+    {
+        // 1. Position: 깊이 버퍼에 써야 하므로 위치는 저장
+        gOut.PositionWS = float4(pIn.WorldPos, 1.0f);
+        
+        // 2. Normal/Roughness/Metalness: 조명 연산 방해 안 되게 더미 값
+        gOut.NormalWS   = float4(0.5f, 0.5f, 1.0f, 0.0f); 
+        gOut.Metalness  = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        gOut.Roughness  = float4(1.0f, 0.0f, 0.0f, 1.0f);
+        
+        // 3. BaseColor: 아웃라인 색상
+        // 4. Alpha (ShadingMode): 1.0f -> 인코딩 시 mode 6 (TextureOnly/Unlit)이 됨
+        //    (LightPS에서 1.0은 Unlit으로 처리되어 BaseColor가 그대로 출력됨)
+        gOut.BaseColor  = float4(gOutlineColor, 1.0f);
+        
+        return gOut;
+    }
+    
+    // --- 아래는 기존 원본 물체 렌더링 로직 (변화 없음) ---
     float4 textureColor = float4(1,1,1,1);
     if (gUseTexture != 0)
     {
@@ -206,6 +272,8 @@ GBufferOut main(VertexOut pIn)
         float3x3 TBN = float3x3(T, B, N);
         float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
         N_ts.y = -N_ts.y;
+        // 노말맵 강도 조절: X, Y 성분에만 Strength를 곱하고 정규화
+        N_ts.xy *= gNormalStrength;
         N_ts = normalize(N_ts);
         N = normalize(mul(N_ts, TBN));
     }
@@ -220,7 +288,8 @@ GBufferOut main(VertexOut pIn)
     gOut.NormalWS   = float4(normalEncoded, 1.0f);
     gOut.Metalness  = float4(metalness, 0, 0, 1);
     gOut.Roughness  = float4(roughness, 0, 0, 1);
-    gOut.BaseColor  = float4(baseColor, saturate((float)gShadingMode / 5.0f));
+    // shadingMode를 [0,1] 범위로 인코딩하여 저장 (0~6 -> 0.0~1.0)
+    gOut.BaseColor  = float4(baseColor, saturate((float)gShadingMode / 6.0f));
     
     return gOut;
 }
@@ -523,8 +592,15 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 albedo = baseColor.rgb;
     float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
     
-    int shadingMode = (int)floor(baseColor.a * 5.0f + 0.5f);
-    shadingMode = clamp(shadingMode, 0, 5);
+    // shadingMode 디코딩 (0~6 범위)
+    int shadingMode = (int)floor(baseColor.a * 6.0f + 0.5f);
+    shadingMode = clamp(shadingMode, 0, 6);
+    
+    // shadingMode == 6: TextureOnly (빛의 영향을 받지 않는 텍스처만 반환)
+    if (shadingMode == 6)
+    {
+        return float4(albedoLinear, 1.0f);
+    }
 
     // 라이팅 벡터 계산
     float3 L = normalize(-g_LightDirection.xyz);
@@ -702,7 +778,18 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 cbuffer CBBones : register(b2)
@@ -722,6 +809,7 @@ struct VSInput
     float2 TexCoord     : TEXCOORD0;
     uint4  BoneIndices  : BLENDINDICES;
     float4 BoneWeights  : BLENDWEIGHT;
+    float3 SmoothNormal : SMOOTHNORMAL; // 아웃라인용 스무스 노멀
 };
 
 struct VSOutput
@@ -752,11 +840,19 @@ VSOutput main(VSInput input)
     float3 skinnedT = normalize(mul(input.Tangent, M3));
     float3 skinnedB = normalize(mul(input.Binormal, M3));
 
-    float4 posW = mul(skinnedPos, gWorld);
+    float3 N = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    
+    // 아웃라인: 스무스 노멀 방향으로 확장 (하드 엣지 모델의 아웃라인 끊김 방지)
+    // 스무스 노멀도 스키닝 변환을 적용해야 함
+    float3 skinnedSmoothN = normalize(mul(input.SmoothNormal, M3));
+    float3 smoothN = normalize(mul(float4(skinnedSmoothN, 0.0f), gWorld).xyz);
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
+    
+    float4 posW = mul(float4(skinnedPos.xyz + posOffset, 1.0f), gWorld);
     output.Position = mul(mul(posW, gView), gProj);
     output.WorldPos = posW.xyz;
 
-    output.Normal   = normalize(mul(float4(skinnedN, 0.0f), gWorld).xyz);
+    output.Normal   = N;
     output.TangentW = normalize(mul(float4(skinnedT, 0.0f), gWorld).xyz);
     output.BitanW   = normalize(mul(float4(skinnedB, 0.0f), gWorld).xyz);
     output.TexCoord = input.TexCoord;
@@ -819,7 +915,18 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 cbuffer CBTransparentLight : register(b1)
@@ -864,6 +971,12 @@ float4 main(PSIn pIn) : SV_Target
     if (gUseTexture != 0)
         baseColor *= tex.rgb;
 
+    // shadingMode == 6: TextureOnly (빛의 영향을 받지 않는 텍스처만 반환)
+    if (gShadingMode == 6)
+    {
+        return float4(baseColor, alphaTex);
+    }
+
     float3 albedoLinear = pow(max(baseColor, 0.0f), 2.2f);
 
     float3 N = normalize(pIn.Normal);
@@ -876,7 +989,10 @@ float4 main(PSIn pIn) : SV_Target
         float3x3 TBN = float3x3(T, B, N);
         float3 N_ts = g_NormalMap.Sample(g_Sam, pIn.TexCoord).xyz * 2.0f - 1.0f;
         N_ts.y = -N_ts.y;
-        N = normalize(mul(normalize(N_ts), TBN));
+        // 노말맵 강도 조절: X, Y 성분에만 Strength를 곱하고 정규화
+        N_ts.xy *= gNormalStrength;
+        N_ts = normalize(N_ts);
+        N = normalize(mul(N_ts, TBN));
     }
 
     float metalness = saturate(gMetalness);
@@ -935,7 +1051,18 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 struct VSInput
@@ -970,7 +1097,18 @@ cbuffer CBPerObject : register(b0)
     int      gUseTexture;
     int      gEnableNormalMap;
     int      gShadingMode;
-    int3     gPadPerObject;
+    int      gPad0;
+    
+    // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
 };
 
 cbuffer CBBones : register(b2)
