@@ -95,7 +95,7 @@ namespace Alice
         /// @param sourceSRV 입력 씬 텍스처 SRV
         /// @param viewport 뷰포트 영역
         /// @note 결과는 m_postBloomSRV에 저장됩니다.
-        void RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, const D3D11_VIEWPORT& viewport);
+        void RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
