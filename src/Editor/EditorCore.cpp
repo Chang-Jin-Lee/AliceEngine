@@ -13,10 +13,13 @@
 #include "Core/ResourceManager.h"
 #include "Core/GameObject.h"
 #include "Game/FbxImporter.h"
+#include "Game/FbxAsset.h"
 #include "3Dmodel/FbxModel.h"
+#include "Core/Material.h"
 #include "Core/Logger.h"
 #include "Core/ReflectionUI.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
+#include "Core/EditorComponentRegistry.h"
 #include "Core/JsonRttr.h"
 #include "Components/AdvancedAnimationComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
@@ -72,6 +75,33 @@ namespace Alice
 
 	namespace
 	{
+		// RTTR 기반 Inspector 렌더링 헬퍼
+		ReflectionUI::UIEditEvent RenderInspectorInstance(rttr::instance inst, World* world)
+		{
+			ReflectionUI::UIEditEvent result{};
+			if (!inst.is_valid()) return result;
+
+			rttr::type t = inst.get_type();
+			for (auto& prop : t.get_properties())
+			{
+				const std::string propName = prop.get_name().to_string();
+
+				ReflectionUI::UIEditEvent ev{};
+				if (propName == "roughness" || propName == "metalness")
+				{
+					ev = ReflectionUI::Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
+				}
+				else
+				{
+					ev = ReflectionUI::Detail::RenderProperty(prop, inst, "", world);
+				}
+
+				result.changed |= ev.changed;
+				result.activated |= ev.activated;
+				result.deactivatedAfterEdit |= ev.deactivatedAfterEdit;
+			}
+			return result;
+		}
 		// Build Game 진행 상황 전역 (아래쪽에서 정의됨)
 		extern std::atomic<bool>  g_BuildInProgress;
 		extern std::atomic<float> g_BuildProgress;
@@ -1986,60 +2016,92 @@ namespace Alice
                     g_SceneDirty   = true;
                     ImGui::CloseCurrentPopup();
                 }
-				if (ImGui::MenuItem("Cube"))
+				// FBX Primitives 메뉴
+				if (ImGui::BeginMenu("FBX Primitives"))
 				{
-					bool created = false;
+					// 프리미티브 폴더 스캔해서 자동으로 메뉴 채우기
+					static std::vector<std::filesystem::path> cached;
+					static bool cachedOnce = false;
 
-					if (m_renderDevice)
+					if (!cachedOnce && m_resources)
 					{
-						std::filesystem::path fbxPath = "Resource/BasicMesh/Cube.fbx";
+						cachedOnce = true;
 
-						FbxImportOptions opt{};
-						FbxImporter importer(*m_resources, m_skinnedRegistry);
-
-						auto* d3dDevice = m_renderDevice->GetDevice();
-						FbxImportResult result = importer.Import(d3dDevice, fbxPath, opt);
-
-						if (!result.meshAssetPath.empty())
+						auto dirAbs = m_resources->Resolve("Assets/Fbx/Primitives");
+						if (std::filesystem::exists(dirAbs))
 						{
-							EntityId e = world.CreateEntity();
-
-							TransformComponent& t = world.AddComponent<TransformComponent>(e);
-							t.position = { 0.0f, 0.0f, 0.0f };
-							t.scale = { 1.0f, 1.0f, 1.0f };
-							t.rotation = { 0.0f, 0.0f, 0.0f };
-
-							SkinnedMeshComponent& skinned =
-								world.AddComponent<SkinnedMeshComponent>(e, result.meshAssetPath);
-							skinned.instanceAssetPath = result.instanceAssetPath;
-
-							static DirectX::XMFLOAT4X4 s_identityBone =
-								DirectX::XMFLOAT4X4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-							skinned.boneMatrices = &s_identityBone;
-							skinned.boneCount = 1;
-
-							DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
-							MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
-
-							if (!result.materialAssetPaths.empty())
+							for (auto& it : std::filesystem::directory_iterator(dirAbs))
 							{
-								mat.assetPath = result.materialAssetPaths.front();
-								MaterialFile::Load(mat.assetPath, mat, &ResourceManager::Get());
+								if (!it.is_regular_file()) continue;
+								auto p = it.path();
+								auto ext = p.extension().string();
+								std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+								if (ext == ".fbxasset")
+									cached.push_back(p);
 							}
-
-							world.SetEntityName(e, "Cube"); // 혹은 "Entity123" 정책이면 그대로
-							
-							PushCommand(std::make_unique<CreateEntityCommand>(e, "Cube"));
-
-							selectedEntity = e;
-							g_SceneDirty = true;
-							created = true;
+							std::sort(cached.begin(), cached.end());
 						}
 					}
 
-					// created=false면 보통 팝업 유지 + 에러 표시가 더 좋긴 한데,
-					// 일단 기존 동작 유지하려면 닫아도 됨.
-					ImGui::CloseCurrentPopup();
+					// 고정 프리미티브 목록 (폴더에 없어도 표시)
+					struct Prim { const char* label; const char* path; };
+					static Prim prims[] = {
+						{"IcoSphere", "../Assets/Fbx/IcoSphere.fbxasset"},
+						{"Torus",     "../Assets/Fbx/Torus.fbxasset"},
+						{"Monkey",    "../Assets/Fbx/Monkey.fbxasset"},
+						//{"Box",       "../Assets/Fbx/Box.fbxasset"},
+						{"Cube(FBX)", "../Assets/Fbx/Cube.fbxasset"},
+					};
+
+					// 고정 목록 표시
+					for (auto& p : prims)
+					{
+						if (ImGui::MenuItem(p.label))
+						{
+							EntityId e = InstantiateFbxAssetToWorld(world, p.path, p.label);
+							if (e != InvalidEntityId)
+							{
+								PushCommand(std::make_unique<CreateEntityCommand>(e, p.label));
+								selectedEntity = e;
+							}
+							ImGui::CloseCurrentPopup();
+						}
+					}
+
+					// 폴더에서 스캔한 추가 FBX들 표시
+					if (!cached.empty())
+					{
+						ImGui::Separator();
+						for (auto& abs : cached)
+						{
+							std::string label = abs.stem().string();
+							
+							// 이미 고정 목록에 있는 건 스킵
+							bool skip = false;
+							for (auto& p : prims)
+							{
+								if (label == p.label || label == "Cube" && std::string(p.label) == "Cube(FBX)")
+								{
+									skip = true;
+									break;
+								}
+							}
+							if (skip) continue;
+
+							if (ImGui::MenuItem(label.c_str()))
+							{
+								EntityId e = InstantiateFbxAssetToWorld(world, abs, label);
+								if (e != InvalidEntityId)
+								{
+									PushCommand(std::make_unique<CreateEntityCommand>(e, label));
+									selectedEntity = e;
+								}
+								ImGui::CloseCurrentPopup();
+							}
+						}
+					}
+
+					ImGui::EndMenu();
 				}
 
                 if (ImGui::MenuItem("Camera"))
@@ -3350,7 +3412,7 @@ namespace Alice
 							XMStoreFloat4x4(&viewMatrix, viewXM);
 							XMStoreFloat4x4(&projMatrix, projXM);
 
-							// [핵심 수정] ComputeWorldMatrix()로 통일 (런타임과 동일한 규약)
+							// ComputeWorldMatrix()로 통일 (런타임과 동일한 규약)
 							using namespace DirectX;
 							
 							// ComputeWorldMatrix()를 사용하여 월드 행렬 계산 (런타임과 동일)
@@ -3435,7 +3497,7 @@ namespace Alice
 
 							if (manipulated)
 							{
-								// [핵심 수정] 조작된 월드 행렬을 로컬 Transform으로 변환
+								// 조작된 월드 행렬을 로컬 Transform으로 변환
 								// ImGuizmo가 반환한 worldMatrix는 조작된 월드 행렬이므로,
 								// 부모의 월드 행렬을 역으로 곱해서 로컬 Transform을 추출해야 함
 								using namespace DirectX;
@@ -4679,146 +4741,33 @@ namespace Alice
 				ImGui::EndDragDropTarget();
 			}
 
-			// 엔진 컴포넌트 추가 UI - rttr으로 등록된 모든 컴포넌트 타입을 자동으로 처리
-			if (ImGui::BeginCombo("Add Engine Component", "Select Component...")) {
-				// rttr으로 등록된 모든 타입을 순회하며 "Component"로 끝나는 타입을 찾음
-				// IScript는 제외 (스크립트는 별도 관리)
-				// 스크립트 리로드 후에도 갱신되도록 static 변수 초기화 조건 개선
-				static std::vector<rttr::type> componentTypes;
-				static bool componentTypesInitialized = false;
+			// 엔진 컴포넌트 추가 UI - 레지스트리 기반
+			if (ImGui::BeginCombo("Add Engine Component", "Select Component..."))
+			{
+				auto& reg = EditorComponentRegistry::Get();
+				const auto& list = reg.All();
 
-				// 스크립트가 리로드되었거나 아직 초기화되지 않았으면 재초기화
-				if (componentTypes.empty() || !componentTypesInitialized || m_scriptBuilded) {
-					componentTypes.clear();
-					auto allTypes = rttr::type::get_types();
-					for (const auto& type : allTypes) {
-						std::string typeName = type.get_name().to_string();
-						// "Component"로 끝나고 IScript가 아닌 타입만 추가
-						if (typeName.size() >= 9 && typeName.substr(typeName.size() - 9) == "Component") {
-							// IScript 제외
-							if (typeName != "IScript" && !type.is_derived_from(rttr::type::get<IScript>())) {
-								componentTypes.push_back(type);
-							}
-						}
-					}
-					// 타입 이름으로 정렬
-					std::sort(componentTypes.begin(), componentTypes.end(),
-						[](const rttr::type& a, const rttr::type& b) {
-							return a.get_name().to_string() < b.get_name().to_string();
-						});
-					componentTypesInitialized = true;
-					if (m_scriptBuilded) {
-						m_scriptBuilded = false; // 플래그 리셋
-					}
-				}
-
-				struct CompUIEntry
+				std::string currentCat;
+				for (auto& d : list)
 				{
-					bool (*Has)(World&, EntityId);
-					bool (*Add)(World&, EntityId); // 성공하면 true
-				};
+					if (!d.addable) continue;
 
-				static const std::unordered_map<std::string, CompUIEntry> kCompUI = {
-					{ "CameraComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<CameraComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<CameraComponent>(e); return true; }
-					}},
-					{ "TransformComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<TransformComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<TransformComponent>(e); return true; }
-					}},
-					{ "MaterialComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<MaterialComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<MaterialComponent>(e); return true; }
-					}},
-					{ "PointLightComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<PointLightComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<PointLightComponent>(e); return true; }
-					}},
-					{ "SpotLightComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<SpotLightComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<SpotLightComponent>(e); return true; }
-					}},
-					{ "RectLightComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<RectLightComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<RectLightComponent>(e); return true; }
-					}},
-
-					// Effect / ComputeEffect 둘 다 지원
-					{ "EffectComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<EffectComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<EffectComponent>(e); return true; }
-					}},
-					{ "ComputeEffectComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<ComputeEffectComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<ComputeEffectComponent>(e); return true; }
-					}},
-					{ "TrailEffectComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<TrailEffectComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<TrailEffectComponent>(e); return true; }
-					}},
-
-					// Physics
-					{ "Phy_RigidBodyComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<Phy_RigidBodyComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<Phy_RigidBodyComponent>(e); return true; }
-					}},
-					{ "Phy_ColliderComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<Phy_ColliderComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<Phy_ColliderComponent>(e); return true; }
-					}},
-					{ "Phy_MeshColliderComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<Phy_MeshColliderComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<Phy_MeshColliderComponent>(e); return true; }
-					}},
-					{ "Phy_CCTComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<Phy_CCTComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<Phy_CCTComponent>(e); return true; }
-					}},
-					{ "Phy_TerrainHeightFieldComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<Phy_TerrainHeightFieldComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<Phy_TerrainHeightFieldComponent>(e); return true; }
-					}},
-					{ "Phy_SettingsComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<Phy_SettingsComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<Phy_SettingsComponent>(e); return true; }
-					}},
-					{ "Phy_JointComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<Phy_JointComponent>(e) != nullptr; },
-						[](World& w, EntityId e) { w.AddComponent<Phy_JointComponent>(e); return true; }
-					}},
-
-					// Skinned (주의: ctor 인자 정책 필요)
-					{ "SkinnedMeshComponent", {
-						[](World& w, EntityId e) { return w.GetComponent<SkinnedMeshComponent>(e) != nullptr; },
-						[](World& w, EntityId e) {
-						// 빈 경로 생성이 안전한지 프로젝트 정책에 따라 다름 (가능하면 "Pick Asset"로)
-						w.AddComponent<SkinnedMeshComponent>(e, "");
-						return true;
-					}
-				}},
-				{ "SkinnedAnimationComponent", {
-					[](World& w, EntityId e) { return w.GetComponent<SkinnedAnimationComponent>(e) != nullptr; },
-					[](World& w, EntityId e) { w.AddComponent<SkinnedAnimationComponent>(e); return true; }
-				}},
-				};
-
-				for (const auto& compType : componentTypes)
-				{
-					std::string typeName = compType.get_name().to_string();
-
-					auto it = kCompUI.find(typeName);
-					if (it == kCompUI.end())
-						continue; // 등록 안 된 타입은 스킵 (또는 "지원 안 함" 표기)
-
-					bool has = it->second.Has(world, _selectedEntity);
-
-					if (ImGui::Selectable(typeName.c_str(), false,
-						has ? ImGuiSelectableFlags_Disabled : 0))
+					if (d.category != currentCat)
 					{
-						if (!has && it->second.Add(world, _selectedEntity))
-							g_SceneDirty = true;
+						currentCat = d.category;
+						ImGui::Separator();
+						ImGui::TextDisabled("%s", currentCat.c_str());
 					}
+
+					const bool has = d.has(world, _selectedEntity);
+
+					if (has) ImGui::BeginDisabled();
+					if (ImGui::Selectable(d.displayName.c_str(), false) && !has)
+					{
+						d.add(world, _selectedEntity);
+						g_SceneDirty = true;
+					}
+					if (has) ImGui::EndDisabled();
 
 					if (has && ImGui::IsItemHovered())
 						ImGui::SetTooltip("이 컴포넌트는 이미 추가되어 있습니다.");
@@ -4828,113 +4777,106 @@ namespace Alice
 
 
 
-			// 엔진 컴포넌트 표시 - rttr으로 등록된 모든 컴포넌트 타입을 자동으로 처리
-			// (TransformComponent와 MaterialComponent는 별도 처리되므로 제외)
-			// 스크립트 리로드 후에도 갱신되도록 static 변수 초기화 조건 개선
-			static std::vector<rttr::type> displayComponentTypes;
-			static bool displayComponentTypesInitialized = false;
+			// 엔진 컴포넌트 표시 - 레지스트리 기반
+			// 레지스트리 순회로 컴포넌트 표시
+			auto& reg = EditorComponentRegistry::Get();
+			for (auto& d : reg.All())
+			{
+				// Transform과 Material은 별도 처리되므로 제외
+				std::string typeName = d.type.get_name().to_string();
+				if (typeName == "TransformComponent" || typeName == "MaterialComponent")
+					continue;
 
-			// 스크립트가 리로드되었거나 아직 초기화되지 않았으면 재초기화
-			if (displayComponentTypes.empty() || !displayComponentTypesInitialized || m_scriptBuilded) {
-				displayComponentTypes.clear();
-				auto allTypes = rttr::type::get_types();
-				for (const auto& type : allTypes) {
-					std::string typeName = type.get_name().to_string();
-					// "Component"로 끝나고 Transform/Material/IScript가 아닌 타입만 추가
-					if (typeName.size() >= 9 && typeName.substr(typeName.size() - 9) == "Component") {
-						if (typeName != "IScript" && typeName != "TransformComponent" &&
-							typeName != "MaterialComponent" &&
-							!type.is_derived_from(rttr::type::get<IScript>())) {
-							displayComponentTypes.push_back(type);
+				// 특수 처리 필요한 컴포넌트들 (물리 컴포넌트 등)
+				if (typeName == "Phy_ColliderComponent")
+				{
+					DrawInspectorCollider(world, _selectedEntity);
+					continue;
+				}
+				else if (typeName == "Phy_MeshColliderComponent")
+				{
+					DrawInspectorMeshCollider(world, _selectedEntity);
+					continue;
+				}
+				else if (typeName == "Phy_CCTComponent")
+				{
+					DrawInspectorCharacterController(world, _selectedEntity);
+					continue;
+				}
+				else if (typeName == "Phy_TerrainHeightFieldComponent")
+				{
+					DrawInspectorTerrainHeightField(world, _selectedEntity);
+					continue;
+				}
+				else if (typeName == "Phy_SettingsComponent")
+				{
+					DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
+					continue;
+				}
+				else if (typeName == "Phy_JointComponent")
+				{
+					DrawInspectorJoint(world, _selectedEntity);
+					continue;
+				}
+
+				// 일반 컴포넌트: 레지스트리 기반 렌더링
+				if (!d.has(world, _selectedEntity)) continue;
+
+				if (ImGui::CollapsingHeader(d.displayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					if (d.removable)
+					{
+						std::string btn = "Remove##" + d.displayName;
+						if (ImGui::Button(btn.c_str()))
+						{
+							d.remove(world, _selectedEntity);
+							g_SceneDirty = true;
+							continue;
 						}
 					}
-				}
-				// 타입 이름으로 정렬
-				std::sort(displayComponentTypes.begin(), displayComponentTypes.end(),
-					[](const rttr::type& a, const rttr::type& b) {
-						return a.get_name().to_string() < b.get_name().to_string();
-					});
-				displayComponentTypesInitialized = true;
-				if (m_scriptBuilded) {
-					m_scriptBuilded = false; // 플래그 리셋 (componentTypes에서 이미 처리했을 수 있지만 안전하게)
+
+					// 편집 시작/종료 감지 및 Undo 스냅샷
+					static EntityId lastEditedEntity = InvalidEntityId;
+					static std::string lastEditedComponentType;
+					static JsonRttr::json editStartJson;
+					static const EditorComponentDesc* lastEditedDesc = nullptr;
+
+					rttr::instance inst = d.getInstance(world, _selectedEntity);
+					ReflectionUI::UIEditEvent ev = RenderInspectorInstance(inst, &world);
+
+					// 편집 시작: oldJson 스냅샷 저장
+					if (ev.activated && (_selectedEntity != lastEditedEntity || lastEditedComponentType != typeName))
+					{
+						editStartJson = JsonRttr::ToJsonObject(inst);
+						lastEditedEntity = _selectedEntity;
+						lastEditedComponentType = typeName;
+						lastEditedDesc = &d;
+					}
+
+					// 편집 종료: newJson 저장하고 커맨드 푸시
+					if (ev.deactivatedAfterEdit && _selectedEntity == lastEditedEntity && lastEditedComponentType == typeName)
+					{
+						JsonRttr::json editEndJson = JsonRttr::ToJsonObject(inst);
+
+						// 변경사항이 있으면 커맨드 푸시
+						if (editStartJson != editEndJson && lastEditedDesc)
+						{
+							PushCommand(std::make_unique<ComponentEditCommandRTTR>(
+								_selectedEntity, lastEditedDesc, editStartJson, editEndJson));
+							g_SceneDirty = true;
+						}
+
+						lastEditedEntity = InvalidEntityId;
+						lastEditedComponentType.clear();
+						lastEditedDesc = nullptr;
+					}
+
+					if (ev.changed)
+					{
+						g_SceneDirty = true;
+					}
 				}
 			}
-
-        // 각 컴포넌트 타입별로 UI 표시 (타입별 분기 처리 필요)
-        for (const auto& compType : displayComponentTypes) {
-            std::string typeName = compType.get_name().to_string();
-            
-            // 타입별로 컴포넌트 가져오기 및 제거 함수 호출
-            if (typeName == "CameraComponent") {
-                DrawEngineComponent("CameraComponent",
-                    world.GetComponent<CameraComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "CameraFollowComponent") {
-                DrawEngineComponent("CameraFollowComponent",
-                    world.GetComponent<CameraFollowComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraFollowComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "CameraSpringArmComponent") {
-                DrawEngineComponent("CameraSpringArmComponent",
-                    world.GetComponent<CameraSpringArmComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraSpringArmComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "CameraLookAtComponent") {
-                DrawEngineComponent("CameraLookAtComponent",
-                    world.GetComponent<CameraLookAtComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraLookAtComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "CameraShakeComponent") {
-                DrawEngineComponent("CameraShakeComponent",
-                    world.GetComponent<CameraShakeComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraShakeComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "CameraBlendComponent") {
-                DrawEngineComponent("CameraBlendComponent",
-                    world.GetComponent<CameraBlendComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraBlendComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "CameraInputComponent") {
-                DrawEngineComponent("CameraInputComponent",
-                    world.GetComponent<CameraInputComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraInputComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "PointLightComponent") {
-                DrawEngineComponent("PointLightComponent",
-                    world.GetComponent<PointLightComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<PointLightComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "SpotLightComponent") {
-                DrawEngineComponent("SpotLightComponent",
-                    world.GetComponent<SpotLightComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<SpotLightComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "RectLightComponent") {
-                DrawEngineComponent("RectLightComponent",
-                    world.GetComponent<RectLightComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "Phy_RigidBodyComponent") {
-                DrawEngineComponent("Phy_RigidBodyComponent",
-                    world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); },
-                    _selectedEntity, typeName);
-            } else if (typeName == "Phy_ColliderComponent") {
-                DrawInspectorCollider(world, _selectedEntity);
-            } else if (typeName == "Phy_MeshColliderComponent") {
-                DrawInspectorMeshCollider(world, _selectedEntity);
-            } else if (typeName == "Phy_CCTComponent") {
-                DrawInspectorCharacterController(world, _selectedEntity);
-            } else if (typeName == "Phy_TerrainHeightFieldComponent") {
-                DrawInspectorTerrainHeightField(world, _selectedEntity);
-            } else if (typeName == "Phy_SettingsComponent") {
-                DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
-            } else if (typeName == "Phy_JointComponent") {
-                DrawInspectorJoint(world, _selectedEntity);
-            }
-            // 새로운 컴포넌트 타입이 추가되면 여기에 else if 추가
-        }
 
 			// List Scripts
 			if (auto* scripts = world.GetScripts(_selectedEntity);
@@ -7450,8 +7392,101 @@ namespace Alice
 			g_SceneDirty = false;
 		}
 
-		// 씬 로드 (레거시 함수 - 이제는 LoadSceneFileRequest 사용 권장)
-		void EditorCore::PushCommand(std::unique_ptr<ICommand> cmd)
+	// FBX 에셋을 월드에 인스턴스화
+	EntityId EditorCore::InstantiateFbxAssetToWorld(World& world,
+	                                                const std::filesystem::path& fbxAssetPath,
+	                                                std::string_view entityName)
+	{
+		if (!m_resources) return InvalidEntityId;
+
+		Alice::FbxInstanceAsset asset{};
+		std::filesystem::path abs = fbxAssetPath;
+
+		// path가 논리 경로면 Resolve
+		if (!abs.is_absolute())
+			abs = m_resources->Resolve(abs);
+
+		if (!Alice::LoadFbxInstanceAsset(abs, asset) || asset.meshAssetPath.empty())
+			return InvalidEntityId;
+
+		// GPU 메시 없으면 원본 FBX 재임포트로 레지스트리 채움
+		if (m_skinnedRegistry && m_renderDevice)
+		{
+			if (!m_skinnedRegistry->Find(asset.meshAssetPath))
+			{
+				FbxImportOptions opt{};
+				FbxImporter importer(*m_resources, m_skinnedRegistry);
+				auto* device = m_renderDevice->GetDevice();
+
+				std::filesystem::path src = asset.sourceFbx;
+				if (!src.is_absolute())
+					src = m_resources->Resolve(src);
+
+				importer.Import(device, src, opt);
+			}
+		}
+
+		EntityId e = world.CreateEntity();
+
+		auto& t = world.AddComponent<TransformComponent>(e);
+		t.position = { 0, 0, 0 };
+		t.rotation = { 0, 0, 0 };
+		t.scale = { 1, 1, 1 };
+
+		auto& skinned = world.AddComponent<SkinnedMeshComponent>(e, asset.meshAssetPath);
+		skinned.instanceAssetPath = abs.string();
+
+		static DirectX::XMFLOAT4X4 s_identityBone =
+			DirectX::XMFLOAT4X4(1, 0, 0, 0,
+			                     0, 1, 0, 0,
+			                     0, 0, 1, 0,
+			                     0, 0, 0, 1);
+		skinned.boneMatrices = &s_identityBone;
+		skinned.boneCount = 1;
+
+		if (!asset.materialAssetPaths.empty())
+		{
+			DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+			auto& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
+			mat.assetPath = asset.materialAssetPaths.front();
+			MaterialFile::Load(mat.assetPath, mat, m_resources);
+		}
+
+		if (!entityName.empty())
+			world.SetEntityName(e, std::string(entityName));
+
+		g_SceneDirty = true;
+		return e;
+	}
+
+	// ComponentEditCommandRTTR 구현
+	ComponentEditCommandRTTR::ComponentEditCommandRTTR(EntityId id,
+	                                                    const EditorComponentDesc* d,
+	                                                    JsonRttr::json oldJ,
+	                                                    JsonRttr::json newJ)
+		: entityId(id), desc(d), oldJson(std::move(oldJ)), newJson(std::move(newJ))
+	{
+		description = std::string("Edit ") + (desc ? desc->displayName : "Component");
+	}
+
+	void ComponentEditCommandRTTR::Execute(World& world, EntityId&)
+	{
+		if (!desc) return;
+		rttr::instance inst = desc->getInstance(world, entityId);
+		if (!inst.is_valid()) return;
+		JsonRttr::FromJsonObject(inst, newJson);
+	}
+
+	void ComponentEditCommandRTTR::Undo(World& world, EntityId&)
+	{
+		if (!desc) return;
+		rttr::instance inst = desc->getInstance(world, entityId);
+		if (!inst.is_valid()) return;
+		JsonRttr::FromJsonObject(inst, oldJson);
+	}
+
+	// 씬 로드 (레거시 함수 - 이제는 LoadSceneFileRequest 사용 권장)
+	void EditorCore::PushCommand(std::unique_ptr<ICommand> cmd)
 		{
 			// 새로운 액션이 들어오면 Redo 스택 클리어 (일반적인 Undo/Redo 동작)
 			g_RedoStack.clear();

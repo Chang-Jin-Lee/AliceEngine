@@ -100,6 +100,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Material.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.cpp
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.cpp
     ${ALICE_SRC_DIR}/Core/CameraSystem.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
@@ -174,6 +175,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/ReflectionSerializer.h
     ${ALICE_SRC_DIR}/Core/ReflectionUI.h
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.h
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.h
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.inl
     ${ALICE_SRC_DIR}/Core/Component.h
     ${ALICE_SRC_DIR}/Core/Entity.h
     ${ALICE_SRC_DIR}/Core/System.h

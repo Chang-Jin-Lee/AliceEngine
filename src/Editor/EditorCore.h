@@ -21,6 +21,7 @@
 #include "Core/ReflectionUI.h"
 #include "Core/JsonRttr.h"
 #include "Core/ComponentRegistry.h"
+#include "Core/EditorComponentRegistry.h"
 #include "imgui.h"
 #include <functional>
 #include <string>
@@ -43,7 +44,7 @@ namespace Alice
 		virtual bool SupportsRedo() const { return true; }
 	};
 
-	// 컴포넌트 편집 명령 (템플릿)
+	// 컴포넌트 편집 명령 (템플릿) - 레거시 호환용
 	template<typename T>
 	struct ComponentEditCommand : ICommand
 	{
@@ -85,6 +86,25 @@ namespace Alice
 		{
 			return description.c_str();
 		}
+	};
+
+	// RTTR 기반 컴포넌트 편집 명령 (템플릿 제거)
+	struct ComponentEditCommandRTTR : ICommand
+	{
+		EntityId entityId{};
+		const EditorComponentDesc* desc{};
+		JsonRttr::json oldJson;
+		JsonRttr::json newJson;
+		std::string description;
+
+		ComponentEditCommandRTTR(EntityId id,
+			const EditorComponentDesc* d,
+			JsonRttr::json oldJ,
+			JsonRttr::json newJ);
+
+		void Execute(World& world, EntityId&) override;
+		void Undo(World& world, EntityId&) override;
+		const char* GetDescription() const override { return description.c_str(); }
 	};
 
 	/// ImGui 컨텍스트 수명과 기본 에디터 유틸(도킹, 디렉터리 뷰, 에디터 패널 등)을 관리하는
@@ -240,6 +260,11 @@ namespace Alice
         void DrawDirectoryNode(World& world,
                                EntityId& selectedEntity,
                                const std::filesystem::path& path);
+
+        /// FBX 에셋을 월드에 인스턴스화합니다.
+        EntityId InstantiateFbxAssetToWorld(World& world,
+                                            const std::filesystem::path& fbxAssetPath,
+                                            std::string_view entityName);
 
     public:
         void SetResourceManager(ResourceManager* resources) { m_resources = resources; }
