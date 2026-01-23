@@ -382,6 +382,9 @@ private:
     mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithMeshCollider;
     mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithJoint;
 
+    // CCT 경고 엔티티 추적 (씬/월드 경계를 넘어서 상태가 남지 않도록 멤버로 관리)
+    std::unordered_set<Alice::EntityId> m_warnedMissingCCT;
+
     // 런타임 마스크 캐시 (레이어 매트릭스 반영 결과)
     // 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고,
     // 실제 적용되는 필터는 이 캐시에서 관리

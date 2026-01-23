@@ -46,6 +46,14 @@ bool PhysXWorld::Raycast(const Vec3& origin, const Vec3& dir, float maxDist, Ray
 
 bool PhysXWorld::RaycastEx(const Vec3& origin, const Vec3& dir, float maxDist, RaycastHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers) const
 {
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	thread_local bool inContactModifyCallback = false;
+	if (inContactModifyCallback)
+	{
+		// ContactModify 콜백 내에서는 쿼리 호출 불가 (데드락 위험)
+		return false;
+	}
+	
 	if (!impl || !impl->scene) return false;
 
 	PxVec3 unitDir;
@@ -68,6 +76,10 @@ bool PhysXWorld::RaycastEx(const Vec3& origin, const Vec3& dir, float maxDist, R
 
 uint32_t PhysXWorld::RaycastAll(const Vec3& origin, const Vec3& dir, float maxDist, std::vector<RaycastHit>& outHits, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, uint32_t maxHits) const
 {
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	thread_local bool inContactModifyCallback = false;
+	if (inContactModifyCallback) return 0;
+	
 	outHits.clear();
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
@@ -108,6 +120,10 @@ static inline void FillOverlapHit(const PxOverlapHit& h, OverlapHit& out)
 
 uint32_t PhysXWorld::OverlapBox(const Vec3& center, const Quat& rot, const Vec3& halfExtents, std::vector<OverlapHit>& outHits, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, uint32_t maxHits) const
 {
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	thread_local bool inContactModifyCallback = false;
+	if (inContactModifyCallback) return 0;
+	
 	outHits.clear();
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
@@ -140,6 +156,10 @@ uint32_t PhysXWorld::OverlapBox(const Vec3& center, const Quat& rot, const Vec3&
 
 uint32_t PhysXWorld::OverlapSphere(const Vec3& center, float radius, std::vector<OverlapHit>& outHits, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, uint32_t maxHits) const
 {
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	thread_local bool inContactModifyCallback = false;
+	if (inContactModifyCallback) return 0;
+	
 	outHits.clear();
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
@@ -172,6 +192,10 @@ uint32_t PhysXWorld::OverlapSphere(const Vec3& center, float radius, std::vector
 
 uint32_t PhysXWorld::OverlapCapsule(const Vec3& center, const Quat& rot, float radius, float halfHeight, std::vector<OverlapHit>& outHits, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, uint32_t maxHits, bool alignYAxis) const
 {
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	thread_local bool inContactModifyCallback = false;
+	if (inContactModifyCallback) return 0;
+	
 	outHits.clear();
 	if (!impl || !impl->scene || maxHits == 0) return 0;
 
@@ -222,6 +246,10 @@ static inline void FillSweepHit(const PxSweepHit& h, SweepHit& out)
 
 bool PhysXWorld::SweepBox(const Vec3& origin, const Quat& rot, const Vec3& halfExtents, const Vec3& dir, float maxDist, SweepHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers) const
 {
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	thread_local bool inContactModifyCallback = false;
+	if (inContactModifyCallback) return false;
+	
 	if (!impl || !impl->scene) return false;
 
 	PxVec3 unitDir;
@@ -250,6 +278,10 @@ bool PhysXWorld::SweepBox(const Vec3& origin, const Quat& rot, const Vec3& halfE
 
 bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, float maxDist, SweepHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers) const
 {
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	thread_local bool inContactModifyCallback = false;
+	if (inContactModifyCallback) return false;
+	
 	if (!impl || !impl->scene) return false;
 
 	PxVec3 unitDir;
@@ -278,6 +310,10 @@ bool PhysXWorld::SweepSphere(const Vec3& origin, float radius, const Vec3& dir, 
 
 bool PhysXWorld::SweepCapsule(const Vec3& origin, const Quat& rot, float radius, float halfHeight, const Vec3& dir, float maxDist, SweepHit& outHit, uint32_t layerMask, uint32_t queryMask, bool hitTriggers, bool alignYAxis) const
 {
+	// ContactModify 콜백 내에서 쿼리 호출 시 데드락 방지
+	thread_local bool inContactModifyCallback = false;
+	if (inContactModifyCallback) return false;
+	
 	if (!impl || !impl->scene) return false;
 
 	PxVec3 unitDir;

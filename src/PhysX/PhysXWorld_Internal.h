@@ -792,6 +792,16 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 			if (!cb) return;
 
+			// ContactModify 콜백 진입 플래그 설정 (데드락 방지)
+			// thread_local 변수는 각 스레드마다 독립적으로 존재하며, 같은 이름으로 선언하면 같은 변수를 참조
+			thread_local bool inContactModifyCallback = false;
+			if (inContactModifyCallback)
+			{
+				// 중첩 호출 방지 (이론적으로는 발생하지 않아야 함)
+				return;
+			}
+			inContactModifyCallback = true; // 콜백 진입 플래그 설정
+
 			for (PxU32 i = 0; i < count; ++i)
 			{
 				PxContactModifyPair& mp = pairs[i];
@@ -850,6 +860,9 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 						cs.setMaxImpulse(c, src.maxImpulse);
 				}
 			}
+			
+			// ContactModify 콜백 종료 플래그 해제
+			inContactModifyCallback = false;
 		}
 	};
 
