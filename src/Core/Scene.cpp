@@ -52,6 +52,8 @@ namespace Alice
 
 		m_currentScene = std::move(newScene);
 		m_currentScene->OnEnter(m_world, m_resources);
+		// 코드 씬으로 전환 시 파일 경로 초기화
+		m_currentSceneFilePath.clear();
 		return true;
 	}
 
@@ -113,6 +115,8 @@ namespace Alice
 
 			m_currentScene = std::move(pendingScene);
 			m_currentScene->OnEnter(m_world, m_resources);
+			// 코드 씬으로 전환 시 파일 경로 초기화
+			m_currentSceneFilePath.clear();
 			return true;
 		}
 
@@ -128,9 +132,15 @@ namespace Alice
 			m_currentScene.reset();
 
 			const bool ok = SceneFile::LoadAuto(world, m_resources, path);
-			if (!ok)
+			if (ok)
+			{
+				// 로드 성공 시 현재 씬 파일 경로 저장
+				m_currentSceneFilePath = path;
+			}
+			else
 			{
 				ALICE_LOG_ERRORF("[SceneManager] SceneFile::LoadAuto failed: %s", path.generic_string().c_str());
+				// 로드 실패 시 경로는 유지하지 않음
 			}
 			return ok;
 		}
