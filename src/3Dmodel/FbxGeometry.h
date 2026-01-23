@@ -33,6 +33,7 @@ public:
 	const std::vector<std::string>& GetVertexOwningNodeNames() const;
 	std::vector<VertexSkinnedTBN>& GetCPUVertices();
 	const std::vector<VertexSkinnedTBN>& GetCPUVertices() const;
+	const std::vector<uint32_t>& GetCPUIndices() const;
 
 	// Recreate VB from CPU-side vertices (after skin weights applied)
 	bool RebuildVBFromCPU(ID3D11Device* device);
