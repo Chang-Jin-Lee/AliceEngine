@@ -1285,7 +1285,17 @@ namespace Alice
 				}
 				else
 				{
-					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
+					ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
+					//pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					if (deferred->GetBloomSettings().enabled)
+					{
+						deferred->RenderBloomPass(sceneSRV, backBufferRTV, viewport);
+					}
+					else
+					{
+						deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
+					}
 				}
 			}
 		}
