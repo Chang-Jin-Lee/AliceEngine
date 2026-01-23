@@ -321,6 +321,12 @@ namespace Alice
                 outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(id); advAnim)
+            {
+                rttr::instance inst = const_cast<AdvancedAnimationComponent&>(*advAnim);
+                outEntity["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
             {
                 rttr::instance inst = const_cast<CameraComponent&>(*cam);
@@ -518,6 +524,15 @@ namespace Alice
                 SkinnedAnimationComponent& sa = world.AddComponent<SkinnedAnimationComponent>(id);
                 rttr::instance inst = sa;
                 if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
+            }
+
+            // AdvancedAnimation (선택)
+            auto itAA = e.find("AdvancedAnimation");
+            if (itAA != e.end() && itAA->is_object())
+            {
+                AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(id);
+                rttr::instance inst = aa;
+                if (!JsonRttr::FromJsonObject(inst, *itAA)) return false;
             }
 
             // Camera (선택)
