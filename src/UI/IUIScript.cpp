@@ -21,18 +21,18 @@ using namespace DirectX;
 //	}
 //
 //	// ImageComponent가 없으면 자동으로 추가
-//	auto* imageComp = GetImageComponent();
-//	if (!imageComp)
-//	{
-//		ALICE_LOG_INFO("[IUIScript::SetImagePath] ImageComponent not found, adding it automatically...");
-//		imageComp = Owner->AddComponent<UI_ImageComponent>();
-//		if (!imageComp)
-//		{
-//			ALICE_LOG_WARN("[IUIScript::SetImagePath] Failed to add UI_ImageComponent!");
-//			return false;
-//		}
-//		ALICE_LOG_INFO("[IUIScript::SetImagePath] UI_ImageComponent added successfully");
-//	}
+//	//auto* imageComp = GetImageComponent();
+//	//if (!imageComp)
+//	//{
+//	//	ALICE_LOG_INFO("[IUIScript::SetImagePath] ImageComponent not found, adding it automatically...");
+//	//	imageComp = Owner->AddComponent<UI_ImageComponent>();
+//	//	if (!imageComp)
+//	//	{
+//	//		ALICE_LOG_WARN("[IUIScript::SetImagePath] Failed to add UI_ImageComponent!");
+//	//		return false;
+//	//	}
+//	//	ALICE_LOG_INFO("[IUIScript::SetImagePath] UI_ImageComponent added successfully");
+//	//}
 //
 //	ALICE_LOG_INFO("[IUIScript::SetImagePath] Calling SetImagePath with path: %ls", path.c_str());
 //	UINT result = imageComp->SetImagePath(path);
