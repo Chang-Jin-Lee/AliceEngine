@@ -56,58 +56,63 @@ namespace Alice
                 if (propType == rttr::type::get<bool>())
                 {
                     bool val = value.to_bool();
+                    bool changed = ImGui::Checkbox(displayName.c_str(), &val);
                     event.activated = ImGui::IsItemActivated();
-                    if (ImGui::Checkbox(displayName.c_str(), &val))
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                    if (changed)
                     {
                         prop.set_value(obj, val);
                         event.changed = true;
                     }
-                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<int>())
                 {
                     int val = value.to_int();
+                    bool changed = ImGui::DragInt(displayName.c_str(), &val);
                     event.activated = ImGui::IsItemActivated();
-                    if (ImGui::DragInt(displayName.c_str(), &val))
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                    if (changed)
                     {
                         prop.set_value(obj, val);
                         event.changed = true;
                     }
-                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<uint32_t>())
                 {
                     // uint32_t는 비트마스크로 처리 가능하지만, 일단 일반 int로 표시
                     int val = static_cast<int>(value.to_uint32());
+                    bool changed = ImGui::DragInt(displayName.c_str(), &val, 1.0f, 0, INT_MAX);
                     event.activated = ImGui::IsItemActivated();
-                    if (ImGui::DragInt(displayName.c_str(), &val, 1.0f, 0, INT_MAX))
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                    if (changed)
                     {
                         prop.set_value(obj, static_cast<uint32_t>(val));
                         event.changed = true;
                     }
-                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<float>())
                 {
                     float val = value.to_float();
+                    bool changed = ImGui::DragFloat(displayName.c_str(), &val, 0.01f);
                     event.activated = ImGui::IsItemActivated();
-                    if (ImGui::DragFloat(displayName.c_str(), &val, 0.01f))
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                    if (changed)
                     {
                         prop.set_value(obj, val);
                         event.changed = true;
                     }
-                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<double>())
                 {
                     float val = static_cast<float>(value.to_double());
+                    bool changed = ImGui::DragFloat(displayName.c_str(), &val, 0.01f);
                     event.activated = ImGui::IsItemActivated();
-                    if (ImGui::DragFloat(displayName.c_str(), &val, 0.01f))
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                    if (changed)
                     {
                         prop.set_value(obj, static_cast<double>(val));
                         event.changed = true;
                     }
-                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if (propType == rttr::type::get<std::string>())
                 {
@@ -116,13 +121,14 @@ namespace Alice
                     strncpy_s(buffer, val.c_str(), sizeof(buffer) - 1);
                     
                     // InputText 렌더링
+                    bool changed = ImGui::InputText(displayName.c_str(), buffer, sizeof(buffer));
                     event.activated = ImGui::IsItemActivated();
-                    if (ImGui::InputText(displayName.c_str(), buffer, sizeof(buffer)))
+                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                    if (changed)
                     {
                         prop.set_value(obj, std::string(buffer));
                         event.changed = true;
                     }
-                    event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                     
                     // 드래그앤드롭 지원 감지
                     std::string propNameLower = propName;
@@ -269,34 +275,28 @@ namespace Alice
                     // XMFLOAT3 타입 렌더링
                     if (className == "XMFLOAT3")
                     {
-                        rttr::instance inst = value;
-                        DirectX::XMFLOAT3* float3 = inst.try_convert<DirectX::XMFLOAT3>();
-                        if (float3)
+                        DirectX::XMFLOAT3 v = value.get_value<DirectX::XMFLOAT3>();
+                        // "color" 또는 "Color"가 포함된 경우 색상 편집 컨트롤로 렌더링
+                        bool isColor = propName.find("color") != std::string::npos || 
+                                      propName.find("Color") != std::string::npos;
+                        
+                        bool changed = false;
+                        if (isColor)
                         {
-                            // "color" 또는 "Color"가 포함된 경우 색상 편집 컨트롤로 렌더링
-                            bool isColor = propName.find("color") != std::string::npos || 
-                                          propName.find("Color") != std::string::npos;
-                            
-                            if (isColor)
-                            {
-                                event.activated = ImGui::IsItemActivated();
-                                if (ImGui::ColorEdit3(displayName.c_str(), &float3->x))
-                                {
-                                    prop.set_value(obj, *float3);
-                                    event.changed = true;
-                                }
-                                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
-                            }
-                            else
-                            {
-                                event.activated = ImGui::IsItemActivated();
-                                if (ImGui::DragFloat3(displayName.c_str(), &float3->x, 0.1f))
-                                {
-                                    prop.set_value(obj, *float3);
-                                    event.changed = true;
-                                }
-                                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
-                            }
+                            changed = ImGui::ColorEdit3(displayName.c_str(), &v.x);
+                        }
+                        else
+                        {
+                            changed = ImGui::DragFloat3(displayName.c_str(), &v.x, 0.1f);
+                        }
+                        
+                        event.activated = ImGui::IsItemActivated();
+                        event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                        
+                        if (changed)
+                        {
+                            prop.set_value(obj, v);
+                            event.changed = true;
                         }
                     }
                     // XMFLOAT4 타입 렌더링
@@ -382,9 +382,12 @@ namespace Alice
                 float val = propType == rttr::type::get<float>() ? 
                            value.to_float() : static_cast<float>(value.to_double());
                 
+                bool changed = ImGui::SliderFloat(displayName.c_str(), &val, minVal, maxVal);
                 UIEditEvent event{};
                 event.activated = ImGui::IsItemActivated();
-                if (ImGui::SliderFloat(displayName.c_str(), &val, minVal, maxVal))
+                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                
+                if (changed)
                 {
                     if (propType == rttr::type::get<float>())
                         prop.set_value(obj, val);
@@ -392,7 +395,6 @@ namespace Alice
                         prop.set_value(obj, static_cast<double>(val));
                     event.changed = true;
                 }
-                event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
                 return event;
             }
         }

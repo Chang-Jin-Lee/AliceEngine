@@ -127,18 +127,27 @@ namespace Alice
             else
             {
                 auto& storage = GetStorage<T>();
+                T* result = nullptr;
                 if constexpr (std::is_default_constructible_v<T> && sizeof...(Args) == 0)
                 {
                     // 기본 생성자만 호출
                     T defaultComp{};
-                    return storage.Add(id, std::move(defaultComp));
+                    result = &storage.Add(id, std::move(defaultComp));
                 }
                 else
                 {
                     // 인자가 있는 경우 생성 후 추가
                     T newComp(std::forward<Args>(args)...);
-                    return storage.Add(id, std::move(newComp));
+                    result = &storage.Add(id, std::move(newComp));
                 }
+                
+                // TransformComponent 추가/제거 시 children 캐시 무효화
+                if constexpr (std::is_same_v<T, TransformComponent>)
+                {
+                    InvalidateChildrenCache();
+                }
+                
+                return *result;
             }
         }
 
@@ -290,6 +299,13 @@ namespace Alice
             else
             {
                 auto& storage = GetStorage<T>();
+                
+                // TransformComponent 제거 시 children 캐시 무효화
+                if constexpr (std::is_same_v<T, TransformComponent>)
+                {
+                    InvalidateChildrenCache();
+                }
+                
                 storage.Remove(id);
             }
         }
@@ -360,6 +376,11 @@ namespace Alice
         // ==== 카메라 (특수 케이스 - 메인 카메라 등) ====
         // 필요하다면 별도 헬퍼 함수 유지
         EntityId GetMainCameraEntityId();
+
+        // ==== Transform 행렬 계산 (공용 API) ====
+        /// 엔티티의 월드 행렬을 계산합니다 (부모-자식 계층 포함)
+        /// 에디터/런타임 모두 이 함수를 사용하여 일관성 보장
+        DirectX::XMMATRIX ComputeWorldMatrix(EntityId entityId) const;
 
         // ==== 지연 파괴 시스템 ====
         /// 지연 파괴를 예약합니다. (delay 초 후에 파괴)

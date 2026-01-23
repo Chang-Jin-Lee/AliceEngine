@@ -502,7 +502,9 @@ namespace Alice
             
             if (auto itGuid = e.find("guid"); itGuid != e.end())
             {
-                idComp->guid = ParseGuid(*itGuid);
+                auto parsed = ParseGuid(*itGuid);
+                if (parsed != 0) idComp->guid = parsed; // 실패면 덮어쓰지 않기
+                else idComp->guid = NewGuid(); // ParseGuid 실패 시 새 GUID 생성
             }
             else
             {

@@ -66,10 +66,11 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         inline static const char* ParticleClearCS = R"(
 cbuffer CBParams : register(b0)
 {
-    float4 params0;
-    float4 params1;
     float4 time;
     float4 resolution;
+    float4 emitterInfo;
+    float4x4 viewProj;
+    float4 cameraPos;
 };
 
 RWTexture2D<float4> outTex : register(u0);
@@ -87,20 +88,32 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;   // 월드 좌표
-    float3 vel;   // 월드 좌표 기준 속도
     float  life;  // sec
+    float3 vel;   // 월드 좌표 기준 속도
     float  seed;
+    uint   emitterIndex;
+    float3 pad;   // 16바이트 정렬용
+};
+
+struct EmitterGPU
+{
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = color, w = sizePx
+    float4 p2; // xyz = gravity, w = drag
+    float4 p3; // x = lifeMin, y = lifeMax, z = intensity, w = depthBiasMeters
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;     // emitterX,Y,Z,radius
-    float4 params1;     // colorRGB,sizePx
     float4 time;        // timeSec, dtSec, particleCount, spawnJitter
     float4 resolution;  // w,h,invW,invH
+    float4 emitterInfo; // x = emitterCount, y = nearZ, z = farZ, w = 0 (bias는 emitter별로 EmitterGPU.p3.w에 저장됨)
+    float4x4 viewProj;
+    float4 cameraPos;
 };
 
 RWStructuredBuffer<Particle> particles : register(u0);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
 
 float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
 float2 Hash21(float n)
@@ -121,10 +134,36 @@ void main(uint3 id : SV_DispatchThreadID)
 
     float t  = time.x;
     float dt = time.y;
+    float jitter = time.w;
+    uint emitterCount = (uint)emitterInfo.x;
 
-    float3 emitter = params0.xyz;
-    float radius   = max(params0.w, 0.0001);
-    float jitter   = time.w;
+    if (emitterCount == 0) return;
+
+    // emitter 선택 (죽은 파티클 리스폰 시)
+    uint emitterIdx = p.emitterIndex;
+    if (p.life <= 0.0)
+    {
+        // Hash 기반으로 emitter 선택
+        float base = (float)i * 1.2345 + t * 13.37 + p.seed * 101.0;
+        emitterIdx = (Hash11(base) * (float)emitterCount);
+        emitterIdx = min(emitterIdx, emitterCount - 1);
+    }
+    
+    // OOB 방지: emitterCount가 줄었을 때 안전하게 처리
+    if (emitterIdx >= emitterCount)
+    {
+        // 즉시 재스폰이 가장 안전
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+
+    EmitterGPU e = gEmitters[emitterIdx];
+    float3 emitter = e.p0.xyz;
+    float radius = max(e.p0.w, 0.0001);
+    float3 gravity = e.p2.xyz;
+    float drag = e.p2.w;
+    float lifeMin = e.p3.x;
+    float lifeMax = e.p3.y;
 
     if (p.life <= 0.0)
     {
@@ -141,15 +180,14 @@ void main(uint3 id : SV_DispatchThreadID)
         float3 rv = float3(Hash21(base + 191.0) * 2.0 - 1.0, Hash11(base + 251.0) * 2.0 - 1.0);
         p.vel = normalize(rv + 1e-5) * float3(0.20, 0.45, 0.20);
 
-        p.life = 0.8 + Hash11(base + 311.0) * 1.6;
+        p.life = lerp(lifeMin, lifeMax, Hash11(base + 311.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
+        p.emitterIndex = emitterIdx;
     }
     else
     {
-        float3 gravity = float3(0.0, -0.65, 0.0);
-
         p.vel += gravity * dt;
-        p.vel *= pow(0.12, dt); // drag
+        p.vel *= pow(max(drag, 0.001), dt);
         p.pos += p.vel * dt;
         p.life -= dt;
     }
@@ -162,24 +200,34 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = color, w = sizePx
+    float4 p2; // xyz = gravity, w = drag
+    float4 p3; // x = lifeMin, y = lifeMax, z = intensity, w = depthBiasMeters
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;
-    float4 params1;     // colorRGB,sizePx
     float4 time;        // timeSec, dtSec, particleCount, spawnJitter
     float4 resolution;  // w,h,invW,invH
+    float4 emitterInfo; // x = emitterCount, y = nearZ, z = farZ, w = 0 (bias는 emitter별로 EmitterGPU.p3.w에 저장됨)
     float4x4 viewProj;
     float4 cameraPos;
 };
 
 StructuredBuffer<Particle> particles : register(t0);
-    Texture2D<float> sceneDepth : register(t1);
-    SamplerState LinearSampler : register(s0);  // 실제로는 Point 샘플러 (depth는 Point 샘플링이 정확함)
+Texture2D<float> sceneDepth : register(t1);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
+SamplerState PointSampler : register(s0);  // Point Clamp 샘플러 (depth 경계 보간 방지)
 RWTexture2D<float4> outTex : register(u0);
 
 // sceneDepth가 null일 수 있으므로 체크 필요 (HLSL에서는 포인터 체크 불가, 일단 사용)
@@ -187,12 +235,32 @@ RWTexture2D<float4> outTex : register(u0);
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID)
 {
+    // emitterCount==0 가드 (GPU 크래시 방지)
+    uint emitterCount = (uint)emitterInfo.x;
+    if (emitterCount == 0) return;
+    
     uint i = id.x;
     uint maxCount = (uint)time.z;
     if (i >= maxCount) return;
 
     Particle p = particles[i];
     if (p.life <= 0.0) return;
+
+    // emitter 정보 읽기 (OOB 방지) - emitterCount는 이미 위에서 선언됨
+    uint emitterIdx = p.emitterIndex;
+    if (emitterIdx >= emitterCount)
+    {
+        // 범위 밖이면 즉시 재스폰
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+    EmitterGPU e = gEmitters[emitterIdx];
+    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
+    bool depthTest = (e.p3.z >= 0.0);
+    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    float size = max(e.p1.w, 1.0);
+    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
 
     // 월드 좌표 → 클립 공간
     // viewProj는 XMMatrixTranspose로 전달되므로 mul(vector, matrix) 사용 (다른 셰이더와 동일)
@@ -210,19 +278,27 @@ void main(uint3 id : SV_DispatchThreadID)
         (1.0 - (ndc.y * 0.5 + 0.5)) * resolution.y
     );
     
-    // 간단한 depth test (가짜)
-    // depth가 0이면 아무것도 렌더링되지 않은 영역이므로 파티클 표시
-    float2 depthUV = screenPos * resolution.zw;
-    float sceneDepthValue = sceneDepth.SampleLevel(LinearSampler, depthUV, 0).r;
-    float particleDepth = ndc.z;
-    if (sceneDepthValue > 0.001 && particleDepth > sceneDepthValue + 0.01) return;
+    // depth test (emitter별 설정) - view-space Z로 선형화해서 비교
+    if (depthTest)
+    {
+        float nearZ = emitterInfo.y;
+        float farZ = emitterInfo.z;
+        float bias = depthBiasMeters;  // emitter별 bias 사용
+        
+        // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
+        // LH 투영: z = (nearZ * farZ) / (farZ - depthValue * (farZ - nearZ))
+        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
+        
+        // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
+        float particleViewZ = clipPos.w;
+        
+        if (sceneDepthValue > 0.001 && particleViewZ > sceneViewZ + bias) return;
+    }
     
     int2 ip = int2(screenPos);
 
-    float size = max(params1.w, 1.0);
     int r = (int)clamp(size * 0.5, 1.0, 6.0);
-
-    float3 color = params1.rgb;
 
     float speed = length(p.vel);
     float intensity = saturate(speed * 1.5) * saturate(p.life);
@@ -258,21 +334,33 @@ void main(uint3 id : SV_DispatchThreadID)
         inline static const char* SparksUpdateCS = R"(
 struct Particle
 {
-    float3 pos;   // 월드 좌표
-    float3 vel;   // 월드 좌표 기준 속도
-    float  life;  // sec
+    float3 pos;
+    float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;     // emitterX,Y,Z,radius
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
+    float4x4 viewProj;
+    float4 cameraPos;
 };
 
 RWStructuredBuffer<Particle> particles : register(u0);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
 
 float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
 float2 Hash21(float n)
@@ -292,10 +380,33 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     float t  = time.x;
     float dt = time.y;
+    float jitter = time.w;
+    uint emitterCount = (uint)emitterInfo.x;
 
-    float3 emitter = params0.xyz;
-    float radius   = max(params0.w, 0.0001);
-    float jitter   = time.w;
+    if (emitterCount == 0) return;
+
+    uint emitterIdx = p.emitterIndex;
+    if (p.life <= 0.0)
+    {
+        float base = (float)i * 1.913 + t * 19.71 + p.seed * 97.0;
+        emitterIdx = (Hash11(base) * (float)emitterCount);
+        emitterIdx = min(emitterIdx, emitterCount - 1);
+    }
+    
+    // OOB 방지: emitterCount가 줄었을 때 안전하게 처리
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+
+    EmitterGPU e = gEmitters[emitterIdx];
+    float3 emitter = e.p0.xyz;
+    float radius = max(e.p0.w, 0.0001);
+    float3 gravity = e.p2.xyz;
+    float drag = e.p2.w;
+    float lifeMin = e.p3.x;
+    float lifeMax = e.p3.y;
 
     if (p.life <= 0.0)
     {
@@ -307,19 +418,18 @@ void main(uint3 id : SV_DispatchThreadID)
         float rr = sqrt(Hash11(base + 91.0)) * radius;
         p.pos = emitter + dir * rr;
 
-        // 스파크는 빠르고 짧게
         float3 rv = float3(Hash21(base + 131.0) * 2.0 - 1.0, Hash11(base + 251.0) * 2.0 - 1.0);
         float spd = 0.45 + Hash11(base + 171.0) * 0.85;
         p.vel = normalize(rv + 1e-5) * spd;
 
-        p.life = 0.15 + Hash11(base + 211.0) * 0.65;
+        p.life = lerp(lifeMin, lifeMax, Hash11(base + 211.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
+        p.emitterIndex = emitterIdx;
     }
     else
     {
-        float3 gravity = float3(0.0, -1.8, 0.0);
         p.vel += gravity * dt;
-        p.vel *= pow(0.03, dt); // 강한 드래그
+        p.vel *= pow(max(drag, 0.001), dt);
         p.pos += p.vel * dt;
         p.life -= dt;
     }
@@ -332,29 +442,43 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
     float4x4 viewProj;
     float4 cameraPos;
 };
 
 StructuredBuffer<Particle> particles : register(t0);
-    Texture2D<float> sceneDepth : register(t1);
-    SamplerState LinearSampler : register(s0);  // 실제로는 Point 샘플러 (depth는 Point 샘플링이 정확함)
+Texture2D<float> sceneDepth : register(t1);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
+SamplerState PointSampler : register(s0);  // Point Clamp 샘플러 (depth 경계 보간 방지)
 RWTexture2D<float4> outTex : register(u0);
 
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID)
 {
+    // emitterCount==0 가드 (GPU 크래시 방지)
+    uint emitterCount = (uint)emitterInfo.x;
+    if (emitterCount == 0) return;
+    
     uint i = id.x;
     uint maxCount = (uint)time.z;
     if (i >= maxCount) return;
@@ -362,29 +486,49 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     if (p.life <= 0.0) return;
 
-    // 월드 좌표 → 클립 공간
-    // viewProj는 XMMatrixTranspose로 전달되므로 mul(vector, matrix) 사용 (다른 셰이더와 동일)
+    // emitter 정보 읽기 (OOB 방지)
+    uint emitterIdx = p.emitterIndex;
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+    EmitterGPU e = gEmitters[emitterIdx];
+    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
+    bool depthTest = (e.p3.z >= 0.0);
+    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    float baseSize = max(e.p1.w, 1.0);
+    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+
     float4 worldPos = float4(p.pos, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
     
     float3 ndc = clipPos.xyz / clipPos.w;
-    // DirectX 좌표계: NDC Y는 +1(위)~-1(아래), 스크린 Y는 0(위)~height(아래)
-    // 따라서 Y축을 뒤집어야 함: screenY = (1.0 - (ndc.y * 0.5 + 0.5)) * height
     float2 screenPos = float2(
         (ndc.x * 0.5 + 0.5) * resolution.x,
         (1.0 - (ndc.y * 0.5 + 0.5)) * resolution.y
     );
     
-    // depth test
-    float2 depthUV = screenPos * resolution.zw;
-    float sceneDepthValue = sceneDepth.SampleLevel(LinearSampler, depthUV, 0).r;
-    float particleDepth = ndc.z;
-    if (sceneDepthValue > 0.001 && particleDepth > sceneDepthValue + 0.01) return;
+    // depth test (emitter별 설정) - view-space Z로 선형화해서 비교
+    if (depthTest)
+    {
+        float nearZ = emitterInfo.y;
+        float farZ = emitterInfo.z;
+        float bias = depthBiasMeters;  // emitter별 bias 사용
+        
+        // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
+        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
+        
+        // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
+        float particleViewZ = clipPos.w;
+        
+        if (sceneDepthValue > 0.001 && particleViewZ > sceneViewZ + bias) return;
+    }
     
-    // 속도 벡터를 화면 공간으로 변환 (두 점을 투영해서 화면 속도 계산)
-    // viewProj로 방향벡터를 직접 변환하면 투영까지 섞여서 카메라 각도에 따라 크기가 변함
     float2 vPx = float2(0.0, 0.0);
     float4 clipPos2 = mul(float4(p.pos + p.vel * 0.03, 1.0), viewProj);
     if (clipPos2.w > 0.0)
@@ -400,14 +544,12 @@ void main(uint3 id : SV_DispatchThreadID)
     float speed = max(length(vPx), 1.0);
     float2 dir  = normalize(vPx + 1e-3);
 
-    float baseSize = max(params1.w, 1.0);
     float L = clamp(speed * 0.03 + baseSize * 1.2, 3.0, 22.0);
     float R = clamp(baseSize * 0.35, 1.0, 5.0);
 
     int2 ip = int2(screenPos);
     int maxR = (int)ceil(max(L, R)) + 1;
 
-    float3 color = params1.rgb;
     float fade = saturate(p.life / 0.8);
 
     for (int y = -maxR; y <= maxR; ++y)
@@ -442,20 +584,32 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;     // emitterX,Y,Z,radius
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
+    float4x4 viewProj;
+    float4 cameraPos;
 };
 
 RWStructuredBuffer<Particle> particles : register(u0);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
 
 float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
 float2 Hash21(float n)
@@ -475,13 +629,33 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     float t  = time.x;
     float dt = time.y;
+    float jitter = time.w;
+    uint emitterCount = (uint)emitterInfo.x;
 
-    float3 emitter = params0.xyz;
-    float radius   = max(params0.w, 0.0001);
-    float jitter   = time.w;
+    if (emitterCount == 0) return;
 
-    // seed 기반 "최대 수명" (드로우에서도 동일 계산 가능)
-    float maxLife = 2.0 + frac(p.seed * 19.1) * 2.0;
+    uint emitterIdx = p.emitterIndex;
+    if (p.life <= 0.0)
+    {
+        float base = (float)i * 0.777 + t * 3.1 + p.seed * 113.0;
+        emitterIdx = (Hash11(base) * (float)emitterCount);
+        emitterIdx = min(emitterIdx, emitterCount - 1);
+    }
+    
+    // OOB 방지: emitterCount가 줄었을 때 안전하게 처리
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+
+    EmitterGPU e = gEmitters[emitterIdx];
+    float3 emitter = e.p0.xyz;
+    float radius = max(e.p0.w, 0.0001);
+    float3 gravity = e.p2.xyz;
+    float drag = e.p2.w;
+    float lifeMin = e.p3.x;
+    float lifeMax = e.p3.y;
 
     if (p.life <= 0.0)
     {
@@ -493,23 +667,20 @@ void main(uint3 id : SV_DispatchThreadID)
         float rr = sqrt(Hash11(base + 33.0)) * radius;
         p.pos = emitter + dir * rr;
 
-        // 천천히 위로
         float3 rv = float3(Hash21(base + 77.0) * 2.0 - 1.0, Hash11(base + 97.0) * 2.0 - 1.0);
         p.vel = float3(rv.x * 0.05, 0.10 + abs(rv.y) * 0.08, rv.z * 0.05);
 
-        p.life = maxLife;
+        p.life = lerp(lifeMin, lifeMax, Hash11(base + 401.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
+        p.emitterIndex = emitterIdx;
     }
     else
     {
-        // 약한 난류/소용돌이 느낌
         float a = 6.2831853 * Hash11(p.seed * 31.0 + floor(t * 2.0));
         float3 swirl = float3(cos(a) * 0.02, 0.0, sin(a) * 0.02);
 
-        // 부력 + 드래그
-        float3 buoyancy = float3(0.0, 0.08, 0.0);
-        p.vel += (buoyancy + swirl) * dt;
-        p.vel *= pow(0.35, dt);
+        p.vel += (gravity + swirl) * dt;
+        p.vel *= pow(max(drag, 0.001), dt);
         p.pos += p.vel * dt;
         p.life -= dt;
     }
@@ -522,24 +693,34 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
     float4x4 viewProj;
     float4 cameraPos;
 };
 
 StructuredBuffer<Particle> particles : register(t0);
-    Texture2D<float> sceneDepth : register(t1);
-    SamplerState LinearSampler : register(s0);  // 실제로는 Point 샘플러 (depth는 Point 샘플링이 정확함)
+Texture2D<float> sceneDepth : register(t1);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
+SamplerState PointSampler : register(s0);  // Point Clamp 샘플러 (depth 경계 보간 방지)
 RWTexture2D<float4> outTex : register(u0);
 
 float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
@@ -547,6 +728,10 @@ float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID)
 {
+    // emitterCount==0 가드 (GPU 크래시 방지)
+    uint emitterCount = (uint)emitterInfo.x;
+    if (emitterCount == 0) return;
+    
     uint i = id.x;
     uint maxCount = (uint)time.z;
     if (i >= maxCount) return;
@@ -554,39 +739,60 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     if (p.life <= 0.0) return;
 
-    // 월드 좌표 → 클립 공간
-    // viewProj는 XMMatrixTranspose로 전달되므로 mul(vector, matrix) 사용 (다른 셰이더와 동일)
+    // emitter 정보 읽기 (OOB 방지)
+    uint emitterIdx = p.emitterIndex;
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+    EmitterGPU e = gEmitters[emitterIdx];
+    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
+    bool depthTest = (e.p3.z >= 0.0);
+    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    float baseSize = max(e.p1.w, 1.0);
+    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+    float lifeMin = e.p3.x;
+    float lifeMax = e.p3.y;
+
     float4 worldPos = float4(p.pos, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
     
     float3 ndc = clipPos.xyz / clipPos.w;
-    // DirectX 좌표계: NDC Y는 +1(위)~-1(아래), 스크린 Y는 0(위)~height(아래)
-    // 따라서 Y축을 뒤집어야 함: screenY = (1.0 - (ndc.y * 0.5 + 0.5)) * height
     float2 screenPos = float2(
         (ndc.x * 0.5 + 0.5) * resolution.x,
         (1.0 - (ndc.y * 0.5 + 0.5)) * resolution.y
     );
     
-    // depth test
-    float2 depthUV = screenPos * resolution.zw;
-    float sceneDepthValue = sceneDepth.SampleLevel(LinearSampler, depthUV, 0).r;
-    float particleDepth = ndc.z;
-    if (sceneDepthValue > 0.001 && particleDepth > sceneDepthValue + 0.01) return;
+    // depth test (emitter별 설정) - view-space Z로 선형화해서 비교
+    if (depthTest)
+    {
+        float nearZ = emitterInfo.y;
+        float farZ = emitterInfo.z;
+        float bias = depthBiasMeters;  // emitter별 bias 사용
+        
+        // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
+        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
+        
+        // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
+        float particleViewZ = clipPos.w;
+        
+        if (sceneDepthValue > 0.001 && particleViewZ > sceneViewZ + bias) return;
+    }
     
-    // seed 기반 maxLife(업데이트와 동일)
-    float maxLife = 2.0 + frac(p.seed * 19.1) * 2.0;
+    float maxLife = lerp(lifeMin, lifeMax, frac(p.seed * 19.1));
     float age01 = 1.0 - saturate(p.life / maxLife);
 
     int2 ip = int2(screenPos);
 
-    float baseSize = max(params1.w, 1.0);
     float size = clamp(baseSize * (0.7 + age01 * 2.2), 2.0, 32.0);
     int r = (int)clamp(size * 0.5, 2.0, 16.0);
 
-    float3 color = params1.rgb;
-    float fade = (1.0 - age01) * 0.55; // 연기는 은근해야 함
+    float fade = (1.0 - age01) * 0.55;
 
     for (int y = -r; y <= r; ++y)
     for (int x = -r; x <= r; ++x)
@@ -614,20 +820,32 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;     // emitterX,Y,Z,radius
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
+    float4x4 viewProj;
+    float4 cameraPos;
 };
 
 RWStructuredBuffer<Particle> particles : register(u0);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
 
 float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
 float2 Hash21(float n)
@@ -647,10 +865,33 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     float t  = time.x;
     float dt = time.y;
+    float jitter = time.w;
+    uint emitterCount = (uint)emitterInfo.x;
 
-    float3 emitter = params0.xyz;
-    float radius   = max(params0.w, 0.0001);
-    float jitter   = time.w;
+    if (emitterCount == 0) return;
+
+    uint emitterIdx = p.emitterIndex;
+    if (p.life <= 0.0)
+    {
+        float base = (float)i * 2.11 + t * 7.7 + p.seed * 111.0;
+        emitterIdx = (Hash11(base) * (float)emitterCount);
+        emitterIdx = min(emitterIdx, emitterCount - 1);
+    }
+    
+    // OOB 방지: emitterCount가 줄었을 때 안전하게 처리
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+
+    EmitterGPU e = gEmitters[emitterIdx];
+    float3 emitter = e.p0.xyz;
+    float radius = max(e.p0.w, 0.0001);
+    float3 gravity = e.p2.xyz;
+    float drag = e.p2.w;
+    float lifeMin = e.p3.x;
+    float lifeMax = e.p3.y;
 
     if (p.life <= 0.0)
     {
@@ -662,12 +903,12 @@ void main(uint3 id : SV_DispatchThreadID)
 
         p.pos = emitter + float3(cos(ang) * rr, h, sin(ang) * rr);
 
-        // 초기 속도는 약하게
         float3 tang = float3(-sin(ang), 0.0, cos(ang));
         p.vel = tang * (0.05 + Hash11(base + 19.0) * 0.10);
 
-        p.life = 1.5 + Hash11(base + 211.0) * 2.5;
+        p.life = lerp(lifeMin, lifeMax, Hash11(base + 211.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
+        p.emitterIndex = emitterIdx;
     }
     else
     {
@@ -678,16 +919,14 @@ void main(uint3 id : SV_DispatchThreadID)
         if (length(tang) < 1e-3) tang = float3(1.0, 0.0, 0.0);
         tang = normalize(tang);
 
-        // 원심 + 접선 가속
         float pull = 0.20 + 0.35 * saturate(dist / radius);
         float spin = 0.65;
 
-        p.vel += (dirC * pull + tang * spin) * dt;
-        p.vel *= pow(0.30, dt);
+        p.vel += (dirC * pull + tang * spin + gravity) * dt;
+        p.vel *= pow(max(drag, 0.001), dt);
         p.pos += p.vel * dt;
         p.life -= dt;
 
-        // 너무 멀어지면 리셋
         if (dist > radius * 2.5) p.life = 0.0;
     }
 
@@ -699,29 +938,43 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
     float4x4 viewProj;
     float4 cameraPos;
 };
 
 StructuredBuffer<Particle> particles : register(t0);
-    Texture2D<float> sceneDepth : register(t1);
-    SamplerState LinearSampler : register(s0);  // 실제로는 Point 샘플러 (depth는 Point 샘플링이 정확함)
+Texture2D<float> sceneDepth : register(t1);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
+SamplerState PointSampler : register(s0);  // Point Clamp 샘플러 (depth 경계 보간 방지)
 RWTexture2D<float4> outTex : register(u0);
 
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID)
 {
+    // emitterCount==0 가드 (GPU 크래시 방지)
+    uint emitterCount = (uint)emitterInfo.x;
+    if (emitterCount == 0) return;
+    
     uint i = id.x;
     uint maxCount = (uint)time.z;
     if (i >= maxCount) return;
@@ -729,33 +982,53 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     if (p.life <= 0.0) return;
 
-    // 월드 좌표 → 클립 공간
-    // viewProj는 XMMatrixTranspose로 전달되므로 mul(vector, matrix) 사용 (다른 셰이더와 동일)
+    // emitter 정보 읽기 (OOB 방지)
+    uint emitterIdx = p.emitterIndex;
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+    EmitterGPU e = gEmitters[emitterIdx];
+    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
+    bool depthTest = (e.p3.z >= 0.0);
+    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    float size = clamp(max(e.p1.w, 1.0) * 0.9, 1.0, 10.0);
+    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+
     float4 worldPos = float4(p.pos, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
     
     float3 ndc = clipPos.xyz / clipPos.w;
-    // DirectX 좌표계: NDC Y는 +1(위)~-1(아래), 스크린 Y는 0(위)~height(아래)
-    // 따라서 Y축을 뒤집어야 함: screenY = (1.0 - (ndc.y * 0.5 + 0.5)) * height
     float2 screenPos = float2(
         (ndc.x * 0.5 + 0.5) * resolution.x,
         (1.0 - (ndc.y * 0.5 + 0.5)) * resolution.y
     );
     
-    // depth test
-    float2 depthUV = screenPos * resolution.zw;
-    float sceneDepthValue = sceneDepth.SampleLevel(LinearSampler, depthUV, 0).r;
-    float particleDepth = ndc.z;
-    if (sceneDepthValue > 0.001 && particleDepth > sceneDepthValue + 0.01) return;
+    // depth test (emitter별 설정) - view-space Z로 선형화해서 비교
+    if (depthTest)
+    {
+        float nearZ = emitterInfo.y;
+        float farZ = emitterInfo.z;
+        float bias = depthBiasMeters;  // emitter별 bias 사용
+        
+        // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
+        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
+        
+        // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
+        float particleViewZ = clipPos.w;
+        
+        if (sceneDepthValue > 0.001 && particleViewZ > sceneViewZ + bias) return;
+    }
     
     int2 ip = int2(screenPos);
 
-    float size = clamp(max(params1.w, 1.0) * 0.9, 1.0, 10.0);
     int r = (int)clamp(size * 0.5, 1.0, 6.0);
 
-    float3 color = params1.rgb;
     float intensity = saturate(p.life * 0.5);
 
     for (int y = -r; y <= r; ++y)
@@ -781,22 +1054,32 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;     // emitterX,Y,Z,radius (x,y는 무시 가능)
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
-    float4x4 viewProj;  // DrawCS에서 사용 (UpdateCS에서는 사용 안 함)
-    float4 cameraPos;   // Snow는 카메라 위치 필요
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
+    float4x4 viewProj;
+    float4 cameraPos;
 };
 
 RWStructuredBuffer<Particle> particles : register(u0);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
 
 float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
 float2 Hash21(float n)
@@ -816,31 +1099,55 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     float t  = time.x;
     float dt = time.y;
+    uint emitterCount = (uint)emitterInfo.x;
 
-    float3 emitter = params0.xyz;
-    float radius   = max(params0.w, 0.0001);
+    if (emitterCount == 0) return;
+
+    uint emitterIdx = p.emitterIndex;
+    if (p.life <= 0.0)
+    {
+        float base = (float)i * 0.91 + t * 0.37 + p.seed * 401.0;
+        emitterIdx = (Hash11(base) * (float)emitterCount);
+        emitterIdx = min(emitterIdx, emitterCount - 1);
+    }
+    
+    // OOB 방지: emitterCount가 줄었을 때 안전하게 처리
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+
+    EmitterGPU e = gEmitters[emitterIdx];
+    float3 emitter = e.p0.xyz;
+    float radius = max(e.p0.w, 0.0001);
+    float3 gravity = e.p2.xyz;
+    float drag = e.p2.w;
+    float lifeMin = e.p3.x;
+    float lifeMax = e.p3.y;
     
     if (p.life <= 0.0)
     {
         float base = (float)i * 0.91 + t * 0.37 + p.seed * 401.0;
         float2 r = Hash21(base);
 
-        // emitter 위치 위에서 시작 (좌표 고정)
         p.pos = emitter + float3((r.x - 0.5) * radius * 2.0, radius * 0.5 + r.y * radius, (r.y - 0.5) * radius * 2.0);
         p.vel = float3((r.y - 0.5) * 0.05, -(0.05 + r.x * 0.08), 0.0);
-        p.life = 4.0 + Hash11(base + 19.0) * 6.0;
+        p.life = lerp(lifeMin, lifeMax, Hash11(base + 19.0));
         p.seed = frac(p.seed + Hash11(base + 401.0));
+        p.emitterIndex = emitterIdx;
     }
     else
     {
         float sway = (Hash11(p.seed * 91.0 + floor(t * 2.0)) - 0.5) * 0.02;
         p.vel.x += sway * dt;
         p.vel.x = clamp(p.vel.x, -0.08, 0.08);
+        p.vel += gravity * dt;
+        p.vel *= pow(max(drag, 0.001), dt);
 
         p.pos += p.vel * dt;
         p.life -= dt;
 
-        // emitter 아래로 떨어지면 리셋
         if (p.pos.y < emitter.y - radius * 0.5) p.life = 0.0;
     }
 
@@ -852,29 +1159,43 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
     float4x4 viewProj;
     float4 cameraPos;
 };
 
 StructuredBuffer<Particle> particles : register(t0);
-    Texture2D<float> sceneDepth : register(t1);
-    SamplerState LinearSampler : register(s0);  // 실제로는 Point 샘플러 (depth는 Point 샘플링이 정확함)
+Texture2D<float> sceneDepth : register(t1);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
+SamplerState PointSampler : register(s0);  // Point Clamp 샘플러 (depth 경계 보간 방지)
 RWTexture2D<float4> outTex : register(u0);
 
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID)
 {
+    // emitterCount==0 가드 (GPU 크래시 방지)
+    uint emitterCount = (uint)emitterInfo.x;
+    if (emitterCount == 0) return;
+    
     uint i = id.x;
     uint maxCount = (uint)time.z;
     if (i >= maxCount) return;
@@ -882,33 +1203,53 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     if (p.life <= 0.0) return;
 
-    // 월드 좌표 → 클립 공간
-    // viewProj는 XMMatrixTranspose로 전달되므로 mul(vector, matrix) 사용 (다른 셰이더와 동일)
+    // emitter 정보 읽기 (OOB 방지)
+    uint emitterIdx = p.emitterIndex;
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+    EmitterGPU e = gEmitters[emitterIdx];
+    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
+    bool depthTest = (e.p3.z >= 0.0);
+    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    float size = clamp(max(e.p1.w, 1.0) * 0.6, 1.0, 6.0);
+    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+
     float4 worldPos = float4(p.pos, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
     
     float3 ndc = clipPos.xyz / clipPos.w;
-    // DirectX 좌표계: NDC Y는 +1(위)~-1(아래), 스크린 Y는 0(위)~height(아래)
-    // 따라서 Y축을 뒤집어야 함: screenY = (1.0 - (ndc.y * 0.5 + 0.5)) * height
     float2 screenPos = float2(
         (ndc.x * 0.5 + 0.5) * resolution.x,
         (1.0 - (ndc.y * 0.5 + 0.5)) * resolution.y
     );
     
-    // depth test
-    float2 depthUV = screenPos * resolution.zw;
-    float sceneDepthValue = sceneDepth.SampleLevel(LinearSampler, depthUV, 0).r;
-    float particleDepth = ndc.z;
-    if (sceneDepthValue > 0.001 && particleDepth > sceneDepthValue + 0.01) return;
+    // depth test (emitter별 설정) - view-space Z로 선형화해서 비교
+    if (depthTest)
+    {
+        float nearZ = emitterInfo.y;
+        float farZ = emitterInfo.z;
+        float bias = depthBiasMeters;  // emitter별 bias 사용
+        
+        // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
+        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
+        
+        // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
+        float particleViewZ = clipPos.w;
+        
+        if (sceneDepthValue > 0.001 && particleViewZ > sceneViewZ + bias) return;
+    }
     
     int2 ip = int2(screenPos);
 
-    float size = clamp(max(params1.w, 1.0) * 0.6, 1.0, 6.0);
     int r = (int)clamp(size * 0.5, 1.0, 3.0);
 
-    float3 color = params1.rgb;
     float intensity = saturate(p.life / 6.0);
 
     for (int y = -r; y <= r; ++y)
@@ -934,20 +1275,32 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;     // emitterX,Y,Z,radius
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
+    float4x4 viewProj;
+    float4 cameraPos;
 };
 
 RWStructuredBuffer<Particle> particles : register(u0);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
 
 float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
 float2 Hash21(float n)
@@ -967,10 +1320,33 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     float t  = time.x;
     float dt = time.y;
+    float jitter = time.w;
+    uint emitterCount = (uint)emitterInfo.x;
 
-    float3 emitter = params0.xyz;
-    float radius   = max(params0.w, 0.0001);
-    float jitter   = time.w;
+    if (emitterCount == 0) return;
+
+    uint emitterIdx = p.emitterIndex;
+    if (p.life <= 0.0)
+    {
+        float base = (float)i * 1.57 + t * 9.0 + p.seed * 181.0;
+        emitterIdx = (Hash11(base) * (float)emitterCount);
+        emitterIdx = min(emitterIdx, emitterCount - 1);
+    }
+    
+    // OOB 방지: emitterCount가 줄었을 때 안전하게 처리
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+
+    EmitterGPU e = gEmitters[emitterIdx];
+    float3 emitter = e.p0.xyz;
+    float radius = max(e.p0.w, 0.0001);
+    float3 gravity = e.p2.xyz;
+    float drag = e.p2.w;
+    float lifeMin = e.p3.x;
+    float lifeMax = e.p3.y;
 
     if (p.life <= 0.0)
     {
@@ -985,12 +1361,14 @@ void main(uint3 id : SV_DispatchThreadID)
         float spd = 0.35 + Hash11(base + 71.0) * 0.95;
         p.vel = dir * spd;
 
-        p.life = 0.35 + Hash11(base + 211.0) * 0.95;
+        p.life = lerp(lifeMin, lifeMax, Hash11(base + 211.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
+        p.emitterIndex = emitterIdx;
     }
     else
     {
-        p.vel *= pow(0.22, dt);
+        p.vel += gravity * dt;
+        p.vel *= pow(max(drag, 0.001), dt);
         p.pos += p.vel * dt;
         p.life -= dt;
     }
@@ -1003,24 +1381,34 @@ void main(uint3 id : SV_DispatchThreadID)
 struct Particle
 {
     float3 pos;
-    float3 vel;
     float  life;
+    float3 vel;
     float  seed;
+    uint   emitterIndex;
+    float3 pad;
+};
+
+struct EmitterGPU
+{
+    float4 p0;
+    float4 p1;
+    float4 p2;
+    float4 p3;
 };
 
 cbuffer CBParams : register(b0)
 {
-    float4 params0;
-    float4 params1;     // colorRGB,sizePx
-    float4 time;        // timeSec, dtSec, particleCount, spawnJitter
-    float4 resolution;  // w,h,invW,invH
+    float4 time;
+    float4 resolution;
+    float4 emitterInfo;
     float4x4 viewProj;
     float4 cameraPos;
 };
 
 StructuredBuffer<Particle> particles : register(t0);
-    Texture2D<float> sceneDepth : register(t1);
-    SamplerState LinearSampler : register(s0);  // 실제로는 Point 샘플러 (depth는 Point 샘플링이 정확함)
+Texture2D<float> sceneDepth : register(t1);
+StructuredBuffer<EmitterGPU> gEmitters : register(t2);
+SamplerState PointSampler : register(s0);  // Point Clamp 샘플러 (depth 경계 보간 방지)
 RWTexture2D<float4> outTex : register(u0);
 
 float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
@@ -1028,6 +1416,10 @@ float Hash11(float n) { return frac(sin(n) * 43758.5453123); }
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID)
 {
+    // emitterCount==0 가드 (GPU 크래시 방지)
+    uint emitterCount = (uint)emitterInfo.x;
+    if (emitterCount == 0) return;
+    
     uint i = id.x;
     uint maxCount = (uint)time.z;
     if (i >= maxCount) return;
@@ -1035,35 +1427,55 @@ void main(uint3 id : SV_DispatchThreadID)
     Particle p = particles[i];
     if (p.life <= 0.0) return;
 
-    // 월드 좌표 → 클립 공간
-    // viewProj는 XMMatrixTranspose로 전달되므로 mul(vector, matrix) 사용 (다른 셰이더와 동일)
+    // emitter 정보 읽기 (OOB 방지)
+    uint emitterIdx = p.emitterIndex;
+    if (emitterIdx >= emitterCount)
+    {
+        p.life = 0.0;
+        emitterIdx = 0;
+    }
+    EmitterGPU e = gEmitters[emitterIdx];
+    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
+    bool depthTest = (e.p3.z >= 0.0);
+    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    float baseSize = max(e.p1.w, 1.0);
+    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+
     float4 worldPos = float4(p.pos, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
     
     float3 ndc = clipPos.xyz / clipPos.w;
-    // DirectX 좌표계: NDC Y는 +1(위)~-1(아래), 스크린 Y는 0(위)~height(아래)
-    // 따라서 Y축을 뒤집어야 함: screenY = (1.0 - (ndc.y * 0.5 + 0.5)) * height
     float2 screenPos = float2(
         (ndc.x * 0.5 + 0.5) * resolution.x,
         (1.0 - (ndc.y * 0.5 + 0.5)) * resolution.y
     );
     
-    // depth test
-    float2 depthUV = screenPos * resolution.zw;
-    float sceneDepthValue = sceneDepth.SampleLevel(LinearSampler, depthUV, 0).r;
-    float particleDepth = ndc.z;
-    if (sceneDepthValue > 0.001 && particleDepth > sceneDepthValue + 0.01) return;
+    // depth test (emitter별 설정) - view-space Z로 선형화해서 비교
+    if (depthTest)
+    {
+        float nearZ = emitterInfo.y;
+        float farZ = emitterInfo.z;
+        float bias = depthBiasMeters;  // emitter별 bias 사용
+        
+        // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
+        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
+        
+        // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
+        float particleViewZ = clipPos.w;
+        
+        if (sceneDepthValue > 0.001 && particleViewZ > sceneViewZ + bias) return;
+    }
     
     int2 ip = int2(screenPos);
 
     float speed = length(p.vel);
-    float baseSize = max(params1.w, 1.0);
     float size = clamp(baseSize * (1.0 + speed * 1.5), 2.0, 18.0);
     int r = (int)clamp(size * 0.5, 2.0, 10.0);
 
-    float3 color = params1.rgb;
     float intensity = saturate(p.life * 1.5);
 
     for (int y = -r; y <= r; ++y)

@@ -118,35 +118,8 @@ namespace Alice
 		}
 
 		// 부모 체인을 따라 올라가며 월드 행렬 계산 (row-vector 컨벤션: World = Local * Parent)
-		inline XMMATRIX ComputeWorldMatrix(const World& world, EntityId entityId)
-		{
-			std::vector<XMMATRIX> matrixStack;
-			EntityId currentId = entityId;
-
-			while (currentId != InvalidEntityId)
-			{
-				const TransformComponent* t = world.GetComponent<TransformComponent>(currentId);
-				if (t)
-				{
-					XMMATRIX localMatrix = BuildLocalMatrix(*t);
-					matrixStack.push_back(localMatrix);
-					currentId = t->parent;
-				}
-				else
-				{
-					break;
-				}
-			}
-
-			// row-vector 컨벤션: child * parent * ... * root
-			XMMATRIX worldMatrix = XMMatrixIdentity();
-			for (const auto& m : matrixStack)  // child -> parent -> root 순서
-			{
-				worldMatrix = worldMatrix * m;
-			}
-
-			return worldMatrix;
-		}
+		// World::ComputeWorldMatrix()를 사용하도록 변경됨
+		// (에디터/런타임 일관성 보장)
 
 		// 로컬 행렬을 TRS로 분해 (쿼터니언 기반 역변환)
 		inline bool DecomposeLocalMatrix(const XMMATRIX& localMatrix, XMFLOAT3& position, XMFLOAT3& rotation, XMFLOAT3& scale)
@@ -245,7 +218,7 @@ namespace Alice
 				}
 			}
 
-			// WriteEntity 함수를 복사한 헬퍼 함수
+			// WriteEntity 함수를 복사한 헬퍼 함수 (SceneFile::WriteEntity와 동일한 방식)
 			static bool WriteEntityToJson(JsonRttr::json& outEntity, const World& world, EntityId id)
 			{
 				outEntity = JsonRttr::json::object();
@@ -253,6 +226,22 @@ namespace Alice
 				const std::string name = world.GetEntityName(id);
 				if (!name.empty())
 					outEntity["name"] = name;
+
+				// GUID 저장
+				if (const auto* idComp = world.GetComponent<IDComponent>(id); idComp)
+				{
+					outEntity["guid"] = std::to_string(idComp->guid);
+				}
+
+				// Parent 관계 저장 (GUID 기반)
+				EntityId parentId = world.GetParent(id);
+				if (parentId != InvalidEntityId)
+				{
+					if (const auto* parentIdComp = world.GetComponent<IDComponent>(parentId); parentIdComp)
+					{
+						outEntity["_parentGuid"] = std::to_string(parentIdComp->guid);
+					}
+				}
 
 				if (const auto* transform = world.GetComponent<TransformComponent>(id); transform)
 				{
@@ -393,6 +382,28 @@ namespace Alice
 				return true;
 			}
 
+			// GUID 파싱 헬퍼 (SceneFile와 동일)
+			static std::uint64_t ParseGuid(const JsonRttr::json& j)
+			{
+				if (j.is_string())
+				{
+					try
+					{
+						return std::stoull(j.get<std::string>());
+					}
+					catch (...)
+					{
+						// GUID 생성 함수는 World.cpp에 있으므로 여기서는 0 반환 (나중에 덮어쓰기)
+						return 0;
+					}
+				}
+				else if (j.is_number_unsigned())
+				{
+					return j.get<std::uint64_t>();
+				}
+				return 0;
+			}
+
 			// ApplyEntity 함수를 복사한 헬퍼 함수
 			static bool RestoreEntityFromJson(World& world, const JsonRttr::json& e, EntityId& restoredId)
 			{
@@ -418,6 +429,18 @@ namespace Alice
 				const std::string name = e.value("name", std::string{});
 				if (!name.empty())
 					world.SetEntityName(id, name);
+
+				// IDComponent: GUID 복원 (저장된 값으로 덮어쓰기)
+				auto* idComp = world.GetComponent<IDComponent>(id);
+				if (idComp)
+				{
+					if (auto itGuid = e.find("guid"); itGuid != e.end())
+					{
+						auto parsed = ParseGuid(*itGuid);
+						if (parsed != 0) idComp->guid = parsed; // 실패면 덮어쓰지 않기
+					}
+					// 없으면 CreateEntity에서 생성한 GUID 유지
+				}
 
 				// Transform
 				TransformComponent& t = world.AddComponent<TransformComponent>(id);
@@ -605,16 +628,8 @@ namespace Alice
 					if (!JsonRttr::FromJsonObject(inst, *itJoint)) return false;
 				}
 
-				// Parent 관계 복원 (순환 참조 방지를 위해 나중에 처리)
-				auto itParent = e.find("_parentId");
-				if (itParent != e.end() && itParent->is_number_unsigned())
-				{
-					EntityId parentId = static_cast<EntityId>(itParent->get<std::uint32_t>());
-					if (parentId != InvalidEntityId && world.GetEntityName(parentId) != "")
-					{
-						world.SetParent(id, parentId);
-					}
-				}
+				// Parent 관계는 RestoreEntityFromJson 내부에서 처리하지 않음
+				// Undo에서 GUID로 찾아서 연결 (바깥에서 처리)
 
 				// 모든 컴포넌트 복원이 성공했으므로 가드 커밋
 				guard.committed = true;
@@ -628,6 +643,17 @@ namespace Alice
 				world.DestroyEntity(entityId);
 			}
 
+			// GUID로 엔티티 찾기 헬퍼
+			static EntityId FindEntityByGuid(World& world, std::uint64_t guid)
+			{
+				for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+				{
+					if (idc.guid == guid)
+						return eid;
+				}
+				return InvalidEntityId;
+			}
+
 			void Undo(World& world, EntityId& selectedEntity) override
 			{
 				// 엔티티 복원
@@ -638,6 +664,17 @@ namespace Alice
 					{
 						// 복원된 엔티티를 선택
 						selectedEntity = restoredId;
+
+						// 루트의 외부 부모 복원 (GUID 기반)
+						if (serializedData.contains("_parentGuid"))
+						{
+							std::uint64_t parentGuid = ParseGuid(serializedData["_parentGuid"]);
+							EntityId parent = FindEntityByGuid(world, parentGuid);
+							if (parent != InvalidEntityId)
+							{
+								world.SetParent(restoredId, parent, false);
+							}
+						}
 
 						// 자식 엔티티들도 재귀적으로 복원하고 부모 관계 설정
 						if (childrenData.is_array())
@@ -658,8 +695,8 @@ namespace Alice
 					EntityId restoredChildId = InvalidEntityId;
 					if (RestoreEntityFromJson(world, childJson, restoredChildId))
 					{
-						// 부모 관계 복원
-						world.SetParent(restoredChildId, parentId);
+						// 부모 관계 복원 (keepWorld=false: 로드이므로)
+						world.SetParent(restoredChildId, parentId, false);
 
 						// 손자들도 재귀적으로 복원
 						auto it = childJson.find("_children");
@@ -2396,12 +2433,26 @@ namespace Alice
 						EntityId oldParent = world.GetParent(draggedId);
 						if (oldParent != InvalidEntityId)
 						{
-							world.SetParent(draggedId, InvalidEntityId);
+							// Transform 스냅샷 저장 (Undo용)
+							TransformComponent oldTransform;
+							if (auto* t = world.GetComponent<TransformComponent>(draggedId))
+							{
+								oldTransform = *t;
+							}
+
+							// keepWorld=true: 월드 위치 유지
+							world.SetParent(draggedId, InvalidEntityId, true);
 							
 							// 성공 여부 확인 후에만 Undo 커맨드 추가
 							if (world.GetParent(draggedId) == InvalidEntityId)
 							{
-								PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, InvalidEntityId));
+								// 새 Transform 스냅샷 저장
+								TransformComponent newTransform;
+								if (auto* t = world.GetComponent<TransformComponent>(draggedId))
+								{
+									newTransform = *t;
+								}
+								PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, InvalidEntityId, oldTransform, newTransform));
 								g_SceneDirty = true;
 							}
 						}
@@ -2622,9 +2673,28 @@ namespace Alice
 							EntityId oldParent = world.GetParent(draggedId);
 							if (oldParent != InvalidEntityId)
 							{
-								world.SetParent(draggedId, InvalidEntityId);
-								PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, InvalidEntityId));
-								g_SceneDirty = true;
+								// Transform 스냅샷 저장 (Undo용)
+								TransformComponent oldTransform;
+								if (auto* t = world.GetComponent<TransformComponent>(draggedId))
+								{
+									oldTransform = *t;
+								}
+
+								// keepWorld=true: 월드 위치 유지
+								world.SetParent(draggedId, InvalidEntityId, true);
+								
+								// 성공 여부 확인 후에만 Undo 커맨드 추가
+								if (world.GetParent(draggedId) == InvalidEntityId)
+								{
+									// 새 Transform 스냅샷 저장
+									TransformComponent newTransform;
+									if (auto* t = world.GetComponent<TransformComponent>(draggedId))
+									{
+										newTransform = *t;
+									}
+									PushCommand(std::make_unique<SetParentCommand>(draggedId, oldParent, InvalidEntityId, oldTransform, newTransform));
+									g_SceneDirty = true;
+								}
 							}
 						}
 					}
@@ -3171,7 +3241,7 @@ namespace Alice
 							using namespace DirectX;
 							
 							// ComputeWorldMatrix()를 사용하여 월드 행렬 계산 (런타임과 동일)
-							XMMATRIX worldMatrixXM = ComputeWorldMatrix(world, selectedEntity);
+							XMMATRIX worldMatrixXM = world.ComputeWorldMatrix(selectedEntity);
 							
 							// XMMATRIX를 float[16] 배열로 변환 (ImGuizmo 형식: row-major)
 							XMFLOAT4X4 worldMatrixFloat4x4;
@@ -3264,7 +3334,7 @@ namespace Alice
 								XMMATRIX parentWorldMatrix = XMMatrixIdentity();
 								if (transform->parent != InvalidEntityId)
 								{
-									parentWorldMatrix = ComputeWorldMatrix(world, transform->parent);
+									parentWorldMatrix = world.ComputeWorldMatrix(transform->parent);
 								}
 								
 								// 부모의 월드 행렬을 역으로 곱해서 로컬 행렬 추출 (row-vector 컨벤션)
@@ -3298,23 +3368,22 @@ namespace Alice
 										if (eid == selectedEntity) continue; // 자기 자신은 제외
 
 									// 스냅 타입에 따라 타겟 위치 결정
-									XMVECTOR bestSnapPos = XMLoadFloat3(&otherTransform.position);
+									// 초기값: 월드 위치로 설정 (폴백용)
+									XMMATRIX otherWorld = world.ComputeWorldMatrix(eid);
+									XMVECTOR bestSnapPos = otherWorld.r[3]; // 월드 위치 (translation 부분)
 									float bestSnapDist = objectSnapDistance;
 									bool hasMeshSnap = false;
 
 									switch (objectSnapType)
 									{
 									case ObjectSnapType::Center:
-										// 중심점 스냅: 월드 위치 계산
+										// 중심점 스냅: 월드 위치 계산 (이미 bestSnapPos에 설정됨)
 										{
-											XMMATRIX otherWorld = ComputeWorldMatrix(world, eid);
-											XMVECTOR centerPos = otherWorld.r[3]; // 월드 위치 (translation 부분)
-											XMVECTOR diff = currentPos - centerPos;
+											XMVECTOR diff = currentPos - bestSnapPos;
 											float dist = XMVectorGetX(XMVector3Length(diff));
 											if (dist < bestSnapDist)
 											{
 												bestSnapDist = dist;
-												bestSnapPos = centerPos;
 												hasMeshSnap = true;
 											}
 										}
@@ -3333,7 +3402,7 @@ namespace Alice
 													if (mesh && mesh->sourceModel)
 													{
 														// 어댑터 함수를 사용하여 월드 행렬 계산
-														XMMATRIX worldMatrix = ComputeWorldMatrix(world, eid);
+														XMMATRIX worldMatrix = world.ComputeWorldMatrix(eid);
 
 														const auto& vertices = mesh->sourceModel->GetCPUVertices();
 														const auto& indices = mesh->sourceModel->GetCPUIndices();
@@ -3346,7 +3415,7 @@ namespace Alice
 																for (const auto& vert : vertices)
 																{
 																	XMVECTOR localPos = XMLoadFloat3(&vert.pos);
-																	XMVECTOR worldPos = XMVector3Transform(localPos, worldMatrix);
+																	XMVECTOR worldPos = XMVector3TransformCoord(localPos, worldMatrix);
 
 																	XMVECTOR diff = currentPos - worldPos;
 																	float dist = XMVectorGetX(XMVector3Length(diff));
@@ -3375,9 +3444,9 @@ namespace Alice
 																		continue;
 
 																	// 삼각형의 3개 엣지
-																	XMVECTOR v0 = XMVector3Transform(XMLoadFloat3(&vertices[i0].pos), worldMatrix);
-																	XMVECTOR v1 = XMVector3Transform(XMLoadFloat3(&vertices[i1].pos), worldMatrix);
-																	XMVECTOR v2 = XMVector3Transform(XMLoadFloat3(&vertices[i2].pos), worldMatrix);
+																	XMVECTOR v0 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i0].pos), worldMatrix);
+																	XMVECTOR v1 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i1].pos), worldMatrix);
+																	XMVECTOR v2 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i2].pos), worldMatrix);
 
 																	// 각 엣지의 중점
 																	XMVECTOR edgeMidpoints[3] = {
@@ -3414,9 +3483,9 @@ namespace Alice
 																	if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size())
 																		continue;
 
-																	XMVECTOR v0 = XMVector3Transform(XMLoadFloat3(&vertices[i0].pos), worldMatrix);
-																	XMVECTOR v1 = XMVector3Transform(XMLoadFloat3(&vertices[i1].pos), worldMatrix);
-																	XMVECTOR v2 = XMVector3Transform(XMLoadFloat3(&vertices[i2].pos), worldMatrix);
+																	XMVECTOR v0 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i0].pos), worldMatrix);
+																	XMVECTOR v1 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i1].pos), worldMatrix);
+																	XMVECTOR v2 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i2].pos), worldMatrix);
 
 																	// 삼각형 중심 (3개 버텍스의 평균)
 																	XMVECTOR faceCenter = (v0 + v1 + v2) / 3.0f;
@@ -3437,10 +3506,9 @@ namespace Alice
 												}
 											}
 
-											// 메시가 없으면 중심점으로 폴백
+											// 메시가 없으면 중심점으로 폴백 (이미 bestSnapPos에 월드 위치 설정됨)
 											if (!hasMeshSnap)
 											{
-												bestSnapPos = XMLoadFloat3(&otherTransform.position);
 												hasMeshSnap = true;
 											}
 											break;
@@ -5104,7 +5172,7 @@ namespace Alice
 					changed |= ImGui::Checkbox("Enabled##ComputeEffect", &effect->enabled);
 					
 					// 파티클 타입 콤보박스
-					const char* particleTypes[] = { "Particle", "ParticleEffect", "Sparks", "Smoke", "Vortex", "Snow", "Explosion" };
+					const char* particleTypes[] = { "Particle", "Sparks", "Smoke", "Vortex", "Snow", "Explosion" };
 					int currentIndex = 0;
 					for (int i = 0; i < IM_ARRAYSIZE(particleTypes); ++i) {
 						if (effect->shaderName == particleTypes[i]) {

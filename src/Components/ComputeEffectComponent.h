@@ -9,7 +9,7 @@ namespace Alice {
     struct ComputeEffectComponent 
     {
         bool enabled{ true };                          // 이펙트 활성화 여부
-        std::string shaderName;                        // 사용할 컴퓨트 셰이더 이름
+        std::string shaderName{ "Particle" };          // 사용할 컴퓨트 셰이더 이름 (기본값: "Particle")
         
         // 기존 effectParams: 호환용으로 유지 (월드 좌표 또는 fallback)
         DirectX::XMFLOAT3 effectParams{ 1.0f, 1.0f, 1.0f };
@@ -31,5 +31,6 @@ namespace Alice {
         float lifeMax{ 2.4f };                        // 최대 수명
 
         bool depthTest{ true };                        // Depth 테스트 사용 여부
+        float depthBiasMeters{ 0.05f };                // Depth bias (미터 단위, 기본 5cm)
     };
 }
