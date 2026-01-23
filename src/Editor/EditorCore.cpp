@@ -769,6 +769,50 @@ namespace Alice
 			}
 		};
 
+		// 컴포넌트 편집 명령 (템플릿)
+		template<typename T>
+		struct ComponentEditCommand : ICommand
+		{
+			EntityId entityId;
+			std::string componentTypeName;
+			JsonRttr::json oldJson;
+			JsonRttr::json newJson;
+			mutable std::string description;
+
+			ComponentEditCommand(EntityId id, const T& oldComp, const T& newComp)
+				: entityId(id), componentTypeName(rttr::type::get<T>().get_name().to_string())
+			{
+				rttr::instance oldInst = const_cast<T&>(oldComp);
+				rttr::instance newInst = const_cast<T&>(newComp);
+				oldJson = JsonRttr::ToJsonObject(oldInst);
+				newJson = JsonRttr::ToJsonObject(newInst);
+				description = "Edit " + componentTypeName;
+			}
+
+			void Execute(World& world, EntityId& selectedEntity) override
+			{
+				if (auto* comp = world.GetComponent<T>(entityId))
+				{
+					rttr::instance inst = *comp;
+					JsonRttr::FromJsonObject(inst, newJson);
+				}
+			}
+
+			void Undo(World& world, EntityId& selectedEntity) override
+			{
+				if (auto* comp = world.GetComponent<T>(entityId))
+				{
+					rttr::instance inst = *comp;
+					JsonRttr::FromJsonObject(inst, oldJson);
+				}
+			}
+
+			const char* GetDescription() const override
+			{
+				return description.c_str();
+			}
+		};
+
 		// 부모 설정 명령
 		struct SetParentCommand : ICommand
 		{
@@ -4281,7 +4325,9 @@ namespace Alice
 					}
 
 					bool changed = false;
-					changed |= ReflectionUI::RenderProperty(*transform, "position", "Position");
+					// Transform은 TransformCommand 사용 (별도 처리)
+					if (ReflectionUI::RenderProperty(*transform, "position", "Position").changed)
+						changed = true;
 
 					DirectX::XMFLOAT3 rotDeg = {
 						DirectX::XMConvertToDegrees(transform->rotation.x),
@@ -4297,8 +4343,10 @@ namespace Alice
 						changed = true;
 					}
 
-					changed |= ReflectionUI::RenderProperty(*transform, "scale", "Scale");
-					changed |= ReflectionUI::RenderProperty(*transform, "enabled", "Enabled");
+					if (ReflectionUI::RenderProperty(*transform, "scale", "Scale").changed)
+						changed = true;
+					if (ReflectionUI::RenderProperty(*transform, "enabled", "Enabled").changed)
+						changed = true;
 
 					// Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
 					if (changed)
@@ -4864,7 +4912,8 @@ namespace Alice
 								else {
 									// Generic - string 타입의 경우 world를 전달하여 드래그 앤 드롭 지원
 									// ReflectionUI::Detail::RenderProperty가 자동으로 엔티티 참조 필드를 감지하고 처리함
-									if (ReflectionUI::Detail::RenderProperty(prop, inst, "", &world))
+									ReflectionUI::UIEditEvent propEvent = ReflectionUI::Detail::RenderProperty(prop, inst, "", &world);
+									if (propEvent.changed)
 										g_SceneDirty = true;
 								}
 							}
@@ -4894,8 +4943,76 @@ namespace Alice
 					g_SceneDirty = true;
 					return;
 				}
-				changed |= ReflectionUI::RenderInspector(*comp);
-				if (changed) g_SceneDirty = true;
+				
+				// 컴포넌트 편집 이벤트 처리
+				static EntityId lastEditedEntity = InvalidEntityId;
+				static std::string lastEditedComponentType;
+				static JsonRttr::json editStartJson;
+				
+				ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*comp);
+				
+				// 편집 시작: oldJson 스냅샷 저장
+				if (event.activated && (_selectedEntity != lastEditedEntity || lastEditedComponentType != compTypeName))
+				{
+					rttr::instance inst = *comp;
+					editStartJson = JsonRttr::ToJsonObject(inst);
+					lastEditedEntity = _selectedEntity;
+					lastEditedComponentType = compTypeName;
+				}
+				
+				// 편집 종료: newJson 저장하고 커맨드 푸시
+				if (event.deactivatedAfterEdit && _selectedEntity == lastEditedEntity && lastEditedComponentType == compTypeName)
+				{
+					rttr::instance inst = *comp;
+					JsonRttr::json editEndJson = JsonRttr::ToJsonObject(inst);
+					
+					// 변경사항이 있으면 커맨드 푸시
+					if (editStartJson != editEndJson)
+					{
+						// 타입별로 적절한 커맨드 생성
+						#define PUSH_COMPONENT_EDIT_CMD(T) \
+							if (compTypeName == rttr::type::get<T>().get_name().to_string()) \
+							{ \
+								T oldComp, newComp; \
+								rttr::instance oldInst = oldComp; \
+								rttr::instance newInst = newComp; \
+								JsonRttr::FromJsonObject(oldInst, editStartJson); \
+								JsonRttr::FromJsonObject(newInst, editEndJson); \
+								PushCommand(std::make_unique<ComponentEditCommand<T>>(_selectedEntity, oldComp, newComp)); \
+							}
+						
+						// 주요 컴포넌트 타입들 처리
+						PUSH_COMPONENT_EDIT_CMD(MaterialComponent)
+						else PUSH_COMPONENT_EDIT_CMD(SkinnedMeshComponent)
+						else PUSH_COMPONENT_EDIT_CMD(SkinnedAnimationComponent)
+						else PUSH_COMPONENT_EDIT_CMD(CameraComponent)
+						else PUSH_COMPONENT_EDIT_CMD(CameraFollowComponent)
+						else PUSH_COMPONENT_EDIT_CMD(CameraSpringArmComponent)
+						else PUSH_COMPONENT_EDIT_CMD(CameraLookAtComponent)
+						else PUSH_COMPONENT_EDIT_CMD(CameraShakeComponent)
+						else PUSH_COMPONENT_EDIT_CMD(CameraBlendComponent)
+						else PUSH_COMPONENT_EDIT_CMD(CameraInputComponent)
+						else PUSH_COMPONENT_EDIT_CMD(PointLightComponent)
+						else PUSH_COMPONENT_EDIT_CMD(SpotLightComponent)
+						else PUSH_COMPONENT_EDIT_CMD(RectLightComponent)
+						else PUSH_COMPONENT_EDIT_CMD(ComputeEffectComponent)
+						else PUSH_COMPONENT_EDIT_CMD(Phy_RigidBodyComponent)
+						else PUSH_COMPONENT_EDIT_CMD(Phy_ColliderComponent)
+						else PUSH_COMPONENT_EDIT_CMD(Phy_MeshColliderComponent)
+						else PUSH_COMPONENT_EDIT_CMD(Phy_CCTComponent)
+						else PUSH_COMPONENT_EDIT_CMD(Phy_TerrainHeightFieldComponent)
+						else PUSH_COMPONENT_EDIT_CMD(Phy_JointComponent)
+						
+						#undef PUSH_COMPONENT_EDIT_CMD
+						
+						g_SceneDirty = true;
+					}
+					
+					lastEditedEntity = InvalidEntityId;
+					lastEditedComponentType.clear();
+				}
+				
+				if (event.changed) g_SceneDirty = true;
 			}
 		}
 
@@ -5386,10 +5503,44 @@ namespace Alice
 					ImGui::Unindent();
 
 					// 기본 프로퍼티는 ReflectionUI로
-					changed |= ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
+					// Collider 편집 이벤트 처리
+					static EntityId lastEditedColliderEntity = InvalidEntityId;
+					static JsonRttr::json colliderEditStartJson;
+					
+					ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
 						// type, layerBits는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
 						return name != "type" && name != "layerBits" && name != "physicsActorHandle";
 						});
+					
+					// 편집 시작
+					if (event.activated && _selectedEntity != lastEditedColliderEntity)
+					{
+						rttr::instance inst = *collider;
+						colliderEditStartJson = JsonRttr::ToJsonObject(inst);
+						lastEditedColliderEntity = _selectedEntity;
+					}
+					
+					// 편집 종료
+					if (event.deactivatedAfterEdit && _selectedEntity == lastEditedColliderEntity)
+					{
+						rttr::instance inst = *collider;
+						JsonRttr::json colliderEditEndJson = JsonRttr::ToJsonObject(inst);
+						
+						if (colliderEditStartJson != colliderEditEndJson)
+						{
+							Phy_ColliderComponent oldCollider, newCollider;
+							rttr::instance oldInst = oldCollider;
+							rttr::instance newInst = newCollider;
+							JsonRttr::FromJsonObject(oldInst, colliderEditStartJson);
+							JsonRttr::FromJsonObject(newInst, colliderEditEndJson);
+							PushCommand(std::make_unique<ComponentEditCommand<Phy_ColliderComponent>>(_selectedEntity, oldCollider, newCollider));
+							g_SceneDirty = true;
+						}
+						
+						lastEditedColliderEntity = InvalidEntityId;
+					}
+					
+					changed |= event.changed;
 
 					// 레이어 마스크 편집
 					ImGui::Separator();
@@ -5502,12 +5653,46 @@ namespace Alice
 					}
 					ImGui::Unindent();
 
-					changed |= ReflectionUI::RenderInspector(*meshCollider, [](const std::string& name) {
+					// MeshCollider 편집 이벤트 처리
+					static EntityId lastEditedMeshColliderEntity = InvalidEntityId;
+					static JsonRttr::json meshColliderEditStartJson;
+					
+					ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*meshCollider, [](const std::string& name) {
 						return name != "type" && name != "layerBits" && name != "collideMask" && name != "queryMask" &&
 							name != "ignoreLayers" && name != "physicsActorHandle" &&
 							name != "flipNormals" && name != "doubleSidedQueries" && name != "validate" &&
 							name != "shiftVertices" && name != "vertexLimit";
 						});
+					
+					// 편집 시작
+					if (event.activated && _selectedEntity != lastEditedMeshColliderEntity)
+					{
+						rttr::instance inst = *meshCollider;
+						meshColliderEditStartJson = JsonRttr::ToJsonObject(inst);
+						lastEditedMeshColliderEntity = _selectedEntity;
+					}
+					
+					// 편집 종료
+					if (event.deactivatedAfterEdit && _selectedEntity == lastEditedMeshColliderEntity)
+					{
+						rttr::instance inst = *meshCollider;
+						JsonRttr::json meshColliderEditEndJson = JsonRttr::ToJsonObject(inst);
+						
+						if (meshColliderEditStartJson != meshColliderEditEndJson)
+						{
+							Phy_MeshColliderComponent oldMeshCollider, newMeshCollider;
+							rttr::instance oldInst = oldMeshCollider;
+							rttr::instance newInst = newMeshCollider;
+							JsonRttr::FromJsonObject(oldInst, meshColliderEditStartJson);
+							JsonRttr::FromJsonObject(newInst, meshColliderEditEndJson);
+							PushCommand(std::make_unique<ComponentEditCommand<Phy_MeshColliderComponent>>(_selectedEntity, oldMeshCollider, newMeshCollider));
+							g_SceneDirty = true;
+						}
+						
+						lastEditedMeshColliderEntity = InvalidEntityId;
+					}
+					
+					changed |= event.changed;
 
 					ImGui::Separator();
 					ImGui::TextUnformatted("Mesh Options");
@@ -5701,10 +5886,44 @@ namespace Alice
 					}
 
 					// 기본 프로퍼티는 ReflectionUI로
-					changed |= ReflectionUI::RenderInspector(*cct, [](const std::string& name) {
+					// CCT 편집 이벤트 처리
+					static EntityId lastEditedCCTEntity = InvalidEntityId;
+					static JsonRttr::json cctEditStartJson;
+					
+					ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*cct, [](const std::string& name) {
 						// layerBits는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
 						return name != "layerBits" && name != "controllerHandle";
 						});
+					
+					// 편집 시작
+					if (event.activated && _selectedEntity != lastEditedCCTEntity)
+					{
+						rttr::instance inst = *cct;
+						cctEditStartJson = JsonRttr::ToJsonObject(inst);
+						lastEditedCCTEntity = _selectedEntity;
+					}
+					
+					// 편집 종료
+					if (event.deactivatedAfterEdit && _selectedEntity == lastEditedCCTEntity)
+					{
+						rttr::instance inst = *cct;
+						JsonRttr::json cctEditEndJson = JsonRttr::ToJsonObject(inst);
+						
+						if (cctEditStartJson != cctEditEndJson)
+						{
+							Phy_CCTComponent oldCCT, newCCT;
+							rttr::instance oldInst = oldCCT;
+							rttr::instance newInst = newCCT;
+							JsonRttr::FromJsonObject(oldInst, cctEditStartJson);
+							JsonRttr::FromJsonObject(newInst, cctEditEndJson);
+							PushCommand(std::make_unique<ComponentEditCommand<Phy_CCTComponent>>(_selectedEntity, oldCCT, newCCT));
+							g_SceneDirty = true;
+						}
+						
+						lastEditedCCTEntity = InvalidEntityId;
+					}
+					
+					changed |= event.changed;
 
 					// 레이어 마스크 편집
 					ImGui::Separator();
@@ -5804,13 +6023,47 @@ namespace Alice
 					}
 
 					// 기본 프로퍼티는 ReflectionUI로
-					changed |= ReflectionUI::RenderInspector(*settings, [](const std::string& name) {
+					// PhysicsSettings 편집 이벤트 처리
+					static EntityId lastEditedPhysicsSettingsEntity = InvalidEntityId;
+					static JsonRttr::json physicsSettingsEditStartJson;
+					
+					ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*settings, [](const std::string& name) {
 						// layerCollideMatrix, layerQueryMatrix, layerNames는 커스텀 UI로 처리
 						return name != "layerCollideMatrix" && name != "layerQueryMatrix" && name != "layerNames" &&
 							name != "enableGroundPlane" && name != "groundStaticFriction" && name != "groundDynamicFriction" &&
 							name != "groundRestitution" && name != "groundLayerBits" && name != "groundCollideMask" &&
 							name != "groundQueryMask" && name != "groundIgnoreLayers" && name != "groundIsTrigger";
 						});
+					
+					// 편집 시작
+					if (event.activated && _selectedEntity != lastEditedPhysicsSettingsEntity)
+					{
+						rttr::instance inst = *settings;
+						physicsSettingsEditStartJson = JsonRttr::ToJsonObject(inst);
+						lastEditedPhysicsSettingsEntity = _selectedEntity;
+					}
+					
+					// 편집 종료
+					if (event.deactivatedAfterEdit && _selectedEntity == lastEditedPhysicsSettingsEntity)
+					{
+						rttr::instance inst = *settings;
+						JsonRttr::json physicsSettingsEditEndJson = JsonRttr::ToJsonObject(inst);
+						
+						if (physicsSettingsEditStartJson != physicsSettingsEditEndJson)
+						{
+							Phy_SettingsComponent oldSettings, newSettings;
+							rttr::instance oldInst = oldSettings;
+							rttr::instance newInst = newSettings;
+							JsonRttr::FromJsonObject(oldInst, physicsSettingsEditStartJson);
+							JsonRttr::FromJsonObject(newInst, physicsSettingsEditEndJson);
+							PushCommand(std::make_unique<ComponentEditCommand<Phy_SettingsComponent>>(_selectedEntity, oldSettings, newSettings));
+							g_SceneDirty = true;
+						}
+						
+						lastEditedPhysicsSettingsEntity = InvalidEntityId;
+					}
+					
+					changed |= event.changed;
 
 					ImGui::Separator();
 					ImGui::Text("Ground Plane (y=0)");
@@ -5981,10 +6234,44 @@ namespace Alice
 					}
 
 					// 기본 프로퍼티는 ReflectionUI로
-					changed |= ReflectionUI::RenderInspector(*terrain, [](const std::string& name) {
+					// Terrain 편집 이벤트 처리
+					static EntityId lastEditedTerrainEntity = InvalidEntityId;
+					static JsonRttr::json terrainEditStartJson;
+					
+					ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*terrain, [](const std::string& name) {
 						// layerBits, heightSamples는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
 						return name != "layerBits" && name != "heightSamples" && name != "physicsActorHandle";
 						});
+					
+					// 편집 시작
+					if (event.activated && _selectedEntity != lastEditedTerrainEntity)
+					{
+						rttr::instance inst = *terrain;
+						terrainEditStartJson = JsonRttr::ToJsonObject(inst);
+						lastEditedTerrainEntity = _selectedEntity;
+					}
+					
+					// 편집 종료
+					if (event.deactivatedAfterEdit && _selectedEntity == lastEditedTerrainEntity)
+					{
+						rttr::instance inst = *terrain;
+						JsonRttr::json terrainEditEndJson = JsonRttr::ToJsonObject(inst);
+						
+						if (terrainEditStartJson != terrainEditEndJson)
+						{
+							Phy_TerrainHeightFieldComponent oldTerrain, newTerrain;
+							rttr::instance oldInst = oldTerrain;
+							rttr::instance newInst = newTerrain;
+							JsonRttr::FromJsonObject(oldInst, terrainEditStartJson);
+							JsonRttr::FromJsonObject(newInst, terrainEditEndJson);
+							PushCommand(std::make_unique<ComponentEditCommand<Phy_TerrainHeightFieldComponent>>(_selectedEntity, oldTerrain, newTerrain));
+							g_SceneDirty = true;
+						}
+						
+						lastEditedTerrainEntity = InvalidEntityId;
+					}
+					
+					changed |= event.changed;
 
 					// HeightSamples 상태 표시 및 생성 버튼
 					ImGui::Separator();
