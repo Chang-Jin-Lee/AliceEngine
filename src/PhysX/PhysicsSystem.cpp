@@ -1,13 +1,275 @@
 #include "PhysicsSystem.h"
 #include "Core/World.h"
+#include "Core/GameObject.h"
 #include "Components/TransformComponent.h"
+#include "Components/Phy_SettingsComponent.h"
+#include "Components/SkinnedMeshComponent.h"
+#include "Core/Logger.h"
+#include "Core/ThreadSafety.h"
+#include "Rendering/SkinnedMeshRegistry.h"
+#include "3Dmodel/FbxModel.h"
+#include "Core/Vertex.h"
 #include <DirectXMath.h>
 #include <algorithm>
 #include <unordered_set>
 #include <cmath>
+#include <bit>
+#include <cstring>
+#include <cassert>
+#include <vector>
 
 using namespace DirectX;
 using namespace Alice;
+
+// 레이어 비트에서 첫 번째 레이어 인덱스를 찾는 헬퍼 함수
+static int FirstLayerIndex(uint32_t bits)
+{
+	if (bits == 0) return -1;
+	return (int)std::countr_zero(bits); // C++20
+}
+
+static void* MakeUserData(uint64_t worldEpoch, EntityId entityId) noexcept
+{
+	const uint64_t combined = (worldEpoch << 32) | (static_cast<uint64_t>(entityId) + 1u);
+	return reinterpret_cast<void*>(static_cast<std::uintptr_t>(combined));
+}
+
+static uint64_t HashCombine64(uint64_t a, uint64_t b) noexcept
+{
+	a ^= b + 0x9e3779b97f4a7c15ull + (a << 6) + (a >> 2);
+	return a;
+}
+
+static uint64_t MakeTerrainGeomKey(const Phy_TerrainHeightFieldComponent& t) noexcept
+{
+	uint64_t key = 0;
+	key = HashCombine64(key, static_cast<uint64_t>(t.numRows));
+	key = HashCombine64(key, static_cast<uint64_t>(t.numCols));
+	
+	uint32_t heightScaleBits = 0;
+	std::memcpy(&heightScaleBits, &t.heightScale, sizeof(float));
+	key = HashCombine64(key, static_cast<uint64_t>(heightScaleBits));
+	
+	uint32_t rowScaleBits = 0;
+	std::memcpy(&rowScaleBits, &t.rowScale, sizeof(float));
+	key = HashCombine64(key, static_cast<uint64_t>(rowScaleBits));
+	
+	uint32_t colScaleBits = 0;
+	std::memcpy(&colScaleBits, &t.colScale, sizeof(float));
+	key = HashCombine64(key, static_cast<uint64_t>(colScaleBits));
+	
+	key = HashCombine64(key, static_cast<uint64_t>(t.heightSamples.size()));
+	
+	return key;
+}
+
+static std::string ResolveMeshAssetPath(const World& world,
+	                                    EntityId entityId,
+	                                    const Phy_MeshColliderComponent& mesh) 
+{
+	if (!mesh.meshAssetPath.empty())
+		return mesh.meshAssetPath;
+
+	if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId))
+	{
+		if (!skinned->meshAssetPath.empty())
+			return skinned->meshAssetPath;
+	}
+
+	return {};
+}
+
+static bool BuildMeshBuffers(const SkinnedMeshRegistry* registry,
+	                         const std::string& assetPath,
+	                         std::vector<Vec3>& outVertices,
+	                         std::vector<uint32_t>& outIndices)
+{
+	outVertices.clear();
+	outIndices.clear();
+
+	if (!registry || assetPath.empty())
+		return false;
+
+	auto mesh = registry->Find(assetPath);
+	if (!mesh || !mesh->sourceModel)
+		return false;
+
+	const auto& verts = mesh->sourceModel->GetCPUVertices();
+	const auto& indices = mesh->sourceModel->GetCPUIndices();
+	if (verts.empty() || indices.empty())
+		return false;
+
+	outVertices.reserve(verts.size());
+	for (const auto& v : verts)
+		outVertices.emplace_back(v.pos.x, v.pos.y, v.pos.z);
+
+	outIndices = indices;
+	return !outVertices.empty() && !outIndices.empty();
+}
+
+// Float 비교를 위한 epsilon (일반적으로 1e-5 정도)
+static constexpr float kFloatEpsilon = 1e-5f;
+
+static bool FloatEqual(float a, float b) noexcept
+{
+	return std::abs(a - b) < kFloatEpsilon;
+}
+
+static bool Float3Equal(const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) noexcept
+{
+	return FloatEqual(a.x, b.x) && FloatEqual(a.y, b.y) && FloatEqual(a.z, b.z);
+}
+
+static bool JointFrameEqual(const Phy_JointFrame& a, const Phy_JointFrame& b) noexcept
+{
+	return Float3Equal(a.position, b.position) && Float3Equal(a.rotation, b.rotation);
+}
+
+static bool RevoluteEqual(const Phy_RevoluteJointSettings& a, const Phy_RevoluteJointSettings& b) noexcept
+{
+	// 구조적 설정만 비교 (재생성 트리거)
+	// driveVelocity, driveForceLimit는 런타임 제어값이므로 재생성 트리거에서 제외
+	return a.enableLimit == b.enableLimit &&
+		FloatEqual(a.lowerLimit, b.lowerLimit) &&
+		FloatEqual(a.upperLimit, b.upperLimit) &&
+		FloatEqual(a.limitStiffness, b.limitStiffness) &&
+		FloatEqual(a.limitDamping, b.limitDamping) &&
+		FloatEqual(a.limitRestitution, b.limitRestitution) &&
+		FloatEqual(a.limitBounceThreshold, b.limitBounceThreshold) &&
+		a.enableDrive == b.enableDrive &&
+		// driveVelocity, driveForceLimit는 런타임 제어이므로 제외
+		a.driveFreeSpin == b.driveFreeSpin &&
+		a.driveLimitsAreForces == b.driveLimitsAreForces;
+}
+
+static bool PrismaticEqual(const Phy_PrismaticJointSettings& a, const Phy_PrismaticJointSettings& b) noexcept
+{
+	return a.enableLimit == b.enableLimit &&
+		FloatEqual(a.lowerLimit, b.lowerLimit) &&
+		FloatEqual(a.upperLimit, b.upperLimit) &&
+		FloatEqual(a.limitStiffness, b.limitStiffness) &&
+		FloatEqual(a.limitDamping, b.limitDamping) &&
+		FloatEqual(a.limitRestitution, b.limitRestitution) &&
+		FloatEqual(a.limitBounceThreshold, b.limitBounceThreshold);
+}
+
+static bool DistanceEqual(const Phy_DistanceJointSettings& a, const Phy_DistanceJointSettings& b) noexcept
+{
+	return FloatEqual(a.minDistance, b.minDistance) &&
+		FloatEqual(a.maxDistance, b.maxDistance) &&
+		FloatEqual(a.tolerance, b.tolerance) &&
+		a.enableMinDistance == b.enableMinDistance &&
+		a.enableMaxDistance == b.enableMaxDistance &&
+		a.enableSpring == b.enableSpring &&
+		FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping);
+}
+
+static bool SphericalEqual(const Phy_SphericalJointSettings& a, const Phy_SphericalJointSettings& b) noexcept
+{
+	return a.enableLimit == b.enableLimit &&
+		FloatEqual(a.yLimitAngle, b.yLimitAngle) &&
+		FloatEqual(a.zLimitAngle, b.zLimitAngle) &&
+		FloatEqual(a.limitStiffness, b.limitStiffness) &&
+		FloatEqual(a.limitDamping, b.limitDamping) &&
+		FloatEqual(a.limitRestitution, b.limitRestitution) &&
+		FloatEqual(a.limitBounceThreshold, b.limitBounceThreshold);
+}
+
+static bool D6DriveEqual(const Phy_D6JointDriveSettings& a, const Phy_D6JointDriveSettings& b) noexcept
+{
+	return FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping) &&
+		FloatEqual(a.forceLimit, b.forceLimit) &&
+		a.isAcceleration == b.isAcceleration;
+}
+
+static bool D6LinearEqual(const Phy_D6LinearLimitSettings& a, const Phy_D6LinearLimitSettings& b) noexcept
+{
+	return FloatEqual(a.lower, b.lower) &&
+		FloatEqual(a.upper, b.upper) &&
+		FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping) &&
+		FloatEqual(a.restitution, b.restitution) &&
+		FloatEqual(a.bounceThreshold, b.bounceThreshold);
+}
+
+static bool D6TwistEqual(const Phy_D6TwistLimitSettings& a, const Phy_D6TwistLimitSettings& b) noexcept
+{
+	return FloatEqual(a.lower, b.lower) &&
+		FloatEqual(a.upper, b.upper) &&
+		FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping) &&
+		FloatEqual(a.restitution, b.restitution) &&
+		FloatEqual(a.bounceThreshold, b.bounceThreshold);
+}
+
+static bool D6SwingEqual(const Phy_D6SwingLimitSettings& a, const Phy_D6SwingLimitSettings& b) noexcept
+{
+	return FloatEqual(a.yAngle, b.yAngle) &&
+		FloatEqual(a.zAngle, b.zAngle) &&
+		FloatEqual(a.stiffness, b.stiffness) &&
+		FloatEqual(a.damping, b.damping) &&
+		FloatEqual(a.restitution, b.restitution) &&
+		FloatEqual(a.bounceThreshold, b.bounceThreshold);
+}
+
+static bool D6Equal(const Phy_D6JointSettings& a, const Phy_D6JointSettings& b) noexcept
+{
+	// 구조적 설정만 비교 (재생성 트리거)
+	// drivePose, driveLinearVelocity, driveAngularVelocity도 구조 설정으로 취급 (런타임 갱신 API가 없으므로)
+	return a.driveLimitsAreForces == b.driveLimitsAreForces &&
+		a.motionX == b.motionX &&
+		a.motionY == b.motionY &&
+		a.motionZ == b.motionZ &&
+		a.motionTwist == b.motionTwist &&
+		a.motionSwing1 == b.motionSwing1 &&
+		a.motionSwing2 == b.motionSwing2 &&
+		D6LinearEqual(a.linearLimitX, b.linearLimitX) &&
+		D6LinearEqual(a.linearLimitY, b.linearLimitY) &&
+		D6LinearEqual(a.linearLimitZ, b.linearLimitZ) &&
+		D6TwistEqual(a.twistLimit, b.twistLimit) &&
+		D6SwingEqual(a.swingLimit, b.swingLimit) &&
+		D6DriveEqual(a.driveX, b.driveX) &&
+		D6DriveEqual(a.driveY, b.driveY) &&
+		D6DriveEqual(a.driveZ, b.driveZ) &&
+		D6DriveEqual(a.driveSwing, b.driveSwing) &&
+		D6DriveEqual(a.driveTwist, b.driveTwist) &&
+		D6DriveEqual(a.driveSlerp, b.driveSlerp) &&
+		JointFrameEqual(a.drivePose, b.drivePose) &&
+		Float3Equal(a.driveLinearVelocity, b.driveLinearVelocity) &&
+		Float3Equal(a.driveAngularVelocity, b.driveAngularVelocity);
+}
+
+static bool JointSnapshotEqual(const Phy_JointComponent& a, const Phy_JointComponent& b) noexcept
+{
+	// 구조적 설정만 비교 (재생성 트리거)
+	// breakForce, breakTorque, collideConnected는 in-place 업데이트 가능하므로 비교에서 제외
+	return a.type == b.type &&
+		a.targetName == b.targetName &&
+		JointFrameEqual(a.frameA, b.frameA) &&
+		JointFrameEqual(a.frameB, b.frameB) &&
+		RevoluteEqual(a.revolute, b.revolute) &&
+		PrismaticEqual(a.prismatic, b.prismatic) &&
+		DistanceEqual(a.distance, b.distance) &&
+		SphericalEqual(a.spherical, b.spherical) &&
+		D6Equal(a.d6, b.d6);
+}
+
+static Phy_JointComponent MakeJointSnapshot(const Phy_JointComponent& src)
+{
+	Phy_JointComponent snap = src;
+	snap.jointHandle = nullptr;
+	return snap;
+}
+
+PhysicsSystem::LayerMaskArray PhysicsSystem::MakeAllMaskArray() noexcept
+{
+	LayerMaskArray a{};
+	const uint32_t ALL = AllLayersMask();
+	for (auto& v : a) v = ALL;
+	return a;
+}
 
 PhysicsSystem::PhysicsSystem(World& world)
     : m_world(world)
@@ -16,7 +278,6 @@ PhysicsSystem::PhysicsSystem(World& world)
 
 PhysicsSystem::~PhysicsSystem()
 {
-    // 모든 물리 액터 정리 (컴포넌트 핸들도 함께 정리)
     std::vector<EntityId> entityIds;
     entityIds.reserve(m_entityToActor.size());
     for (const auto& [entityId, handle] : m_entityToActor)
@@ -31,17 +292,46 @@ PhysicsSystem::~PhysicsSystem()
     
     m_entityToActor.clear();
 
-    // 모든 CCT 정리
     for (auto& [entityId, handle] : m_entityToCCT)
     {
         handle.Destroy();
     }
     m_entityToCCT.clear();
+
+    m_entityToJoint.clear();
+    m_lastJoints.clear();
+
+    if (m_groundPlaneActor)
+    {
+        m_groundPlaneActor->Destroy();
+        m_groundPlaneActor.reset();
+    }
 }
 
 void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
 {
-    // 기존 액터들 정리 (컴포넌트 핸들도 함께 정리)
+	ThreadSafety::AssertMainThread();
+	
+	// 1) old world를 shared_ptr로 먼저 잡아둬서 teardown 동안 수명 보장
+	auto oldShared = std::move(m_physicsWorldShared);
+	IPhysicsWorld* oldWorld = oldShared.get();
+	
+	// 2) new world shared 보관
+	if (physicsWorld != nullptr)
+	{
+		auto shared = m_world.GetPhysicsWorldShared();
+		// 이 함수는 World가 가진 physicsWorld만 받는다 (수명 보장을 위해)
+		assert(shared.get() == physicsWorld && "SetPhysicsWorld must receive World-owned physics world");
+		m_physicsWorldShared = shared;
+	}
+	else
+	{
+		m_physicsWorldShared.reset();
+	}
+	
+	m_physicsWorld = physicsWorld;
+
+    // 3) 기존 액터들 정리
     std::vector<EntityId> entityIds;
     entityIds.reserve(m_entityToActor.size());
     for (const auto& [entityId, handle] : m_entityToActor)
@@ -49,25 +339,53 @@ void PhysicsSystem::SetPhysicsWorld(IPhysicsWorld* physicsWorld)
         entityIds.push_back(entityId);
     }
     
-    for (EntityId entityId : entityIds)
-    {
-        DestroyPhysicsActor(entityId);
-    }
+        for (EntityId entityId : entityIds)
+        {
+            DestroyPhysicsActor(entityId);
+        }
     
     m_entityToActor.clear();
     m_lastTransforms.clear();
     m_lastColliders.clear();
+    m_lastMeshColliders.clear();
     m_lastRigidBodies.clear();
     m_lastTerrains.clear();
 
-    // CCT 정리
+	// CCT 정리
     for (auto& [entityId, handle] : m_entityToCCT)
+	{
+		if (handle.IsValid())
     {
         handle.Destroy();
+		}
     }
     m_entityToCCT.clear();
+    m_lastCCTs.clear();
 
-    m_physicsWorld = physicsWorld;
+    // Joint 정리
+    for (auto& [entityId, joint] : m_entityToJoint)
+    {
+        (void)joint;
+        if (auto* comp = m_world.GetComponent<Phy_JointComponent>(entityId))
+            comp->jointHandle = nullptr;
+    }
+    m_entityToJoint.clear();
+    m_lastJoints.clear();
+
+	// 4) teardown 끝난 뒤 oldWorld flush (누수/잔존 방지)
+	if (oldWorld)
+		oldWorld->Flush();
+
+	// Ground Plane 정리
+	if (m_groundPlaneActor)
+	{
+		m_groundPlaneActor->Destroy();
+		m_groundPlaneActor.reset();
+	}
+	m_lastGroundPlane = GroundPlaneState{};
+	
+	m_lastFilterRevision = 0xFFFFFFFFu; // 강제로 다음 Update에서 1회 갱신
+
 }
 
 void PhysicsSystem::SetEventCallback(EventCallback callback, void* userData)
@@ -78,99 +396,433 @@ void PhysicsSystem::SetEventCallback(EventCallback callback, void* userData)
 
 void PhysicsSystem::Update(float deltaTime)
 {
+	ThreadSafety::AssertMainThread();
+    // World에서 shared_ptr을 가져와서 비교 (raw pointer 대신)
+    // shared_ptr을 통해 수명 보장 (스코프 끝까지 월드가 살아있음)
+    auto currentShared = m_world.GetPhysicsWorldShared();
+    IPhysicsWorld* current = currentShared.get();
+    
+    if (current != m_physicsWorld) {
+        // shared_ptr을 통해 SetPhysicsWorld 호출 (SetPhysicsWorld 내부에서 shared_ptr 보관)
+        SetPhysicsWorld(current); // 바뀌었으면 정리+재바인딩
+        // SetPhysicsWorld(nullptr)가 호출되면 m_entityToActor가 모두 클리어됨
+        // 이후 로직은 실행할 필요 없음
+        if (!m_physicsWorld) return;
+    }
+    // currentShared가 살아있음으로써 월드 수명 보장 (스코프 끝까지)
+
     if (!m_physicsWorld) return;
 
-    // 
-    // (A) 이전 시뮬 결과 반영: ActiveTransform → TransformComponent
-    {
-        std::vector<ActiveTransform> ats;
-        m_physicsWorld->DrainActiveTransforms(ats);
-        for (const auto& at : ats)
-            SyncPhysicsToGame(at);
-    }
+	// (추가) Scene Settings -> 각 컴포넌트 mask로 반영 (전역 매트릭스 기반)
+	// 매 프레임 collideByLayer/queryByLayer를 계산하여 layerBits/ignoreLayers 변경 시에도 사용 가능하게 함
+	// Phy_SettingsComponent가 없어도 기본값으로 전부 허용
+	LayerMaskArray collideByLayer = MakeAllMaskArray();
+	LayerMaskArray queryByLayer = MakeAllMaskArray();
+	
+	// Phy_SettingsComponent가 있으면 매트릭스 기반으로 덮어쓰기
+	{
+		const auto& settingsMap = m_world.GetComponents<Phy_SettingsComponent>();
+		if (!settingsMap.empty())
+		{
+			auto& s = const_cast<Phy_SettingsComponent&>(settingsMap.begin()->second);
 
-    // (B) 이벤트 라우팅: Trigger/Contact/JointBreak
-    {
-        std::vector<PhysicsEvent> events;
-        m_physicsWorld->DrainEvents(events);
-        if (m_eventCallback)
+			// filterRevision 변경 감지: 전역 매트릭스가 변경되었는지 확인
+			bool filterMatrixChanged = (s.filterRevision != m_lastFilterRevision);
+
+			// 런타임 마스크 계산 헬퍼 함수
+			auto ComputeRuntimeMasks = [&](uint32_t layerBits, uint32_t ignoreLayers) -> RuntimeMasks
+			{
+				RuntimeMasks masks{};
+				int li = FirstLayerIndex(layerBits);
+				if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+				{
+					masks.collideMask = collideByLayer[li];
+					masks.queryMask = queryByLayer[li];
+					masks.collideMask &= ~ignoreLayers;
+					masks.queryMask &= ~ignoreLayers;
+				}
+				else
+				{
+					// 레이어가 유효하지 않으면 기본값
+					masks.collideMask = 0xFFFFFFFFu;
+					masks.queryMask = 0xFFFFFFFFu;
+				}
+				return masks;
+			};
+
+			// 매 프레임 collideByLayer/queryByLayer 계산 (성능 부담 거의 없음)
+			// collide: row 기반 (layerCollideMatrix[i][j] = true면 레이어 i와 j가 충돌)
+			for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+			{
+				uint32_t mask = 0;
+				for (int j = 0; j < MAX_PHYSICS_LAYERS; ++j)
+					if (s.layerCollideMatrix[i][j]) mask |= (1u << j);
+
+				// 원하면 자기 레이어는 자동 off:
+				// mask &= ~(1u << i);
+
+				collideByLayer[i] = mask;
+			}
+
+			// query: column 기반 (layerQueryMatrix[querier][target] = true면 querier가 target을 쿼리 가능)
+			// target 레이어 입장에서 "누가 나를 쿼리할 수 있는가"를 마스크로 저장
+			for (int target = 0; target < MAX_PHYSICS_LAYERS; ++target)
+			{
+				uint32_t mask = 0;
+				for (int querier = 0; querier < MAX_PHYSICS_LAYERS; ++querier)
+					if (s.layerQueryMatrix[querier][target]) mask |= (1u << querier);
+
+				queryByLayer[target] = mask;
+			}
+
+			if (filterMatrixChanged)
+			{
+				m_lastFilterRevision = s.filterRevision;
+
+				// Collider들에 적용 (전역 매트릭스 변경 시에만 전체 재계산)
+				// 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고, 런타임 마스크는 캐시에서 관리
+				auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
+				for (auto&& [id, col] : colliders)
+				{
+					int li = FirstLayerIndex(col.layerBits);
+					if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+					uint32_t newCollide = collideByLayer[li];
+					uint32_t newQuery = queryByLayer[li];
+
+					newCollide &= ~col.ignoreLayers;
+					newQuery &= ~col.ignoreLayers;
+
+					RuntimeMasks& runtime = m_runtimeColliderMasks[id];
+					bool maskChanged = false;
+					if (runtime.collideMask != newCollide)
+					{
+						runtime.collideMask = newCollide;
+						maskChanged = true;
+					}
+					if (runtime.queryMask != newQuery)
+					{
+						runtime.queryMask = newQuery;
+						maskChanged = true;
+					}
+
+					if (maskChanged)
+					{
+						auto it = m_entityToActor.find(id);
+						if (it != m_entityToActor.end())
+						{
+							ActorHandle& handle = it->second;
+							if (handle.IsValid() && handle.GetActor())
+							{
+								handle.GetActor()->SetLayerMasks(col.layerBits, runtime.collideMask, runtime.queryMask);
+							}
+						}
+					}
+				}
+
+				// MeshCollider에 적용 (전역 매트릭스 변경 시에만)
+				// 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고, 런타임 마스크는 캐시에서 관리
+				auto meshColliders = m_world.GetComponents<Phy_MeshColliderComponent>();
+				for (auto&& [id, mc] : meshColliders)
+				{
+					int li = FirstLayerIndex(mc.layerBits);
+					if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+					uint32_t newCollide = collideByLayer[li];
+					uint32_t newQuery = queryByLayer[li];
+
+					newCollide &= ~mc.ignoreLayers;
+					newQuery &= ~mc.ignoreLayers;
+
+					RuntimeMasks& runtime = m_runtimeMeshColliderMasks[id];
+					bool maskChanged = false;
+					if (runtime.collideMask != newCollide)
+					{
+						runtime.collideMask = newCollide;
+						maskChanged = true;
+					}
+					if (runtime.queryMask != newQuery)
+					{
+						runtime.queryMask = newQuery;
+						maskChanged = true;
+					}
+
+					if (maskChanged)
+					{
+						auto it = m_entityToActor.find(id);
+						if (it != m_entityToActor.end())
+						{
+							ActorHandle& handle = it->second;
+							if (handle.IsValid() && handle.GetActor())
+							{
+								handle.GetActor()->SetLayerMasks(mc.layerBits, runtime.collideMask, runtime.queryMask);
+							}
+						}
+					}
+				}
+
+				// Terrain에 적용 (전역 매트릭스 변경 시에만)
+				// 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고, 런타임 마스크는 캐시에서 관리
+				auto terrains = m_world.GetComponents<Phy_TerrainHeightFieldComponent>();
+				for (auto&& [id, terrain] : terrains)
+				{
+					int li = FirstLayerIndex(terrain.layerBits);
+					if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+					uint32_t newCollide = collideByLayer[li];
+					uint32_t newQuery = queryByLayer[li];
+
+					newCollide &= ~terrain.ignoreLayers;
+					newQuery &= ~terrain.ignoreLayers;
+
+					RuntimeMasks& runtime = m_runtimeTerrainMasks[id];
+					bool maskChanged = false;
+					if (runtime.collideMask != newCollide)
+					{
+						runtime.collideMask = newCollide;
+						maskChanged = true;
+					}
+					if (runtime.queryMask != newQuery)
+					{
+						runtime.queryMask = newQuery;
+						maskChanged = true;
+					}
+
+					// Terrain 필터 변경 시 SetLayerMasks 사용 (재생성 대신)
+					if (maskChanged)
+					{
+						auto itA = m_entityToActor.find(id);
+						if (itA != m_entityToActor.end() && itA->second.IsValid() && itA->second.GetActor())
+						{
+							itA->second.GetActor()->SetLayerMasks(terrain.layerBits, runtime.collideMask, runtime.queryMask);
+						}
+					}
+				}
+
+				// CCT에 적용 (전역 매트릭스 변경 시에만)
+				// 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고, 런타임 마스크는 캐시에서 관리
+				auto ccts = m_world.GetComponents<Phy_CCTComponent>();
+				for (auto&& [id, cct] : ccts)
         {
-            for (const auto& e : events)
-                m_eventCallback(e, m_eventCallbackUserData);
+					int li = FirstLayerIndex(cct.layerBits);
+					if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+					uint32_t newCollide = collideByLayer[li];
+					uint32_t newQuery = queryByLayer[li];
+
+					newCollide &= ~cct.ignoreLayers;
+					newQuery &= ~cct.ignoreLayers;
+
+					RuntimeMasks& runtime = m_runtimeCCTMasks[id];
+					bool maskChanged = false;
+					if (runtime.collideMask != newCollide)
+					{
+						runtime.collideMask = newCollide;
+						maskChanged = true;
+					}
+					if (runtime.queryMask != newQuery)
+					{
+						runtime.queryMask = newQuery;
+						maskChanged = true;
+					}
+
+					if (maskChanged)
+					{
+						auto itCCT = m_entityToCCT.find(id);
+						if (itCCT != m_entityToCCT.end() && itCCT->second.IsValid())
+						{
+							itCCT->second.cct->SetLayerMasks(cct.layerBits, runtime.collideMask, runtime.queryMask);
         }
     }
+				}
+			}
+		}
+
+	}
+
+	// Ground Plane (Scene Settings 기반)
+	{
+		const auto& settingsMap = m_world.GetComponents<Phy_SettingsComponent>();
+		Phy_SettingsComponent* settings = settingsMap.empty()
+			? nullptr
+			: &const_cast<Phy_SettingsComponent&>(settingsMap.begin()->second);
+
+		if (!settings || !settings->enableGroundPlane)
+		{
+			if (m_groundPlaneActor)
+			{
+				m_groundPlaneActor->Destroy();
+				m_groundPlaneActor.reset();
+			}
+			m_lastGroundPlane = GroundPlaneState{};
+		}
+		else
+		{
+			int li = FirstLayerIndex(settings->groundLayerBits);
+			if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+			{
+				uint32_t newCollide = collideByLayer[li];
+				uint32_t newQuery = queryByLayer[li];
+
+				newCollide &= ~settings->groundIgnoreLayers;
+				newQuery &= ~settings->groundIgnoreLayers;
+
+				settings->groundCollideMask = newCollide;
+				settings->groundQueryMask = newQuery;
+			}
+
+			GroundPlaneState cur{};
+			cur.enabled = settings->enableGroundPlane;
+			cur.staticFriction = settings->groundStaticFriction;
+			cur.dynamicFriction = settings->groundDynamicFriction;
+			cur.restitution = settings->groundRestitution;
+			cur.layerBits = settings->groundLayerBits;
+			cur.collideMask = settings->groundCollideMask;
+			cur.queryMask = settings->groundQueryMask;
+			cur.ignoreLayers = settings->groundIgnoreLayers;
+			cur.isTrigger = settings->groundIsTrigger;
+
+			const bool needRebuild =
+				!m_groundPlaneActor ||
+				cur.enabled != m_lastGroundPlane.enabled ||
+				!FloatEqual(cur.staticFriction, m_lastGroundPlane.staticFriction) ||
+				!FloatEqual(cur.dynamicFriction, m_lastGroundPlane.dynamicFriction) ||
+				!FloatEqual(cur.restitution, m_lastGroundPlane.restitution) ||
+				cur.layerBits != m_lastGroundPlane.layerBits ||
+				cur.collideMask != m_lastGroundPlane.collideMask ||
+				cur.queryMask != m_lastGroundPlane.queryMask ||
+				cur.ignoreLayers != m_lastGroundPlane.ignoreLayers ||
+				cur.isTrigger != m_lastGroundPlane.isTrigger;
+
+			if (needRebuild)
+			{
+				if (m_groundPlaneActor)
+				{
+					m_groundPlaneActor->Destroy();
+					m_groundPlaneActor.reset();
+				}
+
+				FilterDesc filter{};
+				filter.layerBits = settings->groundLayerBits;
+				filter.collideMask = settings->groundCollideMask;
+				filter.queryMask = settings->groundQueryMask;
+				filter.isTrigger = settings->groundIsTrigger;
+				filter.userData = nullptr;
+
+				m_groundPlaneActor = m_physicsWorld->CreateStaticPlaneActor(
+					settings->groundStaticFriction,
+					settings->groundDynamicFriction,
+					settings->groundRestitution,
+					filter);
+
+				if (!m_groundPlaneActor)
+				{
+					ALICE_LOG_WARN("[PhysicsSystem] Ground Plane creation failed.");
+				}
+			}
+
+			m_lastGroundPlane = cur;
+		}
+	}
+
 
     // 1. 컴포넌트 변경 감지 및 물리 액터 생성/삭제
     {
-        // RigidBodyComponent가 있는 엔티티 확인
-        auto rigidBodies = m_world.GetComponents<RigidBodyComponent>();
-        std::unordered_set<EntityId> entitiesWithRigidBody;
+        // 성능 최적화: 멤버 변수 재사용 (할당/리해시 비용 절감)
+        m_tempEntitiesWithRigidBody.clear();
+        m_tempEntitiesWithMeshCollider.clear();
         
+        auto rigidBodies = m_world.GetComponents<Phy_RigidBodyComponent>();
         for (const auto& [entityId, rb] : rigidBodies)
         {
-            entitiesWithRigidBody.insert(entityId);
+            m_tempEntitiesWithRigidBody.insert(entityId);
             
-            // 새로 추가된 경우 또는 핸들이 없는 경우
             if (rb.physicsActorHandle == nullptr)
             {
                 CreatePhysicsActor(entityId);
             }
         }
 
-        // ColliderComponent만 있는 엔티티 확인 (Static Actor)
-        auto colliders = m_world.GetComponents<ColliderComponent>();
+        auto meshColliders = m_world.GetComponents<Phy_MeshColliderComponent>();
+        for (const auto& [entityId, mc] : meshColliders)
+        {
+            m_tempEntitiesWithMeshCollider.insert(entityId);
+
+            const bool hasRB = (m_tempEntitiesWithRigidBody.find(entityId) != m_tempEntitiesWithRigidBody.end());
+            if (!hasRB)
+            {
+                if (mc.physicsActorHandle == nullptr)
+                {
+                    if (m_entityToActor.find(entityId) != m_entityToActor.end())
+                        DestroyPhysicsActor(entityId);
+                    CreatePhysicsActor(entityId);
+                }
+            }
+            else
+            {
+                auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+                auto* mesh = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+                if (rb && rb->physicsActorHandle && mesh && mesh->physicsActorHandle == nullptr)
+                {
+                    // IRigidBody*는 IPhysicsActor*로 암시적 변환 가능
+                    mesh->physicsActorHandle = static_cast<IPhysicsActor*>(rb->physicsActorHandle);
+                    RebuildMeshShapes(entityId);
+                }
+            }
+        }
+
+        auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
         for (const auto& [entityId, collider] : colliders)
         {
-            const bool hasRB = (entitiesWithRigidBody.find(entityId) != entitiesWithRigidBody.end());
+            const bool hasRB = (m_tempEntitiesWithRigidBody.find(entityId) != m_tempEntitiesWithRigidBody.end());
+            const bool hasMesh = (m_tempEntitiesWithMeshCollider.find(entityId) != m_tempEntitiesWithMeshCollider.end());
 
-            if (!hasRB)
+            if (hasMesh)
+            {
+                continue;
+            }
+            else if (!hasRB)
             {
                 if (collider.physicsActorHandle == nullptr)
                     CreatePhysicsActor(entityId);
             }
             else
             {
-                // RB가 이미 있는데 Collider가 새로 붙은 경우:
-                // collider.physicsActorHandle이 null이면 기존 RB 액터에 연결하고 shape 빌드
-                auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-                if (rb && rb->physicsActorHandle && collider.physicsActorHandle == nullptr)
+                auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+				auto* col = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+				if (rb && rb->physicsActorHandle && col && col->physicsActorHandle == nullptr)
                 {
-                    collider.physicsActorHandle = rb->physicsActorHandle;
-                    RebuildShapes(entityId); // 초기 shape 생성
+					// IRigidBody*는 IPhysicsActor*로 암시적 변환 가능
+					col->physicsActorHandle = static_cast<IPhysicsActor*>(rb->physicsActorHandle);
+                    RebuildShapes(entityId);
                 }
             }
         }
 
-        // TerrainHeightFieldComponent가 있는 엔티티 확인
-        auto terrains = m_world.GetComponents<TerrainHeightFieldComponent>();
-        for (const auto& [entityId, terrain] : terrains)
         {
-            // 새로 추가된 경우 또는 핸들이 없는 경우
-            if (terrain.physicsActorHandle == nullptr)
-            {
-                CreateTerrainHeightField(entityId);
-            }
-        }
-
-        // CCT 생성
-        {
-            auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+            auto ccts = m_world.GetComponents<Phy_CCTComponent>();
             for (const auto& [entityId, cct] : ccts)
             {
-                if (cct.controllerHandle == nullptr)
+                auto* ccc = m_world.GetComponent<Phy_CCTComponent>(entityId);
+                if (!ccc) continue;
+
+                auto itCCT = m_entityToCCT.find(entityId);
+                if ((itCCT == m_entityToCCT.end() || !itCCT->second.IsValid()) || ccc->controllerHandle == nullptr)
+                {
                     CreateCharacterController(entityId);
+                }
             }
         }
 
-        // 제거된 컴포넌트 확인 (m_entityToActor에 있지만 컴포넌트가 없는 경우)
         std::vector<EntityId> toRemove;
         for (const auto& [entityId, handle] : m_entityToActor)
         {
-            auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-            auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
-            auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
+            auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+            auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+            auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+            auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
             
-            if (!rb && !collider && !terrain)
+            if (!rb && !collider && !meshCollider && !terrain)
             {
                 toRemove.push_back(entityId);
             }
@@ -181,37 +833,364 @@ void PhysicsSystem::Update(float deltaTime)
             DestroyPhysicsActor(entityId);
         }
 
-        // CCT 제거 (컴포넌트 사라진 엔티티 정리)
         {
             std::vector<EntityId> cctToRemove;
             for (const auto& [entityId, h] : m_entityToCCT)
             {
-                if (!m_world.GetComponent<CharacterControllerComponent>(entityId))
+                if (!m_world.GetComponent<Phy_CCTComponent>(entityId))
                     cctToRemove.push_back(entityId);
             }
             for (auto eid : cctToRemove)
                 DestroyCharacterController(eid);
         }
+
+        // Joint 생성/삭제 및 변경 감지
+        {
+            // 성능 최적화: 멤버 변수 재사용
+            m_tempEntitiesWithJoint.clear();
+            
+            auto joints = m_world.GetComponents<Phy_JointComponent>();
+
+            auto getActor = [&](EntityId id) -> IPhysicsActor*
+            {
+                auto it = m_entityToActor.find(id);
+                if (it == m_entityToActor.end()) return nullptr;
+                if (!it->second.IsValid()) return nullptr;
+                return it->second.GetActor();
+            };
+
+            auto toJointFrame = [&](const Phy_JointFrame& f) -> JointFrame
+            {
+                JointFrame jf{};
+                jf.position = ToVec3(f.position);
+                jf.rotation = ToQuat(f.rotation);
+                return jf;
+            };
+
+            auto toD6Motion = [](Phy_D6Motion m) -> D6Motion
+            {
+                switch (m)
+                {
+                case Phy_D6Motion::Limited: return D6Motion::Limited;
+                case Phy_D6Motion::Free: return D6Motion::Free;
+                default: return D6Motion::Locked;
+                }
+            };
+
+            for (const auto& [entityId, jointComp] : joints)
+            {
+                m_tempEntitiesWithJoint.insert(entityId);
+                auto* joint = m_world.GetComponent<Phy_JointComponent>(entityId);
+                if (!joint) continue;
+
+                if (joint->targetName.empty())
+                {
+                    DestroyJoint(entityId);
+                    continue;
+                }
+
+                // targetName 캐싱: 이전 상태에서 targetName이 같으면 캐시된 targetId 사용
+                EntityId targetId = InvalidEntityId;
+                bool needResolve = true;
+                auto itState = m_lastJoints.find(entityId);
+                if (itState != m_lastJoints.end() && itState->second.targetName == joint->targetName)
+                {
+                    // 캐시된 targetId 사용
+                    targetId = itState->second.targetId;
+                    needResolve = false;
+                }
+
+                // 캐시가 없거나 targetName이 변경된 경우 재탐색
+                if (needResolve)
+                {
+                    GameObject targetGo = m_world.FindGameObject(joint->targetName);
+                    if (!targetGo.IsValid())
+                    {
+                        DestroyJoint(entityId);
+                        continue;
+                    }
+                    targetId = targetGo.id();
+                }
+
+                IPhysicsActor* actorA = getActor(entityId);
+                IPhysicsActor* actorB = getActor(targetId);
+                if (!actorA || !actorB)
+                {
+                    DestroyJoint(entityId);
+                    continue;
+                }
+
+                const Phy_JointComponent snapshot = MakeJointSnapshot(*joint);
+                JointState newState{ snapshot, targetId, joint->targetName };
+
+                bool hasJoint = false;
+                auto itJoint = m_entityToJoint.find(entityId);
+                if (itJoint != m_entityToJoint.end() && itJoint->second && itJoint->second->IsValid())
+                    hasJoint = true;
+
+                // breakForce/collideConnected는 in-place 업데이트 가능
+                bool needsInPlaceUpdate = false;
+                if (hasJoint && itState != m_lastJoints.end())
+                {
+                    const JointState& prev = itState->second;
+                    if (prev.snapshot.breakForce != joint->breakForce ||
+                        prev.snapshot.breakTorque != joint->breakTorque ||
+                        prev.snapshot.collideConnected != joint->collideConnected)
+                    {
+                        needsInPlaceUpdate = true;
+                    }
+                }
+
+                bool needsRebuild = !hasJoint;
+                if (itState == m_lastJoints.end())
+                {
+                    needsRebuild = true;
+                }
+                else
+                {
+                    const JointState& prev = itState->second;
+                    // targetName 변경 또는 구조적 설정 변경 시 재생성
+                    if (prev.targetName != newState.targetName ||
+                        prev.targetId != newState.targetId ||
+                        !JointSnapshotEqual(prev.snapshot, newState.snapshot))
+                    {
+                        needsRebuild = true;
+                    }
+                }
+
+                // In-place 업데이트 (breakForce/collideConnected)
+                if (needsInPlaceUpdate && !needsRebuild && itJoint->second && itJoint->second->IsValid())
+                {
+                    //원래 이거 접근할 때, 씬 락 걸어야하는데 싱글 스레드 루프라 괜찮음 - 그래서 놔둠
+                    itJoint->second->SetBreakForce(joint->breakForce, joint->breakTorque);
+                    itJoint->second->SetCollideConnected(joint->collideConnected);
+                    // 스냅샷 업데이트 (다음 프레임 재업데이트 방지)
+                    newState.snapshot.breakForce = joint->breakForce;
+                    newState.snapshot.breakTorque = joint->breakTorque;
+                    newState.snapshot.collideConnected = joint->collideConnected;
+                    m_lastJoints[entityId] = newState;
+                    joint->jointHandle = itJoint->second.get();
+                    continue;
+                }
+
+                if (!needsRebuild)
+                {
+                    joint->jointHandle = itJoint->second.get();
+                    // 스냅샷 업데이트 (targetName은 이미 같음)
+                    m_lastJoints[entityId] = newState;
+                    continue;
+                }
+
+                DestroyJoint(entityId);
+
+                std::unique_ptr<IPhysicsJoint> created{};
+                void* userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+                switch (joint->type)
+                {
+                case Phy_JointType::Fixed:
+                {
+                    FixedJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+                    created = m_physicsWorld->CreateFixedJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::Revolute:
+                {
+                    RevoluteJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.enableLimit = joint->revolute.enableLimit;
+                    desc.lowerLimit = joint->revolute.lowerLimit;
+                    desc.upperLimit = joint->revolute.upperLimit;
+                    desc.limitStiffness = joint->revolute.limitStiffness;
+                    desc.limitDamping = joint->revolute.limitDamping;
+                    desc.limitRestitution = joint->revolute.limitRestitution;
+                    desc.limitBounceThreshold = joint->revolute.limitBounceThreshold;
+                    desc.enableDrive = joint->revolute.enableDrive;
+                    desc.driveVelocity = joint->revolute.driveVelocity;
+                    desc.driveForceLimit = joint->revolute.driveForceLimit;
+                    desc.driveFreeSpin = joint->revolute.driveFreeSpin;
+                    desc.driveLimitsAreForces = joint->revolute.driveLimitsAreForces;
+
+                    created = m_physicsWorld->CreateRevoluteJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::Prismatic:
+                {
+                    PrismaticJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.enableLimit = joint->prismatic.enableLimit;
+                    desc.lowerLimit = joint->prismatic.lowerLimit;
+                    desc.upperLimit = joint->prismatic.upperLimit;
+                    desc.limitStiffness = joint->prismatic.limitStiffness;
+                    desc.limitDamping = joint->prismatic.limitDamping;
+                    desc.limitRestitution = joint->prismatic.limitRestitution;
+                    desc.limitBounceThreshold = joint->prismatic.limitBounceThreshold;
+
+                    created = m_physicsWorld->CreatePrismaticJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::Distance:
+                {
+                    DistanceJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.minDistance = joint->distance.minDistance;
+                    desc.maxDistance = joint->distance.maxDistance;
+                    desc.tolerance = joint->distance.tolerance;
+                    desc.enableMinDistance = joint->distance.enableMinDistance;
+                    desc.enableMaxDistance = joint->distance.enableMaxDistance;
+                    desc.enableSpring = joint->distance.enableSpring;
+                    desc.stiffness = joint->distance.stiffness;
+                    desc.damping = joint->distance.damping;
+
+                    created = m_physicsWorld->CreateDistanceJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::Spherical:
+                {
+                    SphericalJointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.enableLimit = joint->spherical.enableLimit;
+                    desc.yLimitAngle = joint->spherical.yLimitAngle;
+                    desc.zLimitAngle = joint->spherical.zLimitAngle;
+                    desc.limitStiffness = joint->spherical.limitStiffness;
+                    desc.limitDamping = joint->spherical.limitDamping;
+                    desc.limitRestitution = joint->spherical.limitRestitution;
+                    desc.limitBounceThreshold = joint->spherical.limitBounceThreshold;
+
+                    created = m_physicsWorld->CreateSphericalJoint(*actorA, *actorB, desc);
+                    break;
+                }
+                case Phy_JointType::D6:
+                {
+                    D6JointDesc desc{};
+                    desc.frameA = toJointFrame(joint->frameA);
+                    desc.frameB = toJointFrame(joint->frameB);
+                    desc.breakForce = joint->breakForce;
+                    desc.breakTorque = joint->breakTorque;
+                    desc.collideConnected = joint->collideConnected;
+                    desc.userData = userData;
+
+                    desc.driveLimitsAreForces = joint->d6.driveLimitsAreForces;
+                    desc.motionX = toD6Motion(joint->d6.motionX);
+                    desc.motionY = toD6Motion(joint->d6.motionY);
+                    desc.motionZ = toD6Motion(joint->d6.motionZ);
+                    desc.motionTwist = toD6Motion(joint->d6.motionTwist);
+                    desc.motionSwing1 = toD6Motion(joint->d6.motionSwing1);
+                    desc.motionSwing2 = toD6Motion(joint->d6.motionSwing2);
+
+                    desc.linearLimitX = { joint->d6.linearLimitX.lower, joint->d6.linearLimitX.upper,
+                                          joint->d6.linearLimitX.stiffness, joint->d6.linearLimitX.damping,
+                                          joint->d6.linearLimitX.restitution, joint->d6.linearLimitX.bounceThreshold };
+                    desc.linearLimitY = { joint->d6.linearLimitY.lower, joint->d6.linearLimitY.upper,
+                                          joint->d6.linearLimitY.stiffness, joint->d6.linearLimitY.damping,
+                                          joint->d6.linearLimitY.restitution, joint->d6.linearLimitY.bounceThreshold };
+                    desc.linearLimitZ = { joint->d6.linearLimitZ.lower, joint->d6.linearLimitZ.upper,
+                                          joint->d6.linearLimitZ.stiffness, joint->d6.linearLimitZ.damping,
+                                          joint->d6.linearLimitZ.restitution, joint->d6.linearLimitZ.bounceThreshold };
+
+                    desc.twistLimit = { joint->d6.twistLimit.lower, joint->d6.twistLimit.upper,
+                                        joint->d6.twistLimit.stiffness, joint->d6.twistLimit.damping,
+                                        joint->d6.twistLimit.restitution, joint->d6.twistLimit.bounceThreshold };
+
+                    desc.swingLimit = { joint->d6.swingLimit.yAngle, joint->d6.swingLimit.zAngle,
+                                        joint->d6.swingLimit.stiffness, joint->d6.swingLimit.damping,
+                                        joint->d6.swingLimit.restitution, joint->d6.swingLimit.bounceThreshold };
+
+                    desc.driveX = { joint->d6.driveX.stiffness, joint->d6.driveX.damping,
+                                    joint->d6.driveX.forceLimit, joint->d6.driveX.isAcceleration };
+                    desc.driveY = { joint->d6.driveY.stiffness, joint->d6.driveY.damping,
+                                    joint->d6.driveY.forceLimit, joint->d6.driveY.isAcceleration };
+                    desc.driveZ = { joint->d6.driveZ.stiffness, joint->d6.driveZ.damping,
+                                    joint->d6.driveZ.forceLimit, joint->d6.driveZ.isAcceleration };
+                    desc.driveSwing = { joint->d6.driveSwing.stiffness, joint->d6.driveSwing.damping,
+                                        joint->d6.driveSwing.forceLimit, joint->d6.driveSwing.isAcceleration };
+                    desc.driveTwist = { joint->d6.driveTwist.stiffness, joint->d6.driveTwist.damping,
+                                        joint->d6.driveTwist.forceLimit, joint->d6.driveTwist.isAcceleration };
+                    desc.driveSlerp = { joint->d6.driveSlerp.stiffness, joint->d6.driveSlerp.damping,
+                                        joint->d6.driveSlerp.forceLimit, joint->d6.driveSlerp.isAcceleration };
+
+                    desc.drivePose = toJointFrame(joint->d6.drivePose);
+                    desc.driveLinearVelocity = ToVec3(joint->d6.driveLinearVelocity);
+                    desc.driveAngularVelocity = ToVec3(joint->d6.driveAngularVelocity);
+
+                    created = m_physicsWorld->CreateD6Joint(*actorA, *actorB, desc);
+                    break;
+                }
+                }
+
+                if (created)
+                {
+                    IPhysicsJoint* raw = created.get();
+                    m_entityToJoint[entityId] = std::move(created);
+                    m_lastJoints[entityId] = newState;
+                    joint->jointHandle = raw;
+                }
+                else
+                {
+                    joint->jointHandle = nullptr;
+                    m_lastJoints.erase(entityId);
+                }
+            }
+
+            std::vector<EntityId> jointToRemove;
+            for (const auto& [entityId, handle] : m_entityToJoint)
+            {
+                if (m_tempEntitiesWithJoint.find(entityId) == m_tempEntitiesWithJoint.end())
+                    jointToRemove.push_back(entityId);
+            }
+            for (auto eid : jointToRemove)
+                DestroyJoint(eid);
+        }
     }
 
-    // 2. Game → Physics 동기화 (Transform 변경 감지)
+    // 2. Game → Physics 동기화
     {
         auto transforms = m_world.GetComponents<TransformComponent>();
         for (const auto& [entityId, transform] : transforms)
         {
-            // RigidBody 또는 Collider가 있는 엔티티만 동기화
-            auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-            auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+            if (!transform.enabled) continue;
             
-            if (!rb && !collider) continue;
+            auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+            auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+            auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+            
+            if (!rb && !collider && !meshCollider) continue;
 
-            // 이전 상태 확인
             auto it = m_lastTransforms.find(entityId);
             bool needsSync = false;
 
             if (it == m_lastTransforms.end())
             {
-                // 첫 프레임
                 needsSync = true;
                 m_lastTransforms[entityId] = {
                     transform.position,
@@ -243,21 +1222,21 @@ void PhysicsSystem::Update(float deltaTime)
         }
     }
 
-    // 3. Collider/Scale 변경 감지 및 Shape 재구성
+    // 3. Collider 변경 감지 및 Shape 재구성
     {
-        auto colliders = m_world.GetComponents<ColliderComponent>();
+        auto colliders = m_world.GetComponents<Phy_ColliderComponent>();
         for (const auto& [entityId, collider] : colliders)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-            if (!transform) continue;
+            if (!transform || !transform->enabled) continue;
+            if (m_world.GetComponent<Phy_MeshColliderComponent>(entityId))
+                continue;
 
-            // 이전 상태 확인
             auto it = m_lastColliders.find(entityId);
             bool needsRebuild = false;
 
             if (it == m_lastColliders.end())
             {
-                // 첫 프레임 - 상태 저장만
                 ColliderState state{};
                 state.type = collider.type;
                 state.halfExtents = collider.halfExtents;
@@ -271,46 +1250,86 @@ void PhysicsSystem::Update(float deltaTime)
                 state.layerBits = collider.layerBits;
                 state.collideMask = collider.collideMask;
                 state.queryMask = collider.queryMask;
+				state.ignoreLayers = collider.ignoreLayers;
                 state.isTrigger = collider.isTrigger;
                 state.scale = transform->scale;
                 m_lastColliders[entityId] = state;
             }
             else
             {
-                // 변경 감지
                 const auto& last = it->second;
                 bool changed = false;
+				bool maskOnlyChanged = false;
 
-                // Collider 파라미터 변경
+				bool layerOrIgnoreChanged = (collider.layerBits != last.layerBits || collider.ignoreLayers != last.ignoreLayers);
+				if (layerOrIgnoreChanged)
+				{
+					int li = FirstLayerIndex(collider.layerBits);
+					if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+					{
+						uint32_t newCollide = collideByLayer[li];
+						uint32_t newQuery = queryByLayer[li];
+						
+						newCollide &= ~collider.ignoreLayers;
+						newQuery &= ~collider.ignoreLayers;
+						
+						// 런타임 마스크 캐시 업데이트 (컴포넌트는 authoring 데이터로 유지)
+						RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+						if (runtime.collideMask != newCollide || runtime.queryMask != newQuery)
+						{
+							runtime.collideMask = newCollide;
+							runtime.queryMask = newQuery;
+							maskOnlyChanged = true;
+						}
+					}
+				}
+
                 if (collider.type != last.type ||
-                    collider.halfExtents.x != last.halfExtents.x || collider.halfExtents.y != last.halfExtents.y || collider.halfExtents.z != last.halfExtents.z ||
-                    collider.radius != last.radius ||
-                    collider.capsuleRadius != last.capsuleRadius ||
-                    collider.capsuleHalfHeight != last.capsuleHalfHeight ||
+                    !FloatEqual(collider.halfExtents.x, last.halfExtents.x) || !FloatEqual(collider.halfExtents.y, last.halfExtents.y) || !FloatEqual(collider.halfExtents.z, last.halfExtents.z) ||
+                    !FloatEqual(collider.radius, last.radius) ||
+                    !FloatEqual(collider.capsuleRadius, last.capsuleRadius) ||
+                    !FloatEqual(collider.capsuleHalfHeight, last.capsuleHalfHeight) ||
                     collider.capsuleAlignYAxis != last.capsuleAlignYAxis ||
-                    collider.staticFriction != last.staticFriction ||
-                    collider.dynamicFriction != last.dynamicFriction ||
-                    collider.restitution != last.restitution ||
-                    collider.layerBits != last.layerBits ||
-                    collider.collideMask != last.collideMask ||
-                    collider.queryMask != last.queryMask ||
+                    !FloatEqual(collider.staticFriction, last.staticFriction) ||
+                    !FloatEqual(collider.dynamicFriction, last.dynamicFriction) ||
+                    !FloatEqual(collider.restitution, last.restitution) ||
                     collider.isTrigger != last.isTrigger)
                 {
                     changed = true;
                 }
 
+				// authoring 데이터 변경 감지 (사용자가 직접 설정한 경우)
+				if (collider.collideMask != last.collideMask || collider.queryMask != last.queryMask)
+				{
+					if (!maskOnlyChanged) maskOnlyChanged = true;
+				}
+
                 // Scale 변경
-                if (transform->scale.x != last.scale.x || 
-                    transform->scale.y != last.scale.y || 
-                    transform->scale.z != last.scale.z)
+                if (!FloatEqual(transform->scale.x, last.scale.x) || 
+                    !FloatEqual(transform->scale.y, last.scale.y) || 
+                    !FloatEqual(transform->scale.z, last.scale.z))
                 {
                     changed = true;
                 }
 
-                if (changed)
-                {
-                    needsRebuild = true;
-                    // 상태 업데이트
+				if (maskOnlyChanged && !changed)
+				{
+					auto itActor = m_entityToActor.find(entityId);
+					if (itActor != m_entityToActor.end())
+					{
+						ActorHandle& handle = itActor->second;
+						if (handle.IsValid() && handle.GetActor())
+						{
+							// 런타임 마스크 사용
+							RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+							handle.GetActor()->SetLayerMasks(collider.layerBits, runtime.collideMask, runtime.queryMask);
+						}
+					}
+				}
+
+				if (changed || maskOnlyChanged)
+				{
+					if (changed) needsRebuild = true;
                     it->second.type = collider.type;
                     it->second.halfExtents = collider.halfExtents;
                     it->second.radius = collider.radius;
@@ -323,6 +1342,7 @@ void PhysicsSystem::Update(float deltaTime)
                     it->second.layerBits = collider.layerBits;
                     it->second.collideMask = collider.collideMask;
                     it->second.queryMask = collider.queryMask;
+					it->second.ignoreLayers = collider.ignoreLayers;
                     it->second.isTrigger = collider.isTrigger;
                     it->second.scale = transform->scale;
                 }
@@ -334,11 +1354,10 @@ void PhysicsSystem::Update(float deltaTime)
             }
         }
 
-        // 제거된 Collider의 상태도 정리
         std::vector<EntityId> collidersToRemove;
         for (const auto& [entityId, state] : m_lastColliders)
         {
-            auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+            auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
             if (!collider)
             {
                 collidersToRemove.push_back(entityId);
@@ -346,7 +1365,6 @@ void PhysicsSystem::Update(float deltaTime)
         }
         for (EntityId entityId : collidersToRemove)
         {
-            // Collider 제거 시: RB는 남아도 shape는 제거되어야 함
             auto itActor = m_entityToActor.find(entityId);
             if (itActor != m_entityToActor.end())
             {
@@ -358,7 +1376,6 @@ void PhysicsSystem::Update(float deltaTime)
                     {
                         actor->ClearShapes();
 
-                        // dynamic이면 질량 다시 계산
                         IRigidBody* body = handle.GetRigidBody();
                         if (body && body->IsValid())
                             body->RecomputeMass();
@@ -370,12 +1387,178 @@ void PhysicsSystem::Update(float deltaTime)
         }
     }
 
-    //  4. RigidBodyComponent "런타임 변경 감지 → PhysX 적용"
+    // 3.5 MeshCollider 변경 감지 및 Shape 재구성
     {
-        auto rigidBodies = m_world.GetComponents<RigidBodyComponent>();
+        auto meshColliders = m_world.GetComponents<Phy_MeshColliderComponent>();
+        for (const auto& [entityId, mc] : meshColliders)
+        {
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform || !transform->enabled) continue;
+
+            const std::string resolvedPath = ResolveMeshAssetPath(m_world, entityId, mc);
+
+            auto it = m_lastMeshColliders.find(entityId);
+            bool needsRebuild = false;
+
+            if (it == m_lastMeshColliders.end())
+            {
+                MeshColliderState state{};
+                state.type = mc.type;
+                state.meshAssetPath = resolvedPath;
+                state.staticFriction = mc.staticFriction;
+                state.dynamicFriction = mc.dynamicFriction;
+                state.restitution = mc.restitution;
+                state.layerBits = mc.layerBits;
+                state.collideMask = mc.collideMask;
+                state.queryMask = mc.queryMask;
+                state.ignoreLayers = mc.ignoreLayers;
+                state.isTrigger = mc.isTrigger;
+                state.flipNormals = mc.flipNormals;
+                state.doubleSidedQueries = mc.doubleSidedQueries;
+                state.validate = mc.validate;
+                state.shiftVertices = mc.shiftVertices;
+                state.vertexLimit = mc.vertexLimit;
+                state.scale = transform->scale;
+                m_lastMeshColliders[entityId] = state;
+            }
+            else
+            {
+                const auto& last = it->second;
+                bool changed = false;
+                bool maskOnlyChanged = false;
+
+                bool layerOrIgnoreChanged = (mc.layerBits != last.layerBits || mc.ignoreLayers != last.ignoreLayers);
+                if (layerOrIgnoreChanged)
+                {
+                    int li = FirstLayerIndex(mc.layerBits);
+                    if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+                    {
+                        uint32_t newCollide = collideByLayer[li];
+                        uint32_t newQuery = queryByLayer[li];
+
+                        newCollide &= ~mc.ignoreLayers;
+                        newQuery &= ~mc.ignoreLayers;
+
+                        // 런타임 마스크 캐시 업데이트 (컴포넌트는 authoring 데이터로 유지)
+                        RuntimeMasks& runtime = m_runtimeMeshColliderMasks[entityId];
+                        if (runtime.collideMask != newCollide || runtime.queryMask != newQuery)
+                        {
+                            runtime.collideMask = newCollide;
+                            runtime.queryMask = newQuery;
+                            maskOnlyChanged = true;
+                        }
+                    }
+                }
+
+                if (mc.type != last.type ||
+                    resolvedPath != last.meshAssetPath ||
+                    !FloatEqual(mc.staticFriction, last.staticFriction) ||
+                    !FloatEqual(mc.dynamicFriction, last.dynamicFriction) ||
+                    !FloatEqual(mc.restitution, last.restitution) ||
+                    mc.isTrigger != last.isTrigger ||
+                    mc.flipNormals != last.flipNormals ||
+                    mc.doubleSidedQueries != last.doubleSidedQueries ||
+                    mc.validate != last.validate ||
+                    mc.shiftVertices != last.shiftVertices ||
+                    mc.vertexLimit != last.vertexLimit)
+                {
+                    changed = true;
+                }
+
+                // authoring 데이터 변경 감지 (사용자가 직접 설정한 경우)
+                if (mc.collideMask != last.collideMask || mc.queryMask != last.queryMask)
+                {
+                    if (!maskOnlyChanged) maskOnlyChanged = true;
+                }
+
+                if (!FloatEqual(transform->scale.x, last.scale.x) ||
+                    !FloatEqual(transform->scale.y, last.scale.y) ||
+                    !FloatEqual(transform->scale.z, last.scale.z))
+                {
+                    changed = true;
+                }
+
+                if (maskOnlyChanged && !changed)
+                {
+                    auto itActor = m_entityToActor.find(entityId);
+                    if (itActor != m_entityToActor.end())
+                    {
+                        ActorHandle& handle = itActor->second;
+                        if (handle.IsValid() && handle.GetActor())
+                        {
+                            // 런타임 마스크 사용
+                            RuntimeMasks& runtime = m_runtimeMeshColliderMasks[entityId];
+                            handle.GetActor()->SetLayerMasks(mc.layerBits, runtime.collideMask, runtime.queryMask);
+                        }
+                    }
+                }
+
+                if (changed || maskOnlyChanged)
+                {
+                    if (changed) needsRebuild = true;
+                    it->second.type = mc.type;
+                    it->second.meshAssetPath = resolvedPath;
+                    it->second.staticFriction = mc.staticFriction;
+                    it->second.dynamicFriction = mc.dynamicFriction;
+                    it->second.restitution = mc.restitution;
+                    it->second.layerBits = mc.layerBits;
+                    it->second.collideMask = mc.collideMask;
+                    it->second.queryMask = mc.queryMask;
+                    it->second.ignoreLayers = mc.ignoreLayers;
+                    it->second.isTrigger = mc.isTrigger;
+                    it->second.flipNormals = mc.flipNormals;
+                    it->second.doubleSidedQueries = mc.doubleSidedQueries;
+                    it->second.validate = mc.validate;
+                    it->second.shiftVertices = mc.shiftVertices;
+                    it->second.vertexLimit = mc.vertexLimit;
+                    it->second.scale = transform->scale;
+                }
+            }
+
+            if (needsRebuild)
+            {
+                RebuildMeshShapes(entityId);
+            }
+        }
+
+        std::vector<EntityId> meshToRemove;
+        for (const auto& [entityId, state] : m_lastMeshColliders)
+        {
+            auto* mesh = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+            if (!mesh)
+            {
+                meshToRemove.push_back(entityId);
+            }
+        }
+        for (EntityId entityId : meshToRemove)
+        {
+            auto itActor = m_entityToActor.find(entityId);
+            if (itActor != m_entityToActor.end() && itActor->second.IsValid())
+            {
+                auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+                if (collider)
+                {
+                    ActorHandle& handle = itActor->second;
+                    // IRigidBody가 있으면 IRigidBody* 사용, 없으면 IPhysicsActor* 사용
+                    collider->physicsActorHandle = handle.GetRigidBody()
+                        ? static_cast<IPhysicsActor*>(handle.GetRigidBody())
+                        : handle.GetActor();
+                    RebuildShapes(entityId);
+                }
+            }
+
+            m_lastMeshColliders.erase(entityId);
+        }
+    }
+
+    //  4. Phy_RigidBodyComponent 변경 감지
+    {
+        auto rigidBodies = m_world.GetComponents<Phy_RigidBodyComponent>();
         for (const auto& [entityId, rb] : rigidBodies)
         {
-            // 핸들이 없으면 생성 파트에서 만들어질 거라 여기선 패스 가능
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform || !transform->enabled) continue;
+            
             IRigidBody* body = nullptr;
             auto it = m_entityToActor.find(entityId);
             if (it != m_entityToActor.end())
@@ -418,26 +1601,25 @@ void PhysicsSystem::Update(float deltaTime)
 
             if (cur.lockFlags != prev.lockFlags) body->SetLockFlags(cur.lockFlags);
 
-            if (cur.linearDamping != prev.linearDamping || cur.angularDamping != prev.angularDamping)
+            if (!FloatEqual(cur.linearDamping, prev.linearDamping) || !FloatEqual(cur.angularDamping, prev.angularDamping))
                 body->SetDamping(cur.linearDamping, cur.angularDamping);
 
-            if (cur.maxLinearVelocity != prev.maxLinearVelocity || cur.maxAngularVelocity != prev.maxAngularVelocity)
+            if (!FloatEqual(cur.maxLinearVelocity, prev.maxLinearVelocity) || !FloatEqual(cur.maxAngularVelocity, prev.maxAngularVelocity))
                 body->SetMaxVelocities(cur.maxLinearVelocity, cur.maxAngularVelocity);
 
-            if (cur.density != prev.density || cur.massOverride != prev.massOverride)
+            if (!FloatEqual(cur.density, prev.density) || !FloatEqual(cur.massOverride, prev.massOverride))
                 body->SetMassProperties(cur.density, cur.massOverride);
 
             if (cur.solverPositionIterations != prev.solverPositionIterations ||
                 cur.solverVelocityIterations != prev.solverVelocityIterations)
                 body->SetSolverIterations(cur.solverPositionIterations, cur.solverVelocityIterations);
 
-            if (cur.sleepThreshold != prev.sleepThreshold)
+            if (!FloatEqual(cur.sleepThreshold, prev.sleepThreshold))
                 body->SetSleepThreshold(cur.sleepThreshold);
 
-            if (cur.stabilizationThreshold != prev.stabilizationThreshold)
+            if (!FloatEqual(cur.stabilizationThreshold, prev.stabilizationThreshold))
                 body->SetStabilizationThreshold(cur.stabilizationThreshold);
 
-            // startAwake 변화는 "생성 시" 의미가 크지만, 런타임 토글도 대응 가능
             if (cur.startAwake != prev.startAwake)
             {
                 if (cur.startAwake) body->WakeUp();
@@ -448,66 +1630,203 @@ void PhysicsSystem::Update(float deltaTime)
         }
     }
 
-    // 5. Terrain 변경 감지 및 재생성
+	// 4. Terrain 변경 감지
     {
-        auto terrains = m_world.GetComponents<TerrainHeightFieldComponent>();
+        auto terrains = m_world.GetComponents<Phy_TerrainHeightFieldComponent>();
         for (const auto& [entityId, terrain] : terrains)
         {
             auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-            if (!transform) continue;
+            if (!transform || !transform->enabled) continue;
 
-            TerrainState cur{};
-            cur.numRows = terrain.numRows;
-            cur.numCols = terrain.numCols;
-            cur.rowScale = terrain.rowScale;
-            cur.colScale = terrain.colScale;
-            cur.heightScale = terrain.heightScale;
-            cur.centerPivot = terrain.centerPivot;
-            cur.doubleSidedQueries = terrain.doubleSidedQueries;
-            cur.staticFriction = terrain.staticFriction;
-            cur.dynamicFriction = terrain.dynamicFriction;
-            cur.restitution = terrain.restitution;
-            cur.layerBits = terrain.layerBits;
-            cur.collideMask = terrain.collideMask;
-            cur.queryMask = terrain.queryMask;
-            cur.scale = transform->scale;
+            int li = FirstLayerIndex(terrain.layerBits);
+            if (li < 0 || li >= MAX_PHYSICS_LAYERS) continue;
+
+            uint32_t newCollide = collideByLayer[li];
+            uint32_t newQuery = queryByLayer[li];
+
+            newCollide &= ~terrain.ignoreLayers;
+            newQuery &= ~terrain.ignoreLayers;
+
+            // 런타임 마스크 캐시 업데이트 (컴포넌트는 authoring 데이터로 유지)
+            RuntimeMasks& runtime = m_runtimeTerrainMasks[entityId];
+            runtime.collideMask = newCollide;
+            runtime.queryMask = newQuery;
+
+            if (terrain.heightSamples.empty() && terrain.numRows >= 2 && terrain.numCols >= 2)
+            {
+                const size_t expectedSamples = static_cast<size_t>(terrain.numRows) * static_cast<size_t>(terrain.numCols);
+                terrain.heightSamples.resize(expectedSamples, 0.0f);
+            }
+
+            const uint64_t geomKey = MakeTerrainGeomKey(terrain);
 
             auto it = m_lastTerrains.find(entityId);
             if (it == m_lastTerrains.end())
             {
+                TerrainState state{ terrain.layerBits, terrain.ignoreLayers, newCollide, newQuery, geomKey };
+                m_lastTerrains[entityId] = state;
+
+                if (!terrain.heightSamples.empty() && terrain.numRows >= 2 && terrain.numCols >= 2)
+                {
+                    CreateTerrainHeightField(entityId);
+                }
+                continue;
+            }
+
+            TerrainState prev = it->second;
+            TerrainState cur{ terrain.layerBits, terrain.ignoreLayers, newCollide, newQuery, geomKey };
+
+            if (cur.GeometryChanged(prev))
+            {
+                if (terrain.physicsActorHandle != nullptr)
+                {
+                    DestroyPhysicsActor(entityId);
+
+                    if (m_physicsWorld)
+                    {
+                        m_physicsWorld->Flush();
+                    }
+                }
+
+                if (!terrain.heightSamples.empty() && terrain.numRows >= 2 && terrain.numCols >= 2)
+                {
+                    CreateTerrainHeightField(entityId);
+                }
+
                 m_lastTerrains[entityId] = cur;
                 continue;
             }
 
-            const TerrainState& prev = it->second;
-            const bool changed =
-                cur.numRows != prev.numRows || cur.numCols != prev.numCols ||
-                cur.rowScale != prev.rowScale || cur.colScale != prev.colScale || cur.heightScale != prev.heightScale ||
-                cur.centerPivot != prev.centerPivot || cur.doubleSidedQueries != prev.doubleSidedQueries ||
-                cur.staticFriction != prev.staticFriction || cur.dynamicFriction != prev.dynamicFriction || cur.restitution != prev.restitution ||
-                cur.layerBits != prev.layerBits || cur.collideMask != prev.collideMask || cur.queryMask != prev.queryMask ||
-                cur.scale.x != prev.scale.x || cur.scale.y != prev.scale.y || cur.scale.z != prev.scale.z;
-
-            if (changed)
+            if (cur.MasksChanged(prev))
             {
-                m_lastTerrains[entityId] = cur;
-                CreateTerrainHeightField(entityId); // 내부에서 기존 actor 정리 후 재생성
+                auto itActor = m_entityToActor.find(entityId);
+                if (itActor != m_entityToActor.end())
+                {
+                    ActorHandle& handle = itActor->second;
+                    if (handle.IsValid() && handle.GetActor())
+                    {
+                        handle.GetActor()->SetLayerMasks(terrain.layerBits, newCollide, newQuery);
+                    }
+                }
+            }
+
+            it = m_lastTerrains.find(entityId);
+            if (it != m_lastTerrains.end())
+            {
+                it->second = cur;
             }
         }
 
-        // 제거된 terrain 상태 정리
         std::vector<EntityId> toErase;
         for (auto& [eid, st] : m_lastTerrains)
         {
-            if (!m_world.GetComponent<TerrainHeightFieldComponent>(eid))
+            if (!m_world.GetComponent<Phy_TerrainHeightFieldComponent>(eid))
                 toErase.push_back(eid);
         }
         for (auto eid : toErase) m_lastTerrains.erase(eid);
     }
 
-    // 6. CCT 이동 + 중력/점프 처리 + Transform 갱신
+    // 5. CCT 변경 감지
+    {
+        auto ccts = m_world.GetComponents<Phy_CCTComponent>();
+        
+        for (const auto& [entityId, ccc] : ccts)
+        {
+            auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+            if (!transform || !transform->enabled) continue;
+
+            auto itCCT = m_entityToCCT.find(entityId);
+            
+            CCTState cur{ ccc, transform->scale };
+
+            auto itState = m_lastCCTs.find(entityId);
+            if (itState == m_lastCCTs.end())
+            {
+                m_lastCCTs[entityId] = cur;
+                auto* cccPtr = m_world.GetComponent<Phy_CCTComponent>(entityId);
+                if (!cccPtr) continue;
+
+                bool shouldCreate = (itCCT == m_entityToCCT.end() || !itCCT->second.IsValid() || cccPtr->controllerHandle == nullptr);
+                if (shouldCreate)
+                {
+                    CreateCharacterController(entityId);
+                }
+            }
+            else
+            {
+                const auto& prev = itState->second;
+                bool needsRebuild = false;
+
+				bool layerOrIgnoreChanged = (ccc.layerBits != prev.layerBits || ccc.ignoreLayers != prev.ignoreLayers);
+				if (layerOrIgnoreChanged)
+				{
+					int li = FirstLayerIndex(ccc.layerBits);
+					if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+					{
+						uint32_t newCollide = collideByLayer[li];
+						uint32_t newQuery = queryByLayer[li];
+						
+						newCollide &= ~ccc.ignoreLayers;
+						newQuery &= ~ccc.ignoreLayers;
+						
+						// 런타임 마스크 캐시 업데이트 (컴포넌트는 authoring 데이터로 유지)
+						RuntimeMasks& runtime = m_runtimeCCTMasks[entityId];
+						runtime.collideMask = newCollide;
+						runtime.queryMask = newQuery;
+						cur.OverrideMasks(newCollide, newQuery);
+                    }
+				}
+                
+                if (cur.NeedsRebuild(prev))
+                {
+                    needsRebuild = true;
+                }
+
+                if (itCCT == m_entityToCCT.end() || !itCCT->second.IsValid() || ccc.controllerHandle == nullptr)
+                {
+                    CreateCharacterController(entityId);
+                    m_lastCCTs[entityId] = cur;
+                }
+                else if (needsRebuild)
+                {
+                    DestroyCharacterController(entityId);
+                    CreateCharacterController(entityId);
+                    m_lastCCTs[entityId] = cur;
+                }
+                else
+                {
+                    if (cur.NeedsMaskUpdate(prev))
+                    {
+                        ICharacterController* ctrl = itCCT->second.cct;
+                        if (ctrl)
+                        {
+                            ctrl->SetLayerMasks(cur.layerBits, cur.collideMask, cur.queryMask);
+                        }
+                        m_lastCCTs[entityId] = cur;
+                    }
+                }
+            }
+        }
+
+        std::vector<EntityId> cctsToRemove;
+        for (const auto& [entityId, state] : m_lastCCTs)
+        {
+            auto* ccc = m_world.GetComponent<Phy_CCTComponent>(entityId);
+            if (!ccc)
+            {
+                cctsToRemove.push_back(entityId);
+            }
+        }
+        for (auto eid : cctsToRemove)
+        {
+            DestroyCharacterController(eid);
+            m_lastCCTs.erase(eid);
+        }
+    }
+
+    // 6. CCT 이동 및 Transform 갱신
     {        
-        auto ccts = m_world.GetComponents<CharacterControllerComponent>();
+        auto ccts = m_world.GetComponents<Phy_CCTComponent>();
 
         for (const auto& [entityId, ccc] : ccts)
         {
@@ -515,7 +1834,27 @@ void PhysicsSystem::Update(float deltaTime)
             if (!transform) continue;
 
             auto it = m_entityToCCT.find(entityId);
-            if (it == m_entityToCCT.end() || !it->second.IsValid()) continue;
+            if (it == m_entityToCCT.end() || !it->second.IsValid())
+            {
+                static std::unordered_set<EntityId> warnedEntities;
+                if (warnedEntities.find(entityId) == warnedEntities.end())
+                {
+                    ALICE_LOG_WARN("[PhysicsSystem] CCT not found for entity %llu (controllerHandle: %p). Check if CreateCharacterController succeeded.",
+                        (unsigned long long)entityId, ccc.controllerHandle);
+                    
+                    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+                    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+                    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+                    if (rb || collider || meshCollider)
+                    {
+                        ALICE_LOG_WARN("[PhysicsSystem] Entity %llu has RigidBody or Collider, which conflicts with CCT!", 
+                            (unsigned long long)entityId);
+                    }
+                    
+                    warnedEntities.insert(entityId);
+                }
+                continue;
+            }
 
             ICharacterController* ctrl = it->second.cct;
             if (!ctrl) continue;
@@ -528,16 +1867,15 @@ void PhysicsSystem::Update(float deltaTime)
                 ccc.teleport = false;
             }
 
-            // 현재 지면 상태(점프/중력에 필요)
-            CharacterControllerState st0 = ctrl->GetState(ccc.collideMask, ccc.queryMask, 0.2f, ccc.hitTriggers);
+            // 런타임 마스크 사용
+            RuntimeMasks& runtime = m_runtimeCCTMasks[entityId];
+            CharacterControllerState st0 = ctrl->GetState(runtime.collideMask, ccc.layerBits, 0.2f, ccc.hitTriggers);
             const bool wasGrounded = st0.onGround;
 
-            // 점프
             if (ccc.jumpRequested && wasGrounded)
                 ccc.verticalVelocity = ccc.jumpSpeed;
             ccc.jumpRequested = false;
 
-            // 중력
             if (ccc.applyGravity)
             {
                 if (wasGrounded && ccc.verticalVelocity < 0.0f)
@@ -546,27 +1884,24 @@ void PhysicsSystem::Update(float deltaTime)
                     ccc.verticalVelocity += ccc.gravity * deltaTime;
             }
 
-            // 이동량 계산 (m/s * dt)
             Vec3 disp;
             disp.x = ccc.desiredVelocity.x * deltaTime;
             disp.z = ccc.desiredVelocity.z * deltaTime;
-            disp.y = ccc.verticalVelocity * deltaTime;
+			disp.y = ccc.verticalVelocity * deltaTime;
 
             CCTCollisionFlags cf = ctrl->Move(
                 disp,
                 deltaTime,
-                ccc.collideMask,
-                ccc.queryMask,
+                runtime.collideMask,
+				ccc.layerBits,
                 ccc.hitTriggers);
 
-            // 최종 상태 저장
-            CharacterControllerState st = ctrl->GetState(ccc.collideMask, ccc.queryMask, 0.2f, ccc.hitTriggers);
+            CharacterControllerState st = ctrl->GetState(runtime.collideMask, ccc.layerBits, 0.2f, ccc.hitTriggers);
             ccc.onGround = st.onGround;
             ccc.groundNormal = ToXMFLOAT3(st.groundNormal);
             ccc.groundDistance = st.groundDistance;
             ccc.collisionFlags = static_cast<uint8_t>(cf);
 
-            // Transform 반영: foot 위치로 동기화
             transform->position = ToXMFLOAT3(ctrl->GetFootPosition());
         }
     }
@@ -577,19 +1912,74 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
     if (!m_physicsWorld) return;
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-    if (!transform) return; // Transform이 없으면 생성 불가
+    if (!transform || !transform->enabled) return;
 
-    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
-    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+    auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
 
-    if (!rb && !collider) return; // 둘 다 없으면 생성 불가
+    // 런타임 마스크 계산 헬퍼 (레이어 매트릭스 기반)
+    auto ComputeRuntimeMasks = [this](uint32_t layerBits, uint32_t ignoreLayers) -> RuntimeMasks
+    {
+        RuntimeMasks masks{};
+        const auto& settingsMap = m_world.GetComponents<Phy_SettingsComponent>();
+        if (!settingsMap.empty())
+        {
+            const auto& s = settingsMap.begin()->second;
+            int li = FirstLayerIndex(layerBits);
+            if (li >= 0 && li < MAX_PHYSICS_LAYERS)
+            {
+                // collide: row 기반
+                uint32_t collideMask = 0;
+                for (int j = 0; j < MAX_PHYSICS_LAYERS; ++j)
+                    if (s.layerCollideMatrix[li][j]) collideMask |= (1u << j);
+                
+                // query: column 기반
+                uint32_t queryMask = 0;
+                for (int querier = 0; querier < MAX_PHYSICS_LAYERS; ++querier)
+                    if (s.layerQueryMatrix[querier][li]) queryMask |= (1u << querier);
+                
+                masks.collideMask = collideMask & ~ignoreLayers;
+                masks.queryMask = queryMask & ~ignoreLayers;
+            }
+            else
+            {
+                masks.collideMask = 0xFFFFFFFFu;
+                masks.queryMask = 0xFFFFFFFFu;
+            }
+        }
+        else
+        {
+            // 매트릭스가 없으면 기본값
+            masks.collideMask = 0xFFFFFFFFu;
+            masks.queryMask = 0xFFFFFFFFu;
+        }
+        return masks;
+    };
+
+    if (!rb && !collider && !meshCollider) return;
+    if (terrain)
+    {
+        if (rb || collider || meshCollider)
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] Entity %llu has TerrainHeightField with other colliders; Terrain takes priority.",
+                (unsigned long long)entityId);
+        }
+        return;
+    }
+
+    if (meshCollider && collider)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] Entity %llu has both MeshCollider and Collider. MeshCollider will be used.",
+            (unsigned long long)entityId);
+    }
 
     Vec3 pos = ToVec3(transform->position);
     Quat rot = ToQuat(transform->rotation);
 
     if (rb)
     {
-        // Dynamic RigidBody 생성
         RigidBodyDesc rbDesc{};
         rbDesc.density = rb->density;
         rbDesc.massOverride = rb->massOverride;
@@ -604,20 +1994,83 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         rbDesc.maxLinearVelocity = rb->maxLinearVelocity;
         rbDesc.maxAngularVelocity = rb->maxAngularVelocity;
         rbDesc.solverPositionIterations = rb->solverPositionIterations;
-        rbDesc.solverVelocityIterations = rb->solverVelocityIterations;
-        rbDesc.sleepThreshold = rb->sleepThreshold;
-        rbDesc.stabilizationThreshold = rb->stabilizationThreshold;
-        rbDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+		rbDesc.solverVelocityIterations = rb->solverVelocityIterations;
+		rbDesc.sleepThreshold = rb->sleepThreshold;
+		rbDesc.stabilizationThreshold = rb->stabilizationThreshold;
+		rbDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-        if (collider)
+        if (meshCollider)
         {
-            // Collider 타입에 따라 바디 생성
+            if (!m_physicsWorld->SupportsMeshCooking())
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] Mesh cooking not supported. MeshCollider skipped (entity: %llu).",
+                    (unsigned long long)entityId);
+                return;
+            }
+
+            std::vector<Vec3> vertices;
+            std::vector<uint32_t> indices;
+            const std::string meshPath = ResolveMeshAssetPath(m_world, entityId, *meshCollider);
+            if (!BuildMeshBuffers(m_skinnedRegistry, meshPath, vertices, indices))
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] MeshCollider: invalid mesh asset (entity: %llu, path: %s).",
+                    (unsigned long long)entityId, meshPath.c_str());
+                return;
+            }
+
+            // Triangle mesh는 RigidBody와 함께 사용할 수 없음 (PhysX 제약)
+            // RigidBody가 있으면 Convex mesh로 자동 전환됨
+            if (meshCollider->type == MeshColliderType::Triangle && rb && !rb->isKinematic)
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic (non-kinematic) RigidBody (entity: %llu).",
+                    (unsigned long long)entityId);
+                return;
+            }
+
+            Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+
+            ConvexMeshColliderDesc convexDesc{};
+            convexDesc.vertices = vertices.data();
+            convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+            convexDesc.scale = scale;
+            convexDesc.shiftVertices = meshCollider->shiftVertices;
+            convexDesc.vertexLimit = std::min(meshCollider->vertexLimit, 255u); // PhysX 제한: 최대 255
+            convexDesc.validate = meshCollider->validate;
+
+            convexDesc.staticFriction = meshCollider->staticFriction;
+            convexDesc.dynamicFriction = meshCollider->dynamicFriction;
+            convexDesc.restitution = meshCollider->restitution;
+            convexDesc.layerBits = meshCollider->layerBits;
+            convexDesc.collideMask = meshCollider->collideMask;
+            convexDesc.queryMask = meshCollider->queryMask;
+            convexDesc.isTrigger = meshCollider->isTrigger;
+            convexDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+            if (convexDesc.vertexCount > 255)
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] Convex mesh has too many vertices (%u). Consider simplified mesh.",
+                    convexDesc.vertexCount);
+            }
+
+            auto bodyPtr = m_physicsWorld->CreateDynamicConvexMesh(pos, rot, rbDesc, convexDesc);
+            if (bodyPtr)
+            {
+                ActorHandle handle(std::move(bodyPtr));
+                IRigidBody* body = handle.GetRigidBody();
+
+                rb->physicsActorHandle = body;
+                meshCollider->physicsActorHandle = body;
+                m_entityToActor[entityId] = std::move(handle);
+            }
+            return;
+        }
+        else if (collider)
+        {
             switch (collider->type)
             {
             case ColliderType::Box:
             {
                 BoxColliderDesc boxDesc{};
-                // Scale 반영
                 Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
                 Vec3 he = ToVec3(collider->halfExtents);
                 he.x *= scale.x;
@@ -628,16 +2081,21 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 boxDesc.dynamicFriction = collider->dynamicFriction;
                 boxDesc.restitution = collider->restitution;
                 boxDesc.layerBits = collider->layerBits;
-                boxDesc.collideMask = collider->collideMask;
-                boxDesc.queryMask = collider->queryMask;
-                boxDesc.isTrigger = collider->isTrigger;
-                boxDesc.userData = rbDesc.userData;
+                // 런타임 마스크 사용
+                RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+                if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+                {
+                    // 아직 계산되지 않았으면 계산
+                    runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+                }
+                boxDesc.collideMask = runtime.collideMask;
+                boxDesc.queryMask = runtime.queryMask;
+				boxDesc.isTrigger = collider->isTrigger;
+				boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-                auto bodyPtr = m_physicsWorld->CreateDynamicBox(pos, rot, rbDesc, boxDesc);
+				auto bodyPtr = m_physicsWorld->CreateDynamicBox(pos, rot, rbDesc, boxDesc);
                 if (bodyPtr)
                 {
-                    // unique_ptr을 그대로 move하여 소유권 유지
-                    // IRigidBody는 IPhysicsActor를 상속하므로 자동 변환됨
                     ActorHandle handle(std::move(bodyPtr));
                     IRigidBody* body = handle.GetRigidBody();
                     
@@ -650,7 +2108,6 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             case ColliderType::Sphere:
             {
                 SphereColliderDesc sphereDesc{};
-                // Scale 반영 (최대값 사용)
                 Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
                 float sMax = std::max({ scale.x, scale.y, scale.z });
                 sphereDesc.radius = collider->radius * sMax;
@@ -658,12 +2115,19 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 sphereDesc.dynamicFriction = collider->dynamicFriction;
                 sphereDesc.restitution = collider->restitution;
                 sphereDesc.layerBits = collider->layerBits;
-                sphereDesc.collideMask = collider->collideMask;
-                sphereDesc.queryMask = collider->queryMask;
-                sphereDesc.isTrigger = collider->isTrigger;
-                sphereDesc.userData = rbDesc.userData;
+                // 런타임 마스크 사용
+                RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+                if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+                {
+                    // 아직 계산되지 않았으면 계산
+                    runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+                }
+                sphereDesc.collideMask = runtime.collideMask;
+				sphereDesc.queryMask = runtime.queryMask;
+				sphereDesc.isTrigger = collider->isTrigger;
+				sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-                auto bodyPtr = m_physicsWorld->CreateDynamicSphere(pos, rot, rbDesc, sphereDesc);
+				auto bodyPtr = m_physicsWorld->CreateDynamicSphere(pos, rot, rbDesc, sphereDesc);
                 if (bodyPtr)
                 {
                     ActorHandle handle(std::move(bodyPtr));
@@ -678,7 +2142,6 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             case ColliderType::Capsule:
             {
                 CapsuleColliderDesc capsuleDesc{};
-                // Scale 반영
                 Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
                 if (collider->capsuleAlignYAxis)
                 {
@@ -697,12 +2160,19 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 capsuleDesc.dynamicFriction = collider->dynamicFriction;
                 capsuleDesc.restitution = collider->restitution;
                 capsuleDesc.layerBits = collider->layerBits;
-                capsuleDesc.collideMask = collider->collideMask;
-                capsuleDesc.queryMask = collider->queryMask;
-                capsuleDesc.isTrigger = collider->isTrigger;
-                capsuleDesc.userData = rbDesc.userData;
+                // 런타임 마스크 사용
+                RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+                if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+                {
+                    // 아직 계산되지 않았으면 계산
+                    runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+                }
+                capsuleDesc.collideMask = runtime.collideMask;
+				capsuleDesc.queryMask = runtime.queryMask;
+				capsuleDesc.isTrigger = collider->isTrigger;
+				capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-                auto bodyPtr = m_physicsWorld->CreateDynamicCapsule(pos, rot, rbDesc, capsuleDesc);
+				auto bodyPtr = m_physicsWorld->CreateDynamicCapsule(pos, rot, rbDesc, capsuleDesc);
                 if (bodyPtr)
                 {
                     ActorHandle handle(std::move(bodyPtr));
@@ -715,12 +2185,9 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
                 break;
             }
             }
-
-            // body는 이미 m_entityToActor에 저장됨
         }
         else
         {
-            // Collider 없이 빈 바디 생성
             auto bodyPtr = m_physicsWorld->CreateDynamicEmpty(pos, rot, rbDesc);
             if (bodyPtr)
             {
@@ -732,15 +2199,102 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             }
         }
     }
+    else if (meshCollider)
+    {
+        if (!m_physicsWorld->SupportsMeshCooking())
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] Mesh cooking not supported. MeshCollider skipped (entity: %llu).",
+                (unsigned long long)entityId);
+            return;
+        }
+
+        std::vector<Vec3> vertices;
+        std::vector<uint32_t> indices;
+        const std::string meshPath = ResolveMeshAssetPath(m_world, entityId, *meshCollider);
+        if (!BuildMeshBuffers(m_skinnedRegistry, meshPath, vertices, indices))
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] MeshCollider: invalid mesh asset (entity: %llu, path: %s).",
+                (unsigned long long)entityId, meshPath.c_str());
+            return;
+        }
+
+        Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+
+        if (meshCollider->type == MeshColliderType::Triangle)
+        {
+            TriangleMeshColliderDesc triDesc{};
+            triDesc.vertices = vertices.data();
+            triDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+            triDesc.indices32 = indices.data();
+            triDesc.indexCount = static_cast<uint32_t>(indices.size());
+            triDesc.scale = scale;
+            triDesc.flipNormals = meshCollider->flipNormals;
+            triDesc.doubleSidedQueries = meshCollider->doubleSidedQueries;
+            triDesc.validate = meshCollider->validate;
+
+            triDesc.staticFriction = meshCollider->staticFriction;
+            triDesc.dynamicFriction = meshCollider->dynamicFriction;
+            triDesc.restitution = meshCollider->restitution;
+            triDesc.layerBits = meshCollider->layerBits;
+            triDesc.collideMask = meshCollider->collideMask;
+            triDesc.queryMask = meshCollider->queryMask;
+            triDesc.isTrigger = meshCollider->isTrigger;
+            triDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+            auto actorPtr = m_physicsWorld->CreateStaticTriangleMesh(pos, rot, triDesc);
+            if (actorPtr)
+            {
+                ActorHandle handle(std::move(actorPtr));
+                IPhysicsActor* actor = handle.GetActor();
+
+                meshCollider->physicsActorHandle = actor;
+                m_entityToActor[entityId] = std::move(handle);
+            }
+        }
+        else
+        {
+            ConvexMeshColliderDesc convexDesc{};
+            convexDesc.vertices = vertices.data();
+            convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+            convexDesc.scale = scale;
+            convexDesc.shiftVertices = meshCollider->shiftVertices;
+            convexDesc.vertexLimit = std::min(meshCollider->vertexLimit, 255u); // PhysX 제한: 최대 255
+            convexDesc.validate = meshCollider->validate;
+
+            convexDesc.staticFriction = meshCollider->staticFriction;
+            convexDesc.dynamicFriction = meshCollider->dynamicFriction;
+            convexDesc.restitution = meshCollider->restitution;
+            convexDesc.layerBits = meshCollider->layerBits;
+            convexDesc.collideMask = meshCollider->collideMask;
+            convexDesc.queryMask = meshCollider->queryMask;
+            convexDesc.isTrigger = meshCollider->isTrigger;
+            convexDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+            if (convexDesc.vertexCount > 255)
+            {
+                ALICE_LOG_WARN("[PhysicsSystem] Convex mesh has too many vertices (%u). Consider simplified mesh.",
+                    convexDesc.vertexCount);
+            }
+
+            auto actorPtr = m_physicsWorld->CreateStaticConvexMesh(pos, rot, convexDesc);
+            if (actorPtr)
+            {
+                ActorHandle handle(std::move(actorPtr));
+                IPhysicsActor* actor = handle.GetActor();
+
+                meshCollider->physicsActorHandle = actor;
+                m_entityToActor[entityId] = std::move(handle);
+            }
+        }
+    }
     else if (collider)
     {
-        // Static Actor 생성 (RigidBody 없이 Collider만)
         FilterDesc filterDesc{};
         filterDesc.layerBits = collider->layerBits;
         filterDesc.collideMask = collider->collideMask;
         filterDesc.queryMask = collider->queryMask;
         filterDesc.isTrigger = collider->isTrigger;
-        filterDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+        filterDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         MaterialDesc materialDesc{};
         materialDesc.staticFriction = collider->staticFriction;
@@ -752,7 +2306,6 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         case ColliderType::Box:
         {
             BoxColliderDesc boxDesc{};
-            // Scale 반영
             Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
             Vec3 he = ToVec3(collider->halfExtents);
             he.x *= scale.x;
@@ -763,10 +2316,16 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             boxDesc.dynamicFriction = collider->dynamicFriction;
             boxDesc.restitution = collider->restitution;
             boxDesc.layerBits = collider->layerBits;
-            boxDesc.collideMask = collider->collideMask;
-            boxDesc.queryMask = collider->queryMask;
+            // 런타임 마스크 사용
+            RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+            if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+            {
+                runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+            }
+            boxDesc.collideMask = runtime.collideMask;
+            boxDesc.queryMask = runtime.queryMask;
             boxDesc.isTrigger = collider->isTrigger;
-            boxDesc.userData = filterDesc.userData;
+            boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
             auto actorPtr = m_physicsWorld->CreateStaticBox(pos, rot, boxDesc);
             if (actorPtr)
@@ -782,7 +2341,6 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         case ColliderType::Sphere:
         {
             SphereColliderDesc sphereDesc{};
-            // Scale 반영 (최대값 사용)
             Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
             float sMax = std::max({ scale.x, scale.y, scale.z });
             sphereDesc.radius = collider->radius * sMax;
@@ -790,10 +2348,16 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             sphereDesc.dynamicFriction = collider->dynamicFriction;
             sphereDesc.restitution = collider->restitution;
             sphereDesc.layerBits = collider->layerBits;
-            sphereDesc.collideMask = collider->collideMask;
-            sphereDesc.queryMask = collider->queryMask;
+            // 런타임 마스크 사용
+            RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+            if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+            {
+                runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+            }
+            sphereDesc.collideMask = runtime.collideMask;
+            sphereDesc.queryMask = runtime.queryMask;
             sphereDesc.isTrigger = collider->isTrigger;
-            sphereDesc.userData = filterDesc.userData;
+            sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
             auto actorPtr = m_physicsWorld->CreateStaticSphere(pos, rot, sphereDesc);
             if (actorPtr)
@@ -809,7 +2373,6 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
         case ColliderType::Capsule:
         {
             CapsuleColliderDesc capsuleDesc{};
-            // Scale 반영
             Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
             if (collider->capsuleAlignYAxis)
             {
@@ -828,10 +2391,16 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             capsuleDesc.dynamicFriction = collider->dynamicFriction;
             capsuleDesc.restitution = collider->restitution;
             capsuleDesc.layerBits = collider->layerBits;
-            capsuleDesc.collideMask = collider->collideMask;
-            capsuleDesc.queryMask = collider->queryMask;
+            // 런타임 마스크 사용
+            RuntimeMasks& runtime = m_runtimeColliderMasks[entityId];
+            if (runtime.collideMask == 0xFFFFFFFFu && runtime.queryMask == 0xFFFFFFFFu)
+            {
+                runtime = ComputeRuntimeMasks(collider->layerBits, collider->ignoreLayers);
+            }
+            capsuleDesc.collideMask = runtime.collideMask;
+            capsuleDesc.queryMask = runtime.queryMask;
             capsuleDesc.isTrigger = collider->isTrigger;
-            capsuleDesc.userData = filterDesc.userData;
+            capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
             auto actorPtr = m_physicsWorld->CreateStaticCapsule(pos, rot, capsuleDesc);
             if (actorPtr)
@@ -854,50 +2423,109 @@ void PhysicsSystem::DestroyPhysicsActor(EntityId entityId)
     auto it = m_entityToActor.find(entityId);
     if (it == m_entityToActor.end()) return;
 
-    it->second.Destroy();
-
-    // 컴포넌트의 핸들도 초기화
-    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
+	if (!it->second.owned)
+	{
+		m_entityToActor.erase(it);
+		return;
+	}
+    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
     if (rb) rb->physicsActorHandle = nullptr;
 
-    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
     if (collider) collider->physicsActorHandle = nullptr;
 
-    auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
+    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+    if (meshCollider) meshCollider->physicsActorHandle = nullptr;
+
+    auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
     if (terrain) terrain->physicsActorHandle = nullptr;
 
+	ActorHandle handle = std::move(it->second);
+	
+	if (handle.owned)
+	{
+		handle.Destroy();
+	}
+	
     m_entityToActor.erase(it);
     m_lastTransforms.erase(entityId);
     m_lastColliders.erase(entityId);
+    m_lastMeshColliders.erase(entityId);
     m_lastRigidBodies.erase(entityId);
-    m_lastTerrains.erase(entityId);
+}
+
+void PhysicsSystem::DestroyJoint(EntityId entityId)
+{
+    auto it = m_entityToJoint.find(entityId);
+    if (it != m_entityToJoint.end())
+    {
+        it->second.reset();
+        m_entityToJoint.erase(it);
+    }
+
+    m_lastJoints.erase(entityId);
+
+    if (auto* joint = m_world.GetComponent<Phy_JointComponent>(entityId))
+        joint->jointHandle = nullptr;
 }
 
 void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
 {
-    if (!m_physicsWorld) return;
+    if (!m_physicsWorld)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: m_physicsWorld is null!");
+        return;
+    }
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-    if (!transform) return; // Transform이 없으면 생성 불가
+    if (!transform)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: Transform component missing!");
+        return;
+    }
 
-    auto* terrain = m_world.GetComponent<TerrainHeightFieldComponent>(entityId);
-    if (!terrain) return;
+    auto* terrain = m_world.GetComponent<Phy_TerrainHeightFieldComponent>(entityId);
+    if (!terrain)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: Phy_TerrainHeightFieldComponent missing!");
+        return;
+    }
 
-    // HeightField 데이터 검증
+	const size_t expectedSamples = static_cast<size_t>(terrain->numRows) * static_cast<size_t>(terrain->numCols);
     if (terrain->heightSamples.empty() || terrain->numRows < 2 || terrain->numCols < 2)
     {
-        return; // 유효하지 않은 데이터
+		ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: Invalid terrain data (entity: %llu, rows: %u, cols: %u, samples: %zu, expected: %zu)!",
+			(unsigned long long)entityId, terrain->numRows, terrain->numCols, terrain->heightSamples.size(), expectedSamples);
+        return;
     }
+
+	if (terrain->heightSamples.size() != expectedSamples)
+	{
+		ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: HeightSamples size mismatch (entity: %llu, rows: %u, cols: %u, samples: %zu, expected: %zu)!",
+			(unsigned long long)entityId, terrain->numRows, terrain->numCols, terrain->heightSamples.size(), expectedSamples);
+		return;
+	}
 
     if (terrain->heightScale <= 0.0f || terrain->rowScale <= 0.0f || terrain->colScale <= 0.0f)
     {
-        return; // 유효하지 않은 스케일
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: Invalid terrain scale (entity: %llu, heightScale: %.2f, rowScale: %.2f, colScale: %.2f)!",
+            (unsigned long long)entityId, terrain->heightScale, terrain->rowScale, terrain->colScale);
+        return;
     }
 
-    // 기존 액터가 있으면 제거
+	auto itActor = m_entityToActor.find(entityId);
+	if (itActor != m_entityToActor.end())
+	{
+		ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField called but actor already exists (entity=%llu). Skipping.",
+			(unsigned long long)entityId);
+		return;
+	}
+
     if (terrain->physicsActorHandle != nullptr)
-    {
-        DestroyPhysicsActor(entityId);
+	{
+		ALICE_LOG_WARN("[PhysicsSystem] Terrain component has stale physicsActorHandle. Forcing null (entity=%llu)",
+			(unsigned long long)entityId);
+		terrain->physicsActorHandle = nullptr;
     }
 
     Vec3 pos = ToVec3(transform->position);
@@ -908,15 +2536,13 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
     };
     const Vec3 s = AbsScale(transform->scale);
 
-    // HeightFieldColliderDesc 구성
     HeightFieldColliderDesc hfDesc{};
     hfDesc.heightSamples = terrain->heightSamples.data();
     hfDesc.numRows = terrain->numRows;
     hfDesc.numCols = terrain->numCols;
 
-    // Transform scale 반영: X=col, Z=row, Y=height
-    hfDesc.colScale    = terrain->colScale    * s.x;
-    hfDesc.rowScale    = terrain->rowScale    * s.z;
+	hfDesc.colScale = terrain->colScale * s.x;
+	hfDesc.rowScale = terrain->rowScale * s.z;
     hfDesc.heightScale = terrain->heightScale * s.y;
     hfDesc.staticFriction = terrain->staticFriction;
     hfDesc.dynamicFriction = terrain->dynamicFriction;
@@ -924,11 +2550,10 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
     hfDesc.layerBits = terrain->layerBits;
     hfDesc.collideMask = terrain->collideMask;
     hfDesc.queryMask = terrain->queryMask;
-    hfDesc.isTrigger = false; // HeightField는 절대 트리거 불가 (PhysX 제약)
+    hfDesc.isTrigger = false;
     hfDesc.doubleSidedQueries = terrain->doubleSidedQueries; 
-    hfDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+    hfDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-    // 피벗 보정: centerPivot이 true면 지형 중앙으로 localPos 조정
     Vec3 localPos = Vec3::Zero;
     Quat localRot = Quat::Identity;
 
@@ -939,24 +2564,30 @@ void PhysicsSystem::CreateTerrainHeightField(EntityId entityId)
         localPos = Vec3(-halfW, 0.0f, -halfD);
     }
 
-    // RigidStatic + HeightField 생성
-    // localPos/localRot를 적용하기 위해 빈 액터를 만들고 shape를 직접 추가
+    if (!m_physicsWorld)
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] CreateTerrainHeightField: m_physicsWorld became null during creation!");
+        return;
+    }
+    
     auto actorPtr = m_physicsWorld->CreateStaticEmpty(pos, rot, hfDesc.userData);
     if (actorPtr)
     {
         ActorHandle handle(std::move(actorPtr));
         IPhysicsActor* actor = handle.GetActor();
         
-        // HeightField shape를 localPos/localRot로 추가
         if (!actor->AddHeightFieldShape(hfDesc, localPos, localRot))
         {
-            // 실패 시 액터 정리
             handle.Destroy();
             return;
         }
         
         terrain->physicsActorHandle = actor;
         m_entityToActor[entityId] = std::move(handle);
+    }
+    else
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateTerrainHeightField: Failed to create terrain actor!");
     }
 }
 
@@ -972,20 +2603,16 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
     if (!actor || !actor->IsValid()) return;
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-    auto* collider = m_world.GetComponent<ColliderComponent>(entityId);
+    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
     if (!transform || !collider) return;
 
-    // Scale 반영을 위한 헬퍼 함수
     auto AbsScale = [](const DirectX::XMFLOAT3& s) -> Vec3 {
         return Vec3(std::abs(s.x), std::abs(s.y), std::abs(s.z));
     };
 
     Vec3 scale = AbsScale(transform->scale);
-
-    // 기존 Shape 제거
     actor->ClearShapes();
 
-    // Collider 타입에 따라 Shape 재생성 (scale 반영)
     switch (collider->type)
     {
     case ColliderType::Box:
@@ -1003,7 +2630,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         boxDesc.collideMask = collider->collideMask;
         boxDesc.queryMask = collider->queryMask;
         boxDesc.isTrigger = collider->isTrigger;
-        boxDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+        boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         actor->AddBoxShape(boxDesc, Vec3::Zero, Quat::Identity);
         break;
@@ -1020,7 +2647,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         sphereDesc.collideMask = collider->collideMask;
         sphereDesc.queryMask = collider->queryMask;
         sphereDesc.isTrigger = collider->isTrigger;
-        sphereDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+        sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         actor->AddSphereShape(sphereDesc, Vec3::Zero, Quat::Identity);
         break;
@@ -1028,16 +2655,15 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
     case ColliderType::Capsule:
     {
         CapsuleColliderDesc capsuleDesc{};
-        if (collider->capsuleAlignYAxis)
-        {
-            float radial = std::max(scale.x, scale.z);
-            capsuleDesc.radius = collider->capsuleRadius * radial;
-            capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.y;
-        }
-        else
-        {
-            // X축 정렬 (일반적이지 않지만 지원)
-            float radial = std::max(scale.y, scale.z);
+            if (collider->capsuleAlignYAxis)
+            {
+                float radial = std::max(scale.x, scale.z);
+                capsuleDesc.radius = collider->capsuleRadius * radial;
+                capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.y;
+            }
+            else
+            {
+                float radial = std::max(scale.y, scale.z);
             capsuleDesc.radius = collider->capsuleRadius * radial;
             capsuleDesc.halfHeight = collider->capsuleHalfHeight * scale.x;
         }
@@ -1049,22 +2675,133 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         capsuleDesc.collideMask = collider->collideMask;
         capsuleDesc.queryMask = collider->queryMask;
         capsuleDesc.isTrigger = collider->isTrigger;
-        capsuleDesc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
+        capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
         actor->AddCapsuleShape(capsuleDesc, Vec3::Zero, Quat::Identity);
         break;
     }
     }
 
-    // Dynamic RigidBody인 경우 질량 재계산
     IRigidBody* body = handle.GetRigidBody();
     if (body && body->IsValid())
     {
         body->RecomputeMass();
     }
+}
 
-    // 필터/재질/트리거 변경도 반영
-    // (Shape 재생성 시 이미 desc에 포함되어 있음)
+void PhysicsSystem::RebuildMeshShapes(EntityId entityId)
+{
+    auto it = m_entityToActor.find(entityId);
+    if (it == m_entityToActor.end()) return;
+
+    ActorHandle& handle = it->second;
+    if (!handle.IsValid()) return;
+
+    IPhysicsActor* actor = handle.GetActor();
+    if (!actor || !actor->IsValid()) return;
+
+    auto* transform = m_world.GetComponent<TransformComponent>(entityId);
+    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+    if (!transform || !meshCollider) return;
+
+    if (!m_physicsWorld->SupportsMeshCooking())
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] Mesh cooking not supported. RebuildMeshShapes skipped (entity: %llu).",
+            (unsigned long long)entityId);
+        return;
+    }
+
+    std::vector<Vec3> vertices;
+    std::vector<uint32_t> indices;
+    const std::string meshPath = ResolveMeshAssetPath(m_world, entityId, *meshCollider);
+    if (!BuildMeshBuffers(m_skinnedRegistry, meshPath, vertices, indices))
+    {
+        ALICE_LOG_WARN("[PhysicsSystem] MeshCollider: invalid mesh asset (entity: %llu, path: %s).",
+            (unsigned long long)entityId, meshPath.c_str());
+        return;
+    }
+
+    // Triangle mesh는 RigidBody와 함께 사용할 수 없음 (PhysX 제약)
+    // RigidBody가 있으면 Convex mesh로 자동 전환됨
+    if (meshCollider->type == MeshColliderType::Triangle && handle.GetRigidBody())
+    {
+        auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+        if (rb && !rb->isKinematic)
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] Triangle mesh cannot be used with dynamic (non-kinematic) RigidBody (entity: %llu).",
+                (unsigned long long)entityId);
+            actor->ClearShapes();
+            return;
+        }
+    }
+
+    Vec3 scale = Vec3(std::abs(transform->scale.x), std::abs(transform->scale.y), std::abs(transform->scale.z));
+    actor->ClearShapes();
+
+    if (meshCollider->type == MeshColliderType::Triangle)
+    {
+        TriangleMeshColliderDesc triDesc{};
+        triDesc.vertices = vertices.data();
+        triDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+        triDesc.indices32 = indices.data();
+        triDesc.indexCount = static_cast<uint32_t>(indices.size());
+        triDesc.scale = scale;
+        triDesc.flipNormals = meshCollider->flipNormals;
+        triDesc.doubleSidedQueries = meshCollider->doubleSidedQueries;
+        triDesc.validate = meshCollider->validate;
+
+        triDesc.staticFriction = meshCollider->staticFriction;
+        triDesc.dynamicFriction = meshCollider->dynamicFriction;
+        triDesc.restitution = meshCollider->restitution;
+        triDesc.layerBits = meshCollider->layerBits;
+        triDesc.collideMask = meshCollider->collideMask;
+        triDesc.queryMask = meshCollider->queryMask;
+        triDesc.isTrigger = meshCollider->isTrigger;
+        triDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+        if (!actor->AddTriangleMeshShape(triDesc, Vec3::Zero, Quat::Identity))
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] AddTriangleMeshShape failed (entity: %llu).",
+                (unsigned long long)entityId);
+        }
+    }
+    else
+    {
+        ConvexMeshColliderDesc convexDesc{};
+        convexDesc.vertices = vertices.data();
+        convexDesc.vertexCount = static_cast<uint32_t>(vertices.size());
+        convexDesc.scale = scale;
+        convexDesc.shiftVertices = meshCollider->shiftVertices;
+        convexDesc.vertexLimit = std::min(meshCollider->vertexLimit, 255u); // PhysX 제한: 최대 255
+        convexDesc.validate = meshCollider->validate;
+
+        convexDesc.staticFriction = meshCollider->staticFriction;
+        convexDesc.dynamicFriction = meshCollider->dynamicFriction;
+        convexDesc.restitution = meshCollider->restitution;
+        convexDesc.layerBits = meshCollider->layerBits;
+        convexDesc.collideMask = meshCollider->collideMask;
+        convexDesc.queryMask = meshCollider->queryMask;
+        convexDesc.isTrigger = meshCollider->isTrigger;
+        convexDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+
+        if (convexDesc.vertexCount > 255)
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] Convex mesh has too many vertices (%u). Consider simplified mesh.",
+                convexDesc.vertexCount);
+        }
+
+        if (!actor->AddConvexMeshShape(convexDesc, Vec3::Zero, Quat::Identity))
+        {
+            ALICE_LOG_WARN("[PhysicsSystem] AddConvexMeshShape failed (entity: %llu).",
+                (unsigned long long)entityId);
+        }
+    }
+
+    IRigidBody* body = handle.GetRigidBody();
+    if (body && body->IsValid())
+    {
+        body->RecomputeMass();
+    }
 }
 
 void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation)
@@ -1081,7 +2818,7 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
     Vec3 pos = ToVec3(position);
     Quat rot = ToQuat(rotation);
 
-    auto* rb = m_world.GetComponent<RigidBodyComponent>(entityId);
+    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
 
     if (rb && body && body->IsValid())
     {
@@ -1091,7 +2828,6 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
             return;
         }
 
-        //  Dynamic: teleport일 때만 transform을 물리에 밀어 넣는다
         if (rb->teleport)
         {
             actor->SetTransform(pos, rot);
@@ -1106,7 +2842,6 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
             return;
         }
 
-        //  teleport 아니면 "게임이 건드린 Transform을 되돌림"
         if (actor && actor->IsValid())
         {
             auto* t = m_world.GetComponent<TransformComponent>(entityId);
@@ -1120,7 +2855,6 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
         return;
     }
 
-    // Static actor(또는 RB 없는 static collider): 기존대로
     if (actor && actor->IsValid())
         actor->SetTransform(pos, rot);
 }
@@ -1129,23 +2863,164 @@ void PhysicsSystem::SyncPhysicsToGame(const ActiveTransform& transform)
 {
     if (!transform.userData) return;
 
-    EntityId entityId = static_cast<EntityId>(reinterpret_cast<std::uintptr_t>(transform.userData));
+    EntityId entityId = m_world.ExtractEntityIdFromUserData(transform.userData);
+    if (entityId == InvalidEntityId) return;
+
+    if (!IsTrackedEntity(entityId))
+        return;
+
     auto* transformComp = m_world.GetComponent<TransformComponent>(entityId);
     if (!transformComp) return;
 
-    // 위치 및 회전 동기화
     transformComp->position = ToXMFLOAT3(transform.position);
-    
-    // Quat → Euler 변환
     DirectX::XMFLOAT3 euler = ToEulerRadians(transform.rotation);
     transformComp->rotation = euler;
 
-    // 마지막 상태 업데이트
     m_lastTransforms[entityId] = {
         transformComp->position,
         transformComp->rotation,
         transformComp->scale
     };
+}
+
+bool PhysicsSystem::IsTrackedEntity(Alice::EntityId id) const noexcept
+{
+    return (m_entityToActor.find(id) != m_entityToActor.end()) ||
+           (m_entityToCCT.find(id) != m_entityToCCT.end());
+}
+
+IPhysicsActor* PhysicsSystem::ValidateAndGetActor(void* handle, Alice::EntityId entityId) const noexcept
+{
+    if (!handle) return nullptr;
+    
+    // 1. worldEpoch 검증: IsTrackedEntity로 확인
+    if (!IsTrackedEntity(entityId))
+    {
+        // 이전 씬의 핸들 또는 추적되지 않는 엔티티
+        return nullptr;
+    }
+    
+    // 2. m_entityToActor에서 실제 소유권 확인
+    auto it = m_entityToActor.find(entityId);
+    if (it == m_entityToActor.end() || !it->second.IsValid())
+    {
+        return nullptr;
+    }
+    
+    // 3. 핸들이 실제로 m_entityToActor의 것과 일치하는지 확인
+    IPhysicsActor* actor = it->second.GetActor();
+    IRigidBody* body = it->second.GetRigidBody();
+    
+    if (handle != actor && handle != body)
+    {
+        // 핸들이 실제 소유권과 일치하지 않음 (stale handle)
+        return nullptr;
+    }
+    
+    // 4. IsValid() 최종 검증
+    if (body && handle == body)
+    {
+        if (!body->IsValid()) return nullptr;
+        return body; // IRigidBody는 IPhysicsActor를 상속
+    }
+    
+    if (actor && handle == actor)
+    {
+        if (!actor->IsValid()) return nullptr;
+        return actor;
+    }
+    
+    return nullptr;
+}
+
+IRigidBody* PhysicsSystem::ValidateAndGetRigidBody(void* handle, Alice::EntityId entityId) const noexcept
+{
+    if (!handle) return nullptr;
+    
+    // 1. worldEpoch 검증
+    if (!IsTrackedEntity(entityId))
+    {
+        return nullptr;
+    }
+    
+    // 2. m_entityToActor에서 확인
+    auto it = m_entityToActor.find(entityId);
+    if (it == m_entityToActor.end() || !it->second.IsValid())
+    {
+        return nullptr;
+    }
+    
+    // 3. 핸들 일치 확인
+    IRigidBody* body = it->second.GetRigidBody();
+    if (!body || handle != body)
+    {
+        return nullptr;
+    }
+    
+    // 4. IsValid() 검증
+    if (!body->IsValid()) return nullptr;
+    
+    return body;
+}
+
+IPhysicsJoint* PhysicsSystem::ValidateAndGetJoint(void* handle, Alice::EntityId entityId) const noexcept
+{
+    if (!handle) return nullptr;
+    
+    // 1. worldEpoch 검증
+    if (!IsTrackedEntity(entityId))
+    {
+        return nullptr;
+    }
+    
+    // 2. m_entityToJoint에서 확인
+    auto it = m_entityToJoint.find(entityId);
+    if (it == m_entityToJoint.end() || !it->second)
+    {
+        return nullptr;
+    }
+    
+    // 3. 핸들 일치 확인
+    IPhysicsJoint* joint = it->second.get();
+    if (handle != joint)
+    {
+        return nullptr;
+    }
+    
+    // 4. IsValid() 검증
+    if (!joint->IsValid()) return nullptr;
+    
+    return joint;
+}
+
+ICharacterController* PhysicsSystem::ValidateAndGetController(void* handle, Alice::EntityId entityId) const noexcept
+{
+    if (!handle) return nullptr;
+    
+    // 1. worldEpoch 검증
+    if (!IsTrackedEntity(entityId))
+    {
+        return nullptr;
+    }
+    
+    // 2. m_entityToCCT에서 확인
+    auto it = m_entityToCCT.find(entityId);
+    if (it == m_entityToCCT.end() || !it->second.IsValid())
+    {
+        return nullptr;
+    }
+    
+    // 3. 핸들 일치 확인
+    ICharacterController* cct = it->second.cct;
+    if (handle != cct)
+    {
+        return nullptr;
+    }
+    
+    // 4. IsValid() 검증
+    if (!cct->IsValid()) return nullptr;
+    
+    return cct;
 }
 
 Vec3 PhysicsSystem::ToVec3(const DirectX::XMFLOAT3& v)
@@ -1155,10 +3030,11 @@ Vec3 PhysicsSystem::ToVec3(const DirectX::XMFLOAT3& v)
 
 Quat PhysicsSystem::ToQuat(const DirectX::XMFLOAT3& eulerRadians)
 {
-    // Euler (라디안) → Quaternion
-    // DirectX::SimpleMath::Quaternion 사용
-    // Roll (X), Pitch (Y), Yaw (Z) 순서
-    return Quat::CreateFromYawPitchRoll(eulerRadians.z, eulerRadians.y, eulerRadians.x);
+	return Quat::CreateFromYawPitchRoll(
+		eulerRadians.y,
+		eulerRadians.x,
+		eulerRadians.z
+	);
 }
 
 DirectX::XMFLOAT3 PhysicsSystem::ToXMFLOAT3(const Vec3& v)
@@ -1168,59 +3044,84 @@ DirectX::XMFLOAT3 PhysicsSystem::ToXMFLOAT3(const Vec3& v)
 
 DirectX::XMFLOAT3 PhysicsSystem::ToEulerRadians(const Quat& q)
 {
-    // Quaternion → Euler (라디안)
-    // DirectX::SimpleMath::Quaternion에서 직접 계산
-    float x = q.x, y = q.y, z = q.z, w = q.w;
+	const float x = q.x, y = q.y, z = q.z, w = q.w;
     
-    // Roll (X-axis rotation)
-    float sinr_cosp = 2.0f * (w * x + y * z);
-    float cosr_cosp = 1.0f - 2.0f * (x * x + y * y);
-    float roll = std::atan2(sinr_cosp, cosr_cosp);
+	float sinp = 2.0f * (w * x - y * z);
+	float pitch = (std::abs(sinp) >= 1.0f)
+		? std::copysign(DirectX::XM_PIDIV2, sinp)
+		: std::asin(sinp);
     
-    // Pitch (Y-axis rotation)
-    float sinp = 2.0f * (w * y - z * x);
-    float pitch;
-    if (std::abs(sinp) >= 1.0f)
-        pitch = std::copysign(3.14159265358979323846f / 2.0f, sinp); // Use 90 degrees if out of range
-    else
-        pitch = std::asin(sinp);
-    
-    // Yaw (Z-axis rotation)
-    float siny_cosp = 2.0f * (w * z + x * y);
-    float cosy_cosp = 1.0f - 2.0f * (y * y + z * z);
+	float siny_cosp = 2.0f * (w * y + x * z);
+	float cosy_cosp = 1.0f - 2.0f * (x * x + y * y);
     float yaw = std::atan2(siny_cosp, cosy_cosp);
     
-    return DirectX::XMFLOAT3(roll, pitch, yaw);
+	float sinr_cosp = 2.0f * (w * z + x * y);
+	float cosr_cosp = 1.0f - 2.0f * (x * x + z * z);
+	float roll = std::atan2(sinr_cosp, cosr_cosp);
+
+	return DirectX::XMFLOAT3(pitch, yaw, roll);
 }
 
 void PhysicsSystem::CreateCharacterController(EntityId entityId)
 {
-    if (!m_physicsWorld) return;
-    if (!m_physicsWorld->SupportsCharacterControllers()) return;
+    if (!m_physicsWorld)
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: m_physicsWorld is null!");
+        return;
+    }
+    if (!m_physicsWorld->SupportsCharacterControllers())
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: CharacterControllers not supported!");
+        return;
+    }
 
     auto* transform = m_world.GetComponent<TransformComponent>(entityId);
-    auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
-    if (!transform || !ccc) return;
-
-    // ⚠️ 같은 엔티티에 RB/Collider 같이 두지 마라. 충돌/동기화 싸움 난다.
-    if (m_world.GetComponent<RigidBodyComponent>(entityId) || m_world.GetComponent<ColliderComponent>(entityId))
+    auto* ccc = m_world.GetComponent<Phy_CCTComponent>(entityId);
+    if (!transform || !ccc)
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Transform or CCT component missing! (transform: %p, ccc: %p)",
+            (void*)transform, (void*)ccc);
         return;
+    }
+
+    auto* rb = m_world.GetComponent<Phy_RigidBodyComponent>(entityId);
+    auto* collider = m_world.GetComponent<Phy_ColliderComponent>(entityId);
+    auto* meshCollider = m_world.GetComponent<Phy_MeshColliderComponent>(entityId);
+    if (rb || collider || meshCollider)
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Entity has RigidBody (%p) or Collider (%p), cannot create CCT!",
+            (void*)rb, (void*)collider);
+        return;
+    }
 
     auto AbsScale = [](const DirectX::XMFLOAT3& s) -> Vec3 {
         return Vec3(std::abs(s.x), std::abs(s.y), std::abs(s.z));
     };
     const Vec3 s = AbsScale(transform->scale);
+	const float radial = std::max(s.x, s.z);
 
     CharacterControllerDesc desc{};
-    desc.type = CCTType::Capsule;
+	desc.type = CCTType::Capsule;
 
-    // Capsule 스케일 규칙: Y는 높이, X/Z는 반경(비균일이면 큰 축 선택)
-    const float radial = std::max(s.x, s.z);
     desc.radius = ccc->radius * radial;
     desc.halfHeight = ccc->halfHeight * s.y;
 
-    desc.stepOffset = ccc->stepOffset;
-    desc.contactOffset = ccc->contactOffset;
+	desc.stepOffset = ccc->stepOffset * s.y;
+	desc.contactOffset = ccc->contactOffset * std::min(radial, s.y);
+
+	float maxStep = 0.0f;
+	if (desc.type == CCTType::Capsule)
+	{
+		maxStep = desc.halfHeight * 2.0f + desc.radius * 2.0f;
+	}
+	else
+	{
+		maxStep = desc.halfHeight * 2.0f;
+	}
+
+	desc.stepOffset = std::clamp(desc.stepOffset, 0.0f, maxStep);
+	desc.contactOffset = std::max(desc.contactOffset, 0.001f);
+
     desc.slopeLimitRadians = ccc->slopeLimitRadians;
     desc.nonWalkableMode = ccc->nonWalkableMode;
     desc.climbingMode = ccc->climbingMode;
@@ -1230,20 +3131,21 @@ void PhysicsSystem::CreateCharacterController(EntityId entityId)
     desc.layerBits = ccc->layerBits;
     desc.collideMask = ccc->collideMask;
     desc.queryMask = ccc->queryMask;
-    desc.userData = reinterpret_cast<void*>(static_cast<std::uintptr_t>(entityId));
-
-    // foot 기준: Transform.position을 발 위치로 사용
+    desc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
     desc.footPosition = ToVec3(transform->position);
     desc.upDirection = Vec3::UnitY;
 
     auto ctrl = m_physicsWorld->CreateCharacterController(desc);
-    if (!ctrl) return;
+    if (!ctrl)
+    {
+        ALICE_LOG_ERRORF("[PhysicsSystem] CreateCharacterController: Failed to create CCT (CreateCharacterController returned null)!");
+        return;
+    }
 
     CCTHandle handle(std::move(ctrl));
     ccc->controllerHandle = handle.cct;
     m_entityToCCT[entityId] = std::move(handle);
 }
-
 void PhysicsSystem::DestroyCharacterController(EntityId entityId)
 {
     auto it = m_entityToCCT.find(entityId);
@@ -1251,6 +3153,6 @@ void PhysicsSystem::DestroyCharacterController(EntityId entityId)
     it->second.Destroy();
     m_entityToCCT.erase(it);
 
-    auto* ccc = m_world.GetComponent<CharacterControllerComponent>(entityId);
+    auto* ccc = m_world.GetComponent<Phy_CCTComponent>(entityId);
     if (ccc) ccc->controllerHandle = nullptr;
 }

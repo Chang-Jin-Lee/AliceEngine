@@ -2,6 +2,42 @@
 #include "PhysXWorld_Internal.h"
 
 // ============================================================
+//  Local helper functions
+// ============================================================
+
+namespace
+{
+	void ApplyRbDesc(PxRigidDynamic& body, const RigidBodyDesc& rb)
+	{
+		body.userData = rb.userData;
+
+		body.setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !rb.gravityEnabled);
+
+		body.setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, rb.isKinematic);
+		body.setLinearDamping(rb.linearDamping);
+		body.setAngularDamping(rb.angularDamping);
+
+		if (rb.maxLinearVelocity > 0.0f)  body.setMaxLinearVelocity(rb.maxLinearVelocity);
+		if (rb.maxAngularVelocity > 0.0f) body.setMaxAngularVelocity(rb.maxAngularVelocity);
+
+		body.setSolverIterationCounts(
+			static_cast<PxU32>(std::max(1u, rb.solverPositionIterations)),
+			static_cast<PxU32>(std::max(1u, rb.solverVelocityIterations)));
+
+		if (rb.sleepThreshold >= 0.0f) body.setSleepThreshold(rb.sleepThreshold);
+		if (rb.stabilizationThreshold >= 0.0f) body.setStabilizationThreshold(rb.stabilizationThreshold);
+
+		body.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, rb.enableCCD);
+		body.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_SPECULATIVE_CCD, rb.enableSpeculativeCCD);
+
+		body.setRigidDynamicLockFlags(ToPxLockFlags(rb.lockFlags));
+
+		if (!rb.startAwake)
+			body.putToSleep();
+	}
+}
+
+// ============================================================
 //  PhysXWorld - Bodies / Actors / Meshes / CCT
 // ============================================================
 
@@ -14,10 +50,9 @@ std::unique_ptr<IRigidBody> PhysXWorld::CreateDynamicEmpty(const Vec3& pos, cons
 
 	ApplyRbDesc(*body, rb);
 
-	if (impl->enableActiveTransforms)
+		if (impl->enableActiveTransforms)
 		body->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_POSE_INTEGRATION_PREVIEW, true);
 
-	// Set reasonable defaults to avoid invalid mass/inertia before shapes are attached.
 	body->setMass(1.0f);
 	body->setMassSpaceInertiaTensor(PxVec3(1.0f, 1.0f, 1.0f));
 
@@ -64,10 +99,11 @@ std::unique_ptr<IRigidBody> PhysXWorld::CreateDynamicCapsule(const Vec3& pos, co
 	return body;
 }
 
-// 해당 함수는 사용하지 말것, CreateStaticPlaneActor() 사용 권장함
 void PhysXWorld::CreateStaticPlane(float staticFriction, float dynamicFriction, float restitution, const FilterDesc& filter)
 {
-	(void)CreateStaticPlaneActor(staticFriction, dynamicFriction, restitution, filter);
+	// 월드가 소유하는 내부 액터로 보관 (즉시 파괴 방지)
+	if (auto actor = CreateStaticPlaneActor(staticFriction, dynamicFriction, restitution, filter))
+		m_internalActors.push_back(std::move(actor));
 }
 
 std::unique_ptr<IPhysicsActor> PhysXWorld::CreateStaticPlaneActor(float staticFriction, float dynamicFriction, float restitution, const FilterDesc& filter)
@@ -82,7 +118,6 @@ std::unique_ptr<IPhysicsActor> PhysXWorld::CreateStaticPlaneActor(float staticFr
 
 	PxRigidStatic* plane = PxCreatePlane(*impl->physics, PxPlane(0, 1, 0, 0), *mat);
 	if (!plane) return {};
-	// Convenience: allow user code to tag the created actor.
 	plane->userData = filter.userData;
 
 	// Apply filter to its only shape
@@ -172,14 +207,12 @@ std::unique_ptr<ICharacterController> PhysXWorld::CreateCharacterController(cons
 #if PHYSXWRAP_ENABLE_CCT && PHYSXWRAP_HAS_CCT_HEADERS
 	if (!impl || !impl->scene || !impl->controllerMgr) return {};
 
-	// Minimal sanity checks (PhysX will also validate)
 	if (desc.type == CCTType::Capsule)
 	{
 		if (desc.radius <= 0.0f || desc.halfHeight <= 0.0f) return {};
 	}
-	else
+		else
 	{
-		// PhysX box controller uses 3 half-extents
 		if (desc.halfExtents.x <= 0.0f || desc.halfExtents.y <= 0.0f || desc.halfExtents.z <= 0.0f) return {};
 	}
 
@@ -189,7 +222,6 @@ std::unique_ptr<ICharacterController> PhysXWorld::CreateCharacterController(cons
 	PxMaterial* mat = impl->GetOrCreateMaterial(desc);
 	if (!mat) return {};
 
-	// Convert slope angle -> cosine (PhysX expects cosine).
 	const float clampedSlope = std::max(0.0f, std::min(desc.slopeLimitRadians, 1.56079633f));
 	const float slopeCos = std::cos(clampedSlope);
 
@@ -263,6 +295,7 @@ std::unique_ptr<ICharacterController> PhysXWorld::CreateCharacterController(cons
 			if (!sh) continue;
 			ApplyFilterToShape(*sh, f);
 			sh->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, desc.enableQueries);
+			sh->setFlag(PxShapeFlag::eVISUALIZATION, true); 
 		}
 	}
 

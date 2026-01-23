@@ -1,4 +1,4 @@
-﻿#include "Rendering/ForwardRenderSystem.h"
+#include "Rendering/ForwardRenderSystem.h"
 
 #include <d3dcompiler.h>
 // 텍스처 로더 (vcpkg의 DirectXTK 사용)
@@ -307,9 +307,44 @@ namespace Alice
             return false;
         if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vertexShader.ReleaseAndGetAddressOf()))) return false;
 
+
         // 2. Pixel Shader 컴파일 및 생성
-        if (FAILED(D3DCompile(ForwardShader::PBRPS, strlen(ForwardShader::PBRPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr))) 
-            return false;
+        /*std::string finalPBRPS = std::string(ForwardShader::PBRPS_Part1) + "\n" + ForwardShader::PBRPS_Part2;
+        if (FAILED(D3DCompile(finalPBRPS.c_str(), finalPBRPS.length(), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), nullptr)))
+            return false;*/
+
+
+			// 1. 에러 메시지를 담을 Blob 선언
+		ComPtr<ID3DBlob> errorBlob;
+
+		// 2. 문자열 병합 (안전하게 줄바꿈 문자 추가 추천)
+		std::string finalPBRPS = std::string(ForwardShader::PBRPS_Part1) + "\n" + ForwardShader::PBRPS_Part2;
+
+		// 3. D3DCompile 호출 (마지막 인자에 &errorBlob 전달)
+		HRESULT hr = D3DCompile(
+			finalPBRPS.c_str(),
+			finalPBRPS.length(),
+			nullptr, nullptr, nullptr,
+			"main", "ps_5_0",
+			0, 0,
+			psBlob.GetAddressOf(),
+			errorBlob.GetAddressOf() // [중요] 여기에 에러 메시지가 담깁니다.
+		);
+
+		if (FAILED(hr))
+		{
+			// 에러 메시지가 있다면 출력창에 띄우기
+			if (errorBlob)
+			{
+				const char* compileErrors = (const char*)errorBlob->GetBufferPointer();
+				OutputDebugStringA("--------------------------------------------------\n");
+				OutputDebugStringA("[Shader Compile Error]:\n");
+				OutputDebugStringA(compileErrors); // 비주얼 스튜디오 '출력' 창에서 확인 가능
+				OutputDebugStringA("--------------------------------------------------\n");
+			}
+			return false;
+		}
+
         if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_pixelShader.ReleaseAndGetAddressOf()))) return false;
 
         // 3. Input Layout 생성 (오프셋 자동 정렬: D3D11_APPEND_ALIGNED_ELEMENT)
@@ -372,7 +407,8 @@ namespace Alice
             { "BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,  0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            { "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "SMOOTHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 96, D3D11_INPUT_PER_VERTEX_DATA, 0 }
         };
 
         if (FAILED(m_device->CreateInputLayout(desc, (UINT)std::size(desc), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &m_inputLayoutSkinned))) return false;
@@ -486,6 +522,14 @@ namespace Alice
         desc.SlopeScaledDepthBias = 1.0f;
         if (FAILED(m_device->CreateRasterizerState(&desc, m_shadowRasterizerStateReversed.ReleaseAndGetAddressOf()))) return false;
 
+        // 3. 아웃라인용 Rasterizer State (Cull Front)
+        // - 정점을 법선 방향으로 확장한 뒤, 뒷면(Back Face)을 그리면 원본 물체 뒤로 테두리가 나타납니다.
+        desc.FrontCounterClockwise = TRUE;
+        desc.DepthBias = 0;
+        desc.SlopeScaledDepthBias = 0.0f;
+        desc.CullMode = D3D11_CULL_FRONT;    // 앞면을 제거하고 뒷면을 그림
+        if (FAILED(m_device->CreateRasterizerState(&desc, m_rsCullFront.ReleaseAndGetAddressOf()))) return false;
+
         return true;
     }
 
@@ -521,7 +565,10 @@ namespace Alice
                                                 const float& roughness,
                                                 const float& metalness,
                                                 const bool& useTexture,
-                                                const bool& enableNormalMap)
+                                                const bool& enableNormalMap,
+                                                int shadingMode,
+                                                const XMFLOAT3& outlineColor,
+                                                float outlineWidth)
     {
         CBPerObject data = {};
         // HLSL에서 row-major로 사용할 수 있도록 전치 행렬 사용
@@ -533,6 +580,10 @@ namespace Alice
         data.metalness     = metalness;
         data.useTexture    = useTexture ? 1 : 0;
         data.enableNormalMap = enableNormalMap ? 1 : 0;
+        data.shadingMode   = shadingMode;
+        data.pad0          = 0;
+        data.outlineColor  = outlineColor;
+        data.outlineWidth  = outlineWidth;
 
         m_context->UpdateSubresource(m_cbPerObject.Get(), 0, nullptr, &data, 0, 0);
         m_context->VSSetConstantBuffers(0, 1, m_cbPerObject.GetAddressOf());
@@ -622,7 +673,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.pointCount >= MaxPointLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             auto& dst = data.pointLights[data.pointCount++];
             dst.position = tr->position;
@@ -637,7 +688,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.spotCount >= MaxSpotLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
             XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
@@ -664,7 +715,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.rectCount >= MaxRectLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
             XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
@@ -781,7 +832,10 @@ namespace Alice
 
     void ForwardRenderSystem::RenderSkinnedMeshes(
         const Camera& camera,
-        const std::vector<SkinnedDrawCommand>& commands)
+        const std::vector<SkinnedDrawCommand>& commands,
+        int shadingMode,
+        bool enableFillLight,
+        CXMMATRIX lightViewProj)
     {
         if (commands.empty()) return;
         if (!m_skinnedVertexShader || !m_pixelShader || !m_inputLayoutSkinned) {
@@ -797,6 +851,9 @@ namespace Alice
 
         XMMATRIX view = camera.GetViewMatrix();
         XMMATRIX proj = camera.GetProjectionMatrix();
+
+        int lastShadingMode = shadingMode;
+        UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
 
         for (const auto& cmd : commands)
         {
@@ -818,9 +875,16 @@ namespace Alice
 
             float r = (cmd.roughness != 0.0f) ? cmd.roughness : m_lightingParameters.roughness;
             float m = (cmd.metalness != 0.0f) ? cmd.metalness : m_lightingParameters.metalness;
-            UpdatePerObjectCB(cmd.world, view, proj,
-                XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr));
-
+            const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+            if (objectShadingMode != lastShadingMode)
+            {
+                UpdateLightingCB(camera, objectShadingMode, enableFillLight, lightViewProj);
+                lastShadingMode = objectShadingMode;
+            }
+            // 아웃라인 파라미터
+            XMFLOAT3 outlineColor = cmd.outlineColor;
+            float outlineWidth = cmd.outlineWidth;
+            
             // 6. 메쉬/서브셋 조회 및 렌더링
             auto mesh = (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
             ID3D11ShaderResourceView* baseNormal = m_flatNormalSRV ? m_flatNormalSRV.Get() : m_normalSRV.Get();
@@ -838,7 +902,22 @@ namespace Alice
                     m_iblDiffuseSRV.Get(), m_iblSpecularSRV.Get(), m_iblBrdfLutSRV.Get()
                     };
                     m_context->PSSetShaderResources(0, 8, srvs);
+                    
+                    // [Pass 1] 원본
+                    UpdatePerObjectCB(cmd.world, view, proj,
+                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr), objectShadingMode, outlineColor, 0.0f);
                     m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                    
+                    // [Pass 2] 아웃라인
+                    if (outlineWidth > 0.0f)
+                    {
+                        m_context->RSSetState(m_rsCullFront.Get());
+                        UpdatePerObjectCB(cmd.world, view, proj,
+                            XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr), objectShadingMode, outlineColor, outlineWidth);
+                        m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                        // 상태 복구
+                        m_context->RSSetState(isPositiveDet ? m_rasterizerStateReversed.Get() : m_rasterizerState.Get());
+                    }
                 }
             }
             else
@@ -849,8 +928,27 @@ namespace Alice
                     m_iblDiffuseSRV.Get(), m_iblSpecularSRV.Get(), m_iblBrdfLutSRV.Get()
                 };
                 m_context->PSSetShaderResources(0, 8, srvs);
+                
+                // [Pass 1] 원본
+                UpdatePerObjectCB(cmd.world, view, proj,
+                    XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr), objectShadingMode, outlineColor, 0.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                
+                // [Pass 2] 아웃라인
+                if (outlineWidth > 0.0f)
+                {
+                    m_context->RSSetState(m_rsCullFront.Get());
+                    UpdatePerObjectCB(cmd.world, view, proj,
+                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr), objectShadingMode, outlineColor, outlineWidth);
+                    m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                    // 상태 복구
+                    m_context->RSSetState(isPositiveDet ? m_rasterizerStateReversed.Get() : m_rasterizerState.Get());
+                }
             }
+        }
+        if (lastShadingMode != shadingMode)
+        {
+            UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
         }
     }
 
@@ -885,6 +983,7 @@ namespace Alice
         for (const auto& [id, tr] : transforms)
         {
             if (cameraEntities.contains(id)) continue;
+            if (!tr.enabled) continue;
 
             hasObjects = true;
             minP.x = (std::min)(minP.x, tr.position.x); minP.y = (std::min)(minP.y, tr.position.y); minP.z = (std::min)(minP.z, tr.position.z);
@@ -968,6 +1067,7 @@ namespace Alice
             {
                 if (cameraEntities.contains(id)) continue;
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
+                if (!transform.enabled) continue;
 
                 XMMATRIX worldM = BuildWorldMatrix(transform);
 
@@ -980,7 +1080,7 @@ namespace Alice
                     m_context->RSSetState(m_shadowRasterizerState.Get());
 
                 XMFLOAT4 dummy(1, 1, 1, 1);
-                UpdatePerObjectCB(worldM, lightView, lightProj, dummy, 1, 0, false, false);
+                UpdatePerObjectCB(worldM, lightView, lightProj, dummy, 1, 0, false, false, 0);
                 //m_context->DrawIndexed(m_indexCount, 0, 0);
             }
 
@@ -998,7 +1098,7 @@ namespace Alice
 
                     UpdateBonesCB(cmd.bones, cmd.boneCount);
                     XMFLOAT4 dummy(1, 1, 1, 1);
-                    UpdatePerObjectCB(cmd.world, lightView, lightProj, dummy, 1, 0, false, false);
+                    UpdatePerObjectCB(cmd.world, lightView, lightProj, dummy, 1, 0, false, false, 0);
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 }
             }
@@ -1066,9 +1166,11 @@ namespace Alice
 
         // --- 정적 메시 루프 (Static Meshes) ---
         const auto& transforms = world.GetComponents<TransformComponent>();
+        int lastShadingMode = shadingMode;
         for (const auto& [id, transform] : transforms)
         {
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue; // 스키닝 메시는 제외
+            if (!transform.enabled) continue;
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
 
@@ -1078,20 +1180,59 @@ namespace Alice
             float metal = m_lightingParameters.metalness;
             bool useTex = false;
 
-            if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id)) {
+            const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id);
+            if (mat) {
                 color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
                 rough = mat->roughness; metal = mat->metalness;
                 useTex = !mat->albedoTexturePath.empty();
             }
+            const int objectShadingMode = (mat && mat->shadingMode >= 0) ? mat->shadingMode : shadingMode;
+            if (objectShadingMode != lastShadingMode)
+            {
+                UpdateLightingCB(camera, objectShadingMode, enableFillLight, lightViewProj);
+                lastShadingMode = objectShadingMode;
+            }
+
+            // 아웃라인 파라미터
+            XMFLOAT3 outlineColor = mat ? mat->outlineColor : XMFLOAT3(0.0f, 0.0f, 0.0f);
+            float outlineWidth = mat ? mat->outlineWidth : 0.0f;
 
             // Rasterizer State (Culling)
             bool flipped = XMVectorGetX(XMMatrixDeterminant(worldM)) < 0.0f;
-            if (flipped && m_rasterizerStateReversed) m_context->RSSetState(m_rasterizerStateReversed.Get());
-            else if (m_rasterizerState) m_context->RSSetState(m_rasterizerState.Get());
+            ID3D11RasterizerState* originalRS = nullptr;
+            if (flipped && m_rasterizerStateReversed) 
+            {
+                originalRS = m_rasterizerStateReversed.Get();
+                m_context->RSSetState(originalRS);
+            }
+            else if (m_rasterizerState) 
+            {
+                originalRS = m_rasterizerState.Get();
+                m_context->RSSetState(originalRS);
+            }
 
             bool useNormalMap = (m_normalSRV != nullptr) && useTex;
-            UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, useTex, useNormalMap);
+            
+            // [Pass 1] 원본 물체 그리기 (아웃라인 두께 0으로 강제)
+            UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, useTex, useNormalMap, objectShadingMode, outlineColor, 0.0f);
             m_context->DrawIndexed(m_indexCount, 0, 0);
+
+            // [Pass 2] 아웃라인 그리기 (설정된 경우만)
+            if (outlineWidth > 0.0f)
+            {
+                m_context->RSSetState(m_rsCullFront.Get()); // 뒷면 그리기
+                
+                // 아웃라인 값 적용
+                UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, useTex, useNormalMap, objectShadingMode, outlineColor, outlineWidth);
+                m_context->DrawIndexed(m_indexCount, 0, 0);
+                
+                // 상태 복구
+                if (originalRS) m_context->RSSetState(originalRS);
+            }
+        }
+        if (lastShadingMode != shadingMode)
+        {
+            UpdateLightingCB(camera, shadingMode, enableFillLight, lightViewProj);
         }
     }
 
@@ -1130,7 +1271,7 @@ namespace Alice
         RenderMainPass(world, camera, shadingMode, enableFillLight, lightViewProj);
 
         // 3. 스키닝 메시 패스 (Skinned Meshes) - 이미 Main Pass에서 RTV가 설정되어 있으므로 바로 그립니다.
-        if (!skinnedCommands.empty()) RenderSkinnedMeshes(camera, skinnedCommands);
+        if (!skinnedCommands.empty()) RenderSkinnedMeshes(camera, skinnedCommands, shadingMode, enableFillLight, lightViewProj);
 
         // 4. 스카이박스 렌더링 (Skybox)
         RenderSkybox(camera);

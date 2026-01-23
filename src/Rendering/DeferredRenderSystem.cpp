@@ -16,8 +16,10 @@
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include "Components/TrailEffectComponent.h"
 #include "Rendering/ShaderCode/CommonShaderCode.h"
 #include "Rendering/ShaderCode/DeferredShader.h"
+#include "Rendering/TrailEffectRenderSystem.h"
 #include <fstream>
 #include <sstream>
 
@@ -118,6 +120,18 @@ namespace Alice
 			return false;
 		}
 
+		if (!CreateBloomResources(width, height))
+		{
+			ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateBloomResources failed.");
+			return false;
+		}
+        
+        if (!CreatePostBloomResources(width, height))
+        {
+			ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreatePostBloomResources failed.");
+			return false;
+        }
+
         // IBL 리소스 생성
         if (!CreateIblResources())
         {
@@ -162,6 +176,24 @@ namespace Alice
         if (FAILED(m_device->CreateTexture2D(&dDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf()))) return;
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { dDesc.Format, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
         if (FAILED(m_device->CreateDepthStencilView(m_sceneDepthTex.Get(), &dsvDesc, m_sceneDSV.ReleaseAndGetAddressOf()))) return;
+
+        // Bloom 리소스 리사이즈
+        for (int level = 0; level < BLOOM_LEVEL_COUNT; ++level)
+        {
+            for (int pingPong = 0; pingPong < 2; ++pingPong)
+            {
+                m_bloomLevelTex[level][pingPong].Reset();
+                m_bloomLevelRTV[level][pingPong].Reset();
+                m_bloomLevelSRV[level][pingPong].Reset();
+            }
+        }
+        CreateBloomResources(width, height);
+        
+        // Post-Bloom 합성 리소스 리사이즈
+        m_postBloomTex.Reset();
+        m_postBloomRTV.Reset();
+        m_postBloomSRV.Reset();
+        CreatePostBloomResources(width, height);
     }
 
     bool DeferredRenderSystem::CreateGBuffer(std::uint32_t width, std::uint32_t height)
@@ -268,7 +300,8 @@ namespace Alice
             {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
             {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
             {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0}
+            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"SMOOTHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 96, D3D11_INPUT_PER_VERTEX_DATA, 0}
         };
         if (FAILED(m_device->CreateInputLayout(skinnedLayout, ARRAYSIZE(skinnedLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_gBufferSkinnedInputLayout.ReleaseAndGetAddressOf())))
             return false;
@@ -362,7 +395,8 @@ namespace Alice
                 {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
                 {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
                 {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
-                {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0}
+                {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"SMOOTHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 96, D3D11_INPUT_PER_VERTEX_DATA, 0}
             };
             if (FAILED(m_device->CreateInputLayout(skinnedLayoutT,
                                                    ARRAYSIZE(skinnedLayoutT),
@@ -621,9 +655,9 @@ namespace Alice
 
     bool DeferredRenderSystem::CreateConstantBuffers()
     {
-        // PerObject CB (Forward와 동일한 구조: 행렬 + 재질 정보)
+        // PerObject CB (Forward와 동일한 구조: 행렬 + 재질 정보 + 셰이딩 모드)
         D3D11_BUFFER_DESC cbDesc = {};
-        cbDesc.ByteWidth = sizeof(DirectX::XMMATRIX) * 3 + sizeof(DirectX::XMFLOAT4) + sizeof(float) * 2 + sizeof(int) * 2; // world, view, proj, color, rough, metal, useTex, enableNorm
+        cbDesc.ByteWidth = sizeof(CBPerObject);
         cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         cbDesc.Usage = D3D11_USAGE_DYNAMIC;
         cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -654,6 +688,12 @@ namespace Alice
         // PostProcess CB
         cbDesc.ByteWidth = sizeof(float) * 4; // exposure, maxHDRNits, padding
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbPostProcess.ReleaseAndGetAddressOf())))
+            return false;
+
+        // Bloom CB
+        cbDesc.ByteWidth = sizeof(BloomCB);
+        cbDesc.ByteWidth = (cbDesc.ByteWidth + 15u) & ~15u; // 16-byte alignment
+        if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbBloom.ReleaseAndGetAddressOf())))
             return false;
 
         // Transparent Forward-Style Light CB (register(b1))
@@ -813,6 +853,13 @@ namespace Alice
                 return false;
         }
 
+        // 아웃라인용 Rasterizer State (Cull Front)
+        // - 정점을 법선 방향으로 확장한 뒤, 뒷면(Back Face)을 그리면 원본 물체 뒤로 테두리가 나타납니다.
+        D3D11_RASTERIZER_DESC outlineDesc = rsDesc;
+        outlineDesc.CullMode = D3D11_CULL_FRONT;    // 앞면을 제거하고 뒷면을 그림
+        if (FAILED(m_device->CreateRasterizerState(&outlineDesc, m_rsCullFront.ReleaseAndGetAddressOf())))
+            return false;
+
         return true;
     }
 
@@ -920,6 +967,146 @@ namespace Alice
         return true;
     }
 
+    bool DeferredRenderSystem::CreateBloomResources(const std::uint32_t& width, const std::uint32_t& height)
+    {
+        // 레벨 0: viewport/downsample
+        std::uint32_t level0Width = width / m_bloomSettings.downsample;
+        std::uint32_t level0Height = height / m_bloomSettings.downsample;
+        
+        // 최소 크기 보장
+        if (level0Width == 0) level0Width = 1;
+        if (level0Height == 0) level0Height = 1;
+        
+        // 각 레벨의 해상도 계산 및 텍스처 생성
+        for (int level = 0; level < BLOOM_LEVEL_COUNT; ++level)
+        {
+            std::uint32_t levelWidth = level0Width;
+            std::uint32_t levelHeight = level0Height;
+            
+            // 레벨 1~4는 이전 레벨의 절반
+            for (int i = 0; i < level; ++i)
+            {
+                levelWidth = (levelWidth > 1) ? (levelWidth / 2) : 1;
+                levelHeight = (levelHeight > 1) ? (levelHeight / 2) : 1;
+            }
+            
+            // 최소 크기 보장
+            if (levelWidth == 0) levelWidth = 1;
+            if (levelHeight == 0) levelHeight = 1;
+            
+            m_bloomLevelWidth[level] = levelWidth;
+            m_bloomLevelHeight[level] = levelHeight;
+            
+            // 각 레벨마다 ping-pong 텍스처 2장 (A/B) 생성
+            D3D11_TEXTURE2D_DESC bloomDesc = { levelWidth, levelHeight, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+            
+            for (int pingPong = 0; pingPong < 2; ++pingPong)
+            {
+                if (FAILED(m_device->CreateTexture2D(&bloomDesc, nullptr, m_bloomLevelTex[level][pingPong].ReleaseAndGetAddressOf()))) return false;
+                if (FAILED(m_device->CreateRenderTargetView(m_bloomLevelTex[level][pingPong].Get(), nullptr, m_bloomLevelRTV[level][pingPong].ReleaseAndGetAddressOf()))) return false;
+                if (FAILED(m_device->CreateShaderResourceView(m_bloomLevelTex[level][pingPong].Get(), nullptr, m_bloomLevelSRV[level][pingPong].ReleaseAndGetAddressOf()))) return false;
+            }
+
+
+        }
+
+        // Bloom 셰이더 컴파일 (한 번만 컴파일하므로 이미 생성되어 있으면 스킵)
+        if (!m_bloomBrightPassPS)
+        {
+            ComPtr<ID3DBlob> psBlob, errorBlob;
+
+            // Bright Pass PS
+            if (FAILED(D3DCompile(CommonShaderCode::BloomBrightPassPS, strlen(CommonShaderCode::BloomBrightPassPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Bright Pass PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomBrightPassPS.ReleaseAndGetAddressOf()))) return false;
+
+            psBlob.Reset();
+            errorBlob.Reset();
+
+            // Blur Pass PS (Horizontal)
+            if (FAILED(D3DCompile(CommonShaderCode::BloomBlurPassPS_H, strlen(CommonShaderCode::BloomBlurPassPS_H), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Blur Pass PS (H) compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomBlurPassPS_H.ReleaseAndGetAddressOf()))) return false;
+
+            psBlob.Reset();
+            errorBlob.Reset();
+
+            // Blur Pass PS (Vertical)
+            if (FAILED(D3DCompile(CommonShaderCode::BloomBlurPassPS_V, strlen(CommonShaderCode::BloomBlurPassPS_V), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Blur Pass PS (V) compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomBlurPassPS_V.ReleaseAndGetAddressOf()))) return false;
+
+            psBlob.Reset();
+            errorBlob.Reset();
+
+            // Downsample PS
+            if (FAILED(D3DCompile(CommonShaderCode::BloomDownsamplePS, strlen(CommonShaderCode::BloomDownsamplePS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Downsample PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomDownsamplePS.ReleaseAndGetAddressOf()))) return false;
+
+            psBlob.Reset();
+            errorBlob.Reset();
+
+            // Upsample PS
+            if (FAILED(D3DCompile(CommonShaderCode::BloomUpsamplePS, strlen(CommonShaderCode::BloomUpsamplePS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Upsample PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomUpsamplePS.ReleaseAndGetAddressOf()))) return false;
+
+            psBlob.Reset();
+            errorBlob.Reset();
+
+            // Composite PS
+            if (FAILED(D3DCompile(CommonShaderCode::BloomCompositePS, strlen(CommonShaderCode::BloomCompositePS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob) ALICE_LOG_ERRORF("Bloom Composite PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_bloomCompositePS.ReleaseAndGetAddressOf()))) return false;
+        }
+
+        ALICE_LOG_INFO("DeferredRenderSystem::CreateBloomResources: success. Level0: (%dx%d)", m_bloomLevelWidth[0], m_bloomLevelHeight[0]);
+        return true;
+    }
+
+    bool DeferredRenderSystem::CreatePostBloomResources(const std::uint32_t& width, const std::uint32_t& height)
+	{
+		// Bloom 합성(HDR) -> ToneMapping 입력으로 쓸 중간 텍스처
+		m_postBloomTex.Reset();
+		m_postBloomRTV.Reset();
+		m_postBloomSRV.Reset();
+
+		D3D11_TEXTURE2D_DESC desc = {};
+		desc.Width = width;
+		desc.Height = height;
+		desc.MipLevels = 1;
+		desc.ArraySize = 1;
+		desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // HDR 유지
+		desc.SampleDesc.Count = 1;
+		desc.Usage = D3D11_USAGE_DEFAULT;
+		desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+		if (FAILED(m_device->CreateTexture2D(&desc, nullptr, m_postBloomTex.ReleaseAndGetAddressOf()))) return false;
+		if (FAILED(m_device->CreateRenderTargetView(m_postBloomTex.Get(), nullptr, m_postBloomRTV.ReleaseAndGetAddressOf()))) return false;
+		if (FAILED(m_device->CreateShaderResourceView(m_postBloomTex.Get(), nullptr, m_postBloomSRV.ReleaseAndGetAddressOf()))) return false;
+
+        return true;
+	}
+
 
     bool DeferredRenderSystem::CreateIblResources(const std::string& iblDir, const std::string& iblName)
     {
@@ -976,6 +1163,7 @@ namespace Alice
         for (const auto& [id, tr] : transforms)
         {
             if (cameraEntities.contains(id)) continue;
+            if (!tr.enabled) continue;
             hasObjects = true;
             minP.x = (std::min)(minP.x, tr.position.x); minP.y = (std::min)(minP.y, tr.position.y); minP.z = (std::min)(minP.z, tr.position.z);
             maxP.x = (std::max)(maxP.x, tr.position.x); maxP.y = (std::max)(maxP.y, tr.position.y); maxP.z = (std::max)(maxP.z, tr.position.z);
@@ -1049,6 +1237,7 @@ namespace Alice
             {
                 if (cameraEntities.contains(id)) continue;
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
+                if (!tr.enabled) continue;
 
                 XMMATRIX worldM = BuildWorldMatrix(tr);
 
@@ -1056,7 +1245,7 @@ namespace Alice
                 if (flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
                 else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
 
-                UpdatePerObjectCB(worldM, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false);
+                UpdatePerObjectCB(worldM, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0, 1.0f);
                 m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
             }
         }
@@ -1082,7 +1271,7 @@ namespace Alice
                 else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
 
                 UpdateBonesCB(cmd.bones, cmd.boneCount);
-                UpdatePerObjectCB(cmd.world, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false);
+                UpdatePerObjectCB(cmd.world, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0, 1.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
             }
         }
@@ -1114,10 +1303,16 @@ namespace Alice
         m_context->RSSetViewports(1, &vp);
 
         // G-Buffer 패스
-        PassGBuffer(world, camera, skinnedCommands, cameraEntities, editorMode, isPlaying);
+        PassGBuffer(world, camera, skinnedCommands, cameraEntities, shadingMode, editorMode, isPlaying);
 
-        // Deferred Light 패스
+        // Deferred Light 패스 (IBL 포함)
         PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
+
+        // TrailEffectRenderSystem 렌더링 (IBL 패스 이후)
+        if (m_trailRenderSystem)
+        {
+            m_trailRenderSystem->Render(world, camera);
+        }
 
         // 스카이박스 렌더링
         if (m_skyboxEnabled)
@@ -1126,16 +1321,26 @@ namespace Alice
         }
 
         // 반투명(알파 블렌딩) 오브젝트는 라이트 패스 이후 Forward-Style로 합성
-        PassTransparentForward(camera, skinnedCommands);
+        PassTransparentForward(camera, skinnedCommands, shadingMode);
 
-        // 에디터 뷰포트 표시용 LDR 텍스처로 톤매핑 (ImGui::Image에서 사용)
+        // 에디터 뷰포트 표시용 LDR 텍스처로 Bloom + 톤매핑 (ImGui::Image에서 사용)
         if (m_viewportRTV)
         {
             D3D11_VIEWPORT viewport = {};
             viewport.Width = static_cast<float>(m_sceneWidth);
             viewport.Height = static_cast<float>(m_sceneHeight);
             viewport.MaxDepth = 1.0f;
-            RenderToneMapping(m_viewportRTV.Get(), viewport);
+            
+            // Bloom 패스 (enabled일 때만)
+            if (m_bloomSettings.enabled)
+            {
+                RenderBloomPass(m_sceneColorSRV.Get(), m_viewportRTV.Get(), viewport);
+            }
+            else
+            {
+                // Bloom이 꺼져있으면 씬 컬러를 바로 톤매핑
+                RenderToneMapping(m_sceneColorSRV.Get(), m_viewportRTV.Get(), viewport);
+            }
         }
 
         // 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
@@ -1146,6 +1351,7 @@ namespace Alice
                                            const Camera& camera,
                                            const std::vector<SkinnedDrawCommand>& skinnedCommands,
                                            const std::unordered_set<EntityId>& cameraEntities,
+                                           int shadingMode,
                                            bool editorMode,
                                            bool isPlaying)
     {
@@ -1159,7 +1365,8 @@ namespace Alice
 
         // G-Buffer 클리어
         float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-        float clearNormal[4] = { 0.5f, 0.5f, 0.5f, 1.0f };
+        // Normal 클리어 값: 평평한 노말 (0,0,1)을 [0,1] 인코딩하면 (0.5, 0.5, 1.0)
+        float clearNormal[4] = { 0.5f, 0.5f, 1.0f, 1.0f };
 
         m_context->ClearRenderTargetView(m_gBufferRTVs[0].Get(), clearColor); // Position
         m_context->ClearRenderTargetView(m_gBufferRTVs[1].Get(), clearNormal); // Normal
@@ -1183,6 +1390,10 @@ namespace Alice
         m_context->PSSetShader(m_gBufferPS.Get(), nullptr, 0);
         m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         m_context->IASetInputLayout(m_gBufferInputLayout.Get());
+        
+        // PS sampler 바인딩 (normal map 샘플링을 위해 필요)
+        ID3D11SamplerState* samplers[] = { m_samplerState.Get() };
+        m_context->PSSetSamplers(0, 1, samplers);
 
         // 상수 버퍼 업데이트
         XMMATRIX view = camera.GetViewMatrix();
@@ -1201,6 +1412,7 @@ namespace Alice
         {
             if (cameraEntities.contains(id)) continue;
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
+            if (!transform.enabled) continue;
 
             XMMATRIX worldM = BuildWorldMatrix(transform);
             
@@ -1211,10 +1423,20 @@ namespace Alice
             ID3D11ShaderResourceView* texSRV = nullptr;
             
             // MaterialComponent가 있으면 값 적용
-            if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id)) {
+            XMFLOAT3 outlineColor = {0,0,0};
+            float outlineWidth = 0.0f;
+            float normalStrength = 1.0f;
+            int objectShadingMode = shadingMode;
+            
+            const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id);
+            if (mat) {
                 color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
                 rough = mat->roughness; 
                 metal = mat->metalness;
+                normalStrength = mat->normalStrength;
+                outlineColor = mat->outlineColor;
+                outlineWidth = mat->outlineWidth;
+                if (mat->shadingMode >= 0) objectShadingMode = mat->shadingMode;
                 if (!mat->albedoTexturePath.empty()) {
                     texSRV = GetOrCreateTexture(mat->albedoTexturePath);
                     useTex = (texSRV != nullptr);
@@ -1225,10 +1447,23 @@ namespace Alice
             ID3D11ShaderResourceView* srvs[] = { texSRV, nullptr }; // 정적 메시는 노말맵 현재 null
             m_context->PSSetShaderResources(0, 2, srvs);
 
-            // CB 업데이트 (재질 정보 포함)
-            UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false);
-
+            // Pass 1. 원본 물체 그리기 (아웃라인 두께 0으로 강제)
+            UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false, 
+                              objectShadingMode, normalStrength, outlineColor, 0.0f); // width = 0
             m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
+
+            // Pass 2. 아웃라인 그리기 (설정된 경우만)
+            if (outlineWidth > 0.0f)
+            {
+                m_context->RSSetState(m_rsCullFront.Get()); // 뒷면 그리기
+                
+                // 아웃라인 값 적용
+                UpdatePerObjectCB(worldM, view, proj, color, rough, metal, useTex, false, 
+                                  objectShadingMode, normalStrength, outlineColor, outlineWidth);
+                m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
+                
+                m_context->RSSetState(m_rasterizerState.Get()); // 상태 복구
+            }
         }
         
         // 2. 스키닝 메시 렌더링
@@ -1268,11 +1503,24 @@ namespace Alice
                         ID3D11ShaderResourceView* srvs[] = { diff, norm };
                         m_context->PSSetShaderResources(0, 2, srvs);
 
-                        UpdatePerObjectCB(cmd.world, view, proj, color,
-                                          cmd.roughness, cmd.metalness,
-                                          (diff != nullptr), (norm != nullptr));
-
+                        const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+                        
+                        // Pass 1. 원본
+                        UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                          (diff != nullptr), (norm != nullptr), objectShadingMode, 
+                                          cmd.normalStrength, cmd.outlineColor, 0.0f); // width 0
                         m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+
+                        // Pass 2. 아웃라인
+                        if (cmd.outlineWidth > 0.0f)
+                        {
+                            m_context->RSSetState(m_rsCullFront.Get());
+                            UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                              (diff != nullptr), (norm != nullptr), objectShadingMode, 
+                                              cmd.normalStrength, cmd.outlineColor, cmd.outlineWidth);
+                            m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                            m_context->RSSetState(m_rasterizerState.Get());
+                        }
                     }
                 }
                 else
@@ -1282,11 +1530,24 @@ namespace Alice
                     ID3D11ShaderResourceView* srvs[] = { diff, nullptr };
                     m_context->PSSetShaderResources(0, 2, srvs);
 
-                    UpdatePerObjectCB(cmd.world, view, proj, color,
-                                      cmd.roughness, cmd.metalness,
-                                      (diff != nullptr), false);
-
+                    const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+                    
+                    // Pass 1. 원본
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                      (diff != nullptr), false, objectShadingMode, 
+                                      cmd.normalStrength, cmd.outlineColor, 0.0f);
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+
+                    // Pass 2. 아웃라인
+                    if (cmd.outlineWidth > 0.0f)
+                    {
+                        m_context->RSSetState(m_rsCullFront.Get());
+                        UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                          (diff != nullptr), false, objectShadingMode, 
+                                          cmd.normalStrength, cmd.outlineColor, cmd.outlineWidth);
+                        m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                        m_context->RSSetState(m_rasterizerState.Get());
+                    }
                 }
             }
         }
@@ -1322,7 +1583,7 @@ namespace Alice
 
                 // 카메라 큐브 재질 (흰색)
                 XMFLOAT4 cameraCubeColor(1.0f, 1.0f, 1.0f, 1.0f);
-                UpdatePerObjectCB(cameraCubeWorld, view, proj, cameraCubeColor, 0.5f, 0.0f, false, false);
+                UpdatePerObjectCB(cameraCubeWorld, view, proj, cameraCubeColor, 0.5f, 0.0f, false, false, shadingMode);
 
                 ID3D11ShaderResourceView* srvs[] = { nullptr, nullptr };
                 m_context->PSSetShaderResources(0, 2, srvs);
@@ -1355,7 +1616,7 @@ namespace Alice
 
                 // 하늘색 (0.5, 0.8, 1.0)
                 XMFLOAT4 skyBlueColor(0.5f, 0.8f, 1.0f, 1.0f);
-                UpdatePerObjectCB(directionCubeWorld, view, proj, skyBlueColor, 0.5f, 0.0f, false, false);
+                UpdatePerObjectCB(directionCubeWorld, view, proj, skyBlueColor, 0.5f, 0.0f, false, false, shadingMode);
 
                 m_context->DrawIndexed(m_cubeIndexCount, 0, 0);
             }
@@ -1457,7 +1718,8 @@ namespace Alice
 
     void DeferredRenderSystem::PassTransparentForward(
         const Camera& camera,
-        const std::vector<SkinnedDrawCommand>& skinnedCommands)
+        const std::vector<SkinnedDrawCommand>& skinnedCommands,
+        int shadingMode)
     {
         if (!m_device || !m_context) return;
         if (!m_sceneRTV || !m_sceneDSV) return;
@@ -1539,7 +1801,9 @@ namespace Alice
 
             // PerObject CB
             const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
-            UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, true, true);
+            const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+            XMFLOAT3 outlineColor = cmd.outlineColor;
+            float outlineWidth = cmd.outlineWidth;
 
             // FBX 서브셋 머티리얼이 있으면 그걸 우선 사용 (Forward와 동일)
             std::shared_ptr<SkinnedMeshGPU> mesh =
@@ -1561,9 +1825,20 @@ namespace Alice
                     m_context->PSSetShaderResources(0, 2, srvs01);
 
                     // enableNormalMap은 "노말 SRV가 존재할 때만" 켜는게 안정적입니다.
-                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr));
-
+                    const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+                    
+                    // Pass 1. 원본
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr), objectShadingMode, cmd.normalStrength, outlineColor, 0.0f);
                     m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                    
+                    // Pass 2. 아웃라인
+                    if (outlineWidth > 0.0f)
+                    {
+                        m_context->RSSetState(m_rsCullFront.Get());
+                        UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr), objectShadingMode, cmd.normalStrength, outlineColor, outlineWidth);
+                        m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
+                        m_context->RSSetState(m_rasterizerState.Get());
+                    }
                 }
             }
             else
@@ -1572,8 +1847,20 @@ namespace Alice
                 ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
                 ID3D11ShaderResourceView* srvs01[2] = { diff, nullptr };
                 m_context->PSSetShaderResources(0, 2, srvs01);
-                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false);
+                const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+                
+                // [Pass 1] 원본
+                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false, objectShadingMode, cmd.normalStrength, outlineColor, 0.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                
+                // [Pass 2] 아웃라인
+                if (outlineWidth > 0.0f)
+                {
+                    m_context->RSSetState(m_rsCullFront.Get());
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false, objectShadingMode, cmd.normalStrength, outlineColor, outlineWidth);
+                    m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+                    m_context->RSSetState(m_rasterizerState.Get());
+                }
             }
         }
 
@@ -1672,13 +1959,17 @@ namespace Alice
     }
 
     void DeferredRenderSystem::UpdatePerObjectCB(const DirectX::XMMATRIX& world,
-                                                  const DirectX::XMMATRIX& view,
-                                                  const DirectX::XMMATRIX& projection,
-                                                  const DirectX::XMFLOAT4& color,
-                                                  float roughness,
-                                                  float metalness,
-                                                  bool useTexture,
-                                                  bool enableNormalMap)
+                                                 const DirectX::XMMATRIX& view,
+                                                 const DirectX::XMMATRIX& projection,
+                                                 const DirectX::XMFLOAT4& color,
+                                                 float roughness,
+                                                 float metalness,
+                                                 bool useTexture,
+                                                 bool enableNormalMap,
+                                                 int shadingMode,
+                                                 float normalStrength,
+                                                 const XMFLOAT3& outlineColor,
+                                                 float outlineWidth)
     {
         struct CBPerObjectData
         {
@@ -1690,6 +1981,18 @@ namespace Alice
             float    gMetalness;
             int      gUseTexture;
             int      gEnableNormalMap;
+            int      gShadingMode;
+            int      gPad0;
+            // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+            float    gPad1[2];        // Offset: 232 -> 240
+            // 노말맵 강도 조절
+            float    gNormalStrength; // Offset: 240 -> 244
+            float    gPad2;           // Offset: 244 -> 248
+            // [중요] HLSL에서 float3는 16바이트 경계를 걸칠 수 없음.
+            // 현재 248번지이므로, 12바이트짜리 outlineColor가 들어갈 수 없어 256번지로 밀림.
+            float    gPadAlign[2];    // Offset: 248 -> 256 (8바이트 패딩)
+            XMFLOAT3 gOutlineColor;   // Offset: 256 -> 268
+            float    gOutlineWidth;   // Offset: 268 -> 272
         };
 
         D3D11_MAPPED_SUBRESOURCE mapped;
@@ -1704,6 +2007,18 @@ namespace Alice
             data->gMetalness = metalness;
             data->gUseTexture = useTexture ? 1 : 0;
             data->gEnableNormalMap = enableNormalMap ? 1 : 0;
+            data->gShadingMode = shadingMode;
+            data->gPad0 = 0;
+            // 패딩 초기화 (안전하게 0으로)
+            data->gPad1[0] = 0.0f;
+            data->gPad1[1] = 0.0f;
+            data->gNormalStrength = normalStrength;
+            data->gPad2 = 0.0f;
+            // 패딩 초기화 (안전하게 0으로)
+            data->gPadAlign[0] = 0.0f;
+            data->gPadAlign[1] = 0.0f;
+            data->gOutlineColor = outlineColor;
+            data->gOutlineWidth = outlineWidth;
             m_context->Unmap(m_cbPerObject.Get(), 0);
         }
 
@@ -1809,7 +2124,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.pointCount >= MaxPointLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             auto& dst = data.pointLights[data.pointCount++];
             dst.position = tr->position;
@@ -1824,7 +2139,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.spotCount >= MaxSpotLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
             XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
@@ -1851,7 +2166,7 @@ namespace Alice
             if (!light.enabled) continue;
             if (data.rectCount >= MaxRectLights) break;
             const auto* tr = world.GetComponent<TransformComponent>(id);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMVECTOR forward = XMVectorSet(0, 0, 1, 0);
             XMMATRIX rot = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&tr->rotation));
@@ -1958,6 +2273,18 @@ namespace Alice
         m_postProcessParams.maxHDRNits = maxHDRNits;
     }
 
+    void DeferredRenderSystem::SetBloomSettings(const BloomSettings& settings)
+    {
+        bool downsampleChanged = (m_bloomSettings.downsample != settings.downsample);
+        m_bloomSettings = settings;
+        
+        // 다운샘플링 변경 시 리소스 재생성
+        if (downsampleChanged && m_sceneWidth > 0 && m_sceneHeight > 0)
+        {
+            CreateBloomResources(m_sceneWidth, m_sceneHeight);
+        }
+    }
+
     bool DeferredRenderSystem::SetIblSet(const std::string& iblDir, const std::string& iblName)
     {
         return CreateIblResources(iblDir, iblName);
@@ -1981,9 +2308,9 @@ namespace Alice
         }
     }
 
-    void DeferredRenderSystem::RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+    void DeferredRenderSystem::RenderToneMapping(ID3D11ShaderResourceView* inputSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
     {
-        if (!m_toneMappingPS || !m_quadVS || !m_sceneColorSRV || !targetRTV) return;
+        if (!m_toneMappingPS || !m_quadVS || !inputSRV || !targetRTV) return;
 
         // 뷰포트 설정
         m_context->RSSetViewports(1, &viewport);
@@ -1997,22 +2324,22 @@ namespace Alice
         m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
         m_context->RSSetState(m_ppRasterNoCull.Get());
 
+        // 상수 버퍼 업데이트 (실제 노출값 적용)
         PostProcessCB cbData = {};
         GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
 
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
         {
-            memcpy(mapped.pData, &cbData, sizeof(PostProcessCB));
+            std::memcpy(mapped.pData, &cbData, sizeof(PostProcessCB));
             m_context->Unmap(m_cbPostProcess.Get(), 0);
         }
 
-        // 리소스 바인딩
-        ID3D11ShaderResourceView* srv = m_sceneColorSRV.Get();
+        // 리소스 바인딩 (입력 텍스처 사용)
         ID3D11SamplerState* sampler = m_samplerLinear.Get();
         ID3D11Buffer* cb = m_cbPostProcess.Get();
 
-        m_context->PSSetShaderResources(0, 1, &srv);
+        m_context->PSSetShaderResources(0, 1, &inputSRV);
         m_context->PSSetSamplers(0, 1, &sampler);
         m_context->PSSetConstantBuffers(2, 1, &cb); // register(b2)에 맞춰 슬롯 2 사용
 
@@ -2030,5 +2357,294 @@ namespace Alice
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
     }
-}
 
+	void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+	{
+		if (!m_bloomSettings.enabled || !sourceSRV || !targetRTV) return;
+		if (!m_bloomBrightPassPS || !m_bloomDownsamplePS || !m_bloomBlurPassPS_H || !m_bloomBlurPassPS_V || !m_bloomUpsamplePS || !m_bloomCompositePS) return;
+
+		// 상태 설정
+		float blendFactor[4] = { 0, 0, 0, 0 };
+		m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+		m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+		m_context->RSSetState(m_ppRasterNoCull.Get());
+
+		// Quad 설정
+		m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		m_context->IASetInputLayout(m_quadInputLayout.Get());
+		m_context->IASetVertexBuffers(0, 1, m_quadVB.GetAddressOf(), &m_quadStride, &m_quadOffset);
+		m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+		m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
+
+		ID3D11Buffer* cbBloom = m_cbBloom.Get();
+		ID3D11SamplerState* sampler = m_samplerLinear.Get();
+		ID3D11ShaderResourceView* nullSRVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+
+		// 블러 반복 횟수 (기본값: 1회, 필요시 BloomSettings에 추가 가능)
+		const int blurIterations = 1;
+
+		// ========== 1. Bright Pass: sourceSRV → level0 A ==========
+		{
+			std::uint32_t level0Width = m_bloomLevelWidth[0];
+			std::uint32_t level0Height = m_bloomLevelHeight[0];
+			D3D11_VIEWPORT level0Viewport = { 0.0f, 0.0f, (float)level0Width, (float)level0Height, 0.0f, 1.0f };
+
+			float texelSizeX = (level0Width > 0) ? (1.0f / level0Width) : 1.0f;
+			float texelSizeY = (level0Height > 0) ? (1.0f / level0Height) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			m_context->RSSetViewports(1, &level0Viewport);
+			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[0][0].GetAddressOf(), nullptr); // level0 A
+			m_context->PSSetShaderResources(0, 1, &sourceSRV);
+			m_context->PSSetSamplers(0, 1, &sampler);
+			m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+			m_context->PSSetShader(m_bloomBrightPassPS.Get(), nullptr, 0);
+			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+		}
+
+		// ========== 2. Downsample Chain: level(i-1) A → level(i) A (i=1..4) ==========
+		for (int level = 1; level < BLOOM_LEVEL_COUNT; ++level)
+		{
+			std::uint32_t prevWidth = m_bloomLevelWidth[level - 1];
+			std::uint32_t prevHeight = m_bloomLevelHeight[level - 1];
+			std::uint32_t currWidth = m_bloomLevelWidth[level];
+			std::uint32_t currHeight = m_bloomLevelHeight[level];
+
+			// 입력 텍스처의 텍셀 크기
+			float inputTexelSizeX = (prevWidth > 0) ? (1.0f / prevWidth) : 1.0f;
+			float inputTexelSizeY = (prevHeight > 0) ? (1.0f / prevHeight) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(inputTexelSizeX, inputTexelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			D3D11_VIEWPORT currViewport = { 0.0f, 0.0f, (float)currWidth, (float)currHeight, 0.0f, 1.0f };
+			m_context->RSSetViewports(1, &currViewport);
+
+			// level(i-1) A → level(i) A
+			ID3D11ShaderResourceView* inputSRV = m_bloomLevelSRV[level - 1][0].Get(); // 이전 레벨 A
+			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][0].GetAddressOf(), nullptr); // 현재 레벨 A
+
+			m_context->PSSetShaderResources(0, 1, &inputSRV);
+			m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+			m_context->PSSetShader(m_bloomDownsamplePS.Get(), nullptr, 0);
+			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+		}
+
+		// ========== 3. Blur per Level: level i에서 A↔B로 (H then V) * blurIterations ==========
+		for (int level = 0; level < BLOOM_LEVEL_COUNT; ++level)
+		{
+			std::uint32_t levelWidth = m_bloomLevelWidth[level];
+			std::uint32_t levelHeight = m_bloomLevelHeight[level];
+
+			float texelSizeX = (levelWidth > 0) ? (1.0f / levelWidth) : 1.0f;
+			float texelSizeY = (levelHeight > 0) ? (1.0f / levelHeight) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			D3D11_VIEWPORT levelViewport = { 0.0f, 0.0f, (float)levelWidth, (float)levelHeight, 0.0f, 1.0f };
+			m_context->RSSetViewports(1, &levelViewport);
+
+			int pingPongIndex = 0; // 0=A, 1=B
+
+			for (int iteration = 0; iteration < blurIterations; ++iteration)
+			{
+				// Horizontal Blur: A → B
+				ID3D11ShaderResourceView* inputSRV = m_bloomLevelSRV[level][pingPongIndex].Get();
+				int outputPingPong = 1 - pingPongIndex;
+
+				m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][outputPingPong].GetAddressOf(), nullptr);
+				m_context->PSSetShaderResources(0, 1, &inputSRV);
+				m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+				m_context->PSSetShader(m_bloomBlurPassPS_H.Get(), nullptr, 0);
+				m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+				m_context->PSSetShaderResources(0, 8, nullSRVs);
+
+				// Vertical Blur: B → A
+				pingPongIndex = outputPingPong;
+				inputSRV = m_bloomLevelSRV[level][pingPongIndex].Get();
+				outputPingPong = 1 - pingPongIndex;
+
+				m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][outputPingPong].GetAddressOf(), nullptr);
+				m_context->PSSetShaderResources(0, 1, &inputSRV);
+				m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+				m_context->PSSetShader(m_bloomBlurPassPS_V.Get(), nullptr, 0);
+				m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+				m_context->PSSetShaderResources(0, 8, nullSRVs);
+
+				pingPongIndex = outputPingPong;
+			}
+		}
+
+		// ========== 4. Upsample+Add: level4 → level3 → ... → level0 (합성) ==========
+		// Additive Blend State 사용 (기존 m_blendStateAdditive 사용)
+		if (!m_blendStateAdditive)
+		{
+			ALICE_LOG_ERRORF("Additive blend state not available for bloom upsample");
+			return;
+		}
+
+		// 레벨 4부터 레벨 0까지 역순으로 업샘플링+합성
+		for (int level = BLOOM_LEVEL_COUNT - 1; level > 0; --level)
+		{
+			std::uint32_t lowResWidth = m_bloomLevelWidth[level];
+			std::uint32_t lowResHeight = m_bloomLevelHeight[level];
+			std::uint32_t highResWidth = m_bloomLevelWidth[level - 1];
+			std::uint32_t highResHeight = m_bloomLevelHeight[level - 1];
+
+			// 저해상도 텍스처의 텍셀 크기 (업샘플링용)
+			float texelSizeX = (lowResWidth > 0) ? (1.0f / lowResWidth) : 1.0f;
+			float texelSizeY = (lowResHeight > 0) ? (1.0f / lowResHeight) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			D3D11_VIEWPORT highResViewport = { 0.0f, 0.0f, (float)highResWidth, (float)highResHeight, 0.0f, 1.0f };
+			m_context->RSSetViewports(1, &highResViewport);
+
+			// Additive Blending 활성화 (고해상도 텍스처에 저해상도를 더하기)
+			m_context->OMSetBlendState(m_blendStateAdditive.Get(), blendFactor, 0xFFFFFFFF);
+
+			// 저해상도 텍스처만 바인딩 (업샘플링할 소스)
+			// 고해상도 텍스처는 이미 RTV에 바인딩되어 있으므로 Additive Blending으로 자동 합성됨
+			ID3D11ShaderResourceView* lowResSRV = m_bloomLevelSRV[level][0].Get(); // 현재 레벨의 블러 결과 (A)
+			//ID3D11RenderTargetView* renderpassRTV = 
+
+
+			// 이전 레벨의 RTV에 업샘플링 결과를 렌더링 (Additive Blending으로 기존 값에 더하기)
+			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level - 1][0].GetAddressOf(), nullptr);
+			m_context->PSSetShaderResources(0, 1, &lowResSRV);
+			m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+			m_context->PSSetShader(m_bloomUpsamplePS.Get(), nullptr, 0);
+			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+		}
+
+		// Additive Blending 비활성화
+		m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+
+		// ========== 5. Composite: Scene + Bloom → PostBloomTex (HDR) ==========
+		// 톤매핑과 합성을 분리합니다. 여기서는 HDR 상태로 합치기만 합니다.
+		{
+			// 뷰포트를 전체 씬 크기로 설정
+			D3D11_VIEWPORT sceneViewport = { 0.0f, 0.0f, (float)m_sceneWidth, (float)m_sceneHeight, 0.0f, 1.0f };
+			m_context->RSSetViewports(1, &sceneViewport);
+			
+			// 타겟을 Viewport가 아닌 중간 HDR 버퍼(m_postBloomRTV)로 변경
+			m_context->OMSetRenderTargets(1, m_postBloomRTV.GetAddressOf(), nullptr);
+
+			ID3D11ShaderResourceView* sceneSRV = sourceSRV;
+			ID3D11ShaderResourceView* bloomSRV = m_bloomLevelSRV[0][0].Get(); // level0의 최종 bloom 결과
+			ID3D11ShaderResourceView* compositeSRVs[2] = { sceneSRV, bloomSRV };
+
+			m_context->PSSetShaderResources(0, 2, compositeSRVs);
+
+			// [중요] 합성 단계에서는 Exposure를 1.0으로 강제하여 색상 변형 방지
+			// 실제 노출 보정은 다음 단계인 RenderToneMapping에서 수행함
+			PostProcessCB postProcessCB = {};
+			float tempExposure;
+			GetPostProcessParams(tempExposure, postProcessCB.maxHDRNits);
+			postProcessCB.exposure = 1.0f; // 합성 단계에서는 노출 적용 안 함 (중립값)
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				std::memcpy(mapped.pData, &postProcessCB, sizeof(PostProcessCB));
+				m_context->Unmap(m_cbPostProcess.Get(), 0);
+			}
+
+			// Bloom CB 업데이트 (최종 합성용)
+			std::uint32_t level0Width = m_bloomLevelWidth[0];
+			std::uint32_t level0Height = m_bloomLevelHeight[0];
+			float texelSizeX = (level0Width > 0) ? (1.0f / level0Width) : 1.0f;
+			float texelSizeY = (level0Height > 0) ? (1.0f / level0Height) : 1.0f;
+
+			BloomCB bloomCB = {};
+			bloomCB.threshold = m_bloomSettings.threshold;
+			bloomCB.knee = m_bloomSettings.knee;
+			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.radius = m_bloomSettings.radius;
+			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
+			bloomCB.downsample = m_bloomSettings.downsample;
+
+			if (SUCCEEDED(m_context->Map(m_cbBloom.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+			{
+				std::memcpy(mapped.pData, &bloomCB, sizeof(BloomCB));
+				m_context->Unmap(m_cbBloom.Get(), 0);
+			}
+
+			// 셰이더 및 버퍼 바인딩
+			ID3D11Buffer* cbPostProcess = m_cbPostProcess.Get();
+			ID3D11Buffer* cbBloom = m_cbBloom.Get();
+			m_context->PSSetConstantBuffers(2, 1, &cbPostProcess);
+			m_context->PSSetConstantBuffers(3, 1, &cbBloom);
+			m_context->PSSetShader(m_bloomCompositePS.Get(), nullptr, 0);
+			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+
+			// SRV 해제 (ToneMapping에서 입력으로 쓰기 위해 필수)
+			ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
+			m_context->PSSetShaderResources(0, 2, nullSRVs2);
+		}
+
+		// ========== 6. Final Tone Mapping: PostBloomTex(HDR) → TargetRTV(LDR) ==========
+		// 합성된 HDR 텍스처를 입력으로 받아 실제 Exposure를 적용하고 LDR로 변환
+		RenderToneMapping(m_postBloomSRV.Get(), targetRTV, viewport);
+	}
+}

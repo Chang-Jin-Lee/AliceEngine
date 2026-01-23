@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace Alice
 {
@@ -158,7 +158,7 @@ float3 Rec709ToRec2020(float3 color)
         0.069095, 0.919544, 0.011360,
         0.016394, 0.088028, 0.895578
     };
-    return mul(conversion, color);
+    return mul(color, conversion);
 }
 
 // Linear to ST2084 (PQ 인코딩)
@@ -191,6 +191,246 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     
     // 최종 PQ 인코딩된 값 [0.0, 1.0]을 R10G10B10A2_UNORM 백버퍼에 출력
     return float4(C_ST2084, 1.0);
+}
+)";
+
+        // Bloom Bright Pass Pixel Shader
+        inline static const char* BloomBrightPassPS = R"(
+Texture2D g_SceneHDR : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer BloomConstantBuffer : register(b3)
+{
+    float g_Threshold;
+    float g_Knee;
+    float g_Intensity;
+    float g_Radius;
+    float2 g_TexelSize;
+    int g_Downsample;
+    float g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    float3 color = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
+    
+    // Luminance 계산
+    float luminance = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    
+    // Soft threshold 적용
+    float softThreshold = g_Threshold - g_Knee;
+    float contribution = max(luminance - softThreshold, 0.0f);
+    contribution = contribution / (g_Knee * 2.0f + contribution);
+    
+    float3 result = color * contribution;
+    return float4(result, 1.0f);
+}
+)";
+
+        // Bloom Blur Pass Pixel Shader (Horizontal)
+        inline static const char* BloomBlurPassPS_H = R"(
+Texture2D g_BloomInput : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer BloomConstantBuffer : register(b3)
+{
+    float g_Threshold;
+    float g_Knee;
+    float g_Intensity;
+    float g_Radius;
+    float2 g_TexelSize;
+    int g_Downsample;
+    float g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    float3 color = float3(0.0f, 0.0f, 0.0f);
+    float weightSum = 0.0f;
+    
+    // Gaussian blur (9-tap)
+    float offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
+    float weights[9] = { 0.01621622f, 0.05405405f, 0.12162162f, 0.19459459f, 0.22702703f,
+                         0.19459459f, 0.12162162f, 0.05405405f, 0.01621622f };
+    
+    for (int i = 0; i < 9; ++i)
+    {
+        float2 uvOffset = float2(offsets[i] * g_TexelSize.x * g_Radius, 0.0f);
+        float3 sampleColor = g_BloomInput.Sample(g_SamplerLinear, input.uv + uvOffset).rgb;
+        color += sampleColor * weights[i];
+        weightSum += weights[i];
+    }
+    
+    return float4(color / weightSum, 1.0f);
+}
+)";
+
+        // Bloom Blur Pass Pixel Shader (Vertical)
+        inline static const char* BloomBlurPassPS_V = R"(
+Texture2D g_BloomInput : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer BloomConstantBuffer : register(b3)
+{
+    float g_Threshold;
+    float g_Knee;
+    float g_Intensity;
+    float g_Radius;
+    float2 g_TexelSize;
+    int g_Downsample;
+    float g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    float3 color = float3(0.0f, 0.0f, 0.0f);
+    float weightSum = 0.0f;
+    
+    // Gaussian blur (9-tap)
+    float offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
+    float weights[9] = { 0.01621622f, 0.05405405f, 0.12162162f, 0.19459459f, 0.22702703f,
+                         0.19459459f, 0.12162162f, 0.05405405f, 0.01621622f };
+    
+    for (int i = 0; i < 9; ++i)
+    {
+        float2 uvOffset = float2(0.0f, offsets[i] * g_TexelSize.y * g_Radius);
+        float3 sampleColor = g_BloomInput.Sample(g_SamplerLinear, input.uv + uvOffset).rgb;
+        color += sampleColor * weights[i];
+        weightSum += weights[i];
+    }
+    
+    return float4(color / weightSum, 1.0f);
+}
+)";
+
+        // Bloom Downsample Pixel Shader (2x2 다운샘플링)
+        inline static const char* BloomDownsamplePS = R"(
+Texture2D g_BloomInput : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer BloomConstantBuffer : register(b3)
+{
+    float g_Threshold;
+    float g_Knee;
+    float g_Intensity;
+    float g_Radius;
+    float2 g_TexelSize;
+    int g_Downsample;
+    float g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    // 2x2 다운샘플링: 4개 픽셀의 평균을 사용
+    // g_TexelSize는 입력 텍스처의 텍셀 크기 (다운샘플링 전 크기)
+    float2 offsets[4] = {
+        float2(-0.5f, -0.5f) * g_TexelSize,
+        float2(0.5f, -0.5f) * g_TexelSize,
+        float2(-0.5f, 0.5f) * g_TexelSize,
+        float2(0.5f, 0.5f) * g_TexelSize
+    };
+    
+    float3 color = float3(0.0f, 0.0f, 0.0f);
+    for (int i = 0; i < 4; ++i)
+    {
+        color += g_BloomInput.Sample(g_SamplerLinear, input.uv + offsets[i]).rgb;
+    }
+    color /= 4.0f;
+    
+    return float4(color, 1.0f);
+}
+)";
+
+        // Bloom Upsample Pixel Shader (업샘플링만 수행, Additive Blending은 OM State로 처리)
+        inline static const char* BloomUpsamplePS = R"(
+Texture2D g_BloomLowRes : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer BloomConstantBuffer : register(b3)
+{
+    float g_Threshold;
+    float g_Knee;
+    float g_Intensity;
+    float g_Radius;
+    float2 g_TexelSize;
+    int g_Downsample;
+    float g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    // 저해상도 텍스처를 업샘플링 (bilinear 보간으로 자동 확대)
+    // Additive Blending은 OM State에서 처리되므로, 여기서는 저해상도 값만 반환
+    float3 lowRes = g_BloomLowRes.Sample(g_SamplerLinear, input.uv).rgb;
+    
+    return float4(lowRes, 1.0f);
+}
+)";
+
+        // Bloom Composite Pixel Shader (Scene + Bloom 합성 + ToneMapping)
+        inline static const char* BloomCompositePS = R"(
+Texture2D g_SceneHDR : register(t0);
+Texture2D g_Bloom : register(t1);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer BloomConstantBuffer : register(b3)
+{
+    float g_Threshold;
+    float g_Knee;
+    float g_Intensity;
+    float g_Radius;
+    float2 g_TexelSize;
+    int g_Downsample;
+    float g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    float3 sceneColor = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
+    
+    // Bloom 텍스처는 다운샘플링되어 있으므로 원본 UV 사용 (다운샘플링된 텍스처는 자동으로 보간됨)
+    float3 bloomColor = g_Bloom.Sample(g_SamplerLinear, input.uv).rgb;
+    
+    // HDR 합성만 수행 (ToneMapping은 별도 패스에서 수행)
+    float3 combined = sceneColor + bloomColor * g_Intensity;
+    
+    return float4(combined, 1.0f);
 }
 )";
     };

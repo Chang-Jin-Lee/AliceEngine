@@ -1,9 +1,11 @@
-﻿#include <vector>
+﻿#pragma once
+
+#include <vector>
 #include <DirectXMath.h>
 
 namespace Alice {
     /// 스키닝 애니메이션 재생 상태(엔티티 단위)
-    /// - 실제 평가/팔레트 계산은 SkinnedAnimationSystem 이 수행합니다.
+    /// - 실제 평가/팔레트 계산은 AdvancedAnimSystem 이 수행합니다.
     struct SkinnedAnimationComponent 
     {
         int clipIndex{ 0 }; // 현재 재생 클립 인덱스
