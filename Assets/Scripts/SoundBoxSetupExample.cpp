@@ -20,6 +20,17 @@ namespace Alice
         box->loop = loop;
         box->minDistance = minDistance;
         box->maxDistance = maxDistance;
+        box->debugDraw = debugDraw;
+    }
+
+    void SoundBoxSetupExample::Update(float dt)
+    {
+        // 에디터에서 값을 바꾸면 실시간으로 반영
+        auto go = gameObject();
+        if (auto* box = go.GetComponent<SoundBoxComponent>())
+        {
+            box->debugDraw = debugDraw;
+        }
     }
 }
 

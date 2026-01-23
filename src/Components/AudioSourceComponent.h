@@ -33,6 +33,9 @@ namespace Alice
         // 재생 요청 플래그 (스크립트에서 토글)
         bool requestPlay{ false };
         bool requestStop{ false };
+
+        // 디버그 드로우 활성화 여부
+        bool debugDraw{ false };
     };
 }
 
