@@ -19,10 +19,10 @@ namespace Alice
     struct BloomSettings
     {
         bool enabled = true;          // Bloom 활성화
-        float intensity = 1.2f;      // 합성 강도
+        float intensity = 0.5f;      // 합성 강도
         float threshold = 1.0f;      // 밝기 추출 기준
         float knee = 0.5f;            // Soft threshold (0~1)
-        float radius = 6.0f;          // Blur 크기 (sigma)
+        float radius = 1.0f;          // Blur 크기 (sigma)
         int downsample = 2;           // 다운샘플링 (1=원본, 2=1/2, 4=1/4)
         float clamp = 10.0f;          // Bloom 값 상한 (옵션)
         int blurTaps = 9;              // Blur 탭 수 (5/7/9 등, 옵션)

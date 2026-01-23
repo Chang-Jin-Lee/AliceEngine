@@ -137,6 +137,7 @@ namespace Alice
         bool CreateToneMappingResources(const std::uint32_t& width, const std::uint32_t& height);
 
         bool CreateBloomResources(const std::uint32_t& width, const std::uint32_t& height);
+        bool CreatePostBloomResources(const std::uint32_t& width, const std::uint32_t& height);
         
         // 렌더링 패스
         DirectX::XMMATRIX RenderShadowPass(const World& world,
@@ -226,17 +227,23 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_toneMappingPS;
 
         // ==== Bloom 셰이더 ====
-		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_bloomBrightSRV;
-		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_bloomBrightRTV;
-		Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_bloomBrightTex;
+        // 5단계 레벨 (0~4), 각 레벨마다 ping-pong 텍스처 2장 (A/B)
+        static constexpr int BLOOM_LEVEL_COUNT = 5;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_bloomLevelSRV[BLOOM_LEVEL_COUNT][2]; // [level][A=0/B=1]
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_bloomLevelRTV[BLOOM_LEVEL_COUNT][2];
+        Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_bloomLevelTex[BLOOM_LEVEL_COUNT][2];
+        std::uint32_t m_bloomLevelWidth[BLOOM_LEVEL_COUNT];
+        std::uint32_t m_bloomLevelHeight[BLOOM_LEVEL_COUNT];
 
-		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_bloomBlurSRV[2];
-		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_bloomBlurRTV[2];
-		Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_bloomBlurTex[2];
+		Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_postBloomTex;
+		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_postBloomRTV;
+		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_postBloomSRV;
        
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomBrightPassPS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomDownsamplePS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomBlurPassPS_H;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomBlurPassPS_V;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomUpsamplePS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomCompositePS;
 
         // ==== Shadow pass shaders ====
@@ -245,7 +252,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_shadowInputLayout; // POSITION only
 
         // ==== Quad (FullScreen) 리소스 ====
-        Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_quadVS;
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_quadVS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_quadInputLayout;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_quadVB;
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_quadIB;

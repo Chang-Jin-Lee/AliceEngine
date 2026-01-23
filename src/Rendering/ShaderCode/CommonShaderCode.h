@@ -321,7 +321,83 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 }
 )";
 
-        // Bloom Composite Pixel Shader (HDR 합성만 수행, ToneMapping은 별도 패스)
+        // Bloom Downsample Pixel Shader (2x2 다운샘플링)
+        inline static const char* BloomDownsamplePS = R"(
+Texture2D g_BloomInput : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer BloomConstantBuffer : register(b3)
+{
+    float g_Threshold;
+    float g_Knee;
+    float g_Intensity;
+    float g_Radius;
+    float2 g_TexelSize;
+    int g_Downsample;
+    float g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    // 2x2 다운샘플링: 4개 픽셀의 평균을 사용
+    // g_TexelSize는 입력 텍스처의 텍셀 크기 (다운샘플링 전 크기)
+    float2 offsets[4] = {
+        float2(-0.5f, -0.5f) * g_TexelSize,
+        float2(0.5f, -0.5f) * g_TexelSize,
+        float2(-0.5f, 0.5f) * g_TexelSize,
+        float2(0.5f, 0.5f) * g_TexelSize
+    };
+    
+    float3 color = float3(0.0f, 0.0f, 0.0f);
+    for (int i = 0; i < 4; ++i)
+    {
+        color += g_BloomInput.Sample(g_SamplerLinear, input.uv + offsets[i]).rgb;
+    }
+    color /= 4.0f;
+    
+    return float4(color, 1.0f);
+}
+)";
+
+        // Bloom Upsample Pixel Shader (업샘플링만 수행, Additive Blending은 OM State로 처리)
+        inline static const char* BloomUpsamplePS = R"(
+Texture2D g_BloomLowRes : register(t0);
+SamplerState g_SamplerLinear : register(s0);
+
+cbuffer BloomConstantBuffer : register(b3)
+{
+    float g_Threshold;
+    float g_Knee;
+    float g_Intensity;
+    float g_Radius;
+    float2 g_TexelSize;
+    int g_Downsample;
+    float g_Padding;
+};
+
+struct PS_INPUT_QUAD
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT_QUAD input) : SV_Target
+{
+    // 저해상도 텍스처를 업샘플링 (bilinear 보간으로 자동 확대)
+    // Additive Blending은 OM State에서 처리되므로, 여기서는 저해상도 값만 반환
+    float3 lowRes = g_BloomLowRes.Sample(g_SamplerLinear, input.uv).rgb;
+    
+    return float4(lowRes, 1.0f);
+}
+)";
+
+        // Bloom Composite Pixel Shader (Scene + Bloom 합성 + ToneMapping)
         inline static const char* BloomCompositePS = R"(
 Texture2D g_SceneHDR : register(t0);
 Texture2D g_Bloom : register(t1);
