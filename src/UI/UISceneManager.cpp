@@ -9,14 +9,17 @@
 #include <string>
 #include <stdexcept>
 #include "Core/InputSystem.h"
+#include "Core/Logger.h"
 #include "UITransform.h"
 #include "UI_ImageComponent.h"
 #include "UI_ScriptComponent.h"
 #include "IUIComponent.h"
 #include "UIBase.h"
 #include "UIScriptSystem.h"
+#include "UI_InputComponent.h"
+#include "UIButton.h"
 // ============================================================================
-// UIWorld ����
+// UIWorld 구현 ����
 // ============================================================================
 void UIWorld::Initialize(UIRenderStruct* UIRst)
 {
@@ -184,6 +187,12 @@ UITransform* UIWorld::FindTransformComponent(unsigned long ownerID)
 	return (it == m_transformStorage.end()) ? nullptr : it->second.get();
 }
 
+const UITransform* UIWorld::FindTransformComponent(unsigned long ownerID) const
+{
+	auto it = m_transformStorage.find(ownerID);
+	return (it == m_transformStorage.end()) ? nullptr : it->second.get();
+}
+
 /*
 void UIWorld::RemoveTextComponent(unsigned long ownerID)
 {
@@ -206,12 +215,19 @@ UI_ImageComponent* UIWorld::CreateImageComponent(unsigned long ownerID)
 	// 새 컴포넌트 생성 후 저장
 	auto comp = std::make_unique<UI_ImageComponent>();
 	comp->owner = ownerID;
+	comp->Initalize(*m_UIRenderStruct);
 	UI_ImageComponent* raw = comp.get();
 	m_imageComponentStorage.emplace(ownerID, std::move(comp));
 	return raw;
 }
 
 UI_ImageComponent* UIWorld::FindImageComponent(unsigned long ownerID)
+{
+	auto it = m_imageComponentStorage.find(ownerID);
+	return (it == m_imageComponentStorage.end()) ? nullptr : it->second.get();
+}
+
+const UI_ImageComponent* UIWorld::FindImageComponent(unsigned long ownerID) const
 {
 	auto it = m_imageComponentStorage.find(ownerID);
 	return (it == m_imageComponentStorage.end()) ? nullptr : it->second.get();
@@ -242,6 +258,12 @@ UI_ScriptComponent* UIWorld::FindScriptComponent(unsigned long ownerID)
 	return (it == m_scriptComponentStorage.end()) ? nullptr : it->second.get();
 }
 
+const UI_ScriptComponent* UIWorld::FindScriptComponent(unsigned long ownerID) const
+{
+	auto it = m_scriptComponentStorage.find(ownerID);
+	return (it == m_scriptComponentStorage.end()) ? nullptr : it->second.get();
+}
+
 void UIWorld::RemoveScriptComponent(unsigned long ownerID)
 {
 	auto it = m_scriptComponentStorage.find(ownerID);
@@ -256,6 +278,14 @@ void UIWorld::RemoveScriptComponent(unsigned long ownerID)
 }
 
 UIBase* UIWorld::Get(long unsigned int ID)
+{
+	auto it = pUIObjStorage.find(ID);
+	if (it == pUIObjStorage.end())
+		return nullptr;
+	return it->second.get();
+}
+
+const UIBase* UIWorld::Get(long unsigned int ID) const
 {
 	auto it = pUIObjStorage.find(ID);
 	if (it == pUIObjStorage.end())
@@ -559,17 +589,64 @@ void UISceneManager::Update()
 	// Image System: UI_ImageComponent 업데이트
 	UIImageSystem::Update(m_world);
 
+	// Input System: UI_InputComponent 업데이트 (Hover/Click 판정)
+	UIInputSystem::Update(m_world, *m_InputSystem);
+
+	// UIButton의 InputComponent 업데이트 (AddComponent를 사용하지 않은 경우)
+	// 모든 루트 엔티티와 자식들을 순회하면서 UIButton을 찾아 UpdateInput 호출
+	for (auto rootID : m_world.GetRootIDs())
+	{
+		if (auto* root = m_world.Get(rootID))
+		{
+			UpdateButtonInputRecursive(root);
+		}
+	}
+
 	// Event System: ���콺 �Է� ó��
 	UIEventSystem::UpdatePointer(m_world, m_InputSystem, m_UIRenderStruct);
 }
 
 void UISceneManager::Render()
 {
-	// Render System: 기본 렌더링
-	UIRenderSystem::Render(m_world, m_UIRenderStruct);
+	if (!m_UIRenderStruct || !m_UIRenderStruct->m_d2DdevCon) 
+	{
+		ALICE_LOG_WARN("[UISceneManager] Render skipped: invalid render struct");
+		return;
+	}
 
-	// Image System: UI_ImageComponent 렌더링
+	m_UIRenderStruct->m_d2DdevCon->BeginDraw();
+	m_UIRenderStruct->m_d2DdevCon->Clear(D2D1::ColorF(0, 0, 0, 0));
+	
 	UIImageSystem::Render(m_world, m_UIRenderStruct);
+
+	HRESULT hr = m_UIRenderStruct->m_d2DdevCon->EndDraw();
+	
+	if (FAILED(hr))
+	{
+		ALICE_LOG_ERRORF("[UISceneManager] EndDraw failed: HRESULT=0x%08X", hr);
+		
+		if (hr == D2DERR_RECREATE_TARGET)
+		{
+			ALICE_LOG_WARN("[UISceneManager] D2DERR_RECREATE_TARGET - target needs recreation");
+		}
+		
+		// 첫 프레임 재시도 (1회만)
+		static bool s_retryAttempted = false;
+		if (!s_retryAttempted && m_UIRenderStruct->m_d2dTargetBitmap)
+		{
+			s_retryAttempted = true;
+			m_UIRenderStruct->m_d2DdevCon->SetTarget(m_UIRenderStruct->m_d2dTargetBitmap.Get());
+			hr = m_UIRenderStruct->m_d2DdevCon->EndDraw();
+			if (SUCCEEDED(hr))
+			{
+				ALICE_LOG_INFO("[UISceneManager] EndDraw retry succeeded");
+			}
+			else
+			{
+				ALICE_LOG_ERRORF("[UISceneManager] EndDraw retry failed: HRESULT=0x%08X", hr);
+			}
+		}
+	}
 }
 
 // ============================================================================
@@ -617,41 +694,146 @@ void UIImageSystem::UpdateRootChild(UIWorld& world, UIBase* node)
 
 void UIImageSystem::Render(UIWorld& world, UIRenderStruct* renderStruct)
 {
-	if (!renderStruct) return;
+	ALICE_LOG_INFO("[UIImageSystem::Render] Render called: renderStruct=%p", renderStruct);
+	if (!renderStruct) 
+	{
+		ALICE_LOG_WARN("[UIImageSystem::Render] Render skipped: renderStruct is null");
+		return;
+	}
+	ALICE_LOG_INFO("[UIImageSystem::Render] Calling RenderRoot");
 	RenderRoot(world, renderStruct);
+	ALICE_LOG_INFO("[UIImageSystem::Render] RenderRoot completed");
 }
 
 void UIImageSystem::RenderRoot(UIWorld& world, UIRenderStruct* renderStruct)
+{
+	const auto& rootIDs = world.GetRootIDs();
+	ALICE_LOG_INFO("[UIImageSystem::RenderRoot] RenderRoot called: rootIDs.size()=%zu", rootIDs.size());
+	
+	// 루트 UI 엔티티들 순회
+	for (size_t i = 0; i < rootIDs.size(); ++i)
+	{
+		auto rootID = rootIDs[i];
+		ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Processing rootID[%zu]=%lu", i, rootID);
+		
+		if (auto* root = world.Get(rootID))
+		{
+			ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Found root entity: rootID=%lu", rootID);
+			// ImageComponent 렌더링
+			if (auto* imageComp = root->TryGetComponent<UI_ImageComponent>())
+			{
+				ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Found UI_ImageComponent for rootID=%lu, calling Render()", rootID);
+				imageComp->Render();
+				ALICE_LOG_INFO("[UIImageSystem::RenderRoot] UI_ImageComponent::Render() completed for rootID=%lu", rootID);
+			}
+			else
+			{
+				ALICE_LOG_WARN("[UIImageSystem::RenderRoot] No UI_ImageComponent found for rootID=%lu", rootID);
+			}
+			// 자식들도 재귀적으로 렌더링
+			ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Calling RenderRootChild for rootID=%lu", rootID);
+			RenderRootChild(world, root, renderStruct);
+		}
+		else
+		{
+			ALICE_LOG_WARN("[UIImageSystem::RenderRoot] Root entity not found: rootID=%lu", rootID);
+		}
+	}
+	ALICE_LOG_INFO("[UIImageSystem::RenderRoot] RenderRoot completed");
+}
+
+void UIImageSystem::RenderRootChild(UIWorld& world, UIBase* node, UIRenderStruct* /*renderStruct*/)
+{
+	ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] RenderRootChild called: node=%p, childCount=%zu", 
+	               node, node ? node->childIDStorage.size() : 0);
+	
+	for (auto childID : node->childIDStorage)
+	{
+		ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Processing childID=%lu", childID);
+		if (auto* child = world.Get(childID))
+		{
+			ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Found child entity: childID=%lu", childID);
+			// ImageComponent 렌더링
+			if (auto* imageComp = child->TryGetComponent<UI_ImageComponent>())
+			{
+				ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Found UI_ImageComponent for childID=%lu, calling Render()", childID);
+				imageComp->Render();
+				ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] UI_ImageComponent::Render() completed for childID=%lu", childID);
+			}
+			else
+			{
+				ALICE_LOG_WARN("[UIImageSystem::RenderRootChild] No UI_ImageComponent found for childID=%lu", childID);
+			}
+			// 재귀적으로 자식들도 렌더링
+			RenderRootChild(world, child, nullptr);
+		}
+		else
+		{
+			ALICE_LOG_WARN("[UIImageSystem::RenderRootChild] Child entity not found: childID=%lu", childID);
+		}
+	}
+}
+
+// ============================================================================
+// UIInputSystem 구현
+// ============================================================================
+void UIInputSystem::Update(UIWorld& world, Alice::InputSystem& input)
+{
+	UpdateRoot(world, input);
+}
+
+void UIInputSystem::UpdateRoot(UIWorld& world, Alice::InputSystem& input)
 {
 	// 루트 UI 엔티티들 순회
 	for (auto rootID : world.GetRootIDs())
 	{
 		if (auto* root = world.Get(rootID))
 		{
-			// ImageComponent 렌더링
-			if (auto* imageComp = root->TryGetComponent<UI_ImageComponent>())
+			// InputComponent 업데이트
+			if (auto* inputComp = root->TryGetComponent<UI_InputComponent>())
 			{
-				imageComp->Render();
+				inputComp->Update(world, input);
 			}
-			// 자식들도 재귀적으로 렌더링
-			RenderRootChild(world, root, renderStruct);
+			// 자식들도 재귀적으로 업데이트
+			UpdateRootChild(world, root, input);
 		}
 	}
 }
 
-void UIImageSystem::RenderRootChild(UIWorld& world, UIBase* node, UIRenderStruct* renderStruct)
+void UIInputSystem::UpdateRootChild(UIWorld& world, UIBase* node, Alice::InputSystem& input)
 {
 	for (auto childID : node->childIDStorage)
 	{
 		if (auto* child = world.Get(childID))
 		{
-			// ImageComponent 렌더링
-			if (auto* imageComp = child->TryGetComponent<UI_ImageComponent>())
+			// InputComponent 업데이트
+			if (auto* inputComp = child->TryGetComponent<UI_InputComponent>())
 			{
-				imageComp->Render();
+				inputComp->Update(world, input);
 			}
-			// 재귀적으로 자식들도 렌더링
-			RenderRootChild(world, child, renderStruct);
+			// 재귀적으로 자식들도 업데이트
+			UpdateRootChild(world, child, input);
+		}
+	}
+}
+
+// ============================================================================
+// UIButton Input 업데이트 헬퍼 (UISceneManager 내부 함수)
+// ============================================================================
+void UISceneManager::UpdateButtonInputRecursive(UIBase* node)
+{
+	// 현재 노드가 UIButton인지 확인
+	if (auto* button = dynamic_cast<UIButton*>(node))
+	{
+		button->UpdateInput(m_world, *m_InputSystem);
+	}
+
+	// 자식들도 재귀적으로 처리
+	for (auto childID : node->childIDStorage)
+	{
+		if (auto* child = m_world.Get(childID))
+		{
+			UpdateButtonInputRecursive(child);
 		}
 	}
 }

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 #include <array>
@@ -7,6 +7,9 @@
 #include "Core/Delegate.h"
 #include "Core/InputTypes.h"
 #include <directXTK/Keyboard.h>
+
+// 전방 선언
+class UIWorldManager;
 
 namespace Alice
 {
@@ -59,7 +62,7 @@ namespace Alice
         bool HasPendingSceneRequests() const;
         
         // 씬 요청 커밋 (엔진이 안전 지점에서만 호출)
-        void CommitSceneRequests(World& world);
+        void CommitSceneRequests(World& world, UIWorldManager* uiWorldManager = nullptr);
 
         // === editormode ===
         void SetEditorMode(const bool& isEditor) { m_editorMode = isEditor; }
@@ -72,7 +75,7 @@ namespace Alice
         void CallUpdate(World& world, float deltaTime);
         void CallLateUpdate(World& world, float deltaTime);
         void CallFixedUpdate(World& world, float fixedDt);
-        void ProcessSceneRequests(World& world);
+        void ProcessSceneRequests(World& world, UIWorldManager* uiWorldManager = nullptr);
         bool GetKeyInternal(KeyCode key) const;
         bool GetMouseButtonInternal(MouseCode button) const;
 

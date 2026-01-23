@@ -155,7 +155,11 @@ set(ENGINE_SOURCES
 	${ALICE_SRC_DIR}/UI/UI_ImageComponent.cpp
 	${ALICE_SRC_DIR}/UI/UIImage.cpp
 	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.cpp
+	${ALICE_SRC_DIR}/UI/IUIScript.cpp
 	${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
+	${ALICE_SRC_DIR}/UI/UIScriptFactory.cpp
+	${ALICE_SRC_DIR}/UI/UI_InputComponent.cpp
+	${ALICE_SRC_DIR}/UI/UIButton.cpp
 )
 
 set(ENGINE_HEADERS
@@ -283,6 +287,8 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/UI/UI_ImageComponent.h
 	${ALICE_SRC_DIR}/UI/UIImage.h
 	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.h
+	${ALICE_SRC_DIR}/UI/UI_InputComponent.h
+	${ALICE_SRC_DIR}/UI/UIButton.h
 )
 
 # [변경] AliceEngine -> Engine

@@ -9,7 +9,7 @@
 #include <d3d11.h>          // ID3D11Texture2D 및 핵심 인터페이스 정의
 #include <dxgi.h>           // DXGI 관련 설정 (포맷, 스왑체인 등)
 #include <d3dcompiler.h>    // 셰이더 컴파일이 필요한 경우
-
+#include <filesystem>
 #include <windows.h>
 #include <wincodec.h>
 #pragma comment(lib, "windowscodecs.lib")
@@ -24,6 +24,7 @@
 #include <wrl/client.h>
 #include <unordered_map>
 #include <memory>
+#include <string>
 
 
 
@@ -34,6 +35,10 @@
 // 전방 선언
 struct IWICImagingFactory;
 
+namespace Alice
+{
+    class ResourceManager;
+}
 
     class UIWorldManager
     {
@@ -69,12 +74,11 @@ struct IWICImagingFactory;
         
         UIRenderStruct m_RenderStruct;
 
-        //Scene Manager 저장소
-        std::unordered_map<UINT, std::unique_ptr<UISceneManager>> sceneStorages;
+        //Scene Manager 저장소 (씬 이름을 키로 사용)
+        std::unordered_map<std::string, std::unique_ptr<UISceneManager>> sceneStorages;
 
         //Scene 정보
-        UINT m_SceneID{0}; // 나중에 scene으로 바꾸면 하기!!
-        UINT m_nowSceneID{0};
+        std::string m_nowSceneName; // 현재 씬 이름
 
         //매니저
         UISceneManager* m_nowManager{ nullptr };
@@ -88,8 +92,10 @@ struct IWICImagingFactory;
         void Update(UINT w, UINT h);
         void Render();
 
-        //scene이 생성 될 시에 호출되면 좋음!!
-        void ChangeScene(UINT nowSceneID);
+        //씬 매니저 선택/생성만 수행 (side-effect 없음)
+        //주의: ChangeScene은 월드 데이터를 건드리지 않음. Clear는 LoadUI에서만 수행됨.
+        //씬 전환 시 UI를 새로 로드하려면 LoadUI(sceneName)를 명시적으로 호출해야 함.
+        void ChangeScene(const char* sceneName);
 
         //해당 Scene에 맞는 매니저를 반환함
         UISceneManager& GetManager() {return *m_nowManager;}
@@ -106,4 +112,19 @@ struct IWICImagingFactory;
         // 현재 UI 크기를 반환합니다
         UINT GetWidth() const { return m_curWidth; }
         UINT GetHeight() const { return m_curHeight; }
+        
+        // 렌더 구조체 참조 반환 (재초기화 시 사용)
+        UIRenderStruct& GetRenderStruct() { return m_RenderStruct; }
+        const UIRenderStruct& GetRenderStruct() const { return m_RenderStruct; }
+        
+        // UI 씬 파일 저장/로드 (ID 기반 직렬화)
+        bool SaveUI(const std::filesystem::path& worldScenePath);
+        bool LoadUI(const std::filesystem::path& worldScenePath, const Alice::ResourceManager* resources = nullptr);
+        
+        // 렌더러 준비 후 모든 UI 컴포넌트 재초기화 (초기화 순서 문제 해결)
+        // renderStruct: 렌더러 포인터를 전파할 UIRenderStruct (nullptr이면 m_RenderStruct 사용)
+        void ReinitializeAllUIComponents(UIRenderStruct* renderStruct = nullptr);
+        
+        // UI 리소스 강제 복구 (m_path는 있지만 m_texture가 null인 경우)
+        void EnsureAllUIResources();
     };

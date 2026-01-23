@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // Windows.h의 min/max 매크로 충돌 방지 (RTTR 헤더와의 충돌 방지)
 #ifndef NOMINMAX
@@ -18,6 +18,7 @@
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
 #include "Core/InputSystem.h"
+#include "UI/UIWorldManager.h"
 
 namespace Alice
 {
@@ -64,10 +65,14 @@ namespace Alice
 			bool& useForwardRendering,
 			bool& pvdEnabled,
 			std::string& pvdHost,
-			int& pvdPort);
+			int& pvdPort,
+			UIWorldManager* uiWorldManager
+		);
 
-		void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
-		void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
+	void DrawInspectorTransform(World& world, const EntityId& _selectedEntity);
+	void DrawInspectorUITransform(UIWorld& uiWorld, unsigned long selectedUI);
+	void DrawInspectorUIScripts(UIWorld& uiWorld, unsigned long selectedUI);
+	void DrawInspectorScripts(World& world, const EntityId& _selectedEntity);
 		void DrawEngineComponent(const char* label, auto* comp, auto removeFn);
 		void DrawInspectorMaterial(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
@@ -86,7 +91,8 @@ namespace Alice
 		/// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
 		void DrawDirectoryNode(World& world,
 			EntityId& selectedEntity,
-			const std::filesystem::path& path);
+			const std::filesystem::path& path,
+			UIWorldManager* uiWorldManager = nullptr);
 
 	public:
 		void SetResourceManager(ResourceManager* resources) { m_resources = resources; }
@@ -98,8 +104,8 @@ namespace Alice
 		/// SkinnedMeshRegistry 에도 등록되어 있는지 확인하고,
 		/// 누락된 경우 .fbxasset / FBX 원본을 통해 간단히 재-임포트합니다.
 		void EnsureSkinnedMeshesRegistered(World& world);
-		void SaveScene(World&);
-		void LoadScene(World&);
+		void SaveScene(World&, UIWorldManager* uiWorldManager = nullptr);
+		void LoadScene(World&, UIWorldManager* uiWorldManager = nullptr);
 
 	private:
 		bool               m_initialized = false;

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "UIBase.h"
 #include <DirectXMath.h>
 #include "UI_ImageComponent.h"
@@ -20,14 +20,14 @@ public:
 
 	void Render() override
 	{
-
+		m_Image->Render();
 	};
 
 	void createImage(const std::wstring& path)
 	{
 		m_index = 1;
 		auto m_transform = this->GetComponent<UITransform>();
-		m_Image->SetImagePath(path.c_str(), m_transform.m_size);
+		m_Image->SetImagePath(path);
 	}
 
 private:

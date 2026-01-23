@@ -18,6 +18,7 @@
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
+#include "UI/UIWorldManager.h"
 #include <wrl/client.h>
 #include <dxgi.h>
 #include <dxgi1_3.h>
@@ -651,6 +652,11 @@ namespace Alice
         {
             JsonRttr::json root = JsonRttr::json::object();
             root["version"] = 1;
+            
+            // Scene 이름 저장 (파일명 기반, 확장자 제외)
+            std::string sceneName = path.stem().string();
+            root["sceneName"] = sceneName;
+            
             root["entities"] = JsonRttr::json::array();
 
             const auto& transforms = world.GetComponents<TransformComponent>();
@@ -695,7 +701,7 @@ namespace Alice
             return LoadFromRoot(world, root);
         }
 
-        bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath)
+        bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath, UIWorldManager* uiWorldManager)
         {
             // (1) 에디터: 실제 파일
             // (2) 게임  : Assets/... 는 Metas/Chunks 로 패킹되어 있으므로, 바이트 로드 후 JSON 파싱
@@ -718,14 +724,69 @@ namespace Alice
                                logicalPath.generic_string().c_str(),
                                sp->size(),
                                resolvedStr.c_str());
-                return LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string());
+                // .alice 파일의 경우 World는 바이트에서 로드하고, UI는 별도 파일로 저장되므로 logicalPath를 사용하여 UI 로드
+                if (!LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string())) return false;
+                
+                // UI 로드 (있는 경우)
+                if (uiWorldManager)
+                {
+                    ALICE_LOG_INFO("[SceneFile] LoadAuto: Calling LoadUI for scene: %s", logicalPath.generic_string().c_str());
+                    if (!uiWorldManager->LoadUI(logicalPath, &resources))
+                    {
+                        ALICE_LOG_ERRORF("[SceneFile] LoadAuto: LoadUI failed for: %s", logicalPath.generic_string().c_str());
+                        return false;
+                    }
+                }
+                else
+                {
+                    ALICE_LOG_WARN("[SceneFile] LoadAuto: uiWorldManager is null, skipping UI load");
+                }
+                
+                return true;
             }
 
             // 일반 파일: resolved 경로로 로드
             ALICE_LOG_INFO("[SceneFile] LoadAuto: file load. logical=\"%s\" resolved=\"%s\"",
                            logicalPath.generic_string().c_str(),
                            resolvedStr.c_str());
-            return Load(world, resolved);
+            return Load(world, resolved, uiWorldManager);
+        }
+        
+        bool Save(const World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager)
+        {
+            // World 저장
+            if (!Save(world, path)) return false;
+            
+            // UI 저장 (있는 경우)
+            if (uiWorldManager)
+            {
+                if (!uiWorldManager->SaveUI(path)) return false;
+            }
+            
+            return true;
+        }
+        
+        bool Load(World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager)
+        {
+            // World 로드
+            if (!Load(world, path)) return false;
+            
+            // UI 로드 (있는 경우)
+            if (uiWorldManager)
+            {
+                ALICE_LOG_INFO("[SceneFile] Load: Calling LoadUI for scene: %s", path.generic_string().c_str());
+                if (!uiWorldManager->LoadUI(path, nullptr))
+                {
+                    ALICE_LOG_ERRORF("[SceneFile] Load: LoadUI failed for: %s", path.generic_string().c_str());
+                    return false;
+                }
+            }
+            else
+            {
+                ALICE_LOG_WARN("[SceneFile] Load: uiWorldManager is null, skipping UI load");
+            }
+            
+            return true;
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <wchar.h>
 #include <d3d11.h>
 #include <exception>

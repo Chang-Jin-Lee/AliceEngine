@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <functional>
 
 namespace Alice
@@ -114,24 +114,24 @@ namespace Alice
     private:
         FunctionType m_callback;
     };
+}
 
+// 매크로는 네임스페이스 밖에 정의해야 합니다
+// 사용법: ALICE_DECLARE_DELEGATE(이름)
 
-
-	// 사용법: ALICE_DECLARE_DELEGATE(이름)
-
-	// 파라미터 0개
+// 파라미터 0개
 #define ALICE_DECLARE_DELEGATE(DelegateName) \
         using DelegateName = Alice::Delegate<>; 
 
-	// 파라미터 1개
+// 파라미터 1개
 #define ALICE_DECLARE_DELEGATE_OneParam(DelegateName, Param1Type) \
         using DelegateName = Alice::Delegate<Param1Type>;
 
-	// 파라미터 2개
+// 파라미터 2개
 #define ALICE_DECLARE_DELEGATE_TwoParams(DelegateName, Param1Type, Param2Type) \
         using DelegateName = Alice::Delegate<Param1Type, Param2Type>;
 
-    //  ---- 추가!! ---- return type이 있는 델리게이트
+//  ---- 추가!! ---- return type이 있는 델리게이트
 #define ALICE_DECLARE_DELEGATE_RetVal(DelegateName, RetType) \
         using DelegateName = Alice::DelegateRetVal<RetType>;
 
@@ -144,4 +144,3 @@ namespace Alice
 // 인자 3개 + 반환값 있는 델리게이트
 #define ALICE_DECLARE_DELEGATE_RetVal_ThreeParams(DelegateName, RetType, P1, P2, P3) \
         using DelegateName = Alice::DelegateRetVal<RetType, P1, P2, P3>;
-}

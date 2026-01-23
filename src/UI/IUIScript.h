@@ -3,6 +3,7 @@
 #include <string>
 
 class UIBase;
+class UI_ImageComponent;
 
 /// UI 전용 스크립트 베이스 인터페이스
 class IUIScript
@@ -21,8 +22,10 @@ public:
 	virtual void OnRemoved() {}
 
 	/// 필요하다면 1회 초기화용
-	virtual void OnStart() {}
+	virtual void OnStart() {};
 
 	/// 매 프레임 호출 (UIScriptSystem::Tick에서 호출)
 	virtual void Update(float /*dt*/) {}
+
+
 };

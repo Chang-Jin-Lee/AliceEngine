@@ -27,16 +27,16 @@ enum class UIState
 
 class UIBase
 {
-    friend class UIWorld; // ???�� ???? ????
-    friend class UISceneManager; // ?? ??????? ???? ????
+    friend class UIWorld;       
+    friend class UISceneManager; 
     friend class UIWorldManager;
-    // ???��? parent, childID ?????? ????
     friend class UITransform;
     friend class UIRenderSystem;
     friend class UIHitTestSystem;
     friend class UILayoutSystem;
     friend class UIImageSystem;
     friend class UIScriptSystem;
+    friend class UIInputSystem;
 protected:
     UIBase() = default;
 
@@ -58,6 +58,10 @@ public:
 
     long unsigned int getID() { return ID; }
     UIState m_uiState{ UIState::Normal };
+    
+    // 직렬화를 위한 접근자 (ID 기반 저장/로드용)
+    long unsigned int GetParentID() const { return parentID; }
+    const std::vector<long unsigned int>& GetChildIDs() const { return childIDStorage; }
 
 
     //---------- 컴포넌트 헬퍼 ---------------
@@ -147,7 +151,7 @@ protected:
    
 
 
-    UIRenderStruct* m_UIRenderStruct;
+    UIRenderStruct* m_UIRenderStruct{nullptr};
 
     void SetID(long unsigned tmp) { ID = tmp; };
 

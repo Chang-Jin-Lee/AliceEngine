@@ -1,4 +1,4 @@
-﻿#include "Core/Scene.h"
+#include "Core/Scene.h"
 #include "Core/ResourceManager.h"
 #include "Core/SceneFile.h"
 #include "Core/Logger.h"
@@ -98,7 +98,7 @@ namespace Alice
 		return (m_pendingScene != nullptr) || m_pendingSceneFile.has_value();
 	}
 
-	bool SceneManager::CommitPendingSceneChange(World& world)
+	bool SceneManager::CommitPendingSceneChange(World& world, UIWorldManager* uiWorldManager)
 	{
 		// pending 데이터 추출
 		std::unique_ptr<IScene> pendingScene = std::move(m_pendingScene);
@@ -113,6 +113,14 @@ namespace Alice
 
 			m_currentScene = std::move(pendingScene);
 			m_currentScene->OnEnter(m_world, m_resources);
+			
+			// 코드 씬 이름 저장
+			if (m_currentScene)
+			{
+				m_currentSceneName = m_currentScene->GetName() ? m_currentScene->GetName() : "";
+			}
+			// 코드 기반 씬 전환 시 파일 경로 초기화
+			m_currentSceneFilePath.clear();
 			return true;
 		}
 
@@ -127,7 +135,7 @@ namespace Alice
 			// 파일 기반 로드면 "현재 코드 씬" 개념이 없어질 수 있으니 비워둠
 			m_currentScene.reset();
 
-			const bool ok = SceneFile::LoadAuto(world, m_resources, path);
+			const bool ok = SceneFile::LoadAuto(world, m_resources, path, uiWorldManager);
 			if (!ok)
 			{
 				ALICE_LOG_ERRORF("[SceneManager] SceneFile::LoadAuto failed: %s", path.generic_string().c_str());
