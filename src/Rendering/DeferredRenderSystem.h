@@ -86,15 +86,16 @@ namespace Alice
         const DirectX::XMFLOAT4& GetBackgroundColor() const { return m_backgroundColor; }
 
         /// 톤매핑을 적용하여 HDR 씬 텍스처를 백버퍼에 렌더링합니다.
+        /// @param inputSRV 입력 HDR 텍스처 SRV (씬 컬러 또는 Bloom 합성 결과)
         /// @param targetRTV 백버퍼 RTV
         /// @param viewport 뷰포트 영역
-        void RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+        void RenderToneMapping(ID3D11ShaderResourceView* inputSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
         /// Bloom 패스를 렌더링합니다.
         /// @param sourceSRV 입력 씬 텍스처 SRV
-        /// @param targetRTV 출력 렌더 타겟 RTV
         /// @param viewport 뷰포트 영역
-        void RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+        /// @note 결과는 m_postBloomSRV에 저장됩니다.
+        void RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, const D3D11_VIEWPORT& viewport);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
