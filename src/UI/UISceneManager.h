@@ -14,7 +14,7 @@
 //#include "UIComponent/UITransformClass.h"
 #include "IUIComponent.h"
 #include "UIRenderStruct.h"
-// Core delegate wrapper (BindLambda/Execute style)
+// Core delegate wrapper 
 #include "Core/Delegate.h"
 #include "Core/InputSystem.h"
 #include "UITransform.h"
@@ -24,16 +24,20 @@
 #include "UI_ScriptComponent.h"
 #include "UIScriptSystem.h"
 
+// Forward declaration
+class UIButton;
 
-// !!!�߰� ����!!!
-// ���Ŀ� ID ��� �ڵ�� �����ϱ�
-// void SetParent()�� ����� ��쿡�� �θ��� rect�� �ڽı��� �����ϵ��� �����
-// -> collider ���� rect�� ���� ������ �ҵ�?
+
+// !!!추가 필요!!!
+// 부모에 ID 기반 코드를 추가해야 함
+// void SetParent()를 추가할 때 부모의 rect를 자식에게 전달해야 하는지 확인 필요
+// -> collider 같은 rect를 전달할 필요가 있는지 확인
 
 class UIBase;
+class EditorCore;
 
 // ============================================================================
-// UIWorld: ��ƼƼ�� ������Ʈ�� �����ϴ� ������ �����
+// UIWorld: UI버전 world
 // ============================================================================
 class UIWorld
 {
@@ -44,6 +48,7 @@ class UIWorld
 	friend class UIRenderSystem;
 	friend class UIImageSystem;
 	friend class UIScriptSystem;
+	friend class EditorCore;
 
 public:
 	~UIWorld()
@@ -52,20 +57,20 @@ public:
 	}
 
 private:
-	// ��ƼƼ �����
-	std::unordered_map<long unsigned, std::unique_ptr<UIBase>> pUIObjStorage; // UI Object ����
-	std::vector<long unsigned> m_rootID; // �θ� ���� UI Object�� ID
+	// UI 엔티티 저장소
+	std::unordered_map<long unsigned, std::unique_ptr<UIBase>> pUIObjStorage; // UI Object 저장소
+	std::vector<long unsigned> m_rootID; // 루트 노드 UI Object의 ID
 
-	// ������Ʈ ����� (���ø� ���� ���� ����)
-	//std::unordered_map<unsigned long, std::unique_ptr<UITextComponent>> m_compStorage;      // UITextComponent �����
-	std::unordered_map<unsigned long, std::unique_ptr<UITransform>> m_transformStorage;     // UITransform �����
-	std::unordered_map<unsigned long, std::unique_ptr<UI_ImageComponent>> m_imageComponentStorage; // UI_ImageComponent �����
-	std::unordered_map<unsigned long, std::unique_ptr<UI_ScriptComponent>> m_scriptComponentStorage; // UI_ScriptComponent �����
+	// 컴포넌트 저장소 (월드 소유 고정 타입)
+	//std::unordered_map<unsigned long, std::unique_ptr<UITextComponent>> m_compStorage;      // UITextComponent 저장소
+	std::unordered_map<unsigned long, std::unique_ptr<UITransform>> m_transformStorage;     // UITransform 저장소
+	std::unordered_map<unsigned long, std::unique_ptr<UI_ImageComponent>> m_imageComponentStorage; // UI_ImageComponent 저장소
+	std::unordered_map<unsigned long, std::unique_ptr<UI_ScriptComponent>> m_scriptComponentStorage; // UI_ScriptComponent 저장소
 
-	// ���� ���� ������Ʈ ������ ���� ��������Ʈ
+	// 공통 델리게이트: 컴포넌트 생성/조회/삭제를 위임하는 델리게이트
 	CompDelegates m_worldDelegates{};
 
-	// World Epoch: ��ȿ�� üũ�� ���� ���� ��ȣ
+	// World Epoch: 유효성 체크를 위한 월드 버전 번호
 	unsigned long long m_worldEpoch{ 1 };
 
 	long unsigned nowInteger{ 1 };
@@ -73,87 +78,95 @@ private:
 	UIRenderStruct* m_UIRenderStruct{ nullptr };
 
 public:
-	// �ʱ�ȭ
+	// 초기화
 	void Initialize(UIRenderStruct* UIRst);
 
-	// ----- �ٽ� �������̽� (World ����) -----
-	// ��ƼƼ ����
+	// ----- UI 엔티티 생성/조회 (World 소유) -----
+	// UI 엔티티 생성
 	template<typename T, typename... Args>
 		requires std::derived_from<T, UIBase>
 	T* CreateEntity(Args&&... args);
 
-	// ��ƼƼ ���� + �θ� ����
+	// UI 엔티티 생성 + 부모 연결
 	template<typename T, typename... Args>
 		requires std::derived_from<T, UIBase>
 	T* CreateChildEntity(long unsigned parentID, Args&&... args);
 
-	// ��ƼƼ ���� (����Ʈ�� ��ü ���� ����)
+	// UI 엔티티 삭제 (자식까지 전체 삭제 포함)
 	bool DestroyEntity(long unsigned int handle);
 
-	// ��ƼƼ ��ȸ
+	// UI 엔티티 조회
 	UIBase* Get(long unsigned int handle);
+	const UIBase* Get(long unsigned int handle) const;
 
-	// ��ü ���� Ŭ����
+	// 전체 월드 클리어
 	void Clear();
 
-	// �� ���� UI�� Ŭ���� (���� ����)
-	void ClearSceneUI() { Clear(); } // �ϴ� ��ü Ŭ����
+	// 씬 전용 UI만 클리어 (현재는 전체 클리어)
+	void ClearSceneUI() { Clear(); } // 현재는 전체 클리어
 	 
-	// World Epoch ��ȸ (��ȿ�� üũ��)
+	// World Epoch 조회 (유효성 체크용)
 	unsigned long long GetWorldEpoch() const { return m_worldEpoch; }
 
-	// ��Ʈ ID ��� ��ȸ (�ý��ۿ�)
+	// 루트 ID 목록 조회 (렌더링용)
 	const std::vector<long unsigned>& GetRootIDs() const { return m_rootID; }
 
-	// �θ� ����
+	// 부모 설정
 	template<typename T, typename K>
 		requires std::derived_from<T, UIBase> || std::derived_from<K, UIBase>
 	void SetParent(T* parentUI, K* childUI);
 
-	// ----- ������Ʈ ���� �Լ� -----
+	// ----- 컴포넌트 관련 함수 -----
 	void BindWorldDelegates(const CompDelegates& d) { m_worldDelegates = d; }
 	CompDelegates& GetDelegates() { return m_worldDelegates; }
 
-	// UITextComponent ����/��ȸ/����
+	// UITextComponent 생성/조회/삭제
 	//UITextComponent* CreateTextComponent(unsigned long ownerID);
 	///UITextComponent* FindTextComponent(unsigned long ownerID);
 	//void RemoveTextComponent(unsigned long ownerID);
 
-	// UITransform ����/��ȸ/����
+	// UITransform 생성/조회/삭제
 	UITransform* CreateTransformComponent(unsigned long ownerID);
 	UITransform* FindTransformComponent(unsigned long ownerID);
+	const UITransform* FindTransformComponent(unsigned long ownerID) const;
 	void RemoveTransformComponent(unsigned long ownerID);
 
-	// UI_ImageComponent ����/��ȸ/����
+	// UI_ImageComponent 생성/조회/삭제
 	UI_ImageComponent* CreateImageComponent(unsigned long ownerID);
 	UI_ImageComponent* FindImageComponent(unsigned long ownerID);
+	const UI_ImageComponent* FindImageComponent(unsigned long ownerID) const;
 	void RemoveImageComponent(unsigned long ownerID);
 
 	// UI_ScriptComponent 생성/조회/삭제
 	UI_ScriptComponent* CreateScriptComponent(unsigned long ownerID);
 	UI_ScriptComponent* FindScriptComponent(unsigned long ownerID);
+	const UI_ScriptComponent* FindScriptComponent(unsigned long ownerID) const;
 	void RemoveScriptComponent(unsigned long ownerID);
 
-	// ������Ʈ ���� ���ø� �Լ�
+	// 컴포넌트 생성 (델리게이트 wrapper)
 	template<class T, class... Args>
 		requires std::derived_from<T, IUIComponent>
 	T* CreateComponent(unsigned long ownerID, Args&&... args);
 
-	//������Ʈ ��ȸ (���ø� wrapper)
+	// 컴포넌트 조회 (델리게이트 wrapper)
 	template<class T>
 		requires std::derived_from<T, IUIComponent>
 	T* TryGetComponent(unsigned long ownerID);
+	
+	template<class T>
+		requires std::derived_from<T, IUIComponent>
+	const T* TryGetComponent(unsigned long ownerID) const;
 
 	template<class T>
 		requires std::derived_from<T, IUIComponent>
 	T& GetComponent(unsigned long ownerID);
 
-	// ������Ʈ ����
+	// 컴포넌트 삭제
 	template<class T>
 		requires std::derived_from<T, IUIComponent>
 	void RemoveComponent(unsigned long ownerID);
 
-	// ��� �Լ��� ���� UIBase�� �Լ��� ȣ���ϰ� ���� ��� ���
+	// 재귀 함수: 모든 UIBase의 함수를 호출하며 전체 트리 순회
 	template <typename Func, typename... Args>
 	void Traverse(UIBase* node, Func action, Args... args)
 	{
@@ -174,7 +187,7 @@ private:
 };
 
 // ============================================================================
-// UILayoutSystem: Ʈ��/Transform ���� �ý���
+// UILayoutSystem: 트리/Transform 업데이트 시스템
 // ============================================================================
 class UILayoutSystem
 {
@@ -187,7 +200,7 @@ private:
 };
 
 // ============================================================================
-// UIHitTestSystem: ���콺 �˻� �ý���
+// UIHitTestSystem: 마우스 검색 시스템
 // ============================================================================
 class UIHitTestSystem
 {
@@ -200,7 +213,7 @@ private:
 };
 
 // ============================================================================
-// UIEventSystem: �̺�Ʈ ó�� �ý��� (���콺 �Է� �� UI ����)
+// UIEventSystem: 이벤트 처리 시스템 (마우스 입력 및 UI 이벤트)
 // ============================================================================
 class UIEventSystem
 {
@@ -209,15 +222,15 @@ public:
 };
 
 // ============================================================================
-// UIRenderSystem: ������ �ý���
+// UIRenderSystem: 렌더링 시스템
 // ============================================================================
 class UIRenderSystem
 {
 public:
 	static void Render(UIWorld& world, UIRenderStruct* renderStruct);
+	static void RenderRoot(UIWorld& world, UIRenderStruct* renderStruct);
 
 private:
-	static void RenderRoot(UIWorld& world, UIRenderStruct* renderStruct);
 	static void RenderRootChild(UIWorld& world, UIBase* node);
 };
 
@@ -237,14 +250,29 @@ private:
 	// 루트부터 시작하여 모든 엔티티의 ImageComponent 업데이트
 	static void UpdateRoot(UIWorld& world);
 	static void UpdateRootChild(UIWorld& world, UIBase* node);
-
+	
 	// 루트부터 시작하여 모든 엔티티의 ImageComponent 렌더링
 	static void RenderRoot(UIWorld& world, UIRenderStruct* renderStruct);
 	static void RenderRootChild(UIWorld& world, UIBase* node, UIRenderStruct* renderStruct);
 };
 
 // ============================================================================
-// UISceneManager: UI ��/���̾� ��ȯ�� ��� (���丮 + ���� ����)
+// UIInputSystem: UI_InputComponent 업데이트 시스템
+// ============================================================================
+class UIInputSystem
+{
+public:
+	// 모든 UI_InputComponent를 업데이트
+	static void Update(UIWorld& world, Alice::InputSystem& input);
+
+private:
+	// 루트부터 시작하여 모든 엔티티의 InputComponent 업데이트
+	static void UpdateRoot(UIWorld& world, Alice::InputSystem& input);
+	static void UpdateRootChild(UIWorld& world, UIBase* node, Alice::InputSystem& input);
+};
+
+// ============================================================================
+// UISceneManager: UI 씬/매니저 전환을 관리 (팩토리 + 월드 관리)
 // ============================================================================
 
 class UISceneManager
@@ -252,7 +280,7 @@ class UISceneManager
 public:
 	~UISceneManager()
 	{
-		// UIWorld�� �ڵ����� Clear() ȣ���
+		// UIWorld의 소멸자에서 Clear() 호출됨
 	}
 
 private:
@@ -261,23 +289,23 @@ private:
 	Alice::InputSystem* m_InputSystem{ nullptr };
 	UIRenderStruct* m_UIRenderStruct{ nullptr };
 
-	// UIWorld �ν��Ͻ�
+	// UIWorld 인스턴스
 	UIWorld m_world;
 
-	// �� ��ȯ ���� (���� Ȯ��)
+	// 씬 전환 플래그 (현재 미사용)
 	bool isLayerChange = false;
-	void SortCanvas() {}; // ���� �߰��ϱ�!!!!
+	void SortCanvas() {}; // 추후 추가 예정!!!!
 
 public:
 	void initalize(ID3D11Device* Dev, ID3D11DeviceContext* DevCon, UIRenderStruct* UIRst, Alice::InputSystem* tmpSystem);
 	void Update();
 	void Render();
 
-	// UIWorld ����
+	// UIWorld 접근
 	UIWorld& GetWorld() { return m_world; }
 	const UIWorld& GetWorld() const { return m_world; }
 
-	// ----- ���Ž� �������̽� (���� ȣȯ��) -----
+	// ----- UI 엔티티 생성/조회 (외부 호출용) -----
 	template<typename T, typename... Args>
 		requires std::derived_from<T, UIBase>
 	T* CreateUIObjects(Args&&... args) { return m_world.CreateEntity<T>(std::forward<Args>(args)...); }
@@ -298,6 +326,10 @@ public:
 	template<class T>
 		requires std::derived_from<T, IUIComponent>
 	T* TryGetComponent(unsigned long ownerID) { return m_world.TryGetComponent<T>(ownerID); }
+	
+	template<class T>
+		requires std::derived_from<T, IUIComponent>
+	const T* TryGetComponent(unsigned long ownerID) const { return m_world.TryGetComponent<T>(ownerID); }
 
 	template<class T>
 		requires std::derived_from<T, IUIComponent>
@@ -306,10 +338,14 @@ public:
 	template<class T>
 		requires std::derived_from<T, IUIComponent>
 	void RemoveComponent(unsigned long ownerID) { m_world.RemoveComponent<T>(ownerID); }
+
+private:
+	// UIButton의 InputComponent 업데이트 헬퍼 (재귀적)
+	void UpdateButtonInputRecursive(UIBase* node);
 };
 
 // ============================================================================
-// UIWorld ���ø� ����
+// UIWorld 템플릿 구현
 // ============================================================================
 template<typename T, typename... Args>
 	requires std::derived_from<T, UIBase>
@@ -322,7 +358,7 @@ T* UIWorld::CreateEntity(Args&&... args)
 	ObjPtr->SetID(this->nowInteger);
 
 	pUIObjStorage.emplace(this->nowInteger, std::move(pUIObj));
-	m_rootID.push_back(this->nowInteger); // ��Ʈ ���
+	m_rootID.push_back(this->nowInteger); // 루트 추가
 	this->nowInteger++;
 
 	ObjPtr->Initalize(*m_UIRenderStruct, m_worldDelegates);
@@ -336,23 +372,23 @@ T* UIWorld::CreateChildEntity(long unsigned parentID, Args&&... args)
 	assert(m_UIRenderStruct && "UIWorld::Initialize() must be called before CreateChildEntity");
 
 	auto pUIObj = std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-	pUIObj->ID = this->nowInteger++; // ID �Է� �Ŀ� ID++
+	pUIObj->ID = this->nowInteger++; // ID 할당 후 ID++
 
 	UIBase* parentNode = Get(parentID);
 	assert(parentNode && "CreateChildEntity: parentNode must not be null");
 
-	// �θ� ����
+	// 부모 연결
 	parentNode->childIDStorage.push_back(pUIObj->ID);
 	pUIObj->parentID = parentID;
 
-	// child�� root�� ���� �ʵ��� Ȯ�� (�̹� parent�� �����Ƿ� root�� �ƴ�)
-	// m_rootID���� ���� (Ȥ�� �� ��� ���)
+	// child가 root에 포함되지 않도록 확인 (이미 parent가 있으므로 root가 아님)
+	// m_rootID에서 제거 (혹시 모를 경우 대비)
 	m_rootID.erase(std::remove(m_rootID.begin(), m_rootID.end(), pUIObj->ID), m_rootID.end());
 
 	T* ObjPtr = pUIObj.get();
 	pUIObjStorage.emplace(pUIObj->ID, std::move(pUIObj));
 
-	// �ڽĵ� �ʱ�ȭ
+	// 자식도 초기화
 	ObjPtr->Initalize(*m_UIRenderStruct, m_worldDelegates);
 
 	return ObjPtr;
@@ -364,7 +400,7 @@ void UIWorld::SetParent(T* parentUI, K* childUI)
 {
 	assert(parentUI && childUI && "SetParent: parentUI and childUI must not be null");
 
-	// ���� �θ� ������ ���� �θ��� children���� ����
+	// 기존 부모가 있으면 그 부모의 children에서 제거
 	if (childUI->parentID != 0)
 	{
 		UIBase* oldParent = Get(childUI->parentID);
@@ -378,11 +414,11 @@ void UIWorld::SetParent(T* parentUI, K* childUI)
 		}
 	}
 
-	// ���ο� �θ� ����
+	// 새로운 부모 연결
 	parentUI->childIDStorage.push_back(childUI->ID);
 	childUI->parentID = parentUI->ID;
 
-	// m_rootID���� child ���� (���� �θ� �����Ƿ� root�� �ƴ�)
+	// m_rootID에서 child 제거 (이미 부모가 있으므로 root가 아님)
 	m_rootID.erase(std::remove_if(m_rootID.begin(), m_rootID.end(),
 		[&](long unsigned ID) {
 			return ID == childUI->ID;
@@ -405,11 +441,29 @@ T* UIWorld::TryGetComponent(unsigned long ownerID)
 	if constexpr (std::is_same_v<T, UI_ScriptComponent>)
 		return FindScriptComponent(ownerID);
 
-	// Delegates�� ���� ��ȸ
+	// Delegates를 통한 조회
 	if (!m_worldDelegates.FindComponent.IsBound()) return nullptr;
-	void* raw = nullptr;
-	m_worldDelegates.FindComponent.Execute(ownerID, typeid(T), &raw);
+	void* raw = m_worldDelegates.FindComponent.Execute(ownerID, typeid(T));
 	return static_cast<T*>(raw);
+}
+
+template<class T>
+	requires std::derived_from<T, IUIComponent>
+const T* UIWorld::TryGetComponent(unsigned long ownerID) const
+{
+	if constexpr (std::is_same_v<T, UITransform>)
+		return FindTransformComponent(ownerID);
+
+	if constexpr (std::is_same_v<T, UI_ImageComponent>)
+		return FindImageComponent(ownerID);
+
+	if constexpr (std::is_same_v<T, UI_ScriptComponent>)
+		return FindScriptComponent(ownerID);
+
+	// Delegates를 통한 조회
+	if (!m_worldDelegates.FindComponent.IsBound()) return nullptr;
+	void* raw = m_worldDelegates.FindComponent.Execute(ownerID, typeid(T));
+	return static_cast<const T*>(raw);
 }
 
 template<class T>

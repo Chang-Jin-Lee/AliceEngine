@@ -1055,7 +1055,7 @@ PS_INPUT main(uint vid : SV_VertexID)
     float2 t2 = float2(1.0, 0.0);
     float2 t3 = float2(1.0, 1.0);
 
-    // 삼각형 2개 = 6정점 (0,1,2) + (0,2,3)
+    // 삼각형 2개
     float2 pos[6] = { p0, p1, p2, p0, p2, p3 };
     float2 uv[6] = { t0, t1, t2, t0, t2, t3 };
 

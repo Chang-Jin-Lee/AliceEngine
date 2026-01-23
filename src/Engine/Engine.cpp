@@ -29,7 +29,7 @@
 #include "Core/Scene.h"
 #include "Core/ScriptSystem.h"
 #include "Core/Delegate.h"
-#include "UI/UIWorldManager.h"
+
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
@@ -43,6 +43,9 @@
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 #include "PhysX/PhysicsSystem.h" // 물리 시스템
 #include "PhysX/Module/PhysicsDebug.h" // 물리 디버그 드로우
+
+//UI
+#include "UI/UIWorldManager.h"
 
 // 문자열 변환 / ImGui 래퍼
 #include "Core/StringUtils.h"
@@ -247,7 +250,7 @@ namespace Alice
 
 		// BuildSettings.txt 에서 시작 씬(.scene 파일)을 읽어와 World 에 로드합니다.
 		// - scenes 섹션은 "index: path" 형식으로 저장되어 있다고 가정합니다.
-		bool LoadStartupSceneFromBuildSettings(World& world, const ResourceManager& resources, const std::filesystem::path& exeDir)
+		bool LoadStartupSceneFromBuildSettings(World& world, const ResourceManager& resources, const std::filesystem::path& exeDir, UIWorldManager* uiWorldManager = nullptr)
 		{
 			namespace fs = std::filesystem;
 
@@ -275,17 +278,18 @@ namespace Alice
 			if (target.empty() && !scenes.empty()) target = scenes[0];
 			if (target.empty()) return false;
 
-			const fs::path logicalScene = fs::path(target);
-			ALICE_LOG_INFO("Loading Startup Scene: %s", logicalScene.string().c_str());
+		const fs::path logicalScene = fs::path(target);
+		ALICE_LOG_INFO("Loading Startup Scene: %s (uiWorldManager=%p)", logicalScene.string().c_str(), uiWorldManager);
 
-			// gameMode에서는 Assets/... 가 Metas/Chunks 로 패킹되어 있으므로 LoadAuto를 사용합니다.
-			if (!SceneFile::LoadAuto(world, resources, logicalScene))
-			{
-				ALICE_LOG_ERRORF("Scene Load Failed: %s", logicalScene.string().c_str());
-				return false;
-			}
+		// gameMode에서는 Assets/... 가 Metas/Chunks 로 패킹되어 있으므로 LoadAuto를 사용합니다.
+		if (!SceneFile::LoadAuto(world, resources, logicalScene, uiWorldManager))
+		{
+			ALICE_LOG_ERRORF("Scene Load Failed: %s", logicalScene.string().c_str());
+			return false;
+		}
 
-			return true;
+		ALICE_LOG_INFO("Startup Scene loaded successfully: %s", logicalScene.string().c_str());
+		return true;
 		}
 	}
 
@@ -473,18 +477,31 @@ namespace Alice
 
 		if (!pImpl->m_deferredRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
 
-		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
-		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
+	pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
+	if (!pImpl->m_debugDrawSystem->Initialize()) return false;
 
-		// ============================================= 카메라 & 스크립트 =============================================
-		// 기본 카메라 위치 설정 및 핫리로드 로드
-		pImpl->m_cameraPosition = { 0.0f, 2.0f, -5.0f };
-		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
-		pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, static_cast<float>(pImpl->m_width) / pImpl->m_height, 0.1f, 5000.0f);
+	// ============================================= UI 시스템 초기화 (씬 로드 전에 초기화 필요) =============================================
+	// UIWorldManager 초기화를 씬 로드 전으로 이동
+	// 씬 로드 시 LoadUI가 호출되는데, 이때 UIWorldManager가 이미 초기화되어 있어야 Post-load fixup이 정상 작동함
+	{
+		auto* device = pImpl->m_renderDevice->GetDevice();
+		auto* context = pImpl->m_renderDevice->GetImmediateContext();
+		if (device && context)
+		{
+			pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
+			ALICE_LOG_INFO("Engine::Initialize: UIWorldManager initialized (before scene load).");
+		}
+	}
 
-		ScriptHotReload_Load();
+	// ============================================= 카메라 & 스크립트 =============================================
+	// 기본 카메라 위치 설정 및 핫리로드 로드
+	pImpl->m_cameraPosition = { 0.0f, 2.0f, -5.0f };
+	pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
+	pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, static_cast<float>(pImpl->m_width) / pImpl->m_height, 0.1f, 5000.0f);
 
-		// ============================================= 씬 관리 =============================================
+	ScriptHotReload_Load();
+
+	// ============================================= 씬 관리 =============================================
 		// 씬 매니저 생성 및 초기 씬 로드
 		pImpl->m_resourceManager.Clear();
 		pImpl->m_sceneManager = std::make_unique<SceneManager>(pImpl->m_world, pImpl->m_resourceManager);
@@ -492,7 +509,7 @@ namespace Alice
 		bool isSceneLoaded = false;
 		if (!pImpl->m_editorMode) // 게임 모드: 빌드 설정에서 씬 로드 시도
 		{
-			isSceneLoaded = LoadStartupSceneFromBuildSettings(pImpl->m_world, pImpl->m_resourceManager, exeDir);
+			isSceneLoaded = LoadStartupSceneFromBuildSettings(pImpl->m_world, pImpl->m_resourceManager, exeDir, &pImpl->m_uiWorld);
 		}
 
 		if (!isSceneLoaded) // 에디터 모드거나 로드 실패 시 샘플 씬 사용
@@ -538,16 +555,12 @@ namespace Alice
 		pImpl->m_scriptSystem.onTrimVideoMemory.BindObject(this, &Engine::TrimVideoMemory);
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::RefreshPhysicsForCurrentWorld); // 씬 로드 직후 추가작업 등록하는거 같음
 
-		// ============================================= UI 시스템 =============================================
-		// UIWorldManager 초기화 (World와 동일한 패턴)
+		// ============================================= UI 리소스 복구 (씬 로드 후) =============================================
+		// UIWorldManager는 이미 씬 로드 전에 초기화되었으므로, 씬 로드 후 리소스만 복구하면 됨
+		// LoadUI에서 Post-load fixup이 정상 작동했지만, 추가로 리소스 복구를 보장
 		{
-			auto* device = pImpl->m_renderDevice->GetDevice();
-			auto* context = pImpl->m_renderDevice->GetImmediateContext();
-			if (device && context)
-			{
-				pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
-				ALICE_LOG_INFO("Engine::Initialize: UIWorldManager initialized.");
-			}
+			ALICE_LOG_INFO("Engine::Initialize: Ensuring all UI resources after scene load...");
+			pImpl->m_uiWorld.EnsureAllUIResources();
 		}
 
 		ALICE_LOG_INFO("Engine::Initialize: Success (Entities: %zu)", pImpl->m_world.GetComponents<TransformComponent>().size());
@@ -634,13 +647,13 @@ namespace Alice
 				// 2) ScriptSystem의 씬 요청 커밋 (LoadAuto/SwitchTo 실행)
 				if (pImpl->m_scriptSystem.HasPendingSceneRequests())
 				{
-					pImpl->m_scriptSystem.CommitSceneRequests(pImpl->m_world);
+					pImpl->m_scriptSystem.CommitSceneRequests(pImpl->m_world, &pImpl->m_uiWorld);
 				}
 
 				// 3) SceneManager의 씬 요청 커밋
 				if (pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange())
 				{
-					pImpl->m_sceneManager->CommitPendingSceneChange(pImpl->m_world);
+					pImpl->m_sceneManager->CommitPendingSceneChange(pImpl->m_world, &pImpl->m_uiWorld);
 				}
 
 				// 4) 이 프레임은 더 이상 월드에 접근하면 안 됨 (방금 갈아엎었을 수 있으니까)
@@ -1076,7 +1089,7 @@ namespace Alice
 				pImpl->m_isPlaying, shadingMode, pImpl->m_useFillLight,
 				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
 				pImpl->m_useForwardRendering,
-				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort
+				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort, &pImpl->m_uiWorld
 			);
 			pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
 

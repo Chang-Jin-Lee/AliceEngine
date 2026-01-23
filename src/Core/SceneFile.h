@@ -1,6 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include <filesystem>
+
+// 전방 선언
+class UIWorldManager;
 
 namespace Alice
 {
@@ -14,15 +17,28 @@ namespace Alice
     {
         /// 현재 World 의 상태를 JSON(.scene)으로 저장합니다.
         bool Save(const World& world, const std::filesystem::path& path);
+        
+        /// World와 UI를 함께 저장합니다.
+        /// UIWorldManager가 nullptr이면 World만 저장합니다.
+        bool Save(const World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager);
 
         /// .scene(JSON)을 읽어서 World 를 재구성합니다.
         /// 기존 엔티티들은 모두 제거됩니다.
         bool Load(World& world, const std::filesystem::path& path);
+        
+        /// World와 UI를 함께 로드합니다.
+        /// UIWorldManager가 nullptr이면 World만 로드합니다.
+        bool Load(World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager);
 
         /// 에디터/최종빌드 모두에서 동작하는 자동 로더입니다.
         /// - editorMode: 실제 파일(Assets/...)을 읽습니다.
         /// - gameMode  : ResourceManager를 통해 Metas/Chunks에서 바이트를 로드해서 JSON으로 파싱합니다.
-        bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath);
+        /// UIWorldManager가 nullptr이면 World만 로드합니다.
+        bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath, UIWorldManager* uiWorldManager = nullptr);
+
+        /// .scene 파일에서 Scene 이름을 읽어옵니다.
+        /// 파일이 없거나 이름이 없으면 빈 문자열을 반환합니다.
+        std::string GetSceneName(const std::filesystem::path& path);
     }
 }
 

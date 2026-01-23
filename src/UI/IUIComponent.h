@@ -3,6 +3,8 @@
 
 class UIBase; // forward declaration
 
+
+// 컴포넌트의 부모
 struct IUIComponent
 {
     virtual ~IUIComponent() = default;
