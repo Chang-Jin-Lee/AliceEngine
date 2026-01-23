@@ -65,17 +65,7 @@ namespace Alice
 	// 씬 상태 전역 - 여러 네임스페이스에서 공유
 	bool g_SceneDirty = false;
 
-	// === Undo/Redo 시스템 ===
-	struct ICommand
-	{
-		virtual ~ICommand() = default;
-		virtual void Execute(World& world, EntityId& selectedEntity) = 0;
-		virtual void Undo(World& world, EntityId& selectedEntity) = 0;
-		virtual const char* GetDescription() const = 0;
-		
-		// Redo 지원 여부 (기본값: true, Create/Destroy는 false로 오버라이드)
-		virtual bool SupportsRedo() const { return true; }
-	};
+	// ICommand는 이제 EditorCore.h에 정의됨
 
 	namespace
 	{
@@ -769,49 +759,7 @@ namespace Alice
 			}
 		};
 
-		// 컴포넌트 편집 명령 (템플릿)
-		template<typename T>
-		struct ComponentEditCommand : ICommand
-		{
-			EntityId entityId;
-			std::string componentTypeName;
-			JsonRttr::json oldJson;
-			JsonRttr::json newJson;
-			mutable std::string description;
-
-			ComponentEditCommand(EntityId id, const T& oldComp, const T& newComp)
-				: entityId(id), componentTypeName(rttr::type::get<T>().get_name().to_string())
-			{
-				rttr::instance oldInst = const_cast<T&>(oldComp);
-				rttr::instance newInst = const_cast<T&>(newComp);
-				oldJson = JsonRttr::ToJsonObject(oldInst);
-				newJson = JsonRttr::ToJsonObject(newInst);
-				description = "Edit " + componentTypeName;
-			}
-
-			void Execute(World& world, EntityId& selectedEntity) override
-			{
-				if (auto* comp = world.GetComponent<T>(entityId))
-				{
-					rttr::instance inst = *comp;
-					JsonRttr::FromJsonObject(inst, newJson);
-				}
-			}
-
-			void Undo(World& world, EntityId& selectedEntity) override
-			{
-				if (auto* comp = world.GetComponent<T>(entityId))
-				{
-					rttr::instance inst = *comp;
-					JsonRttr::FromJsonObject(inst, oldJson);
-				}
-			}
-
-			const char* GetDescription() const override
-			{
-				return description.c_str();
-			}
-		};
+		// ComponentEditCommand는 이제 EditorCore.h에 정의됨
 
 		// 부모 설정 명령
 		struct SetParentCommand : ICommand
@@ -4723,57 +4671,68 @@ namespace Alice
 				if (typeName == "CameraComponent") {
 					DrawEngineComponent("CameraComponent",
 						world.GetComponent<CameraComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<CameraComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "CameraFollowComponent") {
 					DrawEngineComponent("CameraFollowComponent",
 						world.GetComponent<CameraFollowComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraFollowComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<CameraFollowComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "CameraSpringArmComponent") {
 					DrawEngineComponent("CameraSpringArmComponent",
 						world.GetComponent<CameraSpringArmComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraSpringArmComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<CameraSpringArmComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "CameraLookAtComponent") {
 					DrawEngineComponent("CameraLookAtComponent",
 						world.GetComponent<CameraLookAtComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraLookAtComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<CameraLookAtComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "CameraShakeComponent") {
 					DrawEngineComponent("CameraShakeComponent",
 						world.GetComponent<CameraShakeComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraShakeComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<CameraShakeComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "CameraBlendComponent") {
 					DrawEngineComponent("CameraBlendComponent",
 						world.GetComponent<CameraBlendComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraBlendComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<CameraBlendComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "CameraInputComponent") {
 					DrawEngineComponent("CameraInputComponent",
 						world.GetComponent<CameraInputComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<CameraInputComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<CameraInputComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "PointLightComponent") {
 					DrawEngineComponent("PointLightComponent",
 						world.GetComponent<PointLightComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<PointLightComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<PointLightComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "SpotLightComponent") {
 					DrawEngineComponent("SpotLightComponent",
 						world.GetComponent<SpotLightComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<SpotLightComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<SpotLightComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "RectLightComponent") {
 					DrawEngineComponent("RectLightComponent",
 						world.GetComponent<RectLightComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "Phy_RigidBodyComponent") {
 					DrawEngineComponent("Phy_RigidBodyComponent",
 						world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
-						[&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
+						[&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); },
+						_selectedEntity, typeName);
 				}
 				else if (typeName == "Phy_ColliderComponent") {
 					DrawInspectorCollider(world, _selectedEntity);
@@ -4931,90 +4890,6 @@ namespace Alice
 			}
 		}
 
-		// Engine Components
-		void EditorCore::DrawEngineComponent(const char* label, auto* comp, auto removeFn)
-		{
-			if (!comp) return;
-			if (ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) {
-				bool changed = false;
-				std::string removeId = std::string("Remove##") + label;
-				if (ImGui::Button(removeId.c_str())) {
-					removeFn();
-					g_SceneDirty = true;
-					return;
-				}
-				
-				// 컴포넌트 편집 이벤트 처리
-				static EntityId lastEditedEntity = InvalidEntityId;
-				static std::string lastEditedComponentType;
-				static JsonRttr::json editStartJson;
-				
-				ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*comp);
-				
-				// 편집 시작: oldJson 스냅샷 저장
-				if (event.activated && (_selectedEntity != lastEditedEntity || lastEditedComponentType != compTypeName))
-				{
-					rttr::instance inst = *comp;
-					editStartJson = JsonRttr::ToJsonObject(inst);
-					lastEditedEntity = _selectedEntity;
-					lastEditedComponentType = compTypeName;
-				}
-				
-				// 편집 종료: newJson 저장하고 커맨드 푸시
-				if (event.deactivatedAfterEdit && _selectedEntity == lastEditedEntity && lastEditedComponentType == compTypeName)
-				{
-					rttr::instance inst = *comp;
-					JsonRttr::json editEndJson = JsonRttr::ToJsonObject(inst);
-					
-					// 변경사항이 있으면 커맨드 푸시
-					if (editStartJson != editEndJson)
-					{
-						// 타입별로 적절한 커맨드 생성
-						#define PUSH_COMPONENT_EDIT_CMD(T) \
-							if (compTypeName == rttr::type::get<T>().get_name().to_string()) \
-							{ \
-								T oldComp, newComp; \
-								rttr::instance oldInst = oldComp; \
-								rttr::instance newInst = newComp; \
-								JsonRttr::FromJsonObject(oldInst, editStartJson); \
-								JsonRttr::FromJsonObject(newInst, editEndJson); \
-								PushCommand(std::make_unique<ComponentEditCommand<T>>(_selectedEntity, oldComp, newComp)); \
-							}
-						
-						// 주요 컴포넌트 타입들 처리
-						PUSH_COMPONENT_EDIT_CMD(MaterialComponent)
-						else PUSH_COMPONENT_EDIT_CMD(SkinnedMeshComponent)
-						else PUSH_COMPONENT_EDIT_CMD(SkinnedAnimationComponent)
-						else PUSH_COMPONENT_EDIT_CMD(CameraComponent)
-						else PUSH_COMPONENT_EDIT_CMD(CameraFollowComponent)
-						else PUSH_COMPONENT_EDIT_CMD(CameraSpringArmComponent)
-						else PUSH_COMPONENT_EDIT_CMD(CameraLookAtComponent)
-						else PUSH_COMPONENT_EDIT_CMD(CameraShakeComponent)
-						else PUSH_COMPONENT_EDIT_CMD(CameraBlendComponent)
-						else PUSH_COMPONENT_EDIT_CMD(CameraInputComponent)
-						else PUSH_COMPONENT_EDIT_CMD(PointLightComponent)
-						else PUSH_COMPONENT_EDIT_CMD(SpotLightComponent)
-						else PUSH_COMPONENT_EDIT_CMD(RectLightComponent)
-						else PUSH_COMPONENT_EDIT_CMD(ComputeEffectComponent)
-						else PUSH_COMPONENT_EDIT_CMD(Phy_RigidBodyComponent)
-						else PUSH_COMPONENT_EDIT_CMD(Phy_ColliderComponent)
-						else PUSH_COMPONENT_EDIT_CMD(Phy_MeshColliderComponent)
-						else PUSH_COMPONENT_EDIT_CMD(Phy_CCTComponent)
-						else PUSH_COMPONENT_EDIT_CMD(Phy_TerrainHeightFieldComponent)
-						else PUSH_COMPONENT_EDIT_CMD(Phy_JointComponent)
-						
-						#undef PUSH_COMPONENT_EDIT_CMD
-						
-						g_SceneDirty = true;
-					}
-					
-					lastEditedEntity = InvalidEntityId;
-					lastEditedComponentType.clear();
-				}
-				
-				if (event.changed) g_SceneDirty = true;
-			}
-		}
 
 		void EditorCore::DrawInspectorMaterial(World & world, const EntityId & _selectedEntity)
 		{
@@ -5057,7 +4932,7 @@ namespace Alice
 					}
 					ImGui::EndDragDropTarget();
 				}
-				changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter);
+				changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter).changed;
 
 				const char* shadingItems[] = {
 					"Global",

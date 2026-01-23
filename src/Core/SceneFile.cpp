@@ -493,7 +493,13 @@ namespace Alice
                 world.SetEntityName(id, name);
 
             // IDComponent: GUID 로드 또는 생성
-            auto& idComp = world.GetComponent<IDComponent>(id);
+            auto* idComp = world.GetComponent<IDComponent>(id);
+            if (!idComp)
+            {
+                // IDComponent가 없으면 생성
+                idComp = &world.AddComponent<IDComponent>(id);
+            }
+            
             if (auto itGuid = e.find("guid"); itGuid != e.end())
             {
                 idComp->guid = ParseGuid(*itGuid);
