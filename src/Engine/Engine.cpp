@@ -1363,15 +1363,17 @@ namespace Alice
 				viewport.Height = static_cast<float>(pImpl->m_height);
 				viewport.MaxDepth = 1.0f;
 
-				// 게임 모드에서는 톤매핑 후 오버레이
-				if (pImpl->m_useForwardRendering)
-				{
-					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-				}
-				else
-				{
-					pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-				}
+			// 게임 모드에서는 톤매핑 후 오버레이
+			if (pImpl->m_useForwardRendering)
+			{
+				pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+			}
+			else
+			{
+				DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
+				ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
+				deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
+			}
 
 				// 파티클 오버레이 합성 (톤매핑 후)
 				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();

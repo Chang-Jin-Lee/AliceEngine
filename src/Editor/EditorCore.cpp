@@ -4126,6 +4126,8 @@ namespace Alice
 					if (bloomChanged)
 						deferred.SetBloomSettings(bloomSettings);
 				}
+			}
+			ImGui::End();
 
 
 			// === Material Asset Editor (.mat 더블클릭 시) ===
@@ -4480,12 +4482,7 @@ namespace Alice
 						};
 						changed = true;
 					}
-					bool changed = false;
-
-					// Transform 편집 시작/종료 추적용 (멤버로 두는 게 정석)
-					static bool isEditing = false;
-					static EntityId lastEditedEntity = {};
-					static TransformCommand::TransformData editStartTransform{};
+													
 
 					bool anyTransformItemActive = false;
 					bool anyTransformItemActivated = false;
@@ -4579,8 +4576,46 @@ namespace Alice
 
 						isEditing = false;
 					}
+				}
+			}
+		}
 
-            
+		void EditorCore::DrawInspectorAnimationStatus(World& world, const EntityId& _selectedEntity)
+		{
+			if (auto* anim = world.GetComponent<SkinnedAnimationComponent>(_selectedEntity))
+			{
+				if (ImGui::CollapsingHeader("Animation Status", ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					ImGui::Text("Playing: %s", anim->playing ? "Yes" : "No");
+					ImGui::Text("Speed: %.2f", anim->speed);
+					ImGui::Text("Clip Index: %d", anim->clipIndex);
+					ImGui::Text("Time: %.3f sec", anim->timeSec);
+
+					// SkinnedMesh가 있으면 애니메이션 이름도 표시
+					if (auto* skinned = world.GetComponent<SkinnedMeshComponent>(_selectedEntity))
+					{
+						if (m_skinnedRegistry)
+						{
+							auto mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+							if (mesh && mesh->sourceModel)
+							{
+								const auto& names = mesh->sourceModel->GetAnimationNames();
+								if (anim->clipIndex >= 0 && anim->clipIndex < (int)names.size())
+								{
+									ImGui::Text("Clip Name: %s", names[(size_t)anim->clipIndex].c_str());
+									const double dur = mesh->sourceModel->GetClipDurationSec(anim->clipIndex);
+									if (dur > 0.0)
+									{
+										ImGui::Text("Duration: %.3f sec", dur);
+										ImGui::Text("Progress: %.1f%%", (anim->timeSec / dur) * 100.0);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 
 		void EditorCore::DrawInspectorScripts(World & world, const EntityId & _selectedEntity)
 		{
@@ -4788,6 +4823,8 @@ namespace Alice
 					if (has && ImGui::IsItemHovered())
 						ImGui::SetTooltip("이 컴포넌트는 이미 추가되어 있습니다.");
 				}
+				ImGui::EndCombo();
+			}
 
 
 
@@ -4831,47 +4868,58 @@ namespace Alice
             if (typeName == "CameraComponent") {
                 DrawEngineComponent("CameraComponent",
                     world.GetComponent<CameraComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<CameraComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "CameraFollowComponent") {
                 DrawEngineComponent("CameraFollowComponent",
                     world.GetComponent<CameraFollowComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraFollowComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<CameraFollowComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "CameraSpringArmComponent") {
                 DrawEngineComponent("CameraSpringArmComponent",
                     world.GetComponent<CameraSpringArmComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraSpringArmComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<CameraSpringArmComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "CameraLookAtComponent") {
                 DrawEngineComponent("CameraLookAtComponent",
                     world.GetComponent<CameraLookAtComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraLookAtComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<CameraLookAtComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "CameraShakeComponent") {
                 DrawEngineComponent("CameraShakeComponent",
                     world.GetComponent<CameraShakeComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraShakeComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<CameraShakeComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "CameraBlendComponent") {
                 DrawEngineComponent("CameraBlendComponent",
                     world.GetComponent<CameraBlendComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraBlendComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<CameraBlendComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "CameraInputComponent") {
                 DrawEngineComponent("CameraInputComponent",
                     world.GetComponent<CameraInputComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<CameraInputComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<CameraInputComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "PointLightComponent") {
                 DrawEngineComponent("PointLightComponent",
                     world.GetComponent<PointLightComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<PointLightComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<PointLightComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "SpotLightComponent") {
                 DrawEngineComponent("SpotLightComponent",
                     world.GetComponent<SpotLightComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<SpotLightComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<SpotLightComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "RectLightComponent") {
                 DrawEngineComponent("RectLightComponent",
                     world.GetComponent<RectLightComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<RectLightComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "Phy_RigidBodyComponent") {
                 DrawEngineComponent("Phy_RigidBodyComponent",
                     world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity),
-                    [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); });
+                    [&]() { world.RemoveComponent<Phy_RigidBodyComponent>(_selectedEntity); },
+                    _selectedEntity, typeName);
             } else if (typeName == "Phy_ColliderComponent") {
                 DrawInspectorCollider(world, _selectedEntity);
             } else if (typeName == "Phy_MeshColliderComponent") {
