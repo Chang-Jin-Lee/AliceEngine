@@ -74,9 +74,6 @@ namespace Alice
     {
         m_device  = m_renderDevice.GetDevice();
         m_context = m_renderDevice.GetImmediateContext();
-
-        QueryPerformanceFrequency(&m_qpcFreq);
-        QueryPerformanceCounter(&m_qpcPrev);
     }
 
     ComputeEffectSystem::~ComputeEffectSystem()
@@ -183,6 +180,12 @@ namespace Alice
             return false;
         }
 
+        if (!CreateDummyDepthTexture())
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: CreateDummyDepthTexture failed.");
+            return false;
+        }
+
         m_width  = width;
         m_height = height;
 
@@ -228,7 +231,7 @@ namespace Alice
     {
         m_params0.x = ClampFloat(x, 0.0f, 1.0f);
         m_params0.y = ClampFloat(y, 0.0f, 1.0f);
-        m_params0.z = std::max(radius, 0.0f);
+        m_params0.w = std::max(radius, 0.0f); // 셰이더는 params0.w를 radius로 사용
     }
 
     void ComputeEffectSystem::SetParticleColor(float r, float g, float b)
@@ -248,7 +251,7 @@ namespace Alice
         return m_hasActiveEffect;
     }
 
-    void ComputeEffectSystem::Execute(const World& world, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraPos, ID3D11ShaderResourceView* sceneDepthSRV)
+    void ComputeEffectSystem::Execute(const World& world, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraPos, ID3D11ShaderResourceView* sceneDepthSRV, float dtSec)
     {
         if (!m_constantBuffer || !m_outputUAV || !m_particleUAV || !m_particleSRV)
         {
@@ -261,8 +264,8 @@ namespace Alice
         m_viewProj = viewProj;
         m_cameraPos = cameraPos;
 
-        // 여러 이펙트 동시 지원: 모든 활성화된 ComputeEffectComponent 처리
-        std::vector<std::pair<EntityId, std::pair<std::string, const ComputeEffectComponent*>>> activeEffects;
+        // 여러 이펙트 동시 지원: 프리셋별로 그룹핑
+        std::unordered_map<std::string, std::vector<std::pair<EntityId, const ComputeEffectComponent*>>> emittersByPreset;
         
         for (auto&& [entityId, effect] : world.GetComponents<ComputeEffectComponent>())
         {
@@ -273,33 +276,10 @@ namespace Alice
             if (m_particleShaderSets.find(effect.shaderName) == m_particleShaderSets.end())
                 continue;
 
-            activeEffects.push_back({ entityId, { effect.shaderName, &effect } });
+            emittersByPreset[effect.shaderName].push_back({ entityId, &effect });
         }
 
-        // entityId로 정렬하여 일관된 순서 보장
-        std::sort(activeEffects.begin(), activeEffects.end(),
-            [](const auto& a, const auto& b) { return a.first < b.first; });
-
-        if (activeEffects.empty())
-        {
-            m_hasActiveEffect = false;
-            return;
-        }
-
-        // 첫 번째 이펙트만 처리 (여러 이펙트 지원은 나중에 확장)
-        // TODO: 여러 이펙트를 동시에 지원하려면 이펙트별 버퍼를 따로 두거나 emitter 리스트를 StructuredBuffer로 넘겨야 함
-        const auto& [activeShaderName, activeEffect] = activeEffects[0].second;
-
-        // 해당 셰이더 세트 가져오기
-        auto it = m_particleShaderSets.find(activeShaderName);
-        if (it == m_particleShaderSets.end())
-        {
-            m_hasActiveEffect = false;
-            return;
-        }
-
-        const ParticleShaderSet& shaderSet = it->second;
-        if (!shaderSet.clearShader || !shaderSet.updateShader || !shaderSet.drawShader)
+        if (emittersByPreset.empty())
         {
             m_hasActiveEffect = false;
             return;
@@ -307,34 +287,85 @@ namespace Alice
 
         m_hasActiveEffect = true;
 
-        // 인스펙터 값을 CS 상수버퍼로 매핑
-        // effectParams는 이제 월드 좌표 (x, y, z)로 사용
+        // dtSec를 사용하여 시간 업데이트
+        m_dtSec = ClampFloat(dtSec, 0.0f, 1.0f / 20.0f);
+        m_timeSec += m_dtSec;
+
+        // depthSRV가 nullptr이면 더미 depth 사용
+        ID3D11ShaderResourceView* depthSRVToUse = sceneDepthSRV;
+        if (!depthSRVToUse)
         {
-            const float ex  = activeEffect->effectParams.x;  // 월드 X
-            const float ey  = activeEffect->effectParams.y;  // 월드 Y
-            const float ez  = activeEffect->effectParams.z;  // 월드 Z
-            const float rad = ClampFloat(activeEffect->intensity * 0.5f, 0.01f, 5.0f);  // 반경 (intensity 기반)
-            m_params0 = XMFLOAT4(ex, ey, ez, rad);  // emitterX, emitterY, emitterZ, radius
-
-            const float inten = ClampFloat(activeEffect->intensity, 0.0f, 10.0f);
-            const float brightness = 0.25f + inten * 0.25f; // 0.25 .. 2.75
-            const float sizePx = 1.0f + inten * 2.0f;       // 1 .. 21 px
-
-            XMFLOAT3 baseColor(1.0f, 1.0f, 0.0f);
-            if (activeShaderName == "Sparks")        baseColor = XMFLOAT3(1.0f, 0.55f, 0.12f);
-            else if (activeShaderName == "Smoke")    baseColor = XMFLOAT3(0.65f, 0.65f, 0.65f);
-            else if (activeShaderName == "Vortex")   baseColor = XMFLOAT3(0.45f, 0.20f, 1.0f);
-            else if (activeShaderName == "Snow")     baseColor = XMFLOAT3(0.95f, 0.98f, 1.0f);
-            else if (activeShaderName == "Explosion")baseColor = XMFLOAT3(1.0f, 0.85f, 0.25f);
-
-            m_params1 = XMFLOAT4(baseColor.x * brightness, baseColor.y * brightness, baseColor.z * brightness, sizePx);
+            depthSRVToUse = m_dummyDepthSRV.Get();
         }
 
-        UpdateConstantBuffer();
+        // Clear는 1번만 (모든 프리셋이 공유하는 출력 텍스처)
+        // 첫 번째 프리셋의 clearShader 사용 (모든 프리셋이 같은 ClearCS를 사용하므로)
+        auto firstPresetIt = emittersByPreset.begin();
+        const std::string& firstPresetName = firstPresetIt->first;
+        auto firstShaderSetIt = m_particleShaderSets.find(firstPresetName);
+        if (firstShaderSetIt != m_particleShaderSets.end() && firstShaderSetIt->second.clearShader)
+        {
+            DispatchClear(firstShaderSetIt->second.clearShader.Get());
+        }
 
-        DispatchClear(shaderSet.clearShader.Get());
-        DispatchParticlesUpdate(shaderSet.updateShader.Get());
-        DispatchParticlesDraw(shaderSet.drawShader.Get(), sceneDepthSRV);
+        // 프리셋별로 Update/Draw 처리
+        for (const auto& [presetName, emitters] : emittersByPreset)
+        {
+            auto shaderSetIt = m_particleShaderSets.find(presetName);
+            if (shaderSetIt == m_particleShaderSets.end())
+                continue;
+
+            const ParticleShaderSet& shaderSet = shaderSetIt->second;
+            if (!shaderSet.updateShader || !shaderSet.drawShader)
+                continue;
+
+            // 현재는 첫 번째 이펙트만 처리 (나중에 emitter 리스트를 StructuredBuffer로 확장 가능)
+            const auto& [entityId, effect] = emitters[0];
+
+            // 월드 위치 결정 (Transform 연동)
+            XMFLOAT3 emitterPos{};
+            if (effect->useTransform)
+            {
+                if (auto* t = world.GetComponent<TransformComponent>(entityId))
+                {
+                    emitterPos = t->position;
+                    emitterPos.x += effect->localOffset.x;
+                    emitterPos.y += effect->localOffset.y;
+                    emitterPos.z += effect->localOffset.z;
+                }
+                else
+                {
+                    emitterPos = effect->effectParams; // fallback
+                }
+            }
+            else
+            {
+                emitterPos = effect->effectParams; // 기존 방식 호환
+            }
+
+            // 파라미터 설정
+            const float rad = ClampFloat(effect->radius, 0.01f, 5.0f);
+            m_params0 = XMFLOAT4(emitterPos.x, emitterPos.y, emitterPos.z, rad);
+
+            // 색상과 크기는 컴포넌트에서 직접 사용 (프리셋 기본값 대신)
+            const float inten = ClampFloat(effect->intensity, 0.0f, 10.0f);
+            const float brightness = 0.25f + inten * 0.25f;
+            m_params1 = XMFLOAT4(
+                effect->color.x * brightness,
+                effect->color.y * brightness,
+                effect->color.z * brightness,
+                effect->sizePx
+            );
+
+            UpdateConstantBuffer();
+
+            // Update/Draw 실행
+            DispatchParticlesUpdate(shaderSet.updateShader.Get());
+            
+            // depthTest 설정에 따라 depthSRV 사용 여부 결정
+            ID3D11ShaderResourceView* depthForDraw = effect->depthTest ? depthSRVToUse : m_dummyDepthSRV.Get();
+            DispatchParticlesDraw(shaderSet.drawShader.Get(), depthForDraw);
+        }
 
         UnbindCS();
 
@@ -562,17 +593,52 @@ namespace Alice
         return true;
     }
 
+    bool ComputeEffectSystem::CreateDummyDepthTexture()
+    {
+        // 1x1 R32_FLOAT 텍스처 생성 (값=1.0, 즉 far plane)
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = 1;
+        desc.Height = 1;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R32_FLOAT;
+        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Quality = 0;
+        desc.Usage = D3D11_USAGE_IMMUTABLE;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        desc.CPUAccessFlags = 0;
+
+        float depthValue = 1.0f; // far plane
+        D3D11_SUBRESOURCE_DATA initData = {};
+        initData.pSysMem = &depthValue;
+        initData.SysMemPitch = sizeof(float);
+        initData.SysMemSlicePitch = sizeof(float);
+
+        HRESULT hr = m_device->CreateTexture2D(&desc, &initData, m_dummyDepthTexture.GetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::CreateDummyDepthTexture: CreateTexture2D failed (0x%08X)", (unsigned)hr);
+            return false;
+        }
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+        srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MostDetailedMip = 0;
+        srvDesc.Texture2D.MipLevels = 1;
+
+        hr = m_device->CreateShaderResourceView(m_dummyDepthTexture.Get(), &srvDesc, m_dummyDepthSRV.GetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("ComputeEffectSystem::CreateDummyDepthTexture: CreateShaderResourceView failed (0x%08X)", (unsigned)hr);
+            return false;
+        }
+
+        return true;
+    }
+
     void ComputeEffectSystem::UpdateConstantBuffer()
     {
-        LARGE_INTEGER now{};
-        QueryPerformanceCounter(&now);
-
-        double dt = (double)(now.QuadPart - m_qpcPrev.QuadPart) / (double)m_qpcFreq.QuadPart;
-        m_qpcPrev = now;
-
-        m_dtSec = ClampFloat((float)dt, 0.0f, 1.0f / 20.0f);
-        m_timeSec += m_dtSec;
-
         float w = (float)std::max<std::uint32_t>(m_width, 1);
         float h = (float)std::max<std::uint32_t>(m_height, 1);
 

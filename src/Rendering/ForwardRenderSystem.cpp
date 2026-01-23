@@ -1251,6 +1251,10 @@ namespace Alice
         // 0. 초기화 및 유효성 검사
         if (!IsValidPipeline()) return;
 
+        // 실제로 사용한 카메라 정보 저장 (ComputeEffect용)
+        m_lastViewProj = camera.GetViewProjectionMatrix();
+        m_lastCameraPos = camera.GetPosition();
+
         // 1. 섀도우 맵 패스 (Shadow Map Generation) - 반환값: Main Pass에서 사용할 Light View-Projection 행렬
         XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities);
 
