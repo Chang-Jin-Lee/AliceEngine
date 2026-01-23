@@ -1,9 +1,29 @@
 #include "Core/ComponentRegistry.h"
 #include "Core/World.h"
+#include "Core/EditorComponentRegistry.h"
 #include "Logger.h"
 
 #include <rttr/registration>
 #include <DirectXMath.h>
+
+// 컴포넌트 헤더들
+#include "Components/TransformComponent.h"
+#include "Components/MaterialComponent.h"
+#include "Components/SkinnedMeshComponent.h"
+#include "Components/SkinnedAnimationComponent.h"
+#include "Components/CameraComponent.h"
+#include "Components/CameraFollowComponent.h"
+#include "Components/CameraSpringArmComponent.h"
+#include "Components/CameraLookAtComponent.h"
+#include "Components/CameraShakeComponent.h"
+#include "Components/CameraBlendComponent.h"
+#include "Components/CameraInputComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/SpotLightComponent.h"
+#include "Components/RectLightComponent.h"
+#include "Components/ComputeEffectComponent.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
@@ -14,8 +34,7 @@
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/IPhysicsWorld.h"
-#include "Components/EffectComponent.h"
-#include "Components/TrailEffectComponent.h"
+#include "Core/Material.h"
 
 using namespace DirectX;
 
@@ -630,4 +649,60 @@ namespace Alice
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();
     }
+
+    // EditorComponentRegistry에 컴포넌트 등록
+    static void RegisterEditorComponentsOnce()
+    {
+        auto& r = EditorComponentRegistry::Get();
+
+        // Transform은 필수라면 addable/removable 컨트롤
+        r.Register<TransformComponent>("Transform", "Core",
+            /*addFn*/{}, /*addable*/false, /*removable*/false);
+
+        r.Register<MaterialComponent>("Material", "Rendering",
+            [](World& w, EntityId e) {
+                DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+                w.AddComponent<MaterialComponent>(e, defaultColor);
+            });
+
+        r.Register<SkinnedMeshComponent>("Skinned Mesh", "Rendering",
+            [](World& w, EntityId e) {
+                w.AddComponent<SkinnedMeshComponent>(e, ""); // 기본값
+            });
+
+        r.Register<SkinnedAnimationComponent>("Skinned Animation", "Rendering");
+
+        r.Register<CameraComponent>("Camera", "Camera");
+        r.Register<CameraFollowComponent>("Camera Follow", "Camera");
+        r.Register<CameraSpringArmComponent>("Spring Arm", "Camera");
+        r.Register<CameraLookAtComponent>("Look At", "Camera");
+        r.Register<CameraShakeComponent>("Shake", "Camera");
+        r.Register<CameraBlendComponent>("Blend", "Camera");
+        r.Register<CameraInputComponent>("Input", "Camera");
+
+        r.Register<PointLightComponent>("Point Light", "Lighting");
+        r.Register<SpotLightComponent>("Spot Light", "Lighting");
+        r.Register<RectLightComponent>("Rect Light", "Lighting");
+
+        r.Register<ComputeEffectComponent>("Compute Effect", "VFX");
+        r.Register<EffectComponent>("Effect", "VFX");
+        r.Register<TrailEffectComponent>("Trail Effect", "VFX");
+
+        r.Register<Phy_RigidBodyComponent>("RigidBody", "Physics");
+        r.Register<Phy_ColliderComponent>("Collider", "Physics");
+        r.Register<Phy_MeshColliderComponent>("MeshCollider", "Physics");
+        r.Register<Phy_CCTComponent>("CCT", "Physics");
+        r.Register<Phy_TerrainHeightFieldComponent>("TerrainHeightField", "Physics");
+        r.Register<Phy_JointComponent>("Joint", "Physics");
+        r.Register<Phy_SettingsComponent>("Physics Settings", "Physics",
+            /*addFn*/{}, /*addable*/true, /*removable*/false);
+
+        r.SortByCategoryThenName();
+    }
+
+    // 정적 초기화로 1회 실행
+    static const bool s_regEditorComponents = [] {
+        RegisterEditorComponentsOnce();
+        return true;
+    }();
 }
