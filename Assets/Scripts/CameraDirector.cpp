@@ -4,6 +4,7 @@
 #include "Core/World.h"
 #include "Components/TransformComponent.h"
 #include "Components/CameraComponent.h"
+#include "Rendering/Camera.h"
 
 #include <algorithm>
 #include <cmath>
@@ -159,9 +160,11 @@ namespace Alice
 
         out.position = tr->position;
         out.rotation = tr->rotation;
-        out.fovY = cam->fovYRad;
-        out.nearPlane = cam->nearPlane;
-        out.farPlane = cam->farPlane;
+        // Camera 객체에서 FOV, Near, Far 가져오기
+        const Camera& camera = cam->GetCamera();
+        out.fovY = camera.GetFovYRadians();
+        out.nearPlane = camera.GetNearPlane();
+        out.farPlane = camera.GetFarPlane();
         return true;
     }
 
@@ -232,8 +235,11 @@ namespace Alice
         DirectX::XMStoreFloat4(&qOut, DirectX::XMQuaternionSlerp(qA, qB, t));
         tr->rotation = QuaternionToEuler(qOut);
 
-        cam->fovYRad = from.fovY + (to.fovY - from.fovY) * t;
-        cam->nearPlane = from.nearPlane + (to.nearPlane - from.nearPlane) * t;
-        cam->farPlane = from.farPlane + (to.farPlane - from.farPlane) * t;
+        // Camera 객체에 FOV, Near, Far 설정
+        Camera& camera = cam->GetCamera();
+        float fov = from.fovY + (to.fovY - from.fovY) * t;
+        float nearP = from.nearPlane + (to.nearPlane - from.nearPlane) * t;
+        float farP = from.farPlane + (to.farPlane - from.farPlane) * t;
+        camera.SetPerspective(fov, camera.GetAspectRatio(), nearP, farP);
     }
 }
