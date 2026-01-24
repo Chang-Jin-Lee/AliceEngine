@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -59,7 +59,6 @@ namespace Alice
         std::vector<std::string> GetRegisteredShaderNames() const;
 
     private:
-        bool CreateComputeShader();
         bool CreateComputeShaders();
         bool CreateConstantBuffer();
         bool CreateUnorderedAccessViews(std::uint32_t width, std::uint32_t height);
@@ -92,8 +91,6 @@ namespace Alice
 
         Microsoft::WRL::ComPtr<ID3D11Device>        m_device;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context;
-
-        Microsoft::WRL::ComPtr<ID3D11ComputeShader> m_computeShader;
         
         // 파티클 셰이더 세트 (타입별로 관리)
         struct ParticleShaderSet
@@ -129,6 +126,8 @@ namespace Alice
         };
 
         std::unordered_map<std::string, PresetRuntime> m_presets;
+        /// Clear용 셰이더. 모든 프리셋이 m_outputUAV를 공유하므로 시스템 전역 1회 Clear.
+        Microsoft::WRL::ComPtr<ID3D11ComputeShader> m_clearShader;
         Microsoft::WRL::ComPtr<ID3D11Buffer>        m_constantBuffer;
 
         // 컴퓨트 셰이더 출력용 UAV

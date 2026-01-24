@@ -397,7 +397,8 @@ namespace Alice
             .property("drag", &ComputeEffectComponent::drag)
             .property("lifeMin", &ComputeEffectComponent::lifeMin)
             .property("lifeMax", &ComputeEffectComponent::lifeMax)
-            .property("depthTest", &ComputeEffectComponent::depthTest);
+            .property("depthTest", &ComputeEffectComponent::depthTest)
+            .property("depthBiasMeters", &ComputeEffectComponent::depthBiasMeters);
 
         // === ColliderType enum 등록 ===
         rttr::registration::enumeration<ColliderType>("ColliderType")
