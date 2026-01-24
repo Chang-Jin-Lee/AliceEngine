@@ -168,9 +168,9 @@ namespace Alice
         HRESULT hrDepthSRV = m_device->CreateShaderResourceView(m_sceneDepthTex.Get(), &depthSrvDesc, m_sceneDepthSRV.ReleaseAndGetAddressOf());
         if (FAILED(hrDepthSRV))
         {
-            ALICE_LOG_WARN("ForwardRenderSystem::CreateSceneRenderTarget: CreateShaderResourceView(depthSRV) failed (0x%08X) - depth test will be disabled", (unsigned)hrDepthSRV);
+            ALICE_LOG_WARN("ForwardRenderSystem::CreateSceneRenderTarget: CreateShaderResourceView(depthSRV) failed (0x%08X) - depth test disabled", (unsigned)hrDepthSRV);
             m_sceneDepthSRV.Reset();
-            return false;
+            // 초기화는 성공으로 계속 진행 (depth test 없이 렌더링)
         }
 
         return true;
@@ -1669,8 +1669,10 @@ namespace Alice
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
 
-        // Blend state 복원 (다음 렌더링을 위해)
+        // 파이프라인 상태 복원 (다음 렌더링을 위해)
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        m_context->RSSetState(m_ppRasterNoCull.Get());
     }
 
     void ForwardRenderSystem::RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV)
