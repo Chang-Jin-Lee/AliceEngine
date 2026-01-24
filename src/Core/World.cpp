@@ -382,6 +382,8 @@ namespace Alice {
 	}
 
 
+
+
 	//========================================================
 	// ���� ���� �Լ�
 	void World::SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld) { m_physicsWorld = std::move(physicsWorld); }

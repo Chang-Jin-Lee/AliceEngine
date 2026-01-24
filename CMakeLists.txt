@@ -151,6 +151,28 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
 
+    #UI
+     ${ALICE_SRC_DIR}/UI/UIWorldManager.cpp
+     ${ALICE_SRC_DIR}/UI/UISceneManager.cpp
+
+     #UI Component
+    ${ALICE_SRC_DIR}/UI/IUIComponent.cpp
+	${ALICE_SRC_DIR}/UI/UITransform.cpp
+	${ALICE_SRC_DIR}/UI/UI_ImageComponent.cpp
+	
+	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.cpp
+	${ALICE_SRC_DIR}/UI/IUIScript.cpp
+	${ALICE_SRC_DIR}/UI/UI_InputComponent.cpp
+	
+     #UI Object
+     ${ALICE_SRC_DIR}/UI/UIBase.cpp
+	 ${ALICE_SRC_DIR}/UI/UIImage.cpp
+	 ${ALICE_SRC_DIR}/UI/UIButton.cpp
+	
+	#UI IUIScripts
+	${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
+	${ALICE_SRC_DIR}/UI/UIScriptFactory.cpp
+
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
@@ -158,6 +180,8 @@ set(ENGINE_SOURCES
 	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
 	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
+
+	${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
 )
 
 set(ENGINE_HEADERS
@@ -208,6 +232,7 @@ set(ENGINE_HEADERS
     # Audio
     ${ALICE_SRC_DIR}/Audio/AudioSystem.h
     ${ALICE_SRC_DIR}/Audio/SoundManager.h
+
     
     #컴포넌트들
     ${ALICE_SRC_DIR}/Components/ComponentStorage.h
@@ -268,6 +293,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
 	${ALICE_SRC_DIR}/PhysX/PhysicsSystem.h
+
     #Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
@@ -278,9 +304,26 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
-    ${ALICE_SRC_DIR}/PhysX/Components/Phy_MeshColliderComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_MeshColliderComponent.h
     ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
     ${ALICE_SRC_DIR}/PhysX/Components/Phy_JointComponent.h
+
+
+     #UI
+    ${ALICE_SRC_DIR}/UI/UIWorldManager.h
+    ${ALICE_SRC_DIR}/UI/UISceneManager.h
+    ${ALICE_SRC_DIR}/UI/UIRenderStruct.h
+	${ALICE_SRC_DIR}/UI/UITransform.h
+	${ALICE_SRC_DIR}/UI/UICompDelegate.h
+	${ALICE_SRC_DIR}/UI/IUIScript.h
+	${ALICE_SRC_DIR}/UI/UIScriptSystem.h
+
+     #UI Component
+    ${ALICE_SRC_DIR}/UI/IUIComponent.h
+
+     #UI Object
+    ${ALICE_SRC_DIR}/UI/UIBase.h
+
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
@@ -296,6 +339,15 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
 	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
+
+
+	${ALICE_SRC_DIR}/UI/UI_ImageComponent.h
+	${ALICE_SRC_DIR}/UI/UIImage.h
+	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.h
+	${ALICE_SRC_DIR}/UI/UI_InputComponent.h
+	${ALICE_SRC_DIR}/UI/UIButton.h
+
+	${ALICE_SRC_DIR}/UI/UIGaugeBar.h
 )
 
 add_library(Engine STATIC

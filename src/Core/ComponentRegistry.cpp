@@ -39,6 +39,12 @@
 #include "PhysX/IPhysicsWorld.h"
 #include "Core/Material.h"
 
+// UI 컴포넌트 헤더
+#include "UI/UITransform.h"
+#include "UI/UI_ImageComponent.h"
+#include "UI/UI_ScriptComponent.h"
+#include "UI/IUIScript.h"
+
 using namespace DirectX;
 
 namespace Alice
@@ -50,6 +56,11 @@ namespace Alice
     RTTR_REGISTRATION
     {
         // === DirectX 타입 등록 ===
+        rttr::registration::class_<XMFLOAT2>("XMFLOAT2")
+            .constructor<>()
+            .property("x", &XMFLOAT2::x)
+            .property("y", &XMFLOAT2::y);
+
         rttr::registration::class_<XMFLOAT3>("XMFLOAT3")
             .constructor<>()
             .property("x", &XMFLOAT3::x)
@@ -719,6 +730,38 @@ namespace Alice
 
         rttr::registration::class_<IScript>("IScript")
             .constructor<>();
+
+        // === UI 컴포넌트 등록 ===
+        // UITransform 등록 (전역 클래스)
+        rttr::registration::class_<UITransform>("UITransform")
+            .constructor<>()
+            .property("m_translation", &UITransform::m_translation)
+            .property("m_rotation", &UITransform::m_rotation)
+            .property("m_scale", &UITransform::m_scale)
+            .property("m_size", &UITransform::m_size)
+            .property("m_pivot", &UITransform::m_pivot)
+            .property("m_screenSize", &UITransform::m_screenSize);
+
+        // UI_ImageComponent 등록 (public 멤버만)
+        // m_path는 private이므로 직렬화 시 수동으로 처리해야 함
+        rttr::registration::class_<UI_ImageComponent>("UI_ImageComponent")
+            .constructor<>()
+            .property("m_size", &UI_ImageComponent::m_size)
+            .property("m_srcPos", &UI_ImageComponent::m_srcPos)
+            .property("SrcWidthHeight", &UI_ImageComponent::SrcWidthHeight)
+            .property("m_pivot", &UI_ImageComponent::m_pivot);
+            // m_path는 private이므로 직렬화 시 수동으로 처리
+
+        // UI_ScriptComponent 등록
+        rttr::registration::class_<UI_ScriptComponent>("UI_ScriptComponent")
+            .constructor<>()
+            .property("scriptName", &UI_ScriptComponent::scriptName)
+            .property("enabled", &UI_ScriptComponent::enabled);
+            // instance는 런타임 생성이므로 저장하지 않음
+
+        // IUIScript 등록 (OwnerID만 저장, Owner 포인터는 저장하지 않음)
+        rttr::registration::class_<IUIScript>("IUIScript")
+            .property("OwnerID", &IUIScript::OwnerID);
     }
 
     // EditorComponentRegistry에 컴포넌트 등록

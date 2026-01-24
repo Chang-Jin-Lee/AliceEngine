@@ -14,6 +14,7 @@
 
 #include "Core/Entity.h"
 #include "Core/World.h"
+#include "UI/UIWorldManager.h"
 #include "Rendering/Camera.h"
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/SkinnedMeshRegistry.h"
@@ -52,13 +53,15 @@ namespace Alice
         /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong
         /// \param enableFillLight 보조광 사용 여부
         /// \param skinnedCommands 스키닝 메시 드로우 커맨드 목록
+        /// \param uiWorld      UI 월드 매니저 (2D UI 렌더링용)
         void Render(const World& world,
                     const Camera& camera,
                     EntityId entity,
                     const std::unordered_set<EntityId>& cameraEntities,
                     int shadingMode,
                     bool enableFillLight,
-                    const std::vector<SkinnedDrawCommand>& skinnedCommands);
+                    const std::vector<SkinnedDrawCommand>& skinnedCommands,
+                    UIWorldManager& uiWorld);
     private:
 
 
@@ -300,6 +303,19 @@ namespace Alice
         
         /// 포스트 프로세스 파라미터 설정하기
         void SetPostProcessParams(float exposure, float maxHDRNits);
+
+        /// UI 텍스처를 최종 렌더 타겟에 합성합니다.
+        /// @param uiWorld UIWorldManager 참조 (UI SRV 획득용)
+        /// @param targetRTV 최종 렌더 타겟 (백버퍼 또는 에디터 뷰포트)
+        /// @param viewport 뷰포트 영역
+        void RenderUI(UIWorldManager& uiWorld, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+
+    private:
+        // ==== UI 합성 리소스 ====
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_uiQuadVS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_uiCompositePS;
+        
+        bool CreateUIResources();
     };
 }
 
