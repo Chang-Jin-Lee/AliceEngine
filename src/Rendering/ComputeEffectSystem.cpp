@@ -1,8 +1,9 @@
-﻿#include "ComputeEffectSystem.h"
+#include "ComputeEffectSystem.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include <d3dcompiler.h>
@@ -26,15 +27,16 @@ namespace Alice
             XMFLOAT4 cameraPos;   // (cameraX, cameraY, cameraZ, 0)
         };
 
-        // EmitterGPU: HLSL과 동일한 레이아웃 (float4 4개 = 64바이트)
+        // EmitterGPU: HLSL과 동일한 레이아웃 (float4 5개 = 80바이트)
         struct EmitterGPU
         {
             XMFLOAT4 p0; // xyz = pos, w = radius
             XMFLOAT4 p1; // xyz = color, w = sizePx
             XMFLOAT4 p2; // xyz = gravity, w = drag
             XMFLOAT4 p3; // x = lifeMin, y = lifeMax, z = intensity, w = depthBiasMeters
+            XMFLOAT4 p4; // x = depthTest (1.0 or 0.0), yzw unused
         };
-        static_assert(sizeof(EmitterGPU) == 64, "EmitterGPU must be 64 bytes");
+        static_assert(sizeof(EmitterGPU) == 80, "EmitterGPU must be 80 bytes");
 
         // ParticleInit: emitterIndex 추가
         struct ParticleInit
@@ -160,6 +162,10 @@ namespace Alice
             ALICE_LOG_ERRORF("ComputeEffectSystem::Initialize: RegisterParticleShaderSet(Explosion) failed.");
             return false;
         }
+
+        // Clear: 모든 프리셋이 m_outputUAV 공유 → 시스템 전역 공통 Clear 1회.
+        // 고정 m_clearShader 사용 (unordered_map.begin() 비결정적 선택 제거)
+        m_clearShader = m_presets["Particle"].shaders.clearShader;
 
         if (!CreateConstantBuffer())
         {
@@ -301,18 +307,22 @@ namespace Alice
             depthSRVToUse = m_dummyDepthSRV.Get();
         }
 
-        // Clear는 1번만 (모든 프리셋이 공유하는 출력 텍스처)
-        auto firstPresetIt = emittersByPreset.begin();
-        const std::string& firstPresetName = firstPresetIt->first;
-        auto firstPreset = m_presets.find(firstPresetName);
-        if (firstPreset != m_presets.end() && firstPreset->second.shaders.clearShader)
-        {
-            DispatchClear(firstPreset->second.shaders.clearShader.Get());
-        }
+        // Clear: 모든 프리셋이 m_outputUAV(출력 텍스처)를 공유하므로,
+        // 시스템 전역 공통 m_clearShader로 1회만 Clear.
+        // (프리셋별 타겟이 있었다면 순회 시 프리셋마다 개별 Clear 필요)
+        if (m_clearShader)
+            DispatchClear(m_clearShader.Get());
 
-        // 프리셋별로 Update/Draw 처리
-        for (const auto& [presetName, emitters] : emittersByPreset)
+        // 프리셋별 Update/Draw — 순서 보장을 위해 이름 기준 정렬 후 순회
+        std::vector<std::string> presetOrder;
+        presetOrder.reserve(emittersByPreset.size());
+        for (const auto& [k, v] : emittersByPreset)
+            presetOrder.push_back(k);
+        std::sort(presetOrder.begin(), presetOrder.end());
+
+        for (const auto& presetName : presetOrder)
         {
+            const auto& emitters = emittersByPreset[presetName];
             auto presetIt = m_presets.find(presetName);
             if (presetIt == m_presets.end())
                 continue;
@@ -370,19 +380,14 @@ namespace Alice
                     ClampFloat(effect->gravity.z, -50.0f, 50.0f),
                     ClampFloat(effect->drag, 0.0f, 1.0f)  // drag는 0~1 범위
                 );
-                // intensity 부호로 depthTest 인코딩: 양수=depthTest true, 음수=depthTest false
                 float intensityValue = ClampFloat(effect->intensity, 0.0f, 10.0f);
-                if (!effect->depthTest)
-                {
-                    intensityValue = -intensityValue;  // depthTest false면 음수로 저장
-                }
-                
                 emitter.p3 = XMFLOAT4(
                     ClampFloat(effect->lifeMin, 0.01f, 100.0f),
                     ClampFloat(effect->lifeMax, 0.01f, 100.0f),
-                    intensityValue,  // 부호로 depthTest 인코딩됨
-                    ClampFloat(effect->depthBiasMeters, 0.0f, 1.0f)  // depthBiasMeters를 emitter별로 저장
+                    intensityValue,
+                    ClampFloat(effect->depthBiasMeters, 0.0f, 1.0f)
                 );
+                emitter.p4 = XMFLOAT4(effect->depthTest ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
                 
                 emitterData.push_back(emitter);
             }
@@ -434,53 +439,6 @@ namespace Alice
         // D3D11_1_UAV_SLOT_COUNT = 64이지만, 일반적으로 8개면 충분
         ID3D11UnorderedAccessView* nullUAVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
         m_context->CSSetUnorderedAccessViews(0, 8, nullUAVs, nullptr);
-    }
-
-    bool ComputeEffectSystem::CreateComputeShader()
-    {
-        const char* shaderCode = ComputeEffectShader::BasicCS;
-
-        ComPtr<ID3DBlob> shaderBlob;
-        ComPtr<ID3DBlob> errorBlob;
-
-        HRESULT hr = D3DCompile(
-            shaderCode,
-            strlen(shaderCode),
-            nullptr,
-            nullptr,
-            nullptr,
-            "main",
-            "cs_5_0",
-            0,
-            0,
-            shaderBlob.GetAddressOf(),
-            errorBlob.GetAddressOf()
-        );
-
-        if (FAILED(hr))
-        {
-            if (errorBlob)
-            {
-                ALICE_LOG_ERRORF("ComputeEffectSystem::CreateComputeShader: %s", 
-                    static_cast<const char*>(errorBlob->GetBufferPointer()));
-            }
-            return false;
-        }
-
-        hr = m_device->CreateComputeShader(
-            shaderBlob->GetBufferPointer(),
-            shaderBlob->GetBufferSize(),
-            nullptr,
-            m_computeShader.GetAddressOf()
-        );
-
-        if (FAILED(hr))
-        {
-            ALICE_LOG_ERRORF("ComputeEffectSystem::CreateComputeShader: CreateComputeShader failed.");
-            return false;
-        }
-
-        return true;
     }
 
     bool ComputeEffectSystem::RegisterParticleShaderSet(const std::string& name, 
@@ -884,8 +842,9 @@ namespace Alice
         ID3D11SamplerState* nullSampler = nullptr;
         m_context->CSSetSamplers(0, 1, &nullSampler);
 
-        ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
-        m_context->CSSetShaderResources(0, 2, nullSRVs);
+        // SRV 3개 unbind (particleSRV, sceneDepthSRV, emitterSRV)
+        ID3D11ShaderResourceView* nullSRVs[3] = { nullptr, nullptr, nullptr };
+        m_context->CSSetShaderResources(0, 3, nullSRVs);
 
         // 모든 UAV slot을 확실히 unbind (UAV와 SRV 동시 바인딩 충돌 방지)
         // DirectX11에서는 같은 리소스를 UAV와 SRV로 동시에 바인딩할 수 없음
