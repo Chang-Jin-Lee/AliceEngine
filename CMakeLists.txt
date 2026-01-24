@@ -54,7 +54,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
 set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
+#set(IMGUI_NODE_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/imgui-node-editor")
 set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
+set(FMOD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/FMOD")
 
 # ==========================================
 # [설정] RTTR 라이브러리 (Engine에 통합)
@@ -88,6 +90,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Engine/Engine.cpp
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.cpp
     ${ALICE_SRC_DIR}/Editor/EditorCore.cpp
+    ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.cpp
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
@@ -113,12 +116,19 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Input.cpp
     ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.cpp
 
+    # Audio
+    ${ALICE_SRC_DIR}/Audio/AudioSystem.cpp
+    ${ALICE_SRC_DIR}/Audio/SoundManager.cpp
+
     # FBX/3D 모델 로더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxModel.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxGeometry.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxAnimation.cpp
+
+    # AnimBlueprint
+    ${ALICE_SRC_DIR}/Game/AnimBlueprintAsset.cpp
 
     # 렌더링 계층
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
@@ -155,6 +165,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Engine/Engine.h
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.h
     ${ALICE_SRC_DIR}/Editor/EditorCore.h
+    ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.h
 
     # 코어
     ${ALICE_SRC_DIR}/Core/World.h
@@ -193,6 +204,10 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
+
+    # Audio
+    ${ALICE_SRC_DIR}/Audio/AudioSystem.h
+    ${ALICE_SRC_DIR}/Audio/SoundManager.h
     
     #컴포넌트들
     ${ALICE_SRC_DIR}/Components/ComponentStorage.h
@@ -205,6 +220,9 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
     ${ALICE_SRC_DIR}/Components/AdvancedAnimationComponent.h
     ${ALICE_SRC_DIR}/Components/AdvancedAnimator.h
+    ${ALICE_SRC_DIR}/Components/SoundBoxComponent.h
+    ${ALICE_SRC_DIR}/Components/AudioListenerComponent.h
+    ${ALICE_SRC_DIR}/Components/AudioSourceComponent.h
     ${ALICE_SRC_DIR}/Components/MaterialComponent.h
     ${ALICE_SRC_DIR}/Components/PointLightComponent.h
     ${ALICE_SRC_DIR}/Components/RectLightComponent.h
@@ -242,7 +260,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
     ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
 	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
-    
+    ${ALICE_SRC_DIR}/Game/AdvancedAnimSystem.h
     #PhysX 물리
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
@@ -280,7 +298,6 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
 )
 
-# [변경] AliceEngine -> Engine
 add_library(Engine STATIC
     ${ENGINE_SOURCES}
     ${ENGINE_HEADERS}
@@ -295,6 +312,26 @@ if(MSVC)
 endif()
 
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
+
+# ==========================================
+# [ThirdParty] FMOD
+# ==========================================
+# FMOD 경로 변수 설정 (기존 FMOD_DIR 사용)
+set(FMOD_INC_DIR "${FMOD_DIR}/inc")
+set(FMOD_LIB_DIR "${FMOD_DIR}/64x")
+
+# Engine에 FMOD 헤더 포함 (PUBLIC: 엔진을 쓰는 프로젝트도 FMOD 헤더 사용 가능)
+if(EXISTS "${FMOD_INC_DIR}")
+    target_include_directories(Engine PUBLIC "${FMOD_INC_DIR}")
+endif()
+
+# Engine에 FMOD 라이브러리 링크 (Debug는 fmodL_vc.lib, Release는 fmod_vc.lib)
+if(EXISTS "${FMOD_LIB_DIR}/fmod_vc.lib" AND EXISTS "${FMOD_LIB_DIR}/fmodL_vc.lib")
+    target_link_libraries(Engine PUBLIC
+        debug     "${FMOD_LIB_DIR}/fmodL_vc.lib"
+        optimized "${FMOD_LIB_DIR}/fmod_vc.lib"
+    )
+endif()
 
 # ==========================================
 # [Target] Launch & AlicePlayer
@@ -350,8 +387,10 @@ target_include_directories(Engine
         ${ALICE_SRC_DIR}
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
+        ${IMGUI_NODE_EDITOR_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR 헤더 경로
 )
+
 
 # ImGui 정적 라이브러리
 add_library(imgui STATIC
@@ -386,6 +425,10 @@ foreach(target Launch AlicePlayer)
             ${IMGUI_DIR}
             ${IMGUI_DIR}/backends
     )
+    if(EXISTS "${FMOD_DIR}/inc")
+        target_include_directories(${target} PRIVATE "${FMOD_DIR}/inc")
+        target_link_directories(${target} PRIVATE "${FMOD_DIR}/64x")
+    endif()
 endforeach()
 
 # ==========================================
@@ -436,6 +479,42 @@ foreach(target Launch AlicePlayer)
 endforeach()
 
 # ==========================================
+# [ThirdParty] ImGui Node Editor
+# ==========================================
+
+# 경로 반영
+#set(IMGUI_NODE_EDITOR_INCLUDE "${IMGUI_NODE_EDITOR_DIR}")
+#set(IMGUI_NODE_EDITOR_SOURCE  "${IMGUI_NODE_EDITOR_DIR}")
+#
+#if(NOT EXISTS "${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp")
+#    message(FATAL_ERROR
+#        "오류: imgui-node-editor 소스를 찾을 수 없습니다!\n"
+#        "경로 확인: ${IMGUI_NODE_EDITOR_SOURCE}\n"
+#        "cpp/h 파일들이 하위 폴더 없이 해당 위치에 바로 있는지 확인해주세요."
+#    )
+#endif()
+#
+#add_library(imgui_node_editor STATIC
+#    ${IMGUI_NODE_EDITOR_SOURCE}/crude_json.cpp
+#    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_canvas.cpp
+#    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp
+#    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor_api.cpp
+#)
+#
+#target_include_directories(imgui_node_editor PUBLIC
+#    ${IMGUI_NODE_EDITOR_INCLUDE}
+#)
+#
+#target_link_libraries(imgui_node_editor PUBLIC
+#    imgui
+#)
+#
+#target_compile_definitions(imgui_node_editor PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+
+# Engine에서 쓰는게 보통이니 Engine에만 물림(실행파일에는 중복 링크 X)
+#target_link_libraries(Engine PUBLIC imgui_node_editor)
+
+# ==========================================
 # [설정] 컴파일 옵션 및 vcpkg 적용
 # ==========================================
 if(MSVC)
@@ -483,6 +562,7 @@ foreach(target Launch AlicePlayer)
             Engine          # 핵심 엔진
             imgui
             imguizmo
+            #imgui_node_editor
             d3d11
             dxgi
             dxguid
@@ -498,7 +578,7 @@ endforeach()
 # [Post-Build] DLL 복사
 # ==========================================
 
-# [변경] Launch와 AlicePlayer 타겟 모두에 DLL 복사 수행
+# Launch와 AlicePlayer 타겟 모두에 DLL 복사 수행
 foreach(target Launch AlicePlayer)
     add_custom_command(TARGET ${target} POST_BUILD
         # RTTR shared 스크립트 DLL과 registry 공유
@@ -576,6 +656,33 @@ if(MSVC)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "$<$<CONFIG:Debug>:${PHYSX_BINDIR_DEBUG}/PhysXCooking_64.dll>$<$<NOT:$<CONFIG:Debug>>:${PHYSX_BINDIR_REL}/PhysXCooking_64.dll>"
                 "$<TARGET_FILE_DIR:${target}>/PhysXCooking_64.dll"
+        )
+    endforeach()
+endif()
+
+
+
+# ==========================================
+# [Post-Build] FMOD DLL 복사
+# ==========================================
+if(WIN32)
+    if(NOT EXISTS "${FMOD_LIB_DIR}/fmod.dll")
+        message(FATAL_ERROR "[FMOD] not found: ${FMOD_LIB_DIR}/fmod.dll")
+    endif()
+    if(NOT EXISTS "${FMOD_LIB_DIR}/fmodL.dll")
+        message(FATAL_ERROR "[FMOD] not found: ${FMOD_LIB_DIR}/fmodL.dll")
+    endif()
+
+    # Launch와 AlicePlayer 타겟에 DLL 복사
+    foreach(t Launch AlicePlayer)
+        add_custom_command(TARGET ${t} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FMOD_LIB_DIR}/fmod.dll"
+                "$<TARGET_FILE_DIR:${t}>/fmod.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FMOD_LIB_DIR}/fmodL.dll"
+                "$<TARGET_FILE_DIR:${t}>/fmodL.dll"
+            VERBATIM
         )
     endforeach()
 endif()

@@ -1,8 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <cstdint>
+#include <DirectXMath.h>
 
 struct ID3D11Device;
 struct ID3D11DeviceContext;
@@ -11,6 +13,14 @@ struct aiScene;
 struct aiNodeAnim;
 
 namespace DirectX { struct XMFLOAT4X4; struct XMMATRIX; }
+
+/// 로컬 SRT(스케일/회전/이동) 표현
+struct FbxLocalSRT
+{
+	DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
+	DirectX::XMFLOAT4 rotation{ 0.0f, 0.0f, 0.0f, 1.0f }; // Quaternion (x,y,z,w)
+	DirectX::XMFLOAT3 translation{ 0.0f, 0.0f, 0.0f };
+};
 
 // Controls animation state, builds bone palettes and uploads to GPU
 class FbxAnimation
@@ -71,6 +81,16 @@ public:
 	// CPU 팔레트 생성 (ForwardRenderSystem에서 전치해서 업로드하므로 전치 없이 XMFLOAT4X4로 반환)
 	// - precomputed clip이 있으면 그걸 사용하고, 없으면 on-the-fly 평가로 fallback 합니다.
 	void BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>& outPalette);
+
+	// 임의 클립/시간 팔레트 생성 (FSM/블렌드용)
+	void BuildPaletteAt(int clipIndex, double timeSec, std::vector<DirectX::XMFLOAT4X4>& outPalette);
+	// 임의 클립/시간 전역 행렬 생성 (소켓용)
+	void EvaluateGlobalsAt(int clipIndex, double timeSec, std::vector<DirectX::XMFLOAT4X4>& outGlobal);
+
+	// 임의 클립/시간 로컬 SRT 생성 (고급 블렌드/IK용)
+	void EvaluateLocalsAt(int clipIndex, double timeSec,
+		std::vector<FbxLocalSRT>& outLocals,
+		std::vector<std::uint8_t>* outHasChannel = nullptr) const;
 private:
 	void UploadPalette(ID3D11DeviceContext* ctx, const std::vector<DirectX::XMMATRIX>& pal);
 

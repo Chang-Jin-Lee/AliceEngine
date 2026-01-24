@@ -32,6 +32,7 @@
 #include "Components/CameraShakeComponent.h"
 #include "Components/CameraBlendComponent.h"
 #include "Components/CameraInputComponent.h"
+#include "Editor/Blueprint/AnimBlueprintEditor.h"
 
 // ImGui
 #include "imgui.h"
@@ -3050,26 +3051,43 @@ namespace Alice
 
 					// 3-3. Compute Effect
 					DrawInspectorComputeEffect(world, selectedEntity);
+					// 4. Skinned Mesh / 소켓 프리뷰 (간단 뷰)
+                if (auto* skinned =
+                    world.GetComponent<SkinnedMeshComponent>(selectedEntity)) {
+					ImGui::Separator();
+					ImGui::Text("Skinned Mesh: %s", skinned->meshAssetPath.c_str());
 
-					// 4. Skinned Mesh (Condensed)
-					if (auto* skinned =
-						world.GetComponent<SkinnedMeshComponent>(selectedEntity)) {
-						ImGui::Separator();
-						ImGui::Text("Skinned Mesh: %s", skinned->meshAssetPath.c_str());
+					// 본 목록 미니 뷰 (이름 확인용)
+					if (m_skinnedRegistry) {
+						auto mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+						if (mesh && mesh->sourceModel) {
+							const auto& bones = mesh->sourceModel->GetBoneNames();
+							if (ImGui::TreeNode("Bones")) {
+								for (size_t i = 0; i < bones.size(); ++i) {
+									ImGui::Text("%zu: %s", i, bones[i].c_str());
+								}
+								ImGui::TreePop();
+							}
+						}
+					}
 
-						// 메시 경로 필드에 드롭 타겟 추가
-						if (ImGui::BeginDragDropTarget())
+					// 메시 경로 필드에 드롭 타겟 추가
+					if (ImGui::BeginDragDropTarget())
+					{
+						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
 						{
-							if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
-							{
-								const char* pathStr = static_cast<const char*>(payload->Data);
-								std::filesystem::path droppedPath(pathStr);
-								std::string ext = droppedPath.extension().string();
+							const char* pathStr = static_cast<const char*>(payload->Data);
+							std::filesystem::path droppedPath(pathStr);
+							std::string ext = droppedPath.extension().string();
 
-								// FBX 파일인지 확인
-								std::transform(ext.begin(), ext.end(), ext.begin(),
-                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-								if (ext == ".fbx" || ext == ".fbxasset")
+							// FBX 파일인지 확인
+							std::transform(ext.begin(), ext.end(), ext.begin(),
+								[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+							if (ext == ".fbx" || ext == ".fbxasset")
+							{
+								// 논리 경로로 변환
+								std::string logicalPath = droppedPath.string();
+								if (m_resources)
 								{
 									// 논리 경로로 변환
 									std::string logicalPath = droppedPath.string();
@@ -3080,18 +3098,19 @@ namespace Alice
 											logicalPath = logical.string();
 										}
 									}
-									skinned->meshAssetPath = logicalPath;
-									g_SceneDirty = true;
 								}
+								skinned->meshAssetPath = logicalPath;
+								g_SceneDirty = true;
 							}
-							ImGui::EndDragDropTarget();
 						}
-						// Details omitted for brevity
+						ImGui::EndDragDropTarget();
 					}
-				}
-			}
-			ImGui::End();
+                }
+            }
+        }
+        ImGui::End();
 
+		
 			// === Project ===
 			if (ImGui::Begin("Project"))
 			{
