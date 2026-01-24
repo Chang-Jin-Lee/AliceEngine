@@ -3087,16 +3087,11 @@ namespace Alice
 							{
 								// 논리 경로로 변환
 								std::string logicalPath = droppedPath.string();
-								if (m_resources)
 								{
-									// 논리 경로로 변환
-									std::string logicalPath = droppedPath.string();
+									std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(droppedPath);
+									if (!logical.empty())
 									{
-										std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(droppedPath);
-										if (!logical.empty())
-										{
-											logicalPath = logical.string();
-										}
+										logicalPath = logical.string();
 									}
 								}
 								skinned->meshAssetPath = logicalPath;
