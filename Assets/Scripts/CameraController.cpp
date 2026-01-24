@@ -108,74 +108,41 @@ namespace Alice
         auto go = gameObject();
         if (!go.IsValid()) return;
 
-        auto* world = GetWorld();
-        if (!world) return;
-
-        auto* tr = go.GetComponent<TransformComponent>();
-        auto* cam = go.GetComponent<CameraComponent>();
         auto* blend = go.GetComponent<CameraBlendComponent>();
-        if (!tr || !cam || !blend) return;
+        if (!blend) return;
 
-        // 타겟 카메라 찾기
-        auto targetGo = world->FindGameObject(camName);
-        if (!targetGo.IsValid()) return;
-
-        const auto* targetTr = targetGo.GetComponent<TransformComponent>();
-        const auto* targetCam = targetGo.GetComponent<CameraComponent>();
-        if (!targetTr || !targetCam) return;
-
-        // Blend 컴포넌트는 "타겟 스냅샷을 시스템이 읽어오도록" 준비만 해준다.
-        blend->sourcePosition = tr->position;
-        blend->sourceRotation = tr->rotation;
-        blend->sourceFovY = cam->fovYRad;
-        blend->sourceNear = cam->nearPlane;
-        blend->sourceFar = cam->farPlane;
-
-        blend->targetId = targetGo.id();
+        // 블렌드 요청: 시스템이 스냅샷을 찍도록 명령
         blend->targetName = camName;
-
-        blend->duration = 0.0f;     // 컷
-        blend->elapsed = 0.0f;
-        blend->slowTriggered = false;
-        blend->slowElapsed = 0.0f;
+        blend->targetId = InvalidEntityId; // 이름으로 다시 찾게 함
+        blend->duration = 0.0f; // 컷
         blend->active = true;
+        blend->needsSnapshot = true; // 시스템에게 스냅샷 찍으라고 명령
     }
 
-    void CameraController::TriggerBlend(const std::string& camName, float duration)
+    void CameraController::TriggerBlend(const std::string& camName, float duration, bool useCurve)
     {
         auto go = gameObject();
         if (!go.IsValid()) return;
-
-        auto* world = GetWorld();
-        if (!world) return;
-
-        auto* tr = go.GetComponent<TransformComponent>();
-        auto* cam = go.GetComponent<CameraComponent>();
+        
         auto* blend = go.GetComponent<CameraBlendComponent>();
-        if (!tr || !cam || !blend) return;
+        if (!blend) return;
 
-        // 타겟 카메라 찾기
-        auto targetGo = world->FindGameObject(camName);
-        if (!targetGo.IsValid()) return;
+        // 이전 블렌드(예: 5번 키)에서 남은 슬로우 모션 설정을 초기화합니다.
+        // 이걸 안 하면 3번 키를 눌렀을 때도 중간에 갑자기 느려지는 현상이 생깁니다.
+        blend->slowDuration = 0.0f; 
+        blend->slowTriggerT = 0.5f;
+        blend->slowTimeScale = 1.0f;
 
-        const auto* targetTr = targetGo.GetComponent<TransformComponent>();
-        const auto* targetCam = targetGo.GetComponent<CameraComponent>();
-        if (!targetTr || !targetCam) return;
-
-        blend->sourcePosition = tr->position;
-        blend->sourceRotation = tr->rotation;
-        blend->sourceFovY = cam->fovYRad;
-        blend->sourceNear = cam->nearPlane;
-        blend->sourceFar = cam->farPlane;
-
-        blend->targetId = targetGo.id();
+        // 블렌드 요청: 이제 복잡한 계산 없이 플래그만 설정
         blend->targetName = camName;
-
+        blend->targetId = InvalidEntityId; // 이름으로 다시 찾게 함
         blend->duration = duration;
-        blend->elapsed = 0.0f;
-        blend->slowTriggered = false;
-        blend->slowElapsed = 0.0f;
+        
+        // 곡선 사용 여부 설정 (false면 Linear, true면 SmoothStep)
+        blend->useSmoothStep = useCurve;
+        
         blend->active = true;
+        blend->needsSnapshot = true; // 시스템에게 스냅샷 찍으라고 명령
     }
 
     void CameraController::TriggerShake(float amp, float freq, float dur, float decay)
@@ -321,10 +288,12 @@ namespace Alice
             TriggerCut(GetCameraNameFromCsv(csv, 1));
             return;
         }
+        // 3번 키: Linear Interpolation (부드러운 등속 이동)
         if (input->GetKeyDown(KeyCode::Alpha3))
         {
             SetPreview(true);
-            TriggerBlend(GetCameraNameFromCsv(csv, 2), cfg ? cfg->blendTimeKey3 : 0.6f);
+            // useCurve = false 전달
+            TriggerBlend(GetCameraNameFromCsv(csv, 2), cfg ? cfg->blendTimeKey3 : 0.6f, false);
             return;
         }
         if (input->GetKeyDown(KeyCode::Alpha4))
@@ -357,13 +326,6 @@ namespace Alice
             // 리플렉션으로 노출된 쉐이크 파라미터 사용
             TriggerShake(Get_m_shakeAmplitude(), Get_m_shakeFrequency(), 
                         Get_m_shakeDuration(), Get_m_shakeDecay());
-        }
-
-        // ---- 게임플레이(프리뷰가 아닐 때만) ----
-        if (!m_preview)
-        {
-            UpdateOrbit();
-            UpdateZoom();
         }
     }
 }
