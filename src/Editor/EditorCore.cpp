@@ -7392,20 +7392,8 @@ namespace Alice
 								SceneFile::Save(world, path);
 							}
 							
-							// UI를 분리 파일로도 저장 (선택 사항)
-							if (m_uiWorldManager)
-							{
-								std::filesystem::path uiPath = path;
-								uiPath.replace_extension(".uiscene");
-								if (m_uiWorldManager->SaveUI(uiPath))
-								{
-									ALICE_LOG_INFO("[Editor] UI saved to separate file: %s", uiPath.string().c_str());
-								}
-								else
-								{
-									ALICE_LOG_WARN("[Editor] Failed to save UI to separate file: %s", uiPath.string().c_str());
-								}
-							}
+							// SceneFile::Save가 내부에서 이미 SaveUI를 호출하므로 중복 호출 제거
+							// UI는 SceneFile::Save에서 자동으로 저장됨
 							
 							g_CurrentScenePath = path;
 							g_HasCurrentScenePath = true;
@@ -7580,20 +7568,8 @@ namespace Alice
 			std::filesystem::path absPath = m_resources ? m_resources->Resolve(savePath) : savePath;
 			if (m_uiWorldManager)
 			{
+				// SceneFile::Save가 내부에서 이미 SaveUI를 호출하므로 중복 호출 제거
 				SceneFile::Save(world, absPath, m_uiWorldManager);
-				
-				// UI를 분리 파일로도 저장 (선택 사항)
-				std::filesystem::path uiPath = savePath;
-				uiPath.replace_extension(".uiscene");
-				std::filesystem::path uiPathAbs = m_resources ? m_resources->Resolve(uiPath) : uiPath;
-				if (m_uiWorldManager->SaveUI(uiPathAbs))
-				{
-					ALICE_LOG_INFO("[Editor] UI saved to separate file: %s", uiPath.string().c_str());
-				}
-				else
-				{
-					ALICE_LOG_WARN("[Editor] Failed to save UI to separate file: %s", uiPath.string().c_str());
-				}
 			}
 			else
 			{
