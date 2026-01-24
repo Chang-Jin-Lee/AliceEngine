@@ -9,6 +9,7 @@ class UIWorld;
 class UIBase;
 class UI_ScriptComponent;
 class IUIScript;
+struct UIScriptEntry;
 
 /// 동적 UI 스크립트 DLL에서 사용할 함수 포인터 타입들
 using DynamicUIScriptCountFunc = int (*)(void);
@@ -42,4 +43,8 @@ private:
 	static void TickNode(UIWorld& world, UIBase* node, float dt);
 	static void TickComponent(UI_ScriptComponent& comp, float dt);
 	static void EnsureInstance(UI_ScriptComponent& comp);
+	
+
+	static void TickUIScriptEntry(UIWorld& world, UIBase* owner, UIScriptEntry& entry, float dt);
+	static void EnsureUIScriptInstance(UIWorld& world, UIBase* owner, UIScriptEntry& entry);
 };

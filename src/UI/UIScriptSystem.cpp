@@ -2,7 +2,7 @@
 
 #include "IUIScript.h"
 #include "UI_ScriptComponent.h"
-#include "UISceneManager.h"
+#include "UISceneManager.h" // UIScriptEntry 구조체 포함
 #include "UIBase.h"
 #include "UIScriptFactory.h"
 #include "Core/Logger.h"
@@ -75,14 +75,23 @@ void UIScriptSystem::TickNode(UIWorld& world, UIBase* node, float dt)
 		return;
 	}
 
+	// ============================================================================
+	// UI Script 처리 (여러 스크립트 지원)
+	// ============================================================================
+	// 새로운 m_scripts 저장소에서 스크립트 처리
+	if (auto* scripts = world.GetUIScripts(node->ID))
+	{
+		for (auto& entry : *scripts)
+		{
+			TickUIScriptEntry(world, node, entry, dt);
+		}
+	}
+	
+	// 레거시 UI_ScriptComponent 처리 (하위 호환성)
 	if (auto* comp = node->TryGetComponent<UI_ScriptComponent>())
 	{
 		//ALICE_LOG_INFO("[UIScriptSystem::TickNode] Found UI_ScriptComponent: %s", comp->scriptName.c_str());
 		TickComponent(*comp, dt);
-	}
-	else
-	{
-		//ALICE_LOG_INFO("[UIScriptSystem::TickNode] No UI_ScriptComponent found on node ID: %lu", node->ID);
 	}
 
 	for (auto childID : node->childIDStorage)
@@ -184,5 +193,74 @@ void UIScriptSystem::EnsureInstance(UI_ScriptComponent& comp)
 	else
 	{
 		ALICE_LOG_WARN("[UIScriptSystem::EnsureInstance] Dynamic factory is null!");
+	}
+}
+
+// ============================================================================
+// UI Script Entry 처리 (여러 스크립트 지원)
+// ============================================================================
+void UIScriptSystem::TickUIScriptEntry(UIWorld& world, UIBase* owner, UIScriptEntry& entry, float dt)
+{
+	if (!entry.enabled)
+	{
+		return;
+	}
+
+	if (!entry.instance)
+	{
+		EnsureUIScriptInstance(world, owner, entry);
+	}
+
+	auto* inst = entry.instance.get();
+	if (!inst)
+	{
+		return;
+	}
+
+	// Awake 역할: OnAdded가 아직 호출되지 않았다면 호출
+	if (!entry.awoken)
+	{
+		entry.awoken = true;
+		if (owner)
+		{
+			inst->OnAdded(*owner);
+		}
+	}
+
+	// Start 역할
+	if (!entry.started)
+	{
+		entry.started = true;
+		inst->OnStart();
+	}
+
+	inst->Update(dt);
+}
+
+void UIScriptSystem::EnsureUIScriptInstance(UIWorld& world, UIBase* owner, UIScriptEntry& entry)
+{
+	if (entry.instance || entry.scriptName.empty())
+	{
+		return;
+	}
+
+	// 1) 정적(내장) UI 스크립트 팩토리에서 먼저 찾기
+	entry.instance = UIScriptFactory::Create(entry.scriptName.c_str());
+	if (entry.instance)
+	{
+		entry.instance->Owner = owner;
+		entry.instance->OwnerID = owner ? owner->ID : 0;
+		return;
+	}
+
+	// 2) 동적 UI 스크립트 DLL 팩토리에서 찾기
+	if (s_factory)
+	{
+		entry.instance = s_factory(entry.scriptName);
+		if (entry.instance)
+		{
+			entry.instance->Owner = owner;
+			entry.instance->OwnerID = owner ? owner->ID : 0;
+		}
 	}
 }

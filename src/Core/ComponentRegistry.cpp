@@ -39,6 +39,7 @@
 // UI 컴포넌트 헤더
 #include "UI/UITransform.h"
 #include "UI/UI_ImageComponent.h"
+#include "UI/UI_ScriptComponent.h"
 #include "UI/IUIScript.h"
 
 using namespace DirectX;
@@ -679,6 +680,13 @@ namespace Alice
             .property("SrcWidthHeight", &UI_ImageComponent::SrcWidthHeight)
             .property("m_pivot", &UI_ImageComponent::m_pivot);
             // m_path는 private이므로 직렬화 시 수동으로 처리
+
+        // UI_ScriptComponent 등록
+        rttr::registration::class_<UI_ScriptComponent>("UI_ScriptComponent")
+            .constructor<>()
+            .property("scriptName", &UI_ScriptComponent::scriptName)
+            .property("enabled", &UI_ScriptComponent::enabled);
+            // instance는 런타임 생성이므로 저장하지 않음
 
         // IUIScript 등록 (OwnerID만 저장, Owner 포인터는 저장하지 않음)
         rttr::registration::class_<IUIScript>("IUIScript")

@@ -85,10 +85,7 @@ namespace Alice
 		bool CommitPendingSceneChange(World& world, UIWorldManager* uiWorldManager = nullptr);
 
 		/// 현재 씬 이름을 반환합니다 (없으면 nullptr)
-		const char* GetCurrentSceneName() const;
-
-		/// 현재 로드된 Scene 파일 경로를 반환합니다 (없으면 nullptr)
-		const char* GetCurrentSceneFilePath() const;
+		const char* GetCurrentSceneName() const { return m_currentSceneName.c_str(); };
 
 		/// 현재 로드된 씬 파일 경로를 반환합니다 (파일 기반 씬인 경우)
 		/// 파일 기반 씬이 아니면 빈 경로를 반환합니다.
@@ -106,9 +103,6 @@ namespace Alice
 
 		// 현재 로드된 씬 파일 경로 (에디터에서 저장 경로 추적용)
 		std::filesystem::path m_currentSceneFilePath;
-
-		// 현재 로드된 Scene 파일 경로 (파일 기반 로드 시 사용)
-		std::string m_currentSceneFilePath;
 		
 		// 현재 로드된 Scene 이름 (파일에서 읽어온 이름 또는 코드 씬 이름)
 		std::string m_currentSceneName;

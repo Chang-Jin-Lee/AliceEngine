@@ -1,10 +1,6 @@
 ﻿#include "UIGaugeBar.h"
 
-UIGaugeBar::UIGaugeBar() {
-}
 
-UIGaugeBar::~UIGaugeBar() {
-}
 
 
 

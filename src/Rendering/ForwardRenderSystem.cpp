@@ -1355,7 +1355,7 @@ namespace Alice
             viewport.MaxDepth = 1.0f;
             RenderToneMapping(m_viewportRTV.Get(), viewport);
 
-            // 6. UI 렌더링 (톤매핑 후 뷰포트 텍스처에 합성)
+            // UI 렌더링 (Post-processing 이후, 최상단에 렌더링)
             uiWorld.Render();  // D2D → UI 텍스처 렌더링
             RenderUI(uiWorld, m_viewportRTV.Get(), viewport);
         }

@@ -10,9 +10,18 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": 2.524540901184082,
                     "y": 0.0,
@@ -29,7 +38,7 @@
                     "z": 1.0
                 }
             },
-            "id": 1
+            "guid": "16460941113789764588"
         },
         {
             "Material": {
@@ -41,9 +50,18 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": -4.3895769119262695,
                     "y": 0.0,
@@ -60,7 +78,7 @@
                     "z": 1.0
                 }
             },
-            "id": 2
+            "guid": "17137514104362921702"
         },
         {
             "Material": {
@@ -72,13 +90,24 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
-            "Script": {
-                "enabled": true,
-                "name": "SceneSwitchExample"
-            },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SceneSwitchExample"
+                }
+            ],
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": -1.2992916107177734,
                     "y": -0.38759779930114746,
@@ -95,8 +124,9 @@
                     "z": 2.1143598556518555
                 }
             },
-            "id": 3
+            "guid": "8403997501708610665"
         }
     ],
+    "sceneName": "Scene3",
     "version": 1
 }
