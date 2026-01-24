@@ -36,11 +36,12 @@
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/DeferredRenderSystem.h"
+#include "Rendering/ComputeEffectSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
-#include "Game/SkinnedAnimationSystem.h"
+#include "Core/AdvancedAnimSystem.h"
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 #include "PhysX/PhysicsSystem.h" // 물리 시스템
@@ -61,6 +62,8 @@
 #include "Game/FbxAsset.h"
 #include <dxgi1_3.h>
 #include <unordered_set>
+
+#include "3DModel/FbxModel.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -86,8 +89,11 @@ namespace Alice
 
 		bool m_isRunning = false;            // 엔진 자체가 실행중인지 판단
 		bool m_isPlaying = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
+		bool m_wasPlaying = false;           // 직전 프레임 재생 여부 (Play/Stop 스냅샷·복원용)
 		bool m_editorMode = true;             // true: 에디터, false: 게임 전용
 		EntityId m_selectedEntity{ InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
+
+		std::string m_playSnapshot;          // Play 진입 시 월드 JSON 스냅샷 (Stop 시 복원용)
 
 		World          m_world;
 		UIWorldManager m_uiWorld;
@@ -136,6 +142,7 @@ namespace Alice
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
 		std::unique_ptr<class EffectSystem> m_effectSystem;
 		std::unique_ptr<class TrailEffectRenderSystem> m_trailRenderSystem;
+		std::unique_ptr<ComputeEffectSystem> m_computeEffectSystem;
 
 		// 렌더링 모드 전환 (true: Forward, false: Deferred)
 		bool m_useForwardRendering = false;
@@ -147,7 +154,7 @@ namespace Alice
 		// Skinned FBX 메시 렌더링용 레지스트리/시스템
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
-		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		AdvancedAnimSystem  m_advancedAnimSystem{ m_skinnedMeshRegistry };
 		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
 	};
 	namespace
@@ -510,16 +517,17 @@ namespace Alice
 		}
 	}
 
+		// Compute Effect System 설정
+		pImpl->m_computeEffectSystem = std::make_unique<ComputeEffectSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_computeEffectSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
 
+		// ============================================= 카메라 & 스크립트 =============================================
+		// 기본 카메라 위치 설정 및 핫리로드 로드
+		pImpl->m_cameraPosition = { 0.0f, 2.0f, -5.0f };
+		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
+		pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, static_cast<float>(pImpl->m_width) / pImpl->m_height, 0.1f, 5000.0f);
 
-
-	// ============================================= 카메라 & 스크립트 =============================================
-	// 기본 카메라 위치 설정 및 핫리로드 로드
-	pImpl->m_cameraPosition = { 0.0f, 2.0f, -5.0f };
-	pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
-	pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, static_cast<float>(pImpl->m_width) / pImpl->m_height, 0.1f, 5000.0f);
-
-	ScriptHotReload_Load();
+		ScriptHotReload_Load();
 
 		// ============================================= 씬 관리 =============================================
 		// 씬 매니저 생성 및 초기 씬 로드
@@ -631,6 +639,38 @@ namespace Alice
 		pImpl->m_inputSystem.Update(dt);
 
 		using namespace DirectX;
+
+		// 1.5 Play/Stop 씬 스냅샷·복원 (에디터 전용)
+		if (pImpl->m_editorMode)
+		{
+			const bool wasPlaying = pImpl->m_wasPlaying;
+			const bool isPlaying  = pImpl->m_isPlaying;
+
+			if (!wasPlaying && isPlaying)
+			{
+				// Play 진입: 현재 월드 스냅샷 저장 (런타임은 이 월드에서 실행, Stop 시 복원용)
+				if (SceneFile::SaveToJsonString(pImpl->m_world, pImpl->m_playSnapshot))
+					ALICE_LOG_INFO("[Engine] Play: scene snapshot saved.");
+				else
+					ALICE_LOG_WARN("[Engine] Play: snapshot save failed. Stop restore may be incomplete.");
+			}
+			else if (wasPlaying && !isPlaying)
+			{
+				// Stop: 편집본 복원
+				ClearWorldAndPhysics();
+				if (!pImpl->m_playSnapshot.empty() && SceneFile::LoadFromJsonString(pImpl->m_world, pImpl->m_playSnapshot))
+				{
+					RefreshPhysicsForCurrentWorld();
+					EnsureSkinnedMeshesRegisteredForWorld();
+					pImpl->m_selectedEntity = InvalidEntityId; // 복원 후 ID 매핑 없음
+					ALICE_LOG_INFO("[Engine] Stop: scene restored from snapshot.");
+				}
+				else
+					ALICE_LOG_WARN("[Engine] Stop: restore from snapshot failed or empty.");
+			}
+
+			pImpl->m_wasPlaying = isPlaying;
+		}
 
 		// 2. 카메라 데이터 갱신 (위치/회전)
 		bool updateFromScene = (!pImpl->m_editorMode || pImpl->m_isPlaying);
@@ -1088,6 +1128,9 @@ namespace Alice
 	{
 		if (!pImpl->m_renderDevice) return;
 
+		// Transform 월드행렬 캐시 일괄 갱신 (렌더/피킹 직전 — 물리·스크립트 등 변경이 끝난 뒤)
+		pImpl->m_world.UpdateTransformMatrices();
+
 		// ============================================= 렌더링 시스템 전환 처리 =============================================
 		// 렌더링 시작 전에 전환 요청이 있으면 안전하게 전환합니다.
 		if (pImpl->m_pendingRenderSystemChange)
@@ -1242,8 +1285,8 @@ namespace Alice
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
 		// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
-		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
-		
+		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+
 		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
 		{
 			FbxImporter importer(pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
@@ -1275,6 +1318,8 @@ namespace Alice
 		
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
+		// ============================================= 컴퓨트 이펙트 실행 =============================================
+		// ComputeEffectComponent를 가진 엔티티들의 컴퓨트 셰이더를 실행
 		// ============================================= 렌더링 =============================================
 		// Forward/Deferred 렌더링 모드에 따라 분기
 		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
@@ -1305,30 +1350,145 @@ namespace Alice
 		);
 	}
 
-        // 게임 모드(에디터 UI 없음)에서는 최종 백버퍼로 톤매핑 + UI 렌더링까지 수행
-        // (렌더 시스템 내부에서 뷰포트 텍스처에 UI가 이미 합성되어 있으므로, 백버퍼 톤매핑만 수행)
-        if (!pImpl->m_editorMode)
-        {
-            ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
-            if (backBufferRTV)
-            {
-                D3D11_VIEWPORT viewport = {};
-                viewport.Width = static_cast<float>(pImpl->m_width);
-                viewport.Height = static_cast<float>(pImpl->m_height);
-                viewport.MaxDepth = 1.0f;
+		// 렌더 직후: DSV만 unbind (depth SRV 읽기 전 필수)
+		// DirectX11에서는 같은 리소스를 DSV와 SRV로 동시에 바인딩할 수 없음
+		// RTV는 유지 (RestoreBackBuffer에서 설정한 백버퍼 RTV 유지)
+		ID3D11RenderTargetView* currentRTV = nullptr;
+		ID3D11DepthStencilView* currentDSV = nullptr;
+		pImpl->m_renderDevice->GetImmediateContext()->OMGetRenderTargets(1, &currentRTV, &currentDSV);
+		if (currentRTV)
+		{
+			// RTV는 유지하고 DSV만 nullptr로 설정
+			pImpl->m_renderDevice->GetImmediateContext()->OMSetRenderTargets(1, &currentRTV, nullptr);
+			currentRTV->Release(); // OMGetRenderTargets가 AddRef를 호출하므로 Release 필요
+		}
+		if (currentDSV)
+		{
+			currentDSV->Release(); // OMGetRenderTargets가 AddRef를 호출하므로 Release 필요
+		}
 
-                if (pImpl->m_useForwardRendering)
-                {
-                    pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-                    pImpl->m_forwardRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
-                }
-                else
-                {
-                    pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-                    pImpl->m_deferredRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
-                }
-            }
-        }
+		// ============================================= 컴퓨트 이펙트 (렌더링 이후 실행 - depth가 최신 상태) =============================================
+		// 씬 전환 중이거나 리소스가 유효하지 않으면 스킵 (안전성 보장)
+		if (pImpl->m_computeEffectSystem && 
+		    ((pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem) || 
+		     (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)))
+		{
+		// 렌더 시스템에서 실제로 사용한 카메라 행렬 사용 (에디터 뷰포트 카메라와 메인 카메라 불일치 해결)
+		DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
+		DirectX::XMFLOAT3 cameraPos(0.0f, 0.0f, -5.0f);
+		
+		if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+		{
+			viewProj = pImpl->m_forwardRenderSystem->GetLastViewProj();
+			cameraPos = pImpl->m_forwardRenderSystem->GetLastCameraPos();
+		}
+		else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+		{
+			viewProj = pImpl->m_deferredRenderSystem->GetLastViewProj();
+			cameraPos = pImpl->m_deferredRenderSystem->GetLastCameraPos();
+		}
+			
+			// Scene Depth SRV (depth test용) - 렌더링 이후이므로 최신 depth 사용 가능
+			// DSV는 이미 위에서 unbind했으므로 SRV로 안전하게 읽을 수 있음
+			ID3D11ShaderResourceView* depthSRV = nullptr;
+			if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+			{
+				depthSRV = pImpl->m_forwardRenderSystem->GetSceneDepthSRV();
+			}
+			else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+			{
+				depthSRV = pImpl->m_deferredRenderSystem->GetSceneDepthSRV();
+			}
+			
+		// Execute에 depthSRV, near/far, dt를 직접 전달
+		// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
+		float dtSec = pImpl->m_timer.DeltaTime();
+		float nearPlane = pImpl->m_camera.GetNearPlane();
+		float farPlane = pImpl->m_camera.GetFarPlane();
+		pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV, nearPlane, farPlane, dtSec);
+		}
+
+		// ============================================= 파티클 오버레이 합성 =============================================
+		// 에디터 모드: 뷰포트 렌더 타겟에 파티클 오버레이 합성 (CS 실행 이후 - 같은 프레임 결과 사용)
+		if (pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_computeEffectSystem->HasActiveEffect())
+		{
+			ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
+			if (particleSRV)
+			{
+				if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+				{
+					pImpl->m_forwardRenderSystem->RenderParticleOverlayToViewport(particleSRV);
+				}
+				else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+				{
+					pImpl->m_deferredRenderSystem->RenderParticleOverlayToViewport(particleSRV);
+				}
+			}
+		}
+
+		// 게임 모드: 백버퍼에 파티클 오버레이 합성
+		if (!pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_computeEffectSystem->HasActiveEffect() && pImpl->m_forwardRenderSystem)
+		{
+			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
+			if (backBufferRTV)
+			{
+				D3D11_VIEWPORT viewport = {};
+				viewport.Width = static_cast<float>(pImpl->m_width);
+				viewport.Height = static_cast<float>(pImpl->m_height);
+				viewport.MaxDepth = 1.0f;
+
+			// 게임 모드에서는 톤매핑 후 오버레이
+			if (pImpl->m_useForwardRendering)
+			{
+				pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+			}
+			else
+			{
+				DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
+				ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
+				deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
+			}
+
+				// 파티클 오버레이 합성 (톤매핑 후)
+				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
+				if (particleSRV)
+				{
+					pImpl->m_forwardRenderSystem->RenderParticleOverlay(particleSRV, backBufferRTV, viewport);
+				}
+			}
+		}
+		else if (!pImpl->m_editorMode)
+		{
+			// 게임 모드에서만 톤매핑 (파티클 오버레이 없을 때)
+			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
+			if (backBufferRTV)
+			{
+				D3D11_VIEWPORT viewport = {};
+				viewport.Width = static_cast<float>(pImpl->m_width);
+				viewport.Height = static_cast<float>(pImpl->m_height);
+				viewport.MaxDepth = 1.0f;
+
+				if (pImpl->m_useForwardRendering)
+				{
+					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					pImpl->m_forwardRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
+				}
+				else
+				{
+					DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
+					ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
+					//pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					if (deferred->GetBloomSettings().enabled)
+					{
+						deferred->RenderBloomPass(sceneSRV, backBufferRTV, viewport);
+					}
+					else
+					{
+						deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
+					}
+				}
+			}
+		}
 
                 
 
@@ -1482,6 +1642,10 @@ namespace Alice
 		if (pImpl->m_deferredRenderSystem)
 		{
 			pImpl->m_deferredRenderSystem->Resize(width, height);
+		}
+		if (pImpl->m_computeEffectSystem)
+		{
+			pImpl->m_computeEffectSystem->Resize(width, height);
 		}
 
 		if(pImpl->m_uiWorld.m_d3dDev)

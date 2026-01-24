@@ -8,6 +8,8 @@
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
 #include "Core/ThreadSafety.h"
+#include "Components/IDComponent.h"
+#include <random>
 
 #include <fstream>
 #include <string>
@@ -17,6 +19,7 @@
 
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
+#include "Components/ComputeEffectComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
@@ -32,6 +35,35 @@ namespace Alice
 {
     namespace
     {
+        // GUID 생성 함수
+        static std::uint64_t NewGuid()
+        {
+            static std::mt19937_64 rng{ std::random_device{}() };
+            static std::uniform_int_distribution<std::uint64_t> dist;
+            return dist(rng);
+        }
+
+        // GUID 파싱 (JSON string 또는 number)
+        static std::uint64_t ParseGuid(const JsonRttr::json& j)
+        {
+            if (j.is_string())
+            {
+                try
+                {
+                    return std::stoull(j.get<std::string>());
+                }
+                catch (...)
+                {
+                    return NewGuid();
+                }
+            }
+            else if (j.is_number_unsigned())
+            {
+                return j.get<std::uint64_t>();
+            }
+            return NewGuid();
+        }
+
         // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
         // 1개짜리 항등 본 팔레트입니다. (정적인 메시처럼 렌더링되도록 함)
         static DirectX::XMFLOAT4X4 g_IdentityBone(
@@ -265,6 +297,23 @@ namespace Alice
             if (!name.empty())
                 outEntity["name"] = name;
             
+            // GUID 저장
+            if (const auto* idComp = world.GetComponent<IDComponent>(id); idComp)
+            {
+                // uint64는 JSON에서 string으로 저장 (호환성)
+                outEntity["guid"] = std::to_string(idComp->guid);
+            }
+            
+            // Parent 관계 저장 (GUID 기반)
+            EntityId parentId = world.GetParent(id);
+            if (parentId != InvalidEntityId)
+            {
+                if (const auto* parentIdComp = world.GetComponent<IDComponent>(parentId); parentIdComp)
+                {
+                    outEntity["_parentGuid"] = std::to_string(parentIdComp->guid);
+                }
+            }
+            
             if (const auto* transform = world.GetComponent<TransformComponent>(id); transform)
             {
                 rttr::instance inst = const_cast<TransformComponent&>(*transform);
@@ -323,6 +372,12 @@ namespace Alice
             {
                 rttr::instance inst = const_cast<SkinnedAnimationComponent&>(*anim);
                 outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(id); advAnim)
+            {
+                rttr::instance inst = const_cast<AdvancedAnimationComponent&>(*advAnim);
+                outEntity["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
@@ -385,6 +440,12 @@ namespace Alice
                 outEntity["RectLight"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* computeEffect = world.GetComponent<ComputeEffectComponent>(id); computeEffect)
+            {
+                rttr::instance inst = const_cast<ComputeEffectComponent&>(*computeEffect);
+                outEntity["ComputeEffect"] = JsonRttr::ToJsonObject(inst);
+            }
+
             // PhysX Components
             if (const auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(id); rigidBody)
             {
@@ -431,7 +492,7 @@ namespace Alice
             return true;
         }
 
-        static bool ApplyEntity(World& world, const JsonRttr::json& e)
+        static bool ApplyEntity(World& world, const JsonRttr::json& e, std::unordered_map<std::uint64_t, EntityId>& guidToEntity, std::vector<std::pair<EntityId, std::uint64_t>>& pendingParents)
         {
             if (!e.is_object()) return false;
 
@@ -440,6 +501,33 @@ namespace Alice
             const std::string name = e.value("name", std::string{});
             if (!name.empty())
                 world.SetEntityName(id, name);
+
+            // IDComponent: GUID 로드 또는 생성
+            auto* idComp = world.GetComponent<IDComponent>(id);
+            if (!idComp)
+            {
+                // IDComponent가 없으면 생성
+                idComp = &world.AddComponent<IDComponent>(id);
+            }
+            
+            if (auto itGuid = e.find("guid"); itGuid != e.end())
+            {
+                auto parsed = ParseGuid(*itGuid);
+                if (parsed != 0) idComp->guid = parsed; // 실패면 덮어쓰지 않기
+                else idComp->guid = NewGuid(); // ParseGuid 실패 시 새 GUID 생성
+            }
+            else
+            {
+                idComp->guid = NewGuid();
+            }
+            guidToEntity[idComp->guid] = id;
+
+            // Parent GUID 저장 (나중에 연결)
+            if (auto itParentGuid = e.find("_parentGuid"); itParentGuid != e.end())
+            {
+                std::uint64_t parentGuid = ParseGuid(*itParentGuid);
+                pendingParents.push_back({ id, parentGuid });
+            }
 
             // Transform
             TransformComponent& t = world.AddComponent<TransformComponent>(id);
@@ -522,6 +610,15 @@ namespace Alice
                 SkinnedAnimationComponent& sa = world.AddComponent<SkinnedAnimationComponent>(id);
                 rttr::instance inst = sa;
                 if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
+            }
+
+            // AdvancedAnimation (선택)
+            auto itAA = e.find("AdvancedAnimation");
+            if (itAA != e.end() && itAA->is_object())
+            {
+                AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(id);
+                rttr::instance inst = aa;
+                if (!JsonRttr::FromJsonObject(inst, *itAA)) return false;
             }
 
             // Camera (선택)
@@ -614,6 +711,15 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
             }
 
+            // ComputeEffect 선택
+            auto itCE = e.find("ComputeEffect");
+            if (itCE != e.end() && itCE->is_object())
+            {
+                ComputeEffectComponent& ce = world.AddComponent<ComputeEffectComponent>(id);
+                rttr::instance inst = ce;
+                if (!JsonRttr::FromJsonObject(inst, *itCE)) return false;
+            }
+
             // PhysX Components
             auto itRB = e.find("RigidBody");
             if (itRB != e.end() && itRB->is_object())
@@ -682,9 +788,26 @@ namespace Alice
 
             world.Clear();
 
+            // 2-pass 로드: GUID 기반 parent 복원
+            std::unordered_map<std::uint64_t, EntityId> guidToEntity;
+            std::vector<std::pair<EntityId, std::uint64_t>> pendingParents;
+
+            // PASS 1: 엔티티 생성 + 컴포넌트 복원 + GUID 맵 생성
             for (const auto& e : *itEntities)
-                if (!ApplyEntity(world, e))
+            {
+                if (!ApplyEntity(world, e, guidToEntity, pendingParents))
                     return false;
+            }
+
+            // PASS 2: parent 연결 (keepWorld=false, 로드이므로)
+            for (const auto& [childId, parentGuid] : pendingParents)
+            {
+                auto it = guidToEntity.find(parentGuid);
+                if (it != guidToEntity.end())
+                {
+                    world.SetParent(childId, it->second, false);
+                }
+            }
 
             return true;
         }
@@ -740,6 +863,42 @@ namespace Alice
             if (!JsonRttr::SaveJsonFile(path, root, 4)) return false;
 
             return true;
+        }
+
+        bool SaveToJsonString(const World& world, std::string& out)
+        {
+            JsonRttr::json root = JsonRttr::json::object();
+            root["version"] = 1;
+            root["entities"] = JsonRttr::json::array();
+
+            const auto& transforms = world.GetComponents<TransformComponent>();
+            for (const auto& [id, transform] : transforms)
+            {
+                (void)transform;
+                JsonRttr::json e;
+                if (!WriteEntity(e, world, id)) return false;
+                root["entities"].push_back(e);
+            }
+
+            out = root.dump(4);
+            return true;
+        }
+
+        bool LoadFromJsonString(World& world, const std::string& json)
+        {
+            ThreadSafety::AssertMainThread();
+            JsonRttr::json root;
+            try
+            {
+                root = JsonRttr::json::parse(json);
+            }
+            catch (...)
+            {
+                ALICE_LOG_ERRORF("[SceneFile] LoadFromJsonString: JSON parse failed.");
+                return false;
+            }
+            world.Clear();
+            return LoadFromRoot(world, root);
         }
 
         bool Load(World& world, const std::filesystem::path& path)

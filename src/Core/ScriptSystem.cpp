@@ -256,8 +256,23 @@ namespace Alice
     {
         if (!m_scenes || !scenePathUtf8) return false;
 
+        std::string pathStr = scenePathUtf8;
+        std::filesystem::path p = pathStr;
+        
+        // 이미 Assets/, Resource/, Cooked/로 시작하는 논리 경로인 경우 그대로 사용
+        const std::string genericPath = p.generic_string();
+        if (genericPath.find("Assets/") == 0 || 
+            genericPath.find("Resource/") == 0 || 
+            genericPath.find("Cooked/") == 0)
+        {
+            // 논리 경로는 그대로 사용
+            if (p.extension() != ".scene") p += ".scene";
+            return m_scenes->LoadSceneFileRequest(p);
+        }
+        
+        // 그 외의 경우 GetResolvedPath 사용 (파일명만 들어온 경우)
         std::string resolvedPath = GetResolvedPath(scenePathUtf8);
-        std::filesystem::path p = resolvedPath;
+        p = resolvedPath;
         if (p.extension() != ".scene") p += ".scene";
 
         return m_scenes->LoadSceneFileRequest(p);

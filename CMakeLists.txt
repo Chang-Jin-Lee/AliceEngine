@@ -100,6 +100,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Material.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.cpp
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.cpp
     ${ALICE_SRC_DIR}/Core/CameraSystem.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
@@ -110,6 +111,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Helper.cpp
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
     ${ALICE_SRC_DIR}/Core/Input.cpp
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.cpp
 
     # FBX/3D 모델 로더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
@@ -167,6 +169,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
 	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
+	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
 
 	${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
 )
@@ -196,6 +199,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/ReflectionSerializer.h
     ${ALICE_SRC_DIR}/Core/ReflectionUI.h
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.h
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.h
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.inl
     ${ALICE_SRC_DIR}/Core/Component.h
     ${ALICE_SRC_DIR}/Core/Entity.h
     ${ALICE_SRC_DIR}/Core/System.h
@@ -209,6 +214,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Singleton.h
     ${ALICE_SRC_DIR}/Core/Helper.h
     ${ALICE_SRC_DIR}/Core/Vertex.h
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
 
@@ -222,6 +228,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/CameraLookAtComponent.h
     ${ALICE_SRC_DIR}/Components/CameraShakeComponent.h
     ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
+    ${ALICE_SRC_DIR}/Components/AdvancedAnimationComponent.h
+    ${ALICE_SRC_DIR}/Components/AdvancedAnimator.h
     ${ALICE_SRC_DIR}/Components/MaterialComponent.h
     ${ALICE_SRC_DIR}/Components/PointLightComponent.h
     ${ALICE_SRC_DIR}/Components/RectLightComponent.h
@@ -309,6 +317,10 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
+	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
 
 
 	${ALICE_SRC_DIR}/UI/UI_ImageComponent.h
@@ -329,6 +341,11 @@ add_library(Engine STATIC
 # [설정] Engine에 RTTR 연결 (PUBLIC: 엔진을 쓰는 프로젝트도 RTTR 사용 가능)
 target_link_libraries(Engine PUBLIC RTTR::Core)
 
+if(MSVC)
+    # ComponentRegistry.cpp의 RTTR 등록이 커져서 obj가 커짐
+    target_compile_options(Engine PRIVATE /bigobj)
+endif()
+
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
 # ==========================================
@@ -346,7 +363,7 @@ set(APP_HEADERS
     ${ALICE_SRC_DIR}/Game/FbxImporter.h
     ${ALICE_SRC_DIR}/Game/FbxAsset.h
     ${ALICE_SRC_DIR}/Game/SkinnedMeshSystem.h
-    ${ALICE_SRC_DIR}/Game/SkinnedAnimationSystem.h
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.h
 )
 
 # 1. Launch (에디터/툴 모드) 엔트리 포인트
