@@ -154,6 +154,8 @@ namespace Alice
 		bool m_pendingRenderSystemChange = false;
 		bool m_pendingUseForwardRendering = true;
 
+		CameraSystem m_cameraSystem;
+
 		// Skinned FBX 메시 렌더링용 레지스트리/시스템
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
@@ -772,35 +774,49 @@ namespace Alice
 				// ===================================================================
 
 				// 2-3. 카메라 시스템 (컴포넌트 기반)
-				{
-					CameraSystem cameraSystem;
-					cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
-				}
+				pImpl->m_cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
 
 				// 2-4. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
+				// CameraSystem에서 이미 Camera 객체가 업데이트되었으므로, primary 카메라의 Camera 객체를 가져옴
 				EntityId camId = InvalidEntityId;
 				for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
 				{
-					if (cam.primary) { camId = id; break; }
+					if (cam.GetPrimary()) { camId = id; break; }
 					if (camId == InvalidEntityId) camId = id;
 				}
 
-				if (const auto* t = pImpl->m_world.GetComponent<TransformComponent>(camId))
+				if (camId != InvalidEntityId)
 				{
-					const auto* c = pImpl->m_world.GetComponent<CameraComponent>(camId);
-					pImpl->m_cameraPosition = t->position;
-					pImpl->m_cameraYawRadians = t->rotation.y;
-					pImpl->m_cameraPitchRadians = t->rotation.x;
-
-					const float defaultAspect = static_cast<float>(pImpl->m_width) / pImpl->m_height;
-					const float aspect = (c && c->useAspectOverride && c->aspectOverride > 0.0f)
-						? c->aspectOverride
-						: defaultAspect;
-
-					pImpl->m_camera.SetPerspective(c ? c->fovYRad : DirectX::XM_PIDIV4,
-						aspect,
-						c ? c->nearPlane : 0.1f,
-						c ? c->farPlane : 5000.0f);
+					auto* camComp = pImpl->m_world.GetComponent<CameraComponent>(camId);
+					if (camComp)
+					{
+						// CameraComponent의 Camera 객체를 Engine의 m_camera에 복사
+						const Camera& sourceCamera = camComp->GetCamera();
+						
+						// Aspect Ratio 설정
+						const float defaultAspect = static_cast<float>(pImpl->m_width) / pImpl->m_height;
+						const float aspect = (camComp->useAspectOverride && camComp->aspectOverride > 0.0f)
+							? camComp->aspectOverride : defaultAspect;
+						
+						// Perspective 설정
+						pImpl->m_camera.SetPerspective(
+							sourceCamera.GetFovYRadians(),
+							aspect,
+							sourceCamera.GetNearPlane(),
+							sourceCamera.GetFarPlane()
+						);
+						
+						// Position, Rotation, Scale 복사
+						pImpl->m_camera.SetPosition(sourceCamera.GetPosition());
+						pImpl->m_camera.SetRotation(sourceCamera.GetRotationQuat());
+						pImpl->m_camera.SetScale(sourceCamera.GetScale());
+						
+						// 내부 상태 동기화 (에디터 프리캠용)
+						pImpl->m_cameraPosition = sourceCamera.GetPosition();
+						const DirectX::XMFLOAT3 rot = sourceCamera.GetRotation();
+						pImpl->m_cameraYawRadians = rot.y;
+						pImpl->m_cameraPitchRadians = rot.x;
+					}
 				}
 			}
 		}

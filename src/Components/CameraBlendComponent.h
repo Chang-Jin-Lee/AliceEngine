@@ -12,6 +12,8 @@ namespace Alice
     struct CameraBlendComponent
     {
         bool active{ false };
+        // 블렌드 시작 시 시스템이 현재 카메라 상태를 캡처하도록 요청하는 플래그
+        bool needsSnapshot{ false };
         std::string targetName{};
         float duration{ 0.5f };
         bool useSmoothStep{ true };

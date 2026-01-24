@@ -14,6 +14,10 @@ namespace Alice
         m_position = position;
         m_target   = target;
         m_up       = up;
+        // m_rotation(쿼터니언)을 업데이트
+        XMMATRIX view = XMMatrixLookAtLH(XMLoadFloat3(&m_position), XMLoadFloat3(&m_target), XMLoadFloat3(&m_up));
+        XMMATRIX world = XMMatrixInverse(nullptr, view);
+        XMStoreFloat4(&m_rotation, XMQuaternionRotationMatrix(world));
     }
 
     void Camera::SetPerspective(float fovYRadians,
@@ -39,6 +43,58 @@ namespace Alice
     XMMATRIX Camera::GetProjectionMatrix() const
     {
         return XMMatrixPerspectiveFovLH(m_fovYRadians, std::max(0.1f, m_aspectRatio), m_nearPlane, m_farPlane);
+    }
+    DirectX::XMFLOAT3 Camera::GetRotation() const
+    {
+        // 쿼터니언에서 회전 행렬로 변환
+        XMMATRIX R = XMMatrixRotationQuaternion(XMLoadFloat4(&m_rotation));
+        XMFLOAT4X4 m;
+        XMStoreFloat4x4(&m, R);
+
+        // 회전 행렬에서 오일러 각(Pitch, Yaw, Roll) 추출 (라디안)
+        float pitch = asinf(-m._32);
+        float yaw = 0.0f;
+        float roll = 0.0f;
+
+        // 짐벌락(Gimbal Lock) 체크 (Pitch가 수직에 가까울 때)
+        if (std::abs(m._32) > 0.9999f)
+        {
+            yaw = atan2f(-m._13, m._11);
+            roll = 0.0f;
+        }
+        else
+        {
+            yaw = atan2f(m._31, m._33);
+            roll = atan2f(m._12, m._22);
+        }
+
+        return DirectX::XMFLOAT3(pitch, yaw, roll);
+    }
+
+    void Camera::SetPosition(const DirectX::XMFLOAT3& position)
+    {
+        m_position = position;
+    }
+
+    void Camera::SetRotation(const DirectX::XMFLOAT4& rotation)
+    {
+        m_rotation = rotation;
+
+        // Rotation이 바뀌었으므로 Target, Up 벡터 동기화
+        XMVECTOR q = XMLoadFloat4(&m_rotation);
+
+        // 기본 전방(Z+), 상방(Y+) 벡터를 회전
+        XMVECTOR forward = XMVector3Rotate(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), q);
+        XMVECTOR up = XMVector3Rotate(XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), q);
+        XMVECTOR pos = XMLoadFloat3(&m_position);
+
+        XMStoreFloat3(&m_target, pos + forward); // Target = Pos + Forward
+        XMStoreFloat3(&m_up, up);
+    }
+
+    void Camera::SetScale(const DirectX::XMFLOAT3& scale)
+    {
+        m_scale = scale;
     }
 
     float Camera::GetFovXRadians() const
