@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <memory>
 #include <string>
@@ -8,6 +8,9 @@
 
 #include "Core/Entity.h"
 #include "Core/World.h"
+
+// 전방 선언
+class UIWorldManager;
 
 namespace Alice
 {
@@ -79,7 +82,10 @@ namespace Alice
 
 		/// 엔진이 "프레임 경계"에서만 호출해야 하는 커밋 API
 		/// 성공 시 true
-		bool CommitPendingSceneChange(World& world);
+		bool CommitPendingSceneChange(World& world, UIWorldManager* uiWorldManager = nullptr);
+
+		/// 현재 씬 이름을 반환합니다 (없으면 nullptr)
+		const char* GetCurrentSceneName() const { return m_currentSceneName.c_str(); };
 
 		/// 현재 로드된 씬 파일 경로를 반환합니다 (파일 기반 씬인 경우)
 		/// 파일 기반 씬이 아니면 빈 경로를 반환합니다.
@@ -97,6 +103,9 @@ namespace Alice
 
 		// 현재 로드된 씬 파일 경로 (에디터에서 저장 경로 추적용)
 		std::filesystem::path m_currentSceneFilePath;
+		
+		// 현재 로드된 Scene 이름 (파일에서 읽어온 이름 또는 코드 씬 이름)
+		std::string m_currentSceneName;
 	};
 
 #define REGISTER_SCENE(SceneType) \
