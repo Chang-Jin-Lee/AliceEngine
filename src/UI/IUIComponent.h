@@ -9,12 +9,14 @@ struct IUIComponent
 {
     virtual ~IUIComponent() = default;
 
-    // ������
+    // 주인 포인터
     UIBase* Owner = nullptr;
     unsigned long OwnerID = 0;
 
-    // ���� �ʱ�ȭ ��(����): ������Ʈ�� owner �ʿ� �� �������̵�
-    virtual void OnAdded() {}
+    // 추가된 경우
+    virtual void OnAdded() {};
+    virtual void Update() {};
+    virtual void Render() {};
 
     // ���� ��� (���� ȣȯ�� ����)
     long unsigned id{ 0 };
