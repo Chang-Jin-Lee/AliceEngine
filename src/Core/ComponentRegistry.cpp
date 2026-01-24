@@ -242,12 +242,16 @@ namespace Alice
 			.property("debugDraw", &AudioSourceComponent::debugDraw);
 
         // === CameraComponent 등록 ===
+        // Transform은 TransformComponent에서 담당하므로 여기선 제외
         rttr::registration::class_<CameraComponent>("CameraComponent")
             .constructor<>()
-            .property("primary", &CameraComponent::primary)
-            .property("fovYRad", &CameraComponent::fovYRad)
-            .property("nearPlane", &CameraComponent::nearPlane)
-            .property("farPlane", &CameraComponent::farPlane)
+            .property("primary", &CameraComponent::GetPrimary, &CameraComponent::SetPrimary)
+            .property("FOV", &CameraComponent::GetFov, &CameraComponent::SetFov)
+                (rttr::metadata("Min", 10.0f), rttr::metadata("Max", 170.0f))
+            .property("Near Plane", &CameraComponent::GetNear, &CameraComponent::SetNear)
+                (rttr::metadata("Min", 0.01f))
+            .property("Far Plane", &CameraComponent::GetFar, &CameraComponent::SetFar)
+                (rttr::metadata("Min", 10.0f))
             .property("useAspectOverride", &CameraComponent::useAspectOverride)
             .property("aspectOverride", &CameraComponent::aspectOverride);
 
