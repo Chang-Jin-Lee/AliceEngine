@@ -57,7 +57,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 134.7688876555767
+                "timeSec": 174.4852086561732
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -342,7 +342,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1891.4018196982797
+                "timeSec": 1931.1181406988762
             },
             "SkinnedMesh": {
                 "boneCount": 67,
@@ -447,7 +447,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1796.1954709033016
+                "timeSec": 1835.9117919038981
             },
             "SkinnedMesh": {
                 "boneCount": 16,
@@ -619,6 +619,19 @@
             "name": "Camera5"
         },
         {
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SoundBoxSetupExample",
+                    "props": {
+                        "debugDraw": false,
+                        "loop": true,
+                        "maxDistance": 36.939998626708984,
+                        "minDistance": 12.270000457763672,
+                        "soundPath": "Resource/Sound/CaliforniaGirls.wav"
+                    }
+                }
+            ],
             "Transform": {
                 "position": {
                     "x": -15.881107330322266,
