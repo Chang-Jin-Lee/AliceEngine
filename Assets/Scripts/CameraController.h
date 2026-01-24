@@ -28,7 +28,7 @@ namespace Alice
         void SetPreview(bool on);
 
         void TriggerCut(const std::string& camName);
-        void TriggerBlend(const std::string& camName, float duration);
+        void TriggerBlend(const std::string& camName, float duration, bool useCurve = true);
         void TriggerShake(float amp, float freq, float dur, float decay);
 
         void ToggleLookAt();
