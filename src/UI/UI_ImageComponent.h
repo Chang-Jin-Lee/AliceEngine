@@ -50,7 +50,7 @@ public:
 
     void Initalize(UIRenderStruct& UIRenderStruct);
 
-    void Update();
+    void Update() override;
 
     void Render(); // Index 인자 제거
     UINT SetImagePath(const std::wstring& path);

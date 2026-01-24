@@ -32,7 +32,7 @@ public:
 
 private:
 	D2D1_RECT_F m_srcRect = D2D1::RectF(0, 0, 100, 100);
-	UI_ImageComponent* m_Image;
+	UI_ImageComponent* m_Image{nullptr};
 	// update에 넣기!!!
 
 

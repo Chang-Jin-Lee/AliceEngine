@@ -156,7 +156,7 @@ protected:
     void SetID(long unsigned tmp) { ID = tmp; };
 
 
-    // ���콺 �浹�˻� �Լ�
+    // 마우스 충돌 함수
     virtual bool IsMouseOverUIAABB(DirectX::XMFLOAT2& tmpPoint, std::vector<long unsigned>& IDStorage);
     bool IsMouseOverUIRot(DirectX::XMFLOAT2& tmpPoint);
 };

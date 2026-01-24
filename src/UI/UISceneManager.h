@@ -14,6 +14,7 @@
 //#include "UIComponent/UITransformClass.h"
 #include "IUIComponent.h"
 #include "UIRenderStruct.h"
+
 // Core delegate wrapper 
 #include "Core/Delegate.h"
 #include "Core/InputSystem.h"
@@ -344,9 +345,8 @@ private:
 	void UpdateButtonInputRecursive(UIBase* node);
 };
 
-// ============================================================================
-// UIWorld 템플릿 구현
-// ============================================================================
+
+// Object 생성
 template<typename T, typename... Args>
 	requires std::derived_from<T, UIBase>
 T* UIWorld::CreateEntity(Args&&... args)
@@ -365,6 +365,8 @@ T* UIWorld::CreateEntity(Args&&... args)
 	return ObjPtr;
 }
 
+
+// 부모 설정 + objetc 생성
 template<typename T, typename... Args>
 	requires std::derived_from<T, UIBase>
 T* UIWorld::CreateChildEntity(long unsigned parentID, Args&&... args)
@@ -394,6 +396,7 @@ T* UIWorld::CreateChildEntity(long unsigned parentID, Args&&... args)
 	return ObjPtr;
 }
 
+// 부모 설정
 template<typename T, typename K>
 	requires std::derived_from<T, UIBase> || std::derived_from<K, UIBase>
 void UIWorld::SetParent(T* parentUI, K* childUI)
@@ -425,6 +428,8 @@ void UIWorld::SetParent(T* parentUI, K* childUI)
 		}), m_rootID.end());
 }
 
+
+// 
 template<class T>
 	requires std::derived_from<T, IUIComponent>
 T* UIWorld::TryGetComponent(unsigned long ownerID)

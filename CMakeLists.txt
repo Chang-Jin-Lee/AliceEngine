@@ -168,6 +168,7 @@ set(ENGINE_SOURCES
 	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
 
+	${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
 )
 
 set(ENGINE_HEADERS
@@ -316,6 +317,7 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/UI/UI_InputComponent.h
 	${ALICE_SRC_DIR}/UI/UIButton.h
 
+	${ALICE_SRC_DIR}/UI/UIGaugeBar.h
 )
 
 # [변경] AliceEngine -> Engine
