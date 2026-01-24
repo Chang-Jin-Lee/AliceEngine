@@ -394,6 +394,12 @@ namespace Alice
 
 		// Editor: 프로젝트 루트 기준, Game: 실행 파일 기준
 		pImpl->m_resourceManager.Configure(!pImpl->m_editorMode, exeDir);
+		
+		// 에디터 모드에서는 EditorCore가 싱글톤을 사용하므로 싱글톤도 Configure
+		if (pImpl->m_editorMode)
+		{
+			ResourceManager::Get().Configure(false, exeDir);
+		}
 
 		// 게임 모드일 때 데이터 무결성 검증 수행
 		if (!pImpl->m_editorMode)
@@ -460,7 +466,7 @@ namespace Alice
 		// 에디터 모드일 경우에만 초기화 및 의존성 주입
 		if (pImpl->m_editorMode)
 		{
-			pImpl->m_editorCore.SetResourceManager(&pImpl->m_resourceManager);
+			// EditorCore는 ResourceManager 싱글톤(ResourceManager::Get())을 사용하므로 SetResourceManager 호출 불필요
 			pImpl->m_editorCore.SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 			pImpl->m_editorCore.SetInputSystem(&pImpl->m_inputSystem);
 
