@@ -3,8 +3,44 @@
 // PhysXWorld_Internal.h (split from PhysXWorld.cpp)
 #include "PhysXWorld.h"
 #include "PhysicsMath.h"
+#include "Core/Logger.h"
 
 #include <PhysX/PxPhysicsAPI.h>
+
+// ============================================================
+// ContactModify 가드 (공유 thread_local)
+// ============================================================
+namespace physxwrap_detail {
+	// ContactModify 콜백 내부에서 쿼리 호출을 방지하기 위한 depth 카운터
+	// inline을 사용하여 모든 번역단위에서 같은 변수를 공유
+	// depth > 0이면 ContactModify 콜백 내부
+	inline thread_local int g_contactModifyDepth = 0;
+
+	// 차단된 쿼리 횟수 카운터 (경고 로깅용)
+	inline std::atomic<uint32_t> g_blockedQueryCount{ 0 };
+
+	// RAII 헬퍼: 콜백 진입 시 자동으로 depth 증가/감소
+	struct ContactModifyScope {
+		ContactModifyScope() { 
+			++g_contactModifyDepth;
+			if (g_contactModifyDepth > 1) {
+				// 재진입 감지: 경고 로그
+				ALICE_LOG_WARN("[PhysXWorld] ContactModify callback reentrant detected (depth=%d)! This may cause deadlock.", g_contactModifyDepth);
+			}
+		}
+		~ContactModifyScope() { 
+			--g_contactModifyDepth;
+			if (g_contactModifyDepth < 0) {
+				g_contactModifyDepth = 0; // 안전장치
+			}
+		}
+	};
+	
+	// ContactModify 콜백 내부인지 확인 (호환성 유지)
+	inline bool IsInContactModifyCallback() {
+		return g_contactModifyDepth > 0;
+	}
+}
 
 // ------------------------------------------------------------
 // PhysX Character Controller (CCT) header detection
@@ -792,6 +828,12 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 			if (!cb) return;
 
+			// ContactModify 콜백 진입 플래그 설정 (데드락 방지)
+			// 재진입 방지: 이미 콜백 내부에 있으면 즉시 리턴
+			if (physxwrap_detail::IsInContactModifyCallback()) return;
+			// RAII를 사용하여 자동으로 플래그 설정/해제
+			physxwrap_detail::ContactModifyScope scope;
+
 			for (PxU32 i = 0; i < count; ++i)
 			{
 				PxContactModifyPair& mp = pairs[i];
@@ -850,6 +892,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 						cs.setMaxImpulse(c, src.maxImpulse);
 				}
 			}
+			// scope 소멸 시 자동으로 플래그 해제됨
 		}
 	};
 
@@ -1658,6 +1701,14 @@ public:
 	{
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
 		if (!actor) return false;
+		
+		// PhysX 5.5: TriangleMesh는 트리거 shape로 지원하지 않음
+		if (mesh.isTrigger)
+		{
+			// 경고는 PhysicsSystem에서 이미 출력했으므로 여기서는 false만 반환
+			return false;
+		}
+		
 		auto s = world.lock();
 		if (!s || !s->scene) return false;
 

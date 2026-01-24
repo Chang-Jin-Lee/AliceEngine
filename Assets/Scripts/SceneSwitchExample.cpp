@@ -15,12 +15,12 @@ namespace Alice
         if (input->GetKeyDown(KeyCode::F1))
         {
             // .scene 파일 로드 요청 (SceneManager를 통한 지연 처리)
-            scenes->LoadSceneFileRequest(m_targetName1.c_str());
+            scenes->LoadSceneFileRequest(targetSceneA.c_str());
         }
 
         if (input->GetKeyDown(KeyCode::F2))
         {            
-            scenes->LoadSceneFileRequest(m_targetName2.c_str());
+            scenes->LoadSceneFileRequest(targetSceneB.c_str());
         }
     }
 }

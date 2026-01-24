@@ -159,8 +159,7 @@ private:
         float dynamicFriction{};
         float restitution{};
         uint32_t layerBits{};
-        uint32_t collideMask{};
-        uint32_t queryMask{};
+        // collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거)
         uint32_t ignoreLayers{}; // ignoreLayers 변경 감지 추가
         bool isTrigger{};
         DirectX::XMFLOAT3 scale{}; // Transform scale 포함
@@ -176,8 +175,7 @@ private:
         float dynamicFriction{};
         float restitution{};
         uint32_t layerBits{};
-        uint32_t collideMask{};
-        uint32_t queryMask{};
+        // collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거)
         uint32_t ignoreLayers{};
         bool isTrigger{};
         bool flipNormals{};
@@ -216,8 +214,7 @@ private:
     {
         uint32_t layerBits{};
         uint32_t ignoreLayers{};
-        uint32_t collideMask{};
-        uint32_t queryMask{};
+        // collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거)
         
         // 지형 형상이 바뀌었는지 감지용
         uint64_t lastGeomKey = 0;
@@ -226,13 +223,9 @@ private:
 
         TerrainState(uint32_t inLayerBits,
                      uint32_t inIgnoreLayers,
-                     uint32_t inCollideMask,
-                     uint32_t inQueryMask,
                      uint64_t inGeomKey) noexcept
             : layerBits(inLayerBits)
             , ignoreLayers(inIgnoreLayers)
-            , collideMask(inCollideMask)
-            , queryMask(inQueryMask)
             , lastGeomKey(inGeomKey)
         {}
 
@@ -244,9 +237,7 @@ private:
         bool MasksChanged(const TerrainState& prev) const noexcept
         {
             return layerBits != prev.layerBits ||
-                   ignoreLayers != prev.ignoreLayers ||
-                   collideMask != prev.collideMask ||
-                   queryMask != prev.queryMask;
+                   ignoreLayers != prev.ignoreLayers;
         }
     };
     std::unordered_map<Alice::EntityId, TerrainState> m_lastTerrains;
@@ -264,8 +255,7 @@ private:
         float density{};
         bool enableQueries{};
         uint32_t layerBits{};
-        uint32_t collideMask{};
-        uint32_t queryMask{};
+        // collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거)
         uint32_t ignoreLayers{}; // ignoreLayers 변경 감지 추가
         bool hitTriggers{};
         DirectX::XMFLOAT3 scale{}; // Transform scale 포함
@@ -286,18 +276,13 @@ private:
             , density(ccc.density)
             , enableQueries(ccc.enableQueries)
             , layerBits(ccc.layerBits)
-            , collideMask(ccc.collideMask)
-            , queryMask(ccc.queryMask)
             , ignoreLayers(ccc.ignoreLayers)
             , hitTriggers(ccc.hitTriggers)
             , scale(inScale)
         {}
 
-        void OverrideMasks(uint32_t inCollide, uint32_t inQuery) noexcept
-        {
-            collideMask = inCollide;
-            queryMask   = inQuery;
-        }
+        // collideMask/queryMask는 레이어 매트릭스로만 결정됨 (컴포넌트에서 제거)
+        // OverrideMasks는 더 이상 사용되지 않음
 
         bool NeedsRebuild(const CCTState& prev) const noexcept
         {
@@ -322,8 +307,6 @@ private:
         bool NeedsMaskUpdate(const CCTState& prev) const noexcept
         {
             return layerBits != prev.layerBits ||
-                   collideMask != prev.collideMask ||
-                   queryMask != prev.queryMask ||
                    ignoreLayers != prev.ignoreLayers ||
                    hitTriggers != prev.hitTriggers;
         }
@@ -399,6 +382,9 @@ private:
     mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithMeshCollider;
     mutable std::unordered_set<Alice::EntityId> m_tempEntitiesWithJoint;
 
+    // CCT 경고 엔티티 추적 (씬/월드 경계를 넘어서 상태가 남지 않도록 멤버로 관리)
+    std::unordered_set<Alice::EntityId> m_warnedMissingCCT;
+
     // 런타임 마스크 캐시 (레이어 매트릭스 반영 결과)
     // 컴포넌트의 collideMask/queryMask는 authoring 데이터로 유지하고,
     // 실제 적용되는 필터는 이 캐시에서 관리
@@ -411,4 +397,7 @@ private:
     std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeMeshColliderMasks;
     std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeTerrainMasks;
     std::unordered_map<Alice::EntityId, RuntimeMasks> m_runtimeCCTMasks;
+    
+    // 레이어 매트릭스 기반으로 런타임 마스크 계산
+    RuntimeMasks ComputeRuntimeMasks(uint32_t layerBits, uint32_t ignoreLayers) const;
 };

@@ -1,4 +1,4 @@
-﻿#include "ViewportPicker.h"
+#include "ViewportPicker.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -6,6 +6,9 @@
 
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "3Dmodel/FbxModel.h"
+#include "Components/PointLightComponent.h"
+#include "Components/SpotLightComponent.h"
+#include "Components/RectLightComponent.h"
 
 using namespace DirectX;
 
@@ -77,9 +80,8 @@ namespace Alice
 
         XMVECTOR dirWorld = XMVector3Normalize(XMVectorSubtract(farPoint, nearPoint));
 
-        // 레이의 시작점은 카메라 위치
-        XMFLOAT3 camPos = camera.GetPosition();
-        XMVECTOR originWorld = XMLoadFloat3(&camPos);
+        // 레이의 시작점: 오쏘그래픽은 nearPlane 위의 픽셀 위치, 퍼스펙티브도 nearPoint 사용 (Camera::ScreenToWorldRay와 동일)
+        XMVECTOR originWorld = nearPoint;
 
         Ray rayWorld {};
         XMStoreFloat3(&rayWorld.origin,    originWorld);
@@ -93,21 +95,29 @@ namespace Alice
         EntityId hitEntity  = InvalidEntityId;
 
         // 오브젝트별로: 월드 행렬의 역행렬을 사용해 레이를 로컬 공간으로 변환 후,
-        // 로컬 AABB([-1,1]^3)에 대한 교차를 검사합니다.
-        const XMFLOAT3 defaultBoxMin(-1.0f, -1.0f, -1.0f);
+        // 로컬 AABB에 대한 교차를 검사합니다.
+        const XMFLOAT3 defaultBoxMin(-1.0f, -1.0f, -1.0f);  // SkinnedMesh bounds 폴백
         const XMFLOAT3 defaultBoxMax( 1.0f,  1.0f,  1.0f);
+        const XMFLOAT3 lightBoxMin(-0.1f, -0.1f, -0.1f);     // 라이트용 작은 큐브
+        const XMFLOAT3 lightBoxMax( 0.1f,  0.1f,  0.1f);
 
         for (const auto& [entityId, transform] : transforms)
         {
-            // 월드 행렬 = S * R * T (렌더러와 동일한 방식)
+            // Transform.enabled == false는 스킵
+            if (!transform.enabled)
+                continue;
+
+            // 피킹 가능한 컴포넌트가 있는지 확인
+            bool hasPickableComponent = false;
             XMFLOAT3 boxMin = defaultBoxMin;
             XMFLOAT3 boxMax = defaultBoxMax;
 
-            // SkinnedMeshComponent가 있는 경우, AABB를 찾아서 사용합니다.
+            // 1) SkinnedMeshComponent: 메시 bounds 사용
             if (skinnedRegistry)
             {
                 if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId))
                 {
+                    hasPickableComponent = true;
                     if (!skinned->meshAssetPath.empty())
                     {
                         auto mesh = skinnedRegistry->Find(skinned->meshAssetPath);
@@ -124,19 +134,29 @@ namespace Alice
                 }
             }
 
-            // 월드 행렬 = 스케일 * 회전 * 이동
-            XMVECTOR S = XMLoadFloat3(&transform.scale);
-            XMVECTOR R = XMLoadFloat3(&transform.rotation);
-            XMVECTOR T = XMLoadFloat3(&transform.position);
+            // 2) 라이트 컴포넌트들: 작은 큐브 bounds 사용 (렌더 가능)
+            if (world.GetComponent<PointLightComponent>(entityId) ||
+                world.GetComponent<SpotLightComponent>(entityId) ||
+                world.GetComponent<RectLightComponent>(entityId))
+            {
+                hasPickableComponent = true;
+                boxMin = lightBoxMin;
+                boxMax = lightBoxMax;
+            }
 
-            XMMATRIX worldM    = XMMatrixScalingFromVector(S)
-                               * XMMatrixRotationRollPitchYawFromVector(R)
-                               * XMMatrixTranslationFromVector(T);
+            // 피킹 가능한 컴포넌트가 없으면 스킵
+            if (!hasPickableComponent)
+                continue;
+
+            // 부모-자식 계층 포함 월드 행렬 (렌더링과 동일) — 직접 S*R*T 금지
+            XMMATRIX worldM    = world.ComputeWorldMatrix(entityId);
             XMMATRIX invWorldM = XMMatrixInverse(nullptr, worldM);
 
             // 레이를 로컬 공간으로 변환
+            // 레이 길이는 카메라 farPlane 기반 (큰 씬/스케일에서도 정확한 피킹)
+            float rayLength = camera.GetFarPlane();
             XMVECTOR originLocal = XMVector3TransformCoord(originWorld, invWorldM);
-            XMVECTOR endWorld    = XMVectorAdd(originWorld, XMVectorScale(dirWorld, 1000.0f));
+            XMVECTOR endWorld    = XMVectorAdd(originWorld, XMVectorScale(dirWorld, rayLength));
             XMVECTOR endLocal    = XMVector3TransformCoord(endWorld, invWorldM);
             XMVECTOR dirLocal    = XMVector3Normalize(XMVectorSubtract(endLocal, originLocal));
 
