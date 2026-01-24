@@ -57,7 +57,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 65.28625077893957
+                "timeSec": 134.7688876555767
             },
             "SkinnedMesh": {
                 "boneCount": 180,
@@ -342,7 +342,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1821.9191828216426
+                "timeSec": 1891.4018196982797
             },
             "SkinnedMesh": {
                 "boneCount": 67,
@@ -447,7 +447,7 @@
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1726.7128340266645
+                "timeSec": 1796.1954709033016
             },
             "SkinnedMesh": {
                 "boneCount": 16,
@@ -619,19 +619,6 @@
             "name": "Camera5"
         },
         {
-            "Scripts": [
-                {
-                    "enabled": true,
-                    "name": "SoundBoxSetupExample",
-                    "props": {
-                        "debugDraw": false,
-                        "loop": true,
-                        "maxDistance": 39.130001068115234,
-                        "minDistance": 10.3100004196167,
-                        "soundPath": "Resource/Sound/CaliforniaGirls.wav"
-                    }
-                }
-            ],
             "Transform": {
                 "position": {
                     "x": -15.881107330322266,
@@ -651,6 +638,41 @@
             },
             "id": 15,
             "name": "SoundBox"
+        },
+        {
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "AudioDemoScript",
+                    "props": {
+                        "bgmPath": "Resource/Sound/CaliforniaGirls.wav",
+                        "vfxPath1": "Resource/Sound/Attack.mp3",
+                        "vfxPath2": "Resource/Sound/Jump.mp3",
+                        "vfxPath3": "Resource/Sound/Hit.wav",
+                        "vfxPath4": "Resource/Sound/Coin.wav",
+                        "vfxPath5": "Resource/Sound/Explosion.wav"
+                    }
+                }
+            ],
+            "Transform": {
+                "position": {
+                    "x": -2.608928918838501,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": -0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "id": 16,
+            "name": "GameObject16"
         }
     ],
     "version": 1
