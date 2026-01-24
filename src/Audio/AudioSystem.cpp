@@ -91,173 +91,192 @@ namespace Alice
 
     void AudioSystem::Update(World& world, double)
     {
-        if (!m_resources) return;
+        // [중요 수정] 리소스가 없어도 Sound::Update는 무조건 호출해야 FMOD가 돌아갑니다.
+        // 기존: if (!m_resources) return;  <-- 이 부분이 문제였음
 
-        // Listener 업데이트 (AudioListenerComponent 우선, 없으면 MainCamera)
-        bool listenerSet = false;
-        DirectX::XMFLOAT3 listenerPos{ 0, 0, 0 };
-        for (const auto& [id, listener] : world.GetComponents<AudioListenerComponent>())
+        if (m_resources)
         {
-            if (!listener.primary) continue;
-            if (auto* tr = world.GetComponent<TransformComponent>(id))
-            {
-                DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYawFromVector(DirectX::XMLoadFloat3(&tr->rotation));
-                DirectX::XMVECTOR forward = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0, 0, 1, 0), R);
-                DirectX::XMVECTOR up = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0, 1, 0, 0), R);
-                Sound::SetListener(tr->position, DirectX::XMFLOAT3(0, 0, 0), forward, up);
-                listenerPos = tr->position;
-                listenerSet = true;
-                break;
-            }
-        }
+            // 1. 리스너 업데이트 및 위치 확보 (SoundBox 로직에서 사용)
+            DirectX::XMFLOAT3 listenerPos{ 0, 0, 0 };
+            UpdateListener(world, listenerPos);
 
-        if (!listenerSet)
-        {
-            EntityId camId = world.GetMainCameraEntityId();
-            if (camId != InvalidEntityId)
+            // 2. 오디오 소스 업데이트
+            for (auto [id, src] : world.GetComponents<AudioSourceComponent>())
             {
-                if (auto* tr = world.GetComponent<TransformComponent>(camId))
+                if (src.soundPath.empty()) continue;
+
+                // Runtime 데이터 초기화
+                Runtime& rt = m_runtime[id];
+                if (rt.key.empty())
                 {
-                    DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYawFromVector(DirectX::XMLoadFloat3(&tr->rotation));
-                    DirectX::XMVECTOR forward = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0, 0, 1, 0), R);
-                    DirectX::XMVECTOR up = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0, 1, 0, 0), R);
-                    Sound::SetListener(tr->position, DirectX::XMFLOAT3(0, 0, 0), forward, up);
-                    listenerPos = tr->position;
+                    rt.key = ToKeyW(src.soundKey.empty() ? src.soundPath : src.soundKey);
+                    rt.instanceId = MakeInstanceId(id);
+                }
+
+                // 리소스 로드 (아직 안됐다면)
+                if (!rt.loaded)
+                {
+                    const auto type = (src.type == AudioType::BGM) ? Sound::Type::BGM : Sound::Type::SFX;
+                    rt.loaded = Sound::LoadAuto(*m_resources, rt.key, src.soundPath, type);
+                }
+
+                if (!rt.loaded) continue;
+
+                // 재생 요청 처리
+                if ((src.playOnStart && !rt.started) || src.requestPlay)
+                {
+                    src.requestPlay = false; // 플래그 즉시 리셋
+
+                    if (src.is3D)
+                    {
+                        const auto* tr = world.GetComponent<TransformComponent>(id);
+                        DirectX::XMFLOAT3 pos = tr ? tr->position : DirectX::XMFLOAT3{ 0,0,0 };
+                        // Loop가 아닐 때는 instanceId를 비워서 Fire-and-forget (중첩 재생 허용)
+                        Sound::Play3D(src.loop ? rt.instanceId : L"", rt.key, pos, src.volume, src.pitch, src.loop);
+                        rt.playing3D = src.loop;
+                    }
+                    else
+                    {
+                        if (src.type == AudioType::BGM)
+                        {
+                            Sound::SetBGMVolume(src.volume);
+                            Sound::PlayBGM(rt.key);
+                        }
+                        else
+                        {
+                            Sound::PlaySFX(rt.key, src.volume, src.pitch, src.loop);
+                        }
+                    }
+                    rt.started = true;
+                }
+
+                // 정지 요청 처리
+                if (src.requestStop)
+                {
+                    src.requestStop = false;
+
+                    // [중요 수정] 정지 요청 시 자동 시작 옵션도 꺼야 다시 재생되지 않습니다.
+                    src.playOnStart = false;
+
+                    if (src.is3D)
+                    {
+                        Sound::Stop3D(rt.instanceId);
+                        rt.playing3D = false;
+                    }
+                    else
+                    {
+                        if (src.type == AudioType::BGM) Sound::StopBGM();
+                        else Sound::StopSfx(rt.key);
+                    }
+                    rt.started = false;
+                }
+
+                // 3D 위치 동기화 (재생 중인 루프 사운드만)
+                if (src.is3D && rt.playing3D && src.loop)
+                {
+                    if (auto* tr = world.GetComponent<TransformComponent>(id))
+                    {
+                        Sound::Update3D(rt.instanceId, tr->position, src.volume, src.minDistance, src.maxDistance);
+                    }
                 }
             }
-        }
 
-        for (auto [id, src] : world.GetComponents<AudioSourceComponent>())
-        {
-            if (src.soundPath.empty())
-                continue;
-
-            Runtime& rt = m_runtime[id];
-            if (rt.key.empty())
+            // SoundBox 처리 (listener 위치 기준)
+            for (auto [id, box] : world.GetComponents<SoundBoxComponent>())
             {
-                rt.key = ToKeyW(src.soundKey.empty() ? src.soundPath : src.soundKey);
-                rt.instanceId = MakeInstanceId(id);
-            }
+                if (box.soundPath.empty())
+                    continue;
 
-            if (!rt.loaded)
-            {
-                const auto type = (src.type == AudioType::BGM) ? Sound::Type::BGM : Sound::Type::SFX;
-                if (Sound::LoadAuto(*m_resources, rt.key, src.soundPath, type))
-                    rt.loaded = true;
-            }
-
-            if (!rt.loaded)
-                continue;
-
-            auto play2D = [&]() {
-                if (src.type == AudioType::BGM)
+                SoundBoxRuntime& rt = m_soundBoxRuntime[id];
+                if (rt.key.empty())
                 {
-                    Sound::PlayBGM(rt.key);
-                    Sound::SetBGMVolume(src.volume);
+                    rt.key = ToKeyW(box.soundKey.empty() ? box.soundPath : box.soundKey);
+                    rt.instanceId = MakeSoundBoxId(id);
                 }
-                else
+
+                if (!rt.loaded)
                 {
-                    // SFX: loop=false면 중첩 재생 가능 (Fire-and-forget)
-                    Sound::PlaySFX(rt.key, src.volume, src.pitch, src.loop);
+                    const auto type = (box.type == SoundBoxType::BGM) ? Sound::Type::BGM : Sound::Type::SFX;
+                    if (Sound::LoadAuto(*m_resources, rt.key, box.soundPath, type))
+                        rt.loaded = true;
                 }
-            };
 
-            auto play3D = [&]() {
-                const auto* tr = world.GetComponent<TransformComponent>(id);
-                DirectX::XMFLOAT3 pos = tr ? tr->position : DirectX::XMFLOAT3{ 0,0,0 };
-                
-                // 3D 재생:
-                // - Loop인 경우: instanceId를 사용하여 하나만 재생 및 추적
-                // - Loop가 아닌 경우: 매번 새로운 사운드 발사 (중첩 가능), instanceId 사용 안함(추적 안함)
-                std::wstring idForPlay = src.loop ? rt.instanceId : L""; 
-                
-                Sound::Play3D(idForPlay, rt.key, pos, src.volume, src.pitch, src.loop);
-                
-                if (src.loop) rt.playing3D = true;
-            };
+                if (!rt.loaded)
+                    continue;
 
-            if ((src.playOnStart && !rt.started) || src.requestPlay)
-            {
-                if (src.is3D) play3D();
-                else play2D();
+                const TransformComponent* tr = world.GetComponent<TransformComponent>(id);
+                const bool inside = IsInsideBox(box, tr, listenerPos);
 
-                rt.started = true;
-                src.requestPlay = false;
-            }
-
-            if (src.requestStop)
-            {
-                if (src.is3D)
+                if (inside && !rt.wasInside && box.playOnEnter)
+                {
+                    const DirectX::XMFLOAT3 srcPos = tr ? tr->position : listenerPos;
+                    Sound::Play3D(rt.instanceId, rt.key, srcPos, 0.0f, 1.0f, box.loop);
+                }
+                if (!inside && rt.wasInside && box.stopOnExit)
                 {
                     Sound::Stop3D(rt.instanceId);
-                    rt.playing3D = false;
                 }
-                else
+
+                rt.wasInside = inside;
+
+                if (inside)
                 {
-                    if (src.type == AudioType::BGM) Sound::StopBGM();
-                    else Sound::StopSfx(rt.key);
+                    const float w = CenterWeight01(box, tr, listenerPos);
+                    const float vol = box.edgeVolume + (box.centerVolume - box.edgeVolume) * w;
+                    const DirectX::XMFLOAT3 srcPos = tr ? tr->position : DirectX::XMFLOAT3(0, 0, 0);
+                    Sound::Update3D(rt.instanceId, srcPos, vol, box.minDistance, box.maxDistance);
                 }
-                src.requestStop = false;
             }
 
-            // 위치 업데이트 (Looping 3D 사운드만)
-            if (src.is3D && rt.playing3D && src.loop)
-            {
-                if (auto* tr = world.GetComponent<TransformComponent>(id))
-                {
-                    Sound::Update3D(rt.instanceId, tr->position, src.volume, src.minDistance, src.maxDistance);
-                }
-            }
         }
 
-        // SoundBox 처리 (listener 위치 기준)
-        for (auto [id, box] : world.GetComponents<SoundBoxComponent>())
-        {
-            if (box.soundPath.empty())
-                continue;
-
-            SoundBoxRuntime& rt = m_soundBoxRuntime[id];
-            if (rt.key.empty())
-            {
-                rt.key = ToKeyW(box.soundKey.empty() ? box.soundPath : box.soundKey);
-                rt.instanceId = MakeSoundBoxId(id);
-            }
-
-            if (!rt.loaded)
-            {
-                const auto type = (box.type == SoundBoxType::BGM) ? Sound::Type::BGM : Sound::Type::SFX;
-                if (Sound::LoadAuto(*m_resources, rt.key, box.soundPath, type))
-                    rt.loaded = true;
-            }
-
-            if (!rt.loaded)
-                continue;
-
-            const TransformComponent* tr = world.GetComponent<TransformComponent>(id);
-            const bool inside = IsInsideBox(box, tr, listenerPos);
-
-            if (inside && !rt.wasInside && box.playOnEnter)
-            {
-                const DirectX::XMFLOAT3 srcPos = tr ? tr->position : listenerPos;
-                Sound::Play3D(rt.instanceId, rt.key, srcPos, 0.0f, 1.0f, box.loop);
-            }
-            if (!inside && rt.wasInside && box.stopOnExit)
-            {
-                Sound::Stop3D(rt.instanceId);
-            }
-
-            rt.wasInside = inside;
-
-            if (inside)
-            {
-                const float w = CenterWeight01(box, tr, listenerPos);
-                const float vol = box.edgeVolume + (box.centerVolume - box.edgeVolume) * w;
-                const DirectX::XMFLOAT3 srcPos = tr ? tr->position : DirectX::XMFLOAT3(0, 0, 0);
-                Sound::Update3D(rt.instanceId, srcPos, vol, box.minDistance, box.maxDistance);
-            }
-        }
-
+        // [핵심] FMOD 시스템 업데이트 및 채널 정리 (항상 실행)
+        // 리소스 유무와 무관하게 매 프레임 호출하여 채널 정리 및 시스템 업데이트 보장
         Sound::Update();
     }
+
+	void AudioSystem::UpdateListener(World& world, DirectX::XMFLOAT3& outPos)
+	{
+		using namespace DirectX;
+
+		const TransformComponent* targetTr = nullptr;
+
+		// 1. AudioListenerComponent 찾기
+		for (const auto& [id, listener] : world.GetComponents<AudioListenerComponent>())
+		{
+			if (listener.primary)
+			{
+				targetTr = world.GetComponent<TransformComponent>(id);
+				break;
+			}
+		}
+
+		// 2. 없으면 MainCamera 찾기
+		if (!targetTr)
+		{
+			EntityId camId = world.GetMainCameraEntityId();
+			if (camId != InvalidEntityId)
+			{
+				targetTr = world.GetComponent<TransformComponent>(camId);
+			}
+		}
+
+		// 3. 리스너 설정
+		if (targetTr)
+		{
+			XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&targetTr->rotation));
+			XMVECTOR forward = XMVector3TransformNormal(XMVectorSet(0, 0, 1, 0), R);
+			XMVECTOR up = XMVector3TransformNormal(XMVectorSet(0, 1, 0, 0), R);
+
+			outPos = targetTr->position; // 위치 출력
+			Sound::SetListener(targetTr->position, XMFLOAT3(0, 0, 0), forward, up);
+		}
+		else
+		{
+			outPos = DirectX::XMFLOAT3{ 0, 0, 0 }; // 기본값
+		}
+	}
+
+    
 }
 

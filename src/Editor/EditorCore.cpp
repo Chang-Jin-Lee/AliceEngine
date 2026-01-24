@@ -820,8 +820,8 @@ namespace Alice
         MaterialComponent        g_MaterialEditorData;
 
         // 애니메이션 블루프린트 에디터
-        bool                     g_AnimBlueprintOpen    = false;
-        AnimBlueprintEditor      g_AnimBlueprintEditor;
+        //bool                     g_AnimBlueprintOpen    = false;
+        //AnimBlueprintEditor      g_AnimBlueprintEditor;
     }
 
     EditorCore::~EditorCore()
@@ -885,9 +885,9 @@ namespace Alice
         style.RotationOuterLineThickness = 2.0f;
 
         // 애니메이션 블루프린트 에디터 초기화
-        g_AnimBlueprintEditor.Init();
-        g_AnimBlueprintEditor.SetResourceManager(m_resources);
-        g_AnimBlueprintEditor.SetDevice(d3dDevice);
+        //g_AnimBlueprintEditor.Init();
+        //g_AnimBlueprintEditor.SetResourceManager(m_resources);
+        //g_AnimBlueprintEditor.SetDevice(d3dDevice);
 
         m_initialized = true;
         return true;
@@ -899,7 +899,7 @@ namespace Alice
             return;
 
         // 애니메이션 블루프린트 에디터 종료
-        g_AnimBlueprintEditor.Shutdown();
+        //g_AnimBlueprintEditor.Shutdown();
 
         if (ImGui::GetCurrentContext() != nullptr)
         {
@@ -1173,10 +1173,10 @@ namespace Alice
 
             ImGui::Separator();
             // AnimBlueprint 탭 열기
-            if (ImGui::Button("AnimBlueprint"))
-            {
-                g_AnimBlueprintOpen = true;
-            }
+            //if (ImGui::Button("AnimBlueprint"))
+            //{
+            //    g_AnimBlueprintOpen = true;
+            //}
 
             ImGui::EndMainMenuBar();
         }
@@ -2264,10 +2264,10 @@ namespace Alice
         }
 
         // === AnimBlueprint 창 ===
-        if (g_AnimBlueprintOpen)
-        {
-            g_AnimBlueprintEditor.Draw(&g_AnimBlueprintOpen);
-        }
+        // if (g_AnimBlueprintOpen)
+        //{
+            //g_AnimBlueprintEditor.Draw(&g_AnimBlueprintOpen);
+        //}
 
         // === 씬 변경사항 저장 확인 모달 ===
         if (g_RequestSceneLoad)
