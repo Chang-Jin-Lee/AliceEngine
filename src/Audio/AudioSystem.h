@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <string>
+#include <DirectXMath.h>
 
 #include "Core/World.h"
 #include "Core/ResourceManager.h"
@@ -19,6 +20,8 @@ namespace Alice
         void Update(World& world, double dtSec);
 
     private:
+        // 리스너 업데이트 로직 분리 (listenerPos를 참조로 받아서 업데이트)
+        void UpdateListener(World& world, DirectX::XMFLOAT3& outPos);
         struct Runtime
         {
             bool loaded{ false };

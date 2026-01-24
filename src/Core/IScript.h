@@ -75,9 +75,10 @@ namespace Alice
         /// Unity 느낌의 게임오브젝트 핸들
         GameObject gameObject() const;
 
-        /// 입력/씬 서비스
+        /// 입력/씬/리소스 서비스
         IScriptInput* Input() const { return m_services ? m_services->input : nullptr; }
         IScriptScene* Scenes() const { return m_services ? m_services->scene : nullptr; }
+        ResourceManager* Resources() const { return m_services ? m_services->resources : nullptr; }
 
     private:
         World*   m_world  = nullptr;
