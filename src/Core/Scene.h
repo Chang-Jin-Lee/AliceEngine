@@ -81,6 +81,10 @@ namespace Alice
 		/// 성공 시 true
 		bool CommitPendingSceneChange(World& world);
 
+		/// 현재 로드된 씬 파일 경로를 반환합니다 (파일 기반 씬인 경우)
+		/// 파일 기반 씬이 아니면 빈 경로를 반환합니다.
+		const std::filesystem::path& GetCurrentSceneFilePath() const { return m_currentSceneFilePath; }
+
 	private:
 		World& m_world;
 		ResourceManager& m_resources;
@@ -90,6 +94,9 @@ namespace Alice
 		// pending(지연) 전환 요청
 		std::unique_ptr<IScene> m_pendingScene;
 		std::optional<std::filesystem::path> m_pendingSceneFile;
+
+		// 현재 로드된 씬 파일 경로 (에디터에서 저장 경로 추적용)
+		std::filesystem::path m_currentSceneFilePath;
 	};
 
 #define REGISTER_SCENE(SceneType) \

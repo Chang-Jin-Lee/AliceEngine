@@ -75,15 +75,15 @@ namespace Alice
 	{
 		if (!m_resources || !m_device) return false;
 
-		auto srv = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Image/Hanako.png", m_device.Get());
+		auto srv = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Test/Image/Hanako.png", m_device.Get());
 		if (!srv)
 		{
-			ALICE_LOG_WARN("[TrailEffectRenderSystem] Failed to load texture: Resource/Image/Hanako.png");
+			ALICE_LOG_WARN("[TrailEffectRenderSystem] Failed to load texture: Resource/Test/Image/Hanako.png");
 			return false;
 		}
 
 		m_textureSRV = srv;
-		ALICE_LOG_INFO("[TrailEffectRenderSystem] Texture loaded: Resource/Image/Hanako.png");
+		ALICE_LOG_INFO("[TrailEffectRenderSystem] Texture loaded: Resource/Test/Image/Hanako.png");
 		return true;
 	}
 

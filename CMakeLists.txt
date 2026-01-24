@@ -100,6 +100,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Material.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.cpp
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.cpp
     ${ALICE_SRC_DIR}/Core/CameraSystem.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
@@ -146,6 +147,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
 	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
+	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
 )
 
 set(ENGINE_HEADERS
@@ -173,6 +175,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/ReflectionSerializer.h
     ${ALICE_SRC_DIR}/Core/ReflectionUI.h
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.h
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.h
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.inl
     ${ALICE_SRC_DIR}/Core/Component.h
     ${ALICE_SRC_DIR}/Core/Entity.h
     ${ALICE_SRC_DIR}/Core/System.h
@@ -271,6 +275,9 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
 	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
+	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
 )
 
 # [변경] AliceEngine -> Engine
