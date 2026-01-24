@@ -33,15 +33,6 @@
 #include "Components/CameraBlendComponent.h"
 #include "Components/CameraInputComponent.h"
 
-//UI
-#include "UI/UIWorldManager.h"
-#include "UI/UISceneManager.h"
-#include "UI/UIImage.h"
-#include "UI/UITransform.h"
-#include "UI/UI_ScriptComponent.h"
-#include "UI/UIScriptSystem.h"
-#include "UI/UIBase.h"
-
 // ImGui
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -64,7 +55,6 @@
 #include <Core/ScriptFactory.h>
 #include <Core/Material.h>
 #include <Core/SceneFile.h>
-#include <Core/Scene.h>
 #include <shellapi.h>
 #include <commdlg.h>
 #include <ShlObj.h>   // 폴더 선택 다이얼로그 (SHBrowseForFolderW)
@@ -1857,8 +1847,7 @@ namespace Alice
 		bool& useForwardRendering,
 		bool& pvdEnabled,
 		std::string& pvdHost,
-		int& pvdPort,
-		UIWorldManager* uiWorldManager)
+		int& pvdPort)
 	{
 		// SceneManager에서 현재 씬 파일 경로를 조회하여 g_CurrentScenePath 업데이트
 		if (sceneManager)
@@ -1900,7 +1889,6 @@ namespace Alice
 		static float snapRotation = 15.0f; // degrees
 		static float snapScale = 1.0f;
 		static float objectSnapDistance = 0.5f; // 오브젝트 스냅 거리
-		static unsigned long selectedUI = 0;    // UI 선택 상태를 로컬 변수로 관리
 
 		if (m_inputSystem && !isTextInputActive && !isPlaying)
 		{
@@ -2151,25 +2139,6 @@ namespace Alice
                     g_SceneDirty = true;
                     ImGui::CloseCurrentPopup();
                 }
-                if (ImGui::MenuItem("UI Image"))
-                {
-                    if (uiWorldManager)
-                    {
-                        UISceneManager& uiScene = uiWorldManager->GetManager();
-                        UIWorld& uiWorld = uiScene.GetWorld();
-
-                        if (auto* ui = uiWorld.CreateEntity<UIImage>())
-                        {
-                            // 필요하면 여기서 초기 Transform/이미지 경로/스크립트 설정
-                            // 예: UI_ScriptComponent 붙이기
-                            // if (auto* sc = ui->AddComponent<UI_ScriptComponent>())
-                            //     sc->scriptName = "MyUIScript";
-                        }
-                    }
-                    g_SceneDirty = true;
-                    ImGui::CloseCurrentPopup();
-                }
-
                 ImGui::EndPopup();
             }
 
@@ -2978,42 +2947,6 @@ namespace Alice
 					}
 					g_SceneDirty = true;
 				}
-
-				// UI 목록, 임시
-				ImGui::Spacing();
-				Alice::ImGuiText(L"UI 목록");
-				ImGui::Separator();
-
-				if (uiWorldManager)
-				{
-					UISceneManager& uiScene = uiWorldManager->GetManager();
-					UIWorld& uiWorld = uiScene.GetWorld();
-
-					const auto& rootIds = uiWorld.GetRootIDs();
-					if (rootIds.empty())
-					{
-						Alice::ImGuiText(L"생성된 UI가 없습니다.");
-					}
-					else
-					{
-						for (auto id : rootIds)
-						{
-							const bool isSelected = (selectedUI == id);
-							const std::string label = "UI " + std::to_string(static_cast<unsigned long>(id));
-
-							if (ImGui::Selectable(label.c_str(), isSelected))
-							{
-								selectedUI = id;
-								selectedEntity = InvalidEntityId; // UI 선택 시 엔티티 선택 해제
-							}
-						}
-					}
-				}
-				else
-				{
-					Alice::ImGuiText(L"UIWorldManager 가 없습니다.");
-				}
-
 			}
 
 			ImGui::End();
@@ -3084,23 +3017,6 @@ namespace Alice
 					}
 					ImGui::EndDragDropTarget();
 				}
-
-				if (selectedUI != 0 && uiWorldManager) {
-					// UI 오브젝트 선택됨
-					UISceneManager& uiScene = uiWorldManager->GetManager();
-					UIWorld& uiWorld = uiScene.GetWorld();
-
-					ImGui::Text("UI %lu", static_cast<unsigned long>(selectedUI));
-					ImGui::Separator();
-
-					// UI Transform 편집
-					DrawInspectorUITransform(uiWorld, selectedUI);
-					ImGui::Separator();
-
-					// UI Scripts
-					DrawInspectorUIScripts(uiWorld, selectedUI);
-				}
-
 
 				if (selectedEntity == InvalidEntityId) {
 					Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
@@ -3238,9 +3154,9 @@ namespace Alice
 					std::filesystem::create_directories(assetsRoot);
 				}
 
-            DrawDirectoryNode(world, selectedEntity, assetsRoot, uiWorldManager);
-        }
-        ImGui::End();
+				DrawDirectoryNode(world, selectedEntity, assetsRoot);
+			}
+			ImGui::End();
 
 			// === Game ===
 			if (ImGui::Begin("Game"))
@@ -4396,7 +4312,7 @@ namespace Alice
 						// 실행 안 함: 즉시 로드
 						ALICE_LOG_INFO("[Editor] SceneFile::Load (no-save, not playing): \"%s\"\n",
 							g_NextScenePath.string().c_str());
-						if (!SceneFile::Load(world, loadAbs, uiWorldManager))
+						if (!SceneFile::Load(world, loadAbs))
 						{
 							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
 							ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
@@ -4453,13 +4369,10 @@ namespace Alice
 				Alice::ImGuiText(L"현재 씬의 변경 내용을 저장하시겠습니까?");
 				ImGui::Separator();
 
-			if (ImGui::Button("Save"))
-			{
-				SaveScene(world, uiWorldManager);
-				// 씬 로드 요청 (안전 지점에서 커밋)
-				// 밑에 if만 추가됨!! 문제길시 삭제!!
-				if (sceneManager)
+				if (ImGui::Button("Save"))
 				{
+					SaveScene(world);
+					// 씬 로드
 					const std::filesystem::path loadAbs =
 						(m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
 
@@ -4705,121 +4618,6 @@ namespace Alice
 				}
 			}
 		}
-
-		void EditorCore::DrawInspectorUITransform(UIWorld& uiWorld, unsigned long selectedUI)
-		{
-			UIBase* uiObj = uiWorld.Get(selectedUI);
-			if (!uiObj) return;
-
-			UITransform* transform = uiObj->TryGetComponent<UITransform>();
-			if (!transform) return;
-
-			if (ImGui::CollapsingHeader("Transform",
-				ImGuiTreeNodeFlags_DefaultOpen)) {
-				bool changed = false;
-
-				// Translation
-				DirectX::XMFLOAT2 translation = transform->m_translation;
-				if (ImGui::DragFloat2("Translation", &translation.x, 1.0f)) {
-					transform->SetTranslation(translation.x, translation.y);
-					changed = true;
-				}
-
-				// Rotation (degrees)
-				float rotationDeg = transform->m_rotation * (180.0f / 3.14159265f);
-				if (ImGui::DragFloat("Rotation (deg)", &rotationDeg, 1.0f)) {
-					transform->SetRotation(rotationDeg * (3.14159265f / 180.0f));
-					changed = true;
-				}
-
-				// Scale
-				DirectX::XMFLOAT2 scale = transform->m_scale;
-				if (ImGui::DragFloat2("Scale", &scale.x, 0.01f)) {
-					transform->SetScale(scale.x, scale.y);
-					changed = true;
-				}
-
-				// Size (읽기 전용 또는 편집 가능)
-				DirectX::XMFLOAT2 size = transform->m_size;
-				if (ImGui::DragFloat2("Size", &size.x, 1.0f)) {
-					transform->m_size = size;
-					changed = true;
-				}
-
-				// Pivot
-				DirectX::XMFLOAT2 pivot = transform->m_pivot;
-				if (ImGui::DragFloat2("Pivot", &pivot.x, 0.01f, 0.0f, 1.0f)) {
-					transform->m_pivot = pivot;
-					changed = true;
-				}
-
-				if (changed) {
-					// UI 변경 사항이 있으면 씬을 dirty로 표시할 수 있음
-					// g_SceneDirty = true; // UI는 별도 저장 시스템이 있을 수 있음
-				}
-			}
-		}
-
-
-		// UI 함수 추가 (병합됨)
-		void EditorCore::DrawInspectorUIScripts(UIWorld& uiWorld, unsigned long selectedUI)
-		{
-			UIBase* uiObj = uiWorld.Get(selectedUI);
-			if (!uiObj) return;
-
-			ImGui::Text("Scripts");
-
-			// UI 스크립트 추가 UI
-			static std::vector<std::string> uiScriptNames;
-			if (ImGui::BeginCombo("Add UI Script", "Select UI Script...")) {
-				if (uiScriptNames.empty() || m_scriptBuilded) {
-					m_scriptBuilded = false;
-					uiScriptNames = UIScriptSystem::GetRegisteredUIScriptNames();
-					std::sort(uiScriptNames.begin(), uiScriptNames.end());
-					uiScriptNames.erase(std::unique(uiScriptNames.begin(), uiScriptNames.end()),
-						uiScriptNames.end());
-				}
-
-				for (const auto& name : uiScriptNames) {
-					if (ImGui::Selectable(name.c_str())) {
-						// UI_ScriptComponent가 이미 있는지 확인
-						auto* existingScript = uiObj->TryGetComponent<UI_ScriptComponent>();
-						if (existingScript) {
-							// 이미 스크립트가 있으면 스크립트 이름만 업데이트
-							existingScript->scriptName = name;
-							existingScript->awoken = false;
-							existingScript->started = false;
-							existingScript->instance.reset();
-						}
-						else {
-							// 스크립트 컴포넌트가 없으면 새로 추가
-							auto* scriptComp = uiObj->AddComponent<UI_ScriptComponent>();
-							if (scriptComp) {
-								scriptComp->scriptName = name;
-							}
-						}
-						g_SceneDirty = true;
-					}
-				}
-				ImGui::EndCombo();
-			}
-
-			// 현재 UI 스크립트 표시 및 제거
-			auto* scriptComp = uiObj->TryGetComponent<UI_ScriptComponent>();
-			if (scriptComp) {
-				std::string header = scriptComp->scriptName.empty() ? "UI Script" : scriptComp->scriptName;
-				if (ImGui::CollapsingHeader(header.c_str(),
-					ImGuiTreeNodeFlags_DefaultOpen)) {
-					ImGui::Checkbox("Enabled", &scriptComp->enabled);
-					ImGui::SameLine();
-					if (ImGui::Button("Remove")) {
-						uiObj->RemoveComponent<UI_ScriptComponent>();
-						g_SceneDirty = true;
-					}
-				}
-			}
-		}
-
 
 		void EditorCore::DrawInspectorAnimationStatus(World& world, const EntityId& _selectedEntity)
 		{
@@ -6922,8 +6720,7 @@ namespace Alice
 
 		void EditorCore::DrawDirectoryNode(World & world,
 			EntityId & selectedEntity,
-			const std::filesystem::path & path,
-			UIWorldManager* uiWorldManager)
+			const std::filesystem::path & path)
 		{
 			namespace fs = std::filesystem;
 			if (!fs::exists(path)) return;
@@ -7205,16 +7002,16 @@ namespace Alice
 					ImGui::EndPopup();
 				}
 
-            if (open)
-            {
-                // 이 노드가 그 사이에 삭제되었으면 순회를 건너뜁니다.
-                if (fs::exists(path) && fs::is_directory(path))
-                {
-                    for (const auto& entry : fs::directory_iterator(path))
-                    {
-                        DrawDirectoryNode(world, selectedEntity, entry.path(), uiWorldManager);
-                    }
-                }
+				if (open)
+				{
+					// 이 노드가 그 사이에 삭제되었으면 순회를 건너뜁니다.
+					if (fs::exists(path) && fs::is_directory(path))
+					{
+						for (const auto& entry : fs::directory_iterator(path))
+						{
+							DrawDirectoryNode(world, selectedEntity, entry.path());
+						}
+					}
 
 					ImGui::TreePop();
 				}
@@ -7393,17 +7190,10 @@ namespace Alice
 						{
 							g_NextScenePath = path;
 							g_RequestSceneLoad = true;
-							// Scene 파일 로드 시 UI 씬도 변경 
-							if (uiWorldManager)
-							{
-								// 파일명(확장자 제외)을 UI 씬 이름으로 사용
-								std::string sceneName = path.stem().string();
-								uiWorldManager->ChangeScene(sceneName.c_str());
-							}
 						}
 						if (ImGui::MenuItem("Save Current Scene"))
 						{
-							SceneFile::Save(world, path, uiWorldManager);
+							SceneFile::Save(world, path);
 							g_CurrentScenePath = path;
 							g_HasCurrentScenePath = true;
 							g_SceneDirty = false;
@@ -7566,15 +7356,15 @@ namespace Alice
 			}
 		}
 
-    // 씬 저장
-    void EditorCore::SaveScene(World& world, UIWorldManager* uiWorldManager)
-    {
-        std::filesystem::path savePath = g_CurrentScenePath.empty() ? "Assets/AutoSaved.scene" : g_CurrentScenePath;
+		// 씬 저장
+		void EditorCore::SaveScene(World & world)
+		{
+			std::filesystem::path savePath = g_CurrentScenePath.empty() ? "Assets/AutoSaved.scene" : g_CurrentScenePath;
 
 			ALICE_LOG_INFO("[Editor] Saving Scene: %s", savePath.string().c_str());
 
-        // 저장 실행 (실패 처리는 내부 로직에 맡김) (World와 UI 함께 저장)
-        SceneFile::Save(world, m_resources ? m_resources->Resolve(savePath) : savePath, uiWorldManager);
+			// 저장 실행 (실패 처리는 내부 로직에 맡김)
+			SceneFile::Save(world, m_resources ? m_resources->Resolve(savePath) : savePath);
 
 			// 상태 갱신
 			g_CurrentScenePath = savePath;
@@ -7688,27 +7478,27 @@ namespace Alice
 			}
 		}
 
-		void EditorCore::LoadScene(World & world, UIWorldManager* uiWorldManager)
+		void EditorCore::LoadScene(World & world)
 		{
 			// 이 함수는 더 이상 사용하지 않음. SceneManager::LoadSceneFileRequest을 사용해야 함.
 			// 하지만 호환성을 위해 남겨둠 (내부적으로는 즉시 로드)
 			ALICE_LOG_WARN("[Editor] LoadScene() is deprecated. Use SceneManager::LoadSceneFileRequest() instead.");
 
-        const std::filesystem::path loadAbs = m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath;
-        
-        // 로드 실행 및 반환값 체크 (World와 UI 함께 로드)
-        if (!SceneFile::Load(world, loadAbs, uiWorldManager))
-        {
-            // 로드 실패: 에러 로그 및 팝업 표시
-            const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
-            ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
-            
-            g_SceneLoadErrorMsg = errorMsg;
-            g_ShowSceneLoadError = true;
-            
-            // 후처리하지 않고 종료 (부분 로드 방지)
-            return;
-        }
+			const std::filesystem::path loadAbs = m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath;
+
+			// 로드 실행 및 반환값 체크
+			if (!SceneFile::Load(world, loadAbs))
+			{
+				// 로드 실패: 에러 로그 및 팝업 표시
+				const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
+				ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+
+				g_SceneLoadErrorMsg = errorMsg;
+				g_ShowSceneLoadError = true;
+
+				// 후처리하지 않고 종료 (부분 로드 방지)
+				return;
+			}
 
 			// 로드 성공: 후처리 및 상태 갱신
 			EnsureSkinnedMeshesRegistered(world);
