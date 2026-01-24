@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 #include <vector>
@@ -11,6 +11,8 @@
 
 // FbxModel은 전역 네임스페이스에 있습니다.
 #include "3Dmodel/FbxModel.h"
+#include "Components/AnimBlueprintComponent.h"
+#include "Components/SocketComponent.h"
 
 namespace Alice
 {
@@ -248,6 +250,21 @@ namespace Alice
                 return model ? model->GetClipDurationSec(idx) : 0.0;
             }
 
+            int BoneCount() const
+            {
+                auto model = SourceModel();
+                return model ? (int)model->GetBoneNames().size() : 0;
+            }
+
+            const char* BoneName(int idx) const
+            {
+                auto model = SourceModel();
+                if (!model) return "";
+                const auto& names = model->GetBoneNames();
+                if (idx < 0 || idx >= (int)names.size()) return "";
+                return names[(size_t)idx].c_str();
+            }
+
         private:
             std::shared_ptr<FbxModel> SourceModel() const
             {
@@ -288,6 +305,106 @@ namespace Alice
         };
 
         Animator GetAnimator() const { return Animator(m_world, m_id, m_services); }
+
+        /// AnimBlueprint 핸들 (FSM/파라미터/소켓)
+        class AnimGraph
+        {
+        public:
+            AnimGraph() = default;
+            AnimGraph(World* world, EntityId id, ScriptServices* services)
+                : m_world(world), m_id(id), m_services(services)
+            {
+                if (m_world && m_id != InvalidEntityId)
+                {
+                    m_generation = m_world->GetEntityGeneration(m_id);
+                }
+            }
+
+            bool IsValid() const
+            {
+                if (!m_world || m_id == InvalidEntityId)
+                    return false;
+                if (!m_world->IsEntityValid(m_id, m_generation))
+                    return false;
+                return (m_world->GetComponent<AnimBlueprintComponent>(m_id) != nullptr);
+            }
+
+            void SetBlueprint(const char* path) const
+            {
+                auto* ab = GetOrCreate();
+                if (!ab) return;
+                ab->blueprintPath = (path ? path : "");
+            }
+
+            void SetBool(const char* name, bool v) const
+            {
+                auto* ab = GetOrCreate();
+                if (!ab || !name) return;
+                auto& pv = ab->params[name];
+                pv.type = AnimParamType::Bool;
+                pv.b = v;
+            }
+
+            void SetInt(const char* name, int v) const
+            {
+                auto* ab = GetOrCreate();
+                if (!ab || !name) return;
+                auto& pv = ab->params[name];
+                pv.type = AnimParamType::Int;
+                pv.i = v;
+            }
+
+            void SetFloat(const char* name, float v) const
+            {
+                auto* ab = GetOrCreate();
+                if (!ab || !name) return;
+                auto& pv = ab->params[name];
+                pv.type = AnimParamType::Float;
+                pv.f = v;
+            }
+
+            void SetTrigger(const char* name) const
+            {
+                auto* ab = GetOrCreate();
+                if (!ab || !name) return;
+                auto& pv = ab->params[name];
+                pv.type = AnimParamType::Trigger;
+                pv.trigger = true;
+            }
+
+            bool TryGetSocketWorld(const char* name, DirectX::XMFLOAT4X4& outWorld) const
+            {
+                if (!IsValid() || !name) return false;
+                auto* sc = m_world->GetComponent<SocketComponent>(m_id);
+                if (!sc) return false;
+                for (const auto& s : sc->sockets)
+                {
+                    if (s.name == name)
+                    {
+                        outWorld = s.world;
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+        private:
+            AnimBlueprintComponent* GetOrCreate() const
+            {
+                if (!m_world || m_id == InvalidEntityId) return nullptr;
+                if (!m_world->IsEntityValid(m_id, m_generation)) return nullptr;
+                if (auto* ab = m_world->GetComponent<AnimBlueprintComponent>(m_id))
+                    return ab;
+                return m_world ? &m_world->AddComponent<AnimBlueprintComponent>(m_id) : nullptr;
+            }
+
+            World* m_world = nullptr;
+            EntityId m_id = InvalidEntityId;
+            std::uint32_t m_generation = 0;
+            ScriptServices* m_services = nullptr;
+        };
+
+        AnimGraph GetAnimGraph() const { return AnimGraph(m_world, m_id, m_services); }
 
         /// 씬에서 "첫번째 SkinnedMesh" 엔티티를 찾습니다. (캐릭터 1인 게임용 간단 유틸)
         GameObject FindFirstSkinnedMesh() const

@@ -24,6 +24,9 @@
 #include "Components/ComputeEffectComponent.h"
 #include "Components/EffectComponent.h"
 #include "Components/TrailEffectComponent.h"
+#include "Components/AudioListenerComponent.h"
+#include "Components/AudioSourceComponent.h"
+#include "Components/SoundBoxComponent.h"
 
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
@@ -84,6 +87,18 @@ namespace Alice
             .property("_42", &XMFLOAT4X4::_42)
             .property("_43", &XMFLOAT4X4::_43)
             .property("_44", &XMFLOAT4X4::_44);
+
+        rttr::registration::enumeration<AudioType>("AudioType")
+        (
+            rttr::value("BGM", AudioType::BGM),
+            rttr::value("SFX", AudioType::SFX)
+        );
+
+        rttr::registration::enumeration<SoundBoxType>("SoundBoxType")
+        (
+            rttr::value("BGM", SoundBoxType::BGM),
+            rttr::value("SFX", SoundBoxType::SFX)
+        );
 
         // === TransformComponent 등록 ===
         rttr::registration::class_<TransformComponent>("TransformComponent")
@@ -181,6 +196,61 @@ namespace Alice
             .property("procedural", &AdvancedAnimationComponent::procedural)
             .property("ik", &AdvancedAnimationComponent::ik)
             .property("aim", &AdvancedAnimationComponent::aim);
+
+
+		//  Enum 등록
+		rttr::registration::enumeration<SoundBoxType>("alice_SoundBoxType")
+			(
+				rttr::value("BGM", SoundBoxType::BGM),
+				rttr::value("SFX", SoundBoxType::SFX)
+				);
+
+		rttr::registration::enumeration<AudioType>("alice_AudioType")
+			(
+				rttr::value("BGM", AudioType::BGM),
+				rttr::value("SFX", AudioType::SFX)
+				);
+
+		//  SoundBoxComponent 등록
+		rttr::registration::class_<SoundBoxComponent>("SoundBoxComponent")
+			.constructor<>()
+			.property("soundKey", &SoundBoxComponent::soundKey)
+			.property("soundPath", &SoundBoxComponent::soundPath)
+			.property("type", &SoundBoxComponent::type)
+			.property("loop", &SoundBoxComponent::loop)
+			.property("playOnEnter", &SoundBoxComponent::playOnEnter)
+			.property("stopOnExit", &SoundBoxComponent::stopOnExit)
+			.property("boundsMin", &SoundBoxComponent::boundsMin)
+			.property("boundsMax", &SoundBoxComponent::boundsMax)
+			.property("edgeVolume", &SoundBoxComponent::edgeVolume)
+			.property("centerVolume", &SoundBoxComponent::centerVolume)
+			.property("curve", &SoundBoxComponent::curve)
+			.property("minDistance", &SoundBoxComponent::minDistance)
+			.property("maxDistance", &SoundBoxComponent::maxDistance)
+			.property("debugDraw", &SoundBoxComponent::debugDraw)
+			.property("targetEntity", &SoundBoxComponent::targetEntity);
+
+		//  AudioListenerComponent 등록
+		rttr::registration::class_<AudioListenerComponent>("AudioListenerComponent")
+			.constructor<>()
+			.property("primary", &AudioListenerComponent::primary);
+
+		//  AudioSourceComponent 등록
+		rttr::registration::class_<AudioSourceComponent>("AudioSourceComponent")
+			.constructor<>()
+			.property("soundKey", &AudioSourceComponent::soundKey)
+			.property("soundPath", &AudioSourceComponent::soundPath)
+			.property("type", &AudioSourceComponent::type)
+			.property("is3D", &AudioSourceComponent::is3D)
+			.property("loop", &AudioSourceComponent::loop)
+			.property("playOnStart", &AudioSourceComponent::playOnStart)
+			.property("volume", &AudioSourceComponent::volume)
+			.property("pitch", &AudioSourceComponent::pitch)
+			.property("minDistance", &AudioSourceComponent::minDistance)
+			.property("maxDistance", &AudioSourceComponent::maxDistance)
+			.property("requestPlay", &AudioSourceComponent::requestPlay)
+			.property("requestStop", &AudioSourceComponent::requestStop)
+			.property("debugDraw", &AudioSourceComponent::debugDraw);
 
         // === CameraComponent 등록 ===
         rttr::registration::class_<CameraComponent>("CameraComponent")
@@ -338,7 +408,8 @@ namespace Alice
             .property("drag", &ComputeEffectComponent::drag)
             .property("lifeMin", &ComputeEffectComponent::lifeMin)
             .property("lifeMax", &ComputeEffectComponent::lifeMax)
-            .property("depthTest", &ComputeEffectComponent::depthTest);
+            .property("depthTest", &ComputeEffectComponent::depthTest)
+            .property("depthBiasMeters", &ComputeEffectComponent::depthBiasMeters);
 
         // === ColliderType enum 등록 ===
         rttr::registration::enumeration<ColliderType>("ColliderType")

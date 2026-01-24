@@ -42,6 +42,9 @@
 #include "Editor/EditorCore.h"
 #include "Game/SkinnedMeshSystem.h"
 #include "Core/AdvancedAnimSystem.h"
+#include "Game/SkinnedAnimationSystem.h"
+#include "Audio/AudioSystem.h"
+#include "Audio/SoundManager.h"
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 #include "PhysX/PhysicsSystem.h" // 물리 시스템
@@ -155,6 +158,8 @@ namespace Alice
 		SkinnedMeshRegistry m_skinnedMeshRegistry;
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		AdvancedAnimSystem  m_advancedAnimSystem{ m_skinnedMeshRegistry };
+		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		AudioSystem m_audioSystem;
 		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
 	};
 	namespace
@@ -380,6 +385,7 @@ namespace Alice
 
 		// 4) 마지막에 PhysX 컨텍스트 종료
 		pImpl->m_physics.ShutdownContext();
+		Sound::Shutdown();
 	}
 
 	bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
@@ -400,6 +406,12 @@ namespace Alice
 
 		// Editor: 프로젝트 루트 기준, Game: 실행 파일 기준
 		pImpl->m_resourceManager.Configure(!pImpl->m_editorMode, exeDir);
+		
+		// 에디터 모드에서는 EditorCore가 싱글톤을 사용하므로 싱글톤도 Configure
+		if (pImpl->m_editorMode)
+		{
+			ResourceManager::Get().Configure(false, exeDir);
+		}
 
 		// 게임 모드일 때 데이터 무결성 검증 수행
 		if (!pImpl->m_editorMode)
@@ -466,12 +478,18 @@ namespace Alice
 		// 에디터 모드일 경우에만 초기화 및 의존성 주입
 		if (pImpl->m_editorMode)
 		{
-			pImpl->m_editorCore.SetResourceManager(&pImpl->m_resourceManager);
+			// EditorCore는 ResourceManager 싱글톤(ResourceManager::Get())을 사용하므로 SetResourceManager 호출 불필요
 			pImpl->m_editorCore.SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 			pImpl->m_editorCore.SetInputSystem(&pImpl->m_inputSystem);
 
 			if (!pImpl->m_editorCore.Initialize(pImpl->m_hWnd, *pImpl->m_renderDevice)) return false;
 		}
+
+		// 시스템에 ResourceManager 바인딩
+		pImpl->m_audioSystem.SetResourceManager(&pImpl->m_resourceManager);
+
+		// 사운드 초기화
+		Sound::Initialize();
 
 		// ============================================= 렌더 시스템 =============================================
 		// Forward 렌더러 및 디버그 드로우 설정
@@ -644,7 +662,7 @@ namespace Alice
 		if (pImpl->m_editorMode)
 		{
 			const bool wasPlaying = pImpl->m_wasPlaying;
-			const bool isPlaying  = pImpl->m_isPlaying;
+			const bool isPlaying = pImpl->m_isPlaying;
 
 			if (!wasPlaying && isPlaying)
 			{
@@ -1280,13 +1298,100 @@ namespace Alice
 
 					AddBoxLines(worldCorners, col);
 				}
+
+				// SoundBox: 월드 기준 AABB 를 박스로 시각화
+				for (const auto& [entityId, box] : pImpl->m_world.GetComponents<SoundBoxComponent>())
+				{
+					// 선택된 엔티티 또는 debugDraw가 켜져있을 때만 그림
+					if (entityId != pImpl->m_selectedEntity && !box.debugDraw)
+						continue;
+
+					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
+					DirectX::XMFLOAT3 p = t ? t->position : DirectX::XMFLOAT3(0, 0, 0);
+					DirectX::XMFLOAT3 s = t ? t->scale : DirectX::XMFLOAT3(1, 1, 1);
+
+					DirectX::XMFLOAT3 mn{
+						box.boundsMin.x * s.x + p.x,
+						box.boundsMin.y * s.y + p.y,
+						box.boundsMin.z * s.z + p.z
+					};
+					DirectX::XMFLOAT3 mx{
+						box.boundsMax.x * s.x + p.x,
+						box.boundsMax.y * s.y + p.y,
+						box.boundsMax.z * s.z + p.z
+					};
+
+					DirectX::XMFLOAT3 corners[8] = {
+						{mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mn.y, mx.z}, {mn.x, mn.y, mx.z},
+						{mn.x, mx.y, mn.z}, {mx.x, mx.y, mn.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
+					};
+
+					const DirectX::XMFLOAT4 col = (entityId == pImpl->m_selectedEntity)
+						? DirectX::XMFLOAT4(0.f, 1.f, 1.f, 1.f)
+						: DirectX::XMFLOAT4(0.f, 0.5f, 1.f, 1.f);
+
+					AddBoxLines(corners, col);
+				}
+
+				// AudioSource: 감쇠 반경 시각화
+				auto DrawRing = [&](const DirectX::XMFLOAT3& center, float radius, const DirectX::XMFLOAT3& axisX, const DirectX::XMFLOAT3& axisZ, const DirectX::XMFLOAT4& color)
+					{
+						const int segments = 24;
+						const float step = DirectX::XM_2PI / segments;
+
+						DirectX::XMFLOAT3 prev;
+						// 초기점: center + axisX * radius
+						{
+							using namespace DirectX;
+							XMVECTOR c = XMLoadFloat3(&center);
+							XMVECTOR ax = XMLoadFloat3(&axisX);
+							XMVECTOR p = c + ax * radius;
+							XMStoreFloat3(&prev, p);
+						}
+
+						for (int i = 1; i <= segments; ++i)
+						{
+							float angle = step * i;
+							float c = cosf(angle);
+							float s = sinf(angle);
+
+							using namespace DirectX;
+							XMVECTOR cent = XMLoadFloat3(&center);
+							XMVECTOR ax = XMLoadFloat3(&axisX);
+							XMVECTOR az = XMLoadFloat3(&axisZ);
+
+							XMVECTOR currVec = cent + (ax * c * radius) + (az * s * radius);
+							DirectX::XMFLOAT3 curr;
+							XMStoreFloat3(&curr, currVec);
+
+							dbg->AddLine(prev, curr, color);
+							prev = curr;
+						}
+					};
+
+				for (const auto& [entityId, src] : pImpl->m_world.GetComponents<AudioSourceComponent>())
+				{
+					if (!src.is3D) continue;
+					if (entityId != pImpl->m_selectedEntity && !src.debugDraw) continue;
+
+					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
+					if (!t) continue;
+
+					// Min Distance (Green)
+					DrawRing(t->position, src.minDistance, { 1,0,0 }, { 0,0,1 }, { 0,1,0,1 }); // XZ plane
+					DrawRing(t->position, src.minDistance, { 0,1,0 }, { 1,0,0 }, { 0,1,0,1 }); // YX plane
+
+					// Max Distance (Red)
+					DrawRing(t->position, src.maxDistance, { 1,0,0 }, { 0,0,1 }, { 1,0,0,1 }); // XZ plane
+					DrawRing(t->position, src.maxDistance, { 0,1,0 }, { 1,0,0 }, { 1,0,0,1 }); // YX plane
+				}
 			}
 		}
 
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
-		// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
-		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
 		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
 		{
@@ -1316,16 +1421,15 @@ namespace Alice
 				}
 			}
 		}
-		
-		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
-		// ============================================= 컴퓨트 이펙트 실행 =============================================
-		// ComputeEffectComponent를 가진 엔티티들의 컴퓨트 셰이더를 실행
-		// ============================================= 렌더링 =============================================
-		// Forward/Deferred 렌더링 모드에 따라 분기
+
+		pImpl->m_audioSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		// 오디오 업데이트
 		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
+		// Forward/Deferred 렌더링 모드에 따라 분기
+		// ============================================= 렌더링 =============================================
 
-		// 카메라 엔티티 ID 집합 구성
+			// 카메라 엔티티 ID 집합 구성
 		std::unordered_set<EntityId> cameraIDs;
 		for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
 
@@ -1370,25 +1474,25 @@ namespace Alice
 
 		// ============================================= 컴퓨트 이펙트 (렌더링 이후 실행 - depth가 최신 상태) =============================================
 		// 씬 전환 중이거나 리소스가 유효하지 않으면 스킵 (안전성 보장)
-		if (pImpl->m_computeEffectSystem && 
-		    ((pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem) || 
-		     (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)))
+		if (pImpl->m_computeEffectSystem &&
+			((pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem) ||
+				(!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)))
 		{
-		// 렌더 시스템에서 실제로 사용한 카메라 행렬 사용 (에디터 뷰포트 카메라와 메인 카메라 불일치 해결)
-		DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
-		DirectX::XMFLOAT3 cameraPos(0.0f, 0.0f, -5.0f);
-		
-		if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
-		{
-			viewProj = pImpl->m_forwardRenderSystem->GetLastViewProj();
-			cameraPos = pImpl->m_forwardRenderSystem->GetLastCameraPos();
-		}
-		else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
-		{
-			viewProj = pImpl->m_deferredRenderSystem->GetLastViewProj();
-			cameraPos = pImpl->m_deferredRenderSystem->GetLastCameraPos();
-		}
-			
+			// 렌더 시스템에서 실제로 사용한 카메라 행렬 사용 (에디터 뷰포트 카메라와 메인 카메라 불일치 해결)
+			DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
+			DirectX::XMFLOAT3 cameraPos(0.0f, 0.0f, -5.0f);
+
+			if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+			{
+				viewProj = pImpl->m_forwardRenderSystem->GetLastViewProj();
+				cameraPos = pImpl->m_forwardRenderSystem->GetLastCameraPos();
+			}
+			else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+			{
+				viewProj = pImpl->m_deferredRenderSystem->GetLastViewProj();
+				cameraPos = pImpl->m_deferredRenderSystem->GetLastCameraPos();
+			}
+
 			// Scene Depth SRV (depth test용) - 렌더링 이후이므로 최신 depth 사용 가능
 			// DSV는 이미 위에서 unbind했으므로 SRV로 안전하게 읽을 수 있음
 			ID3D11ShaderResourceView* depthSRV = nullptr;
@@ -1400,13 +1504,13 @@ namespace Alice
 			{
 				depthSRV = pImpl->m_deferredRenderSystem->GetSceneDepthSRV();
 			}
-			
-		// Execute에 depthSRV, near/far, dt를 직접 전달
-		// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
-		float dtSec = pImpl->m_timer.DeltaTime();
-		float nearPlane = pImpl->m_camera.GetNearPlane();
-		float farPlane = pImpl->m_camera.GetFarPlane();
-		pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV, nearPlane, farPlane, dtSec);
+
+			// Execute에 depthSRV, near/far, dt를 직접 전달
+			// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
+			float dtSec = pImpl->m_timer.DeltaTime();
+			float nearPlane = pImpl->m_camera.GetNearPlane();
+			float farPlane = pImpl->m_camera.GetFarPlane();
+			pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV, nearPlane, farPlane, dtSec);
 		}
 
 		// ============================================= 파티클 오버레이 합성 =============================================
@@ -1438,17 +1542,17 @@ namespace Alice
 				viewport.Height = static_cast<float>(pImpl->m_height);
 				viewport.MaxDepth = 1.0f;
 
-			// 게임 모드에서는 톤매핑 후 오버레이
-			if (pImpl->m_useForwardRendering)
-			{
-				pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-			}
-			else
-			{
-				DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
-				ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
-				deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
-			}
+				// 게임 모드에서는 톤매핑 후 오버레이
+				if (pImpl->m_useForwardRendering)
+				{
+					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+				}
+				else
+				{
+					DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
+					ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
+					deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
+				}
 
 				// 파티클 오버레이 합성 (톤매핑 후)
 				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();

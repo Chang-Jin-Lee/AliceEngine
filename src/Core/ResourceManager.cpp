@@ -29,12 +29,6 @@ namespace
 
 namespace Alice
 {
-	ResourceManager& ResourceManager::Get()
-	{
-		static ResourceManager s_instance;
-		return s_instance;
-	}
-
     bool ResourceManager::StartsWith(std::string_view s, std::string_view prefix)
     {
         return s.size() >= prefix.size() && s.substr(0, prefix.size()) == prefix;
