@@ -790,5 +790,69 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     return float4(C_ST2084, 1.0);
 }
 )";
+
+        // ==== UI 합성 셰이더 ====
+        // SV_VertexID를 사용하여 풀스크린 쿼드 생성 (VB 불필요)
+        inline static const char* UIQuadVS = R"(
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float2 TexCoord : TEXCOORD0;
+};
+
+VSOutput main(uint vertexId : SV_VertexID)
+{
+    VSOutput output;
+    
+    // 6개의 버텍스로 풀스크린 쿼드 생성 (2개의 삼각형)
+    
+    float2 positions[6] = {
+        float2(-1.0,  1.0),  // 0: 좌상
+        float2( 1.0,  1.0),  // 1: 우상
+        float2(-1.0, -1.0),  // 2: 좌하
+        float2(-1.0, -1.0),  // 3: 좌하
+        float2( 1.0,  1.0),  // 4: 우상
+        float2( 1.0, -1.0)   // 5: 우하
+    };
+    
+    float2 texcoords[6] = {
+        float2(0.0, 0.0),  // 0
+        float2(1.0, 0.0),  // 1
+        float2(0.0, 1.0),  // 2
+        float2(0.0, 1.0),  // 3
+        float2(1.0, 0.0),  // 4
+        float2(1.0, 1.0)   // 5
+    };
+    
+    output.Position = float4(positions[vertexId], 0.0, 1.0);
+    output.TexCoord = texcoords[vertexId];
+    
+    return output;
+}
+)";
+
+        // UI 텍스처를 알파 블렌딩으로 합성
+        inline static const char* UICompositePS = R"(
+Texture2D g_UITexture : register(t0);
+SamplerState g_Sampler : register(s0);
+
+struct PSInput
+{
+    float4 Position : SV_POSITION;
+    float2 TexCoord : TEXCOORD0;
+};
+
+float4 main(PSInput input) : SV_Target
+{
+    float4 uiColor = g_UITexture.Sample(g_Sampler, input.TexCoord);
+    
+    // Premultiplied Alpha 처리 (D2D 출력은 premultiplied alpha)
+    // 알파가 0이면 완전 투명
+    if (uiColor.a < 0.001)
+        discard;
+    
+    return uiColor;
+}
+)";
     };
 }
