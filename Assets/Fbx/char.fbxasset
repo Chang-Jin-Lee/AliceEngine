@@ -19,5 +19,5 @@
         "Assets/Materials/char_16.mat"
     ],
     "mesh": "char",
-    "source_fbx": "Resource/fbx/char/char.fbx"
+    "source_fbx": "Resource/fbx/Study/char.fbx"
 }
