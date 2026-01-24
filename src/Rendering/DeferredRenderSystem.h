@@ -74,6 +74,14 @@ namespace Alice
 
         /// 에디터 뷰포트 표시용(톤매핑 완료) SRV
         ID3D11ShaderResourceView* GetViewportSRV() const { return m_viewportSRV.Get(); }
+        
+        /// Scene Depth SRV를 반환합니다 (depth test용)
+        ID3D11ShaderResourceView* GetSceneDepthSRV() const { return m_sceneDepthSRV.Get(); }
+
+        /// 이번 프레임에 실제로 사용한 카메라 View-Projection 행렬을 반환합니다 (ComputeEffect용)
+        const DirectX::XMMATRIX& GetLastViewProj() const { return m_lastViewProj; }
+        /// 이번 프레임에 실제로 사용한 카메라 월드 위치를 반환합니다 (ComputeEffect용)
+        const DirectX::XMFLOAT3& GetLastCameraPos() const { return m_lastCameraPos; }
 
         /// IBL 세트를 변경합니다.
         bool SetIblSet(const std::string& iblDir = "Bridge", const std::string& iblName = "bridge");
@@ -96,6 +104,9 @@ namespace Alice
         /// @param viewport 뷰포트 영역
         /// @note 결과는 m_postBloomSRV에 저장됩니다.
         void RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+                
+        /// 뷰포트 렌더 타겟에 파티클 오버레이 합성 (에디터 모드용)
+        void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
@@ -190,6 +201,7 @@ namespace Alice
         
         // 월드 행렬 구성
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
+        DirectX::XMMATRIX BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const;
         
         // 텍스처 로딩
         ID3D11ShaderResourceView* GetOrCreateTexture(const std::string& path);
@@ -288,6 +300,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneColorSRV;
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_sceneDSV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneDepthSRV;
 
         // ==== 에디터 뷰포트 표시용 LDR 결과 텍스처 (ToneMapped) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_viewportTex;
@@ -297,9 +310,17 @@ namespace Alice
         std::uint32_t                                   m_sceneWidth  = 0;
         std::uint32_t                                   m_sceneHeight = 0;
 
+        // 이번 프레임에 실제로 사용한 카메라 정보 (ComputeEffect용)
+        DirectX::XMMATRIX                               m_lastViewProj = DirectX::XMMatrixIdentity();
+        DirectX::XMFLOAT3                                m_lastCameraPos{0, 0, 0};
+
         // ==== 샘플러 상태 ====
         Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_samplerState;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_shadowSampler;
+        
+        // 파티클 오버레이용
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>       m_particleOverlayPS;
+        Microsoft::WRL::ComPtr<ID3D11BlendState>        m_ppBlendAdditive;
         Microsoft::WRL::ComPtr<ID3D11SamplerState>      m_samplerLinear;
 
         // ==== 블렌드 상태 ====

@@ -2,18 +2,56 @@
 #include "Core/ReflectionSerializer.h"
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/ResourceManager.h"
+#include "Components/MaterialComponent.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
 #include <fstream>
 #include <sstream>
+#include <filesystem>
 
 #include "Core/World.h"
 #include "Core/Logger.h"
 
 namespace Alice
 {
+    namespace
+    {
+        /// 절대 경로를 논리 경로(Assets/, Resource/, Cooked/)로 변환. .mat 커밋 시 팀킬 방지.
+        /// ResourceManager::RootDir()(프로젝트 루트) 우선 사용, 미설정 시 exe 기반 폴백(취약).
+        static std::string NormalizePathToLogical(const std::string& path)
+        {
+            if (path.empty()) return path;
+            std::filesystem::path p(path);
+            if (!p.is_absolute()) {
+                std::string s = p.generic_string();
+                if (s.find("Assets/") == 0 || s.find("Resource/") == 0 || s.find("Cooked/") == 0)
+                    return s;
+                return path;
+            }
+            std::filesystem::path projectRoot;
+            const std::filesystem::path& root = ResourceManager::Get().RootDir();
+            if (!root.empty())
+                projectRoot = root;
+            else {
+                wchar_t exeW[MAX_PATH] = {};
+                if (GetModuleFileNameW(nullptr, exeW, MAX_PATH) != 0)
+                    projectRoot = std::filesystem::path(exeW).parent_path().parent_path().parent_path();
+            }
+            if (projectRoot.empty()) return path;
+            try {
+                auto rel = std::filesystem::relative(p, projectRoot);
+                if (!rel.empty()) {
+                    std::string r = rel.generic_string();
+                    if (r.find("Assets/") == 0 || r.find("Resource/") == 0 || r.find("Cooked/") == 0)
+                        return r;
+                }
+            } catch (...) {}
+            return path;
+        }
+    }
+
     bool MaterialFile::Load(const std::filesystem::path& path, MaterialComponent& outMaterial, ResourceManager* rm)
     {
         // RTTR 기반으로 자동 로드
@@ -42,18 +80,22 @@ namespace Alice
 
     bool MaterialFile::Save(const std::filesystem::path& path, const MaterialComponent& material)
     {
-        // RTTR 기반으로 자동 저장
-        bool result = ReflectionSerializer::Save(path, material);
+        // assetPath/albedoTexturePath는 논리 경로만 저장 (절대경로 커밋 시 팀킬 방지)
+        MaterialComponent copy = material;
+        copy.assetPath = NormalizePathToLogical(copy.assetPath);
+        copy.albedoTexturePath = NormalizePathToLogical(copy.albedoTexturePath);
+
+        bool result = ReflectionSerializer::Save(path, copy);
 
         ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
             path.string().c_str(),
-            material.color.x, material.color.y, material.color.z,
-            material.roughness,
-            material.metalness,
-            material.normalStrength,
-            material.outlineColor.x, material.outlineColor.y, material.outlineColor.z,
-            material.outlineWidth,
-            material.albedoTexturePath.c_str());
+            copy.color.x, copy.color.y, copy.color.z,
+            copy.roughness,
+            copy.metalness,
+            copy.normalStrength,
+            copy.outlineColor.x, copy.outlineColor.y, copy.outlineColor.z,
+            copy.outlineWidth,
+            copy.albedoTexturePath.c_str());
 
         return result;
     }

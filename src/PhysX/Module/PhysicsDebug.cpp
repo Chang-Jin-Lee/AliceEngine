@@ -15,11 +15,11 @@ namespace Alice
         namespace
         {
             // 오일러 각도를 쿼터니언으로 변환
-            // PhysicsSystem::ToQuat와 동일한 축 매핑을 쓰려면:
-            // CreateFromYawPitchRoll(yaw=z, pitch=y, roll=x) ↔ DX: (Pitch, Yaw, Roll) = (y, z, x)
+            // PhysicsSystem::ToQuat와 동일한 축 매핑: yaw=Y, pitch=X, roll=Z
+            // CreateFromYawPitchRoll(yaw=Y, pitch=X, roll=Z) ↔ XMQuaternionRotationRollPitchYaw(pitch=X, yaw=Y, roll=Z)
             XMVECTOR EulerToQuaternion(const XMFLOAT3& euler)
             {
-                return XMQuaternionRotationRollPitchYaw(euler.y, euler.z, euler.x);
+                return XMQuaternionRotationRollPitchYaw(euler.x, euler.y, euler.z);
             }
 
             // 쿼터니언으로 벡터 회전
@@ -192,6 +192,80 @@ namespace Alice
                         // 하단 원
                         p1 = XMVectorSet(r1, -halfHeight, z1, 0.0f);
                         p2 = XMVectorSet(r2, -halfHeight, z2, 0.0f);
+                        p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                        p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                        XMStoreFloat3(&f1, p1);
+                        XMStoreFloat3(&f2, p2);
+                        dbg.AddLine(f1, f2, color);
+                    }
+                }
+                else
+                {
+                    // X축 정렬 (PhysX 기본): 원을 x=±halfHeight에서 yz로 그림
+                    // 상단 반구 (X+)
+                    for (int i = 0; i < segments; ++i)
+                    {
+                        float a1 = i * angleStep;
+                        float a2 = (i + 1) * angleStep;
+                        float x1 = halfHeight + radius * std::sin(a1);
+                        float x2 = halfHeight + radius * std::sin(a2);
+                        float r1 = radius * std::cos(a1);
+                        float r2 = radius * std::cos(a2);
+
+                        // YZ 평면 원
+                        XMVECTOR p1 = XMVectorSet(x1, r1, 0.0f, 0.0f);
+                        XMVECTOR p2 = XMVectorSet(x2, r2, 0.0f, 0.0f);
+                        p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                        p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                        XMFLOAT3 f1, f2;
+                        XMStoreFloat3(&f1, p1);
+                        XMStoreFloat3(&f2, p2);
+                        dbg.AddLine(f1, f2, color);
+                    }
+
+                    // 하단 반구 (X-)
+                    for (int i = 0; i < segments; ++i)
+                    {
+                        float a1 = i * angleStep;
+                        float a2 = (i + 1) * angleStep;
+                        float x1 = -halfHeight - radius * std::sin(a1);
+                        float x2 = -halfHeight - radius * std::sin(a2);
+                        float r1 = radius * std::cos(a1);
+                        float r2 = radius * std::cos(a2);
+
+                        XMVECTOR p1 = XMVectorSet(x1, r1, 0.0f, 0.0f);
+                        XMVECTOR p2 = XMVectorSet(x2, r2, 0.0f, 0.0f);
+                        p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                        p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                        XMFLOAT3 f1, f2;
+                        XMStoreFloat3(&f1, p1);
+                        XMStoreFloat3(&f2, p2);
+                        dbg.AddLine(f1, f2, color);
+                    }
+
+                    // 실린더 부분 (상단/하단 원)
+                    for (int i = 0; i < segments; ++i)
+                    {
+                        float a1 = i * angleStep;
+                        float a2 = (i + 1) * angleStep;
+                        float r1 = radius * std::cos(a1);
+                        float r2 = radius * std::cos(a2);
+                        float z1 = radius * std::sin(a1);
+                        float z2 = radius * std::sin(a2);
+
+                        // 상단 원
+                        XMVECTOR p1 = XMVectorSet(halfHeight, r1, z1, 0.0f);
+                        XMVECTOR p2 = XMVectorSet(halfHeight, r2, z2, 0.0f);
+                        p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                        p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                        XMFLOAT3 f1, f2;
+                        XMStoreFloat3(&f1, p1);
+                        XMStoreFloat3(&f2, p2);
+                        dbg.AddLine(f1, f2, color);
+
+                        // 하단 원
+                        p1 = XMVectorSet(-halfHeight, r1, z1, 0.0f);
+                        p2 = XMVectorSet(-halfHeight, r2, z2, 0.0f);
                         p1 = XMVectorAdd(pos, RotateVector(p1, rot));
                         p2 = XMVectorAdd(pos, RotateVector(p2, rot));
                         XMStoreFloat3(&f1, p1);

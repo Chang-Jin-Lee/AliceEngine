@@ -13,6 +13,7 @@
 
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
+#include "Core/World.h"
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
@@ -159,6 +160,7 @@ namespace Alice
         m_viewportSRV.Reset();
         m_sceneDepthTex.Reset();
         m_sceneDSV.Reset();
+        m_sceneDepthSRV.Reset();
 
         m_sceneWidth = width;
         m_sceneHeight = height;
@@ -928,10 +930,30 @@ namespace Alice
 		if (FAILED(m_device->CreateRenderTargetView(m_viewportTex.Get(), nullptr, m_viewportRTV.ReleaseAndGetAddressOf()))) return false;
 		if (FAILED(m_device->CreateShaderResourceView(m_viewportTex.Get(), nullptr, m_viewportSRV.ReleaseAndGetAddressOf()))) return false;
 
-		D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_D24_UNORM_S8_UINT, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL, 0, 0 };
+		// Depth Texture & View (DSV, SRV) - SRV 생성을 위해 typeless 포맷 사용
+		D3D11_TEXTURE2D_DESC dDesc = { width, height, 1, 1, DXGI_FORMAT_R24G8_TYPELESS, {1, 0}, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
 		if (FAILED(m_device->CreateTexture2D(&dDesc, nullptr, m_sceneDepthTex.ReleaseAndGetAddressOf()))) return false;
-		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = { dDesc.Format, D3D11_DSV_DIMENSION_TEXTURE2D, 0 };
+		
+		// DSV 설정 (D24_UNORM_S8_UINT 포맷으로 뷰 생성)
+		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+		dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+		dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+		dsvDesc.Texture2D.MipSlice = 0;
 		if (FAILED(m_device->CreateDepthStencilView(m_sceneDepthTex.Get(), &dsvDesc, m_sceneDSV.ReleaseAndGetAddressOf()))) return false;
+		
+		// Depth SRV 생성 (depth test용) - 실패해도 계속 진행 (선택적)
+		D3D11_SHADER_RESOURCE_VIEW_DESC depthSrvDesc = {};
+		depthSrvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;  // R24G8_TYPELESS의 SRV 포맷
+		depthSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		depthSrvDesc.Texture2D.MostDetailedMip = 0;
+		depthSrvDesc.Texture2D.MipLevels = 1;
+		HRESULT hrDepthSRV = m_device->CreateShaderResourceView(m_sceneDepthTex.Get(), &depthSrvDesc, m_sceneDepthSRV.ReleaseAndGetAddressOf());
+		if (FAILED(hrDepthSRV))
+		{
+			ALICE_LOG_WARN("DeferredRenderSystem::CreateToneMappingResources: CreateShaderResourceView(depthSRV) failed (0x%08X) - depth test will be disabled", (unsigned)hrDepthSRV);
+			m_sceneDepthSRV.Reset();
+            return false;
+		}
 
         // HDR 지원 여부 확인 및 적절한 톤매핑 셰이더 선택
         ComPtr<ID3DBlob> psBlob, errorBlob;
@@ -962,6 +984,42 @@ namespace Alice
         else
         {
             ALICE_LOG_INFO("DeferredRenderSystem::CreateToneMappingResources: LDR 톤매핑 셰이더 사용.");
+        }
+
+        // 파티클 오버레이 Pixel Shader 생성
+        {
+            ComPtr<ID3DBlob> psBlob, errorBlob;
+            if (FAILED(D3DCompile(CommonShaderCode::ParticleOverlayPS, strlen(CommonShaderCode::ParticleOverlayPS), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+            {
+                if (errorBlob)
+                {
+                    ALICE_LOG_ERRORF("Particle Overlay PS compile error: %s", (char*)errorBlob->GetBufferPointer());
+                }
+                return false;
+            }
+            if (FAILED(m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_particleOverlayPS.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Particle Overlay PS");
+                return false;
+            }
+        }
+
+        // 파티클 오버레이용 Additive Blend State 생성
+        {
+            D3D11_BLEND_DESC blendDesc = {};
+            blendDesc.RenderTarget[0].BlendEnable = TRUE;
+            blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+            blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+            blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+            blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+            if (FAILED(m_device->CreateBlendState(&blendDesc, m_ppBlendAdditive.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Particle Overlay Additive Blend State");
+                return false;
+            }
         }
 
         return true;
@@ -1239,7 +1297,7 @@ namespace Alice
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
                 if (!tr.enabled) continue;
 
-                XMMATRIX worldM = BuildWorldMatrix(tr);
+                XMMATRIX worldM = BuildWorldMatrix(world, id, tr);
 
                 const bool flipped = XMVectorGetX(XMMatrixDeterminant(worldM)) < 0.0f;
                 if (flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
@@ -1290,6 +1348,10 @@ namespace Alice
                                       bool isPlaying)
     {
         if (!m_device || !m_context) return;
+
+        // 실제로 사용한 카메라 정보 저장 (ComputeEffect용)
+        m_lastViewProj = camera.GetViewProjectionMatrix();
+        m_lastCameraPos = camera.GetPosition();
 
         // Viewport 설정
         D3D11_VIEWPORT vp{};
@@ -1414,7 +1476,7 @@ namespace Alice
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
             if (!transform.enabled) continue;
 
-            XMMATRIX worldM = BuildWorldMatrix(transform);
+            XMMATRIX worldM = BuildWorldMatrix(world, id, transform);
             
             // 재질 정보 가져오기
             XMFLOAT4 color = { 1, 1, 1, 1 };
@@ -2229,7 +2291,48 @@ namespace Alice
         XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(rotation);
         XMMATRIX T = XMMatrixTranslationFromVector(translation);
         
+        // DirectXMath 행벡터 컨벤션: S * R * T
         return S * R * T;
+    }
+
+    DirectX::XMMATRIX DeferredRenderSystem::BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const
+    {
+        // c.txt 참조: 부모부터 루트까지 로컬 행렬을 스택에 쌓고, 루트에서 자식으로 내려가면서 행렬 곱하기
+        std::vector<XMMATRIX> matrixStack;
+        EntityId currentId = entityId;
+        
+        // 부모부터 루트까지 로컬 행렬을 스택에 쌓음
+        while (currentId != InvalidEntityId)
+        {
+            const TransformComponent* t = world.GetComponent<TransformComponent>(currentId);
+            if (t)
+            {
+                XMVECTOR scale = XMLoadFloat3(&t->scale);
+                XMVECTOR rotation = XMLoadFloat3(&t->rotation);
+                XMVECTOR translation = XMLoadFloat3(&t->position);
+                
+                // 로컬 행렬: S * R * T 순서 (DirectXMath 행벡터 컨벤션)
+                XMMATRIX localMatrix = XMMatrixScalingFromVector(scale) *
+                    XMMatrixRotationRollPitchYawFromVector(rotation) *
+                    XMMatrixTranslationFromVector(translation);
+                
+                matrixStack.push_back(localMatrix);
+                currentId = t->parent;
+            }
+            else
+            {
+                break;
+            }
+        }
+        
+        // 행벡터 컨벤션: child * parent * ... * root 형태로 곱하기 (정순)
+        XMMATRIX worldMatrix = XMMatrixIdentity();
+        for (const auto& m : matrixStack)  // child -> parent -> root 순서
+        {
+            worldMatrix = worldMatrix * m;  // I * child * parent * ... * root
+        }
+        
+        return worldMatrix;
     }
 
     ID3D11ShaderResourceView* DeferredRenderSystem::GetOrCreateTexture(const std::string& path)
@@ -2356,6 +2459,79 @@ namespace Alice
         // 리소스 해제
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
+    }
+
+    void DeferredRenderSystem::RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV)
+    {
+        // 씬 전환 중 리소스가 유효하지 않을 수 있으므로 모든 리소스 확인
+        if (!particleSRV) return;
+        ID3D11RenderTargetView* viewportRTV = m_viewportRTV.Get();
+        if (!viewportRTV) return;
+        if (m_sceneWidth == 0 || m_sceneHeight == 0) return;
+        if (!m_particleOverlayPS || !m_quadVS || !m_quadVB || !m_quadIB || !m_quadInputLayout) return;
+        
+        // UAV와 SRV 동시 바인딩 충돌 방지: Compute Shader에서 사용한 UAV/SRV를 명시적으로 unbind
+        // DirectX11에서는 같은 리소스를 UAV와 SRV로 동시에 바인딩할 수 없음
+        // Compute Shader는 CS stage에서 UAV를 사용하므로, CS stage의 UAV/SRV만 unbind하면 충분
+        ID3D11UnorderedAccessView* nullUAVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        UINT uavInitialCounts[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        m_context->CSSetUnorderedAccessViews(0, 8, nullUAVs, uavInitialCounts);
+        
+        // CS에서 SRV로도 바인딩되어 있을 수 있으므로 CS SRV도 unbind
+        ID3D11ShaderResourceView* nullCSsrvs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->CSSetShaderResources(0, 8, nullCSsrvs);
+        
+        // PS의 SRV도 먼저 unbind한 후에 다시 바인딩 (안전을 위해)
+        ID3D11ShaderResourceView* nullSRVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->PSSetShaderResources(0, 8, nullSRVs);
+        
+        D3D11_VIEWPORT viewport = {};
+        viewport.Width = static_cast<float>(m_sceneWidth);
+        viewport.Height = static_cast<float>(m_sceneHeight);
+        viewport.MaxDepth = 1.0f;
+        
+        // 뷰포트 설정
+        m_context->RSSetViewports(1, &viewport);
+        
+        // 렌더 타겟 설정
+        m_context->OMSetRenderTargets(1, m_viewportRTV.GetAddressOf(), nullptr);
+        
+        // Additive blending 활성화
+        float blendFactor[4] = { 0, 0, 0, 0 };
+        m_context->OMSetBlendState(m_ppBlendAdditive.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        m_context->RSSetState(m_ppRasterNoCull.Get());
+        
+        // 리소스 바인딩 (UAV unbind 후에 SRV 바인딩)
+        ID3D11ShaderResourceView* srv = particleSRV;
+        ID3D11SamplerState* sampler = m_samplerLinear.Get();
+        
+        m_context->PSSetShaderResources(0, 1, &srv);
+        m_context->PSSetSamplers(0, 1, &sampler);
+        
+        // Quad 그리기
+        UINT stride = m_quadStride, offset = m_quadOffset;
+        ID3D11Buffer* vb = m_quadVB.Get();
+        
+        m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_context->IASetInputLayout(m_quadInputLayout.Get());
+        m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        m_context->IASetIndexBuffer(m_quadIB.Get(), DXGI_FORMAT_R16_UINT, 0);
+        
+        m_context->VSSetShader(m_quadVS.Get(), nullptr, 0);
+        m_context->PSSetShader(m_particleOverlayPS.Get(), nullptr, 0);
+        m_context->DrawIndexed(m_quadIndexCount, 0, 0);
+        
+        // 리소스 해제
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(0, 1, &nullSRV);
+        
+        // Blend state 복원
+        m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+        
+        // 뷰포트 RTV를 SRV로 읽을 수 있도록 BackBuffer로 복귀 (ImGui::Image가 viewportSRV를 읽기 위해 필수)
+        // DirectX11에서는 같은 리소스를 RTV와 SRV로 동시에 바인딩할 수 없음
+        RestoreBackBuffer();
     }
 
 	void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
