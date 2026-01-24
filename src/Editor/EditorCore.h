@@ -27,6 +27,10 @@
 #include <string>
 #include <memory>
 
+// Forward declaration
+class UIWorldManager;
+class UISceneManager;
+
 namespace Alice
 {
     struct ID3D11RenderDevice;
@@ -144,7 +148,8 @@ namespace Alice
                           bool& useForwardRendering,
                           bool& pvdEnabled,
                           std::string& pvdHost,
-                          int& pvdPort);
+                          int& pvdPort,
+                          class UIWorldManager* uiWorldManager = nullptr);
 
 		template<typename T>
 		void DrawEngineComponent(const char* label, T* comp, std::function<void()> removeFn, const EntityId& _selectedEntity, const std::string& compTypeName)
@@ -268,6 +273,7 @@ namespace Alice
     public:
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
         void SetInputSystem(InputSystem* inputSystem) { m_inputSystem = inputSystem; }
+        void SetUIWorldManager(class UIWorldManager* uiWorldManager) { m_uiWorldManager = uiWorldManager; }
 
     private:
         /// 씬을 로드한 뒤, World 에 존재하는 SkinnedMeshComponent 들이
@@ -276,6 +282,12 @@ namespace Alice
         void EnsureSkinnedMeshesRegistered(World& world);
         void SaveScene(World& );
         void LoadScene(World& );
+
+
+		// UI
+        void CreateUIImage();
+		void RenderUIHeirarcy();
+		void DrawUIInspector(UISceneManager& manager, UIWorld& uiWorld, unsigned long uiEntityID);
 
 		// Undo 시스템
 		void PushCommand(std::unique_ptr<struct ICommand> cmd);
@@ -286,6 +298,10 @@ namespace Alice
 		ID3D11RenderDevice* m_renderDevice = nullptr;
 		SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
 		InputSystem* m_inputSystem = nullptr;
+		UIWorldManager* m_uiWorldManager = nullptr;
+		
+		// UI 엔티티 선택 상태 (0이면 선택되지 않음)
+		unsigned long m_selectedUIEntity = 0;
 
         bool               m_scriptBuilded = false;
     };

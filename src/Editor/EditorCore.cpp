@@ -65,6 +65,13 @@
 // 텍스처 로딩용 DirectXTK
 #include <DirectXTK/WICTextureLoader.h>
 
+// UI 시스템
+#include "UI/UIWorldManager.h"
+#include "UI/UISceneManager.h"
+#include "UI/UIImage.h"
+#include "UI/UIScriptSystem.h"
+#include "UI/UI_ScriptComponent.h"
+
 using namespace DirectX;
 
 namespace Alice
@@ -1843,8 +1850,12 @@ namespace Alice
 		bool& useForwardRendering,
 		bool& pvdEnabled,
 		std::string& pvdHost,
-		int& pvdPort)
+		int& pvdPort,
+		UIWorldManager* uiWorldManager)
 	{
+		// UIWorldManager 저장
+		m_uiWorldManager = uiWorldManager;
+		
 		// SceneManager에서 현재 씬 파일 경로를 조회하여 g_CurrentScenePath 업데이트
 		if (sceneManager)
 		{
@@ -2076,7 +2087,7 @@ namespace Alice
 							std::string label = abs.stem().string();
 
 							// 이미 고정 목록에 있는 건 스킵
-							bool skip = false;
+							bool skip = false; 
 							for (auto& p : prims)
 							{
 								if (label == p.label || label == "Cube" && std::string(p.label) == "Cube(FBX)")
@@ -2131,12 +2142,17 @@ namespace Alice
 				{
 					EntityId e = world.CreateRectLight();
 					PushCommand(std::make_unique<CreateEntityCommand>(e, "Rect Light"));
-					selectedEntity = e;
-					g_SceneDirty = true;
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
-			}
+                    selectedEntity = e;
+                    g_SceneDirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("UI_Image"))
+                {
+                    CreateUIImage();
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
 
 			ImGui::Separator();
 
@@ -2629,7 +2645,13 @@ namespace Alice
 				}
 				ImGui::EndDragDropTarget();
 			}
+			
+			
 			ImGui::Separator();
+
+
+
+
 
 			EntityId entityToDelete = InvalidEntityId;
 			static EntityId s_renameTarget = InvalidEntityId;
@@ -2667,6 +2689,8 @@ namespace Alice
 				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 				{
 					selectedEntity = entityId;
+					// World 엔티티 선택 시 UI 선택 해제
+					m_selectedUIEntity = 0;
 				}
 
 				// 드래그 시작
@@ -2821,6 +2845,8 @@ namespace Alice
 				}
 			}
 
+			
+
 			// 빈 공간에 드롭하여 부모 관계 해제 또는 프리팹 인스턴스화
 			// 빈 공간을 감지하기 위해 InvisibleButton 사용
 			ImVec2 availSize = ImGui::GetContentRegionAvail();
@@ -2904,6 +2930,10 @@ namespace Alice
 				g_SceneDirty = true;
 			}
 
+
+			
+
+
 			if (openRenamePopup)
 				ImGui::OpenPopup("Change Name");
 
@@ -2927,28 +2957,33 @@ namespace Alice
 				ImGui::EndPopup();
 			}
 
-			// 루프가 끝난 뒤에 실제 삭제를 수행합니다. (반복 중 컨테이너 수정 방지)
-			if (entityToDelete != InvalidEntityId)
-			{
-				const std::string entityName = world.GetEntityName(entityToDelete);
-				PushCommand(std::make_unique<DestroyEntityCommand>(entityToDelete, entityName, world));
-				world.DestroyEntity(entityToDelete);
-				if (selectedEntity == entityToDelete)
+				// 루프가 끝난 뒤에 실제 삭제를 수행합니다. (반복 중 컨테이너 수정 방지)
+				if (entityToDelete != InvalidEntityId)
 				{
-					selectedEntity = InvalidEntityId;
+					const std::string entityName = world.GetEntityName(entityToDelete);
+					PushCommand(std::make_unique<DestroyEntityCommand>(entityToDelete, entityName, world));
+					world.DestroyEntity(entityToDelete);
+					if (selectedEntity == entityToDelete)
+					{
+						selectedEntity = InvalidEntityId;
+					}
+					g_SceneDirty = true;
 				}
-				g_SceneDirty = true;
+
+				RenderUIHeirarcy();
+				
 			}
-		}
 
 		ImGui::End();
 
-		// === Inspector ===
-		if (ImGui::Begin("Inspector")) {
-			// Delete 키 입력 처리: Inspector 창이 포커스를 가지고 있고, 텍스트 입력 중이 아닐 때
-			// isTextInputActive는 이미 DrawEditorUI 시작 부분에서 정의되어 있지만,
-			// Inspector 내부에서도 사용하므로 다시 체크 (Inspector가 포커스를 가진 경우를 위해)
-			const bool inspectorTextInputActive = io.WantTextInput || ImGui::IsAnyItemActive();
+
+			
+			// === Inspector ===
+			if (ImGui::Begin("Inspector")) {
+				// Delete 키 입력 처리: Inspector 창이 포커스를 가지고 있고, 텍스트 입력 중이 아닐 때
+				// isTextInputActive는 이미 DrawEditorUI 시작 부분에서 정의되어 있지만,
+				// Inspector 내부에서도 사용하므로 다시 체크 (Inspector가 포커스를 가진 경우를 위해)
+				const bool inspectorTextInputActive = io.WantTextInput || ImGui::IsAnyItemActive();
 
 			if (selectedEntity != InvalidEntityId &&
 				ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
@@ -3010,19 +3045,53 @@ namespace Alice
 				ImGui::EndDragDropTarget();
 			}
 
-			if (selectedEntity == InvalidEntityId) {
-				Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
-			}
-			else {
-				// 엔티티 ID와 이름 표시 (한 번만 가져와서 재사용)
-				const std::string entityName = world.GetEntityName(selectedEntity);
-				if (!entityName.empty()) {
-					ImGui::Text("Entity %u - %s", static_cast<uint32_t>(selectedEntity), entityName.c_str());
+				// ============================================================================
+				// 엔티티 선택 로직 통합: World / UIWorld 판별
+				// UI 엔티티가 선택되어 있으면 UI Inspector를 우선 표시
+				// ============================================================================
+				if (m_selectedUIEntity != 0 && m_uiWorldManager)
+				{
+					// UI 엔티티 Inspector 표시
+					try
+					{
+						UISceneManager& manager = m_uiWorldManager->GetManager();
+						UIWorld& uiWorld = manager.GetWorld();
+						UIBase* uiBase = uiWorld.Get(m_selectedUIEntity);
+						
+						if (uiBase)
+						{
+							ImGui::Text("UI Object [ID: %lu]", m_selectedUIEntity);
+							ImGui::Separator();
+							
+							// UI 컴포넌트 Inspector 표시
+							DrawUIInspector(manager, uiWorld, m_selectedUIEntity);
+						}
+						else
+						{
+							Alice::ImGuiText(L"선택된 UI 엔티티를 찾을 수 없습니다.");
+							m_selectedUIEntity = 0; // 선택 해제
+						}
+					}
+					catch (...)
+					{
+						Alice::ImGuiText(L"UI 씬이 초기화되지 않았습니다.");
+						m_selectedUIEntity = 0; // 선택 해제
+					}
+				}
+				else if (selectedEntity == InvalidEntityId) {
+					Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
 				}
 				else {
-					ImGui::Text("Entity %u", static_cast<uint32_t>(selectedEntity));
-				}
-				ImGui::Separator();
+					// World 엔티티 Inspector 표시 (기존 로직)
+					// 엔티티 ID와 이름 표시 (한 번만 가져와서 재사용)
+					const std::string entityName = world.GetEntityName(selectedEntity);
+					if (!entityName.empty()) {
+						ImGui::Text("Entity %u - %s", static_cast<uint32_t>(selectedEntity), entityName.c_str());
+					}
+					else {
+						ImGui::Text("Entity %u", static_cast<uint32_t>(selectedEntity));
+					}
+					ImGui::Separator();
 
 				// 1. Transform
 				DrawInspectorTransform(world, selectedEntity);
@@ -3808,17 +3877,23 @@ namespace Alice
 						const float localX = mousePos.x - imgMin.x;
 						const float localY = mousePos.y - imgMin.y;
 
-						if (localX >= 0.0f && localX <= imgSize.x &&
-							localY >= 0.0f && localY <= imgSize.y)
-						{
-							// UV 좌표를 실제 이미지 크기 기준으로 계산
-							const float u = (imgSize.x > 0.0f) ? (localX / imgSize.x) : 0.0f;
-							const float v = (imgSize.y > 0.0f) ? (localY / imgSize.y) : 0.0f;
-							EntityId hit = picker.Pick(world, camera, m_skinnedRegistry, u, v);
-							selectedEntity = hit;
+							if (localX >= 0.0f && localX <= imgSize.x &&
+								localY >= 0.0f && localY <= imgSize.y)
+							{
+								// UV 좌표를 실제 이미지 크기 기준으로 계산
+								const float u = (imgSize.x > 0.0f) ? (localX / imgSize.x) : 0.0f;
+								const float v = (imgSize.y > 0.0f) ? (localY / imgSize.y) : 0.0f;
+								EntityId hit = picker.Pick(world, camera, m_skinnedRegistry, u, v);
+								selectedEntity = hit;
+								
+								// World 엔티티 선택 시 UI 선택 해제
+								if (hit != InvalidEntityId)
+								{
+									m_selectedUIEntity = 0; // UI 선택 해제
+								}
+							}
 						}
 					}
-				}
 #endif // _DEBUG
 			}
 			else
@@ -4318,53 +4393,92 @@ namespace Alice
 				const std::filesystem::path loadAbs =
 					ResourceManager::Get().Resolve(g_NextScenePath);
 
-				if (isPlaying)
-				{
-					// 실행 중: 지연 처리
-					ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (no-save, playing): \"%s\"\n",
-						g_NextScenePath.string().c_str());
-					if (sceneManager)
+					if (isPlaying)
 					{
-						if (!sceneManager->LoadSceneFileRequest(loadAbs))
+						// 실행 중: 지연 처리
+						ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (no-save, playing): \"%s\"\n",
+							g_NextScenePath.string().c_str());
+						if (sceneManager)
 						{
-							const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+							if (!sceneManager->LoadSceneFileRequest(loadAbs))
+							{
+								const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+								ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+								g_SceneLoadErrorMsg = errorMsg;
+								g_ShowSceneLoadError = true;
+							}
+							else
+							{
+								g_CurrentScenePath = g_NextScenePath;
+								g_HasCurrentScenePath = true;
+								g_SceneDirty = false;
+							}
+						}
+					}
+					else
+					{
+						// 실행 안 함: 즉시 로드
+						ALICE_LOG_INFO("[Editor] SceneFile::Load (no-save, not playing): \"%s\"\n",
+							g_NextScenePath.string().c_str());
+						
+						// UIWorldManager가 있으면 LoadAuto 사용 (World + UI 동시 로드)
+						// 없으면 Load만 사용 (World만 로드)
+						bool loadSuccess = false;
+						if (m_uiWorldManager && m_resources)
+						{
+							// LoadAuto는 World와 UI를 함께 로드함
+							loadSuccess = SceneFile::LoadAuto(world, *m_resources, g_NextScenePath, m_uiWorldManager);
+						}
+						else
+						{
+							// UIWorldManager가 없으면 World만 로드
+							loadSuccess = SceneFile::Load(world, loadAbs);
+							
+							// UIWorldManager가 있지만 m_resources가 없으면, 분리 파일로 UI 로드 시도
+							if (loadSuccess && m_uiWorldManager)
+							{
+								// 파일명 기반 UI 파일 경로 계산 (.scene → .uiscene)
+								std::filesystem::path uiPath = g_NextScenePath;
+								uiPath.replace_extension(".uiscene");
+								
+								// UI 파일이 존재하면 로드
+								std::filesystem::path uiPathAbs = m_resources ? m_resources->Resolve(uiPath) : uiPath;
+								if (std::filesystem::exists(uiPathAbs))
+								{
+									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
+									if (!m_uiWorldManager->LoadUI(uiPath, m_resources))
+									{
+										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
+									}
+								}
+								else
+								{
+									ALICE_LOG_INFO("[Editor] UI file not found (expected at %s), skipping UI load", uiPath.string().c_str());
+								}
+							}
+						}
+						
+						if (!loadSuccess)
+						{
+							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
+							ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
 							g_SceneLoadErrorMsg = errorMsg;
 							g_ShowSceneLoadError = true;
 						}
 						else
 						{
+							EnsureSkinnedMeshesRegistered(world);
+							selectedEntity = InvalidEntityId;
+							m_selectedUIEntity = 0; // UI 선택도 해제
 							g_CurrentScenePath = g_NextScenePath;
 							g_HasCurrentScenePath = true;
 							g_SceneDirty = false;
+							ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
 						}
 					}
 				}
-				else
-				{
-					// 실행 안 함: 즉시 로드
-					ALICE_LOG_INFO("[Editor] SceneFile::Load (no-save, not playing): \"%s\"\n",
-						g_NextScenePath.string().c_str());
-					if (!SceneFile::Load(world, loadAbs))
-					{
-						const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-						ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
-						g_SceneLoadErrorMsg = errorMsg;
-						g_ShowSceneLoadError = true;
-					}
-					else
-					{
-						EnsureSkinnedMeshesRegistered(world);
-						selectedEntity = InvalidEntityId;
-						g_CurrentScenePath = g_NextScenePath;
-						g_HasCurrentScenePath = true;
-						g_SceneDirty = false;
-						ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
-					}
-				}
+				g_RequestSceneLoad = false;
 			}
-			g_RequestSceneLoad = false;
-		}
 
 
 
@@ -4409,52 +4523,89 @@ namespace Alice
 				const std::filesystem::path loadAbs =
 					ResourceManager::Get().Resolve(g_NextScenePath);
 
-				if (isPlaying)
-				{
-					// 실행 중: 지연 처리
-					if (sceneManager)
+					if (isPlaying)
 					{
-						if (!sceneManager->LoadSceneFileRequest(loadAbs))
+						// 실행 중: 지연 처리
+						if (sceneManager)
 						{
-							const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+							if (!sceneManager->LoadSceneFileRequest(loadAbs))
+							{
+								const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+								ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+								g_SceneLoadErrorMsg = errorMsg;
+								g_ShowSceneLoadError = true;
+								g_RequestSceneLoad = false;
+								ImGui::CloseCurrentPopup();
+								return;
+							}
+							g_CurrentScenePath = g_NextScenePath;
+							g_HasCurrentScenePath = true;
+							g_SceneDirty = false;
+						}
+						else
+						{
+							ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
+						}
+					}
+					else
+					{
+						// 실행 안 함: 즉시 로드
+						bool loadSuccess = false;
+						if (m_uiWorldManager && m_resources)
+						{
+							// LoadAuto는 World와 UI를 함께 로드함
+							loadSuccess = SceneFile::LoadAuto(world, *m_resources, g_NextScenePath, m_uiWorldManager);
+						}
+						else
+						{
+							// UIWorldManager가 없으면 World만 로드
+							loadSuccess = SceneFile::Load(world, loadAbs);
+							
+							// UIWorldManager가 있지만 m_resources가 없으면, 분리 파일로 UI 로드 시도
+							if (loadSuccess && m_uiWorldManager)
+							{
+								// 파일명 기반 UI 파일 경로 계산 (Foo.scene → Foo.uiscene)
+								std::filesystem::path uiPath = g_NextScenePath;
+								uiPath.replace_extension(".uiscene");
+								
+								// UI 파일이 존재하면 로드
+								std::filesystem::path uiPathAbs = m_resources ? m_resources->Resolve(uiPath) : uiPath;
+								if (std::filesystem::exists(uiPathAbs))
+								{
+									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
+									if (!m_uiWorldManager->LoadUI(uiPath, m_resources))
+									{
+										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
+									}
+								}
+								else
+								{
+									ALICE_LOG_INFO("[Editor] UI file not found (expected at %s), skipping UI load", uiPath.string().c_str());
+								}
+							}
+						}
+						
+						if (!loadSuccess)
+						{
+							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
+							ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
 							g_SceneLoadErrorMsg = errorMsg;
 							g_ShowSceneLoadError = true;
 							g_RequestSceneLoad = false;
 							ImGui::CloseCurrentPopup();
 							return;
 						}
+						EnsureSkinnedMeshesRegistered(world);
+						selectedEntity = InvalidEntityId;
+						m_selectedUIEntity = 0; // UI 선택도 해제
 						g_CurrentScenePath = g_NextScenePath;
 						g_HasCurrentScenePath = true;
 						g_SceneDirty = false;
 					}
-					else
-					{
-						ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
-					}
+					selectedEntity = InvalidEntityId;
+					g_RequestSceneLoad = false;
+					ImGui::CloseCurrentPopup();
 				}
-				else
-				{
-					// 실행 안 함: 즉시 로드
-					if (!SceneFile::Load(world, loadAbs))
-					{
-						const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-						ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
-						g_SceneLoadErrorMsg = errorMsg;
-						g_ShowSceneLoadError = true;
-						g_RequestSceneLoad = false;
-						ImGui::CloseCurrentPopup();
-						return;
-					}
-					EnsureSkinnedMeshesRegistered(world);
-					g_CurrentScenePath = g_NextScenePath;
-					g_HasCurrentScenePath = true;
-					g_SceneDirty = false;
-				}
-				selectedEntity = InvalidEntityId;
-				g_RequestSceneLoad = false;
-				ImGui::CloseCurrentPopup();
-			}
 
 			ImGui::SameLine();
 			if (ImGui::Button("Don't Save"))
@@ -4463,56 +4614,94 @@ namespace Alice
 				const std::filesystem::path loadAbs =
 					ResourceManager::Get().Resolve(g_NextScenePath);
 
-				if (isPlaying)
-				{
-					// 실행 중: 지연 처리
-					if (sceneManager)
+					if (isPlaying)
 					{
-						ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (dont-save, playing): \"%s\"\n",
-							g_NextScenePath.string().c_str());
-						if (!sceneManager->LoadSceneFileRequest(loadAbs))
+						// 실행 중: 지연 처리
+						if (sceneManager)
 						{
-							const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+							ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (dont-save, playing): \"%s\"\n",
+								g_NextScenePath.string().c_str());
+							if (!sceneManager->LoadSceneFileRequest(loadAbs))
+							{
+								const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+								ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
+								g_SceneLoadErrorMsg = errorMsg;
+								g_ShowSceneLoadError = true;
+								g_RequestSceneLoad = false;
+								ImGui::CloseCurrentPopup();
+								return;
+							}
+							g_CurrentScenePath = g_NextScenePath;
+							g_HasCurrentScenePath = true;
+							g_SceneDirty = false;
+						}
+						else
+						{
+							ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
+						}
+					}
+					else
+					{
+						// 실행 안 함: 즉시 로드
+						ALICE_LOG_INFO("[Editor] SceneFile::Load (dont-save, not playing): \"%s\"\n",
+							g_NextScenePath.string().c_str());
+						
+						bool loadSuccess = false;
+						if (m_uiWorldManager && m_resources)
+						{
+							// LoadAuto는 World와 UI를 함께 로드함
+							loadSuccess = SceneFile::LoadAuto(world, *m_resources, g_NextScenePath, m_uiWorldManager);
+						}
+						else
+						{
+							// UIWorldManager가 없으면 World만 로드
+							loadSuccess = SceneFile::Load(world, loadAbs);
+							
+							// UIWorldManager가 있지만 m_resources가 없으면, 분리 파일로 UI 로드 시도
+							if (loadSuccess && m_uiWorldManager)
+							{
+								// 파일명 기반 UI 파일 경로 계산 (Foo.scene → Foo.uiscene)
+								std::filesystem::path uiPath = g_NextScenePath;
+								uiPath.replace_extension(".uiscene");
+								
+								// UI 파일이 존재하면 로드
+								std::filesystem::path uiPathAbs = m_resources ? m_resources->Resolve(uiPath) : uiPath;
+								if (std::filesystem::exists(uiPathAbs))
+								{
+									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
+									if (!m_uiWorldManager->LoadUI(uiPath, m_resources))
+									{
+										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
+									}
+								}
+								else
+								{
+									ALICE_LOG_INFO("[Editor] UI file not found (expected at %s), skipping UI load", uiPath.string().c_str());
+								}
+							}
+						}
+						
+						if (!loadSuccess)
+						{
+							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
+							ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
 							g_SceneLoadErrorMsg = errorMsg;
 							g_ShowSceneLoadError = true;
 							g_RequestSceneLoad = false;
 							ImGui::CloseCurrentPopup();
 							return;
 						}
+						EnsureSkinnedMeshesRegistered(world);
+						selectedEntity = InvalidEntityId;
+						m_selectedUIEntity = 0; // UI 선택도 해제
 						g_CurrentScenePath = g_NextScenePath;
 						g_HasCurrentScenePath = true;
 						g_SceneDirty = false;
 					}
-					else
-					{
-						ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
-					}
+					selectedEntity = InvalidEntityId;
+					g_RequestSceneLoad = false;
+					ImGui::CloseCurrentPopup();
 				}
-				else
-				{
-					// 실행 안 함: 즉시 로드
-					ALICE_LOG_INFO("[Editor] SceneFile::Load (dont-save, not playing): \"%s\"\n",
-						g_NextScenePath.string().c_str());
-					if (!SceneFile::Load(world, loadAbs))
-					{
-						const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-						ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
-						g_SceneLoadErrorMsg = errorMsg;
-						g_ShowSceneLoadError = true;
-						g_RequestSceneLoad = false;
-						ImGui::CloseCurrentPopup();
-						return;
-					}
-					EnsureSkinnedMeshesRegistered(world);
-					g_CurrentScenePath = g_NextScenePath;
-					g_HasCurrentScenePath = true;
-					g_SceneDirty = false;
-				}
-				selectedEntity = InvalidEntityId;
-				g_RequestSceneLoad = false;
-				ImGui::CloseCurrentPopup();
-			}
 
 			ImGui::SameLine();
 			if (ImGui::Button("Cancel"))
@@ -7218,22 +7407,34 @@ namespace Alice
 					}
 				}
 
-				// 씬 파일 저장/로드
-				if (ext == ".scene")
-				{
-					if (ImGui::MenuItem("Load Scene"))
+					// 씬 파일 저장/로드
+					if (ext == ".scene")
 					{
-						g_NextScenePath = path;
-						g_RequestSceneLoad = true;
+						if (ImGui::MenuItem("Load Scene"))
+						{
+							g_NextScenePath = path;
+							g_RequestSceneLoad = true;
+						}
+						if (ImGui::MenuItem("Save Current Scene"))
+						{
+							// World와 UI를 함께 저장 (UIWorldManager가 있으면)
+							if (m_uiWorldManager)
+							{
+								SceneFile::Save(world, path, m_uiWorldManager);
+							}
+							else
+							{
+								SceneFile::Save(world, path);
+							}
+							
+							// SceneFile::Save가 내부에서 이미 SaveUI를 호출하므로 중복 호출 제거
+							// UI는 SceneFile::Save에서 자동으로 저장됨
+							
+							g_CurrentScenePath = path;
+							g_HasCurrentScenePath = true;
+							g_SceneDirty = false;
+						}
 					}
-					if (ImGui::MenuItem("Save Current Scene"))
-					{
-						SceneFile::Save(world, path);
-						g_CurrentScenePath = path;
-						g_HasCurrentScenePath = true;
-						g_SceneDirty = false;
-					}
-				}
 
 				// FBX 인스턴스 에셋(.fbxasset)을 월드에 배치
 				if (ext == ".fbxasset")
@@ -7396,8 +7597,19 @@ namespace Alice
 
 		ALICE_LOG_INFO("[Editor] Saving Scene: %s", savePath.string().c_str());
 
-		// 저장 실행 (실패 처리는 내부 로직에 맡김)
-		SceneFile::Save(world, ResourceManager::Get().Resolve(savePath));
+
+			// 저장 실행 (UIWorldManager가 있으면 World와 UI를 함께 저장)
+			std::filesystem::path absPath = m_resources ? m_resources->Resolve(savePath) : savePath;
+			if (m_uiWorldManager)
+			{
+				// SceneFile::Save가 내부에서 이미 SaveUI를 호출하므로 중복 호출 제거
+				SceneFile::Save(world, absPath, m_uiWorldManager);
+			}
+			else
+			{
+				SceneFile::Save(world, absPath);
+			}
+
 
 		// 상태 갱신
 		g_CurrentScenePath = savePath;
@@ -7531,13 +7743,401 @@ namespace Alice
 			return;
 		}
 
-		// 로드 성공: 후처리 및 상태 갱신
-		EnsureSkinnedMeshesRegistered(world);
-		g_CurrentScenePath = g_NextScenePath;
-		g_HasCurrentScenePath = true;
-		g_SceneDirty = false;
-	}
-}
+			// 로드 성공: 후처리 및 상태 갱신
+			EnsureSkinnedMeshesRegistered(world);
+			g_CurrentScenePath = g_NextScenePath;
+			g_HasCurrentScenePath = true;
+			g_SceneDirty = false;
+		}
 
+	void EditorCore::CreateUIImage()
+	{
+		if (!m_uiWorldManager)
+		{
+			ALICE_LOG_WARN("[EditorCore] CreateUIImage: UIWorldManager is not set");
+			return;
+		}
+		
+		// UIWorldManager는 Initialize 시 "Default" 씬으로 ChangeScene을 호출하므로
+		// 대부분의 경우 m_nowManager는 nullptr이 아닙니다.
+		// GetManager()는 참조를 반환하므로 안전하게 호출할 수 있습니다.
+		// UIWorldManager::Initialize()에서 ChangeScene("Default")를 호출하므로
+		// GetManager()는 항상 유효한 참조를 반환합니다.
+		
+		UISceneManager& manager = m_uiWorldManager->GetManager();
+		
+		// UIImage 생성
+		UIImage* uiImage = manager.CreateUIObjects<UIImage>();
+		if (uiImage)
+		{
+			ALICE_LOG_INFO("[EditorCore] CreateUIImage: Created UIImage with ID=%lu", uiImage->getID());
+		}
+		else
+		{
+			ALICE_LOG_ERRORF("[EditorCore] CreateUIImage: Failed to create UIImage");
+		}
+	}
+
+
+	void EditorCore::RenderUIHeirarcy()
+{
+		if (ImGui::Begin("UI Hierarchy"))
+		{
+			if (m_uiWorldManager)
+			{
+				try
+				{
+					UISceneManager& manager = m_uiWorldManager->GetManager();
+					UIWorld& uiWorld = manager.GetWorld();
+					const auto& rootIDs = uiWorld.GetRootIDs();
+
+					if (rootIDs.empty())
+					{
+						ImGui::TextDisabled("(No UI objects)");
+					}
+					else
+					{
+						// 재귀적으로 리스트를 그리는 람다 함수
+						std::function<void(unsigned long, int)> DrawUINode = [&](unsigned long id, int depth) {
+							UIBase* uiBase = uiWorld.Get(id);
+							if (!uiBase) return;
+
+							// 계층 구조 표현을 위한 들여쓰기
+							ImGui::Indent(depth * 10.0f);
+
+							char label[128];
+							snprintf(label, sizeof(label), "UI Object [ID: %lu]##%lu", id, id);
+
+							// Selectable: 클릭하여 선택 가능한 항목 생성
+							// UI 엔티티 선택 시 World 엔티티 선택 해제
+							bool isSelected = (m_selectedUIEntity == id);
+							if (ImGui::Selectable(label, isSelected))
+							{
+								m_selectedUIEntity = id; // 클릭 시 선택된 UI 엔티티 ID 갱신
+							}
+
+							ImGui::Unindent(depth * 10.0f);
+
+							// 자식들도 바로 아래에 출력 (재귀 호출)
+							const auto& childIDs = uiBase->GetChildIDs();
+							for (auto childID : childIDs)
+							{
+								DrawUINode(childID, depth + 1);
+							}
+							};
+
+						for (auto rootID : rootIDs)
+						{
+							DrawUINode(rootID, 0);
+						}
+					}
+				}
+				catch (...)
+				{
+					ImGui::TextDisabled("(UI scene not initialized)");
+				}
+			}
+		}
+		ImGui::End();
+	}
+
+	// ============================================================================
+	// UI Inspector: UI 엔티티의 컴포넌트를 RTTR 기반으로 표시 및 편집
+	
+	void EditorCore::DrawUIInspector(UISceneManager& manager, UIWorld& uiWorld, unsigned long uiEntityID)
+	{
+		UIBase* uiBase = uiWorld.Get(uiEntityID);
+		if (!uiBase) return;
+		
+		bool needsLayoutUpdate = false; // UITransform 변경 시 레이아웃 갱신 플래그
+		
+		// ============================================================================
+		// 1. UITransform 컴포넌트 (Storage 기반 편집)
+		// ============================================================================
+		if (auto* transform = manager.TryGetComponent<UITransform>(uiEntityID))
+		{
+			if (ImGui::CollapsingHeader("UITransform", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				// Storage에서 데이터 읽기 (transform 포인터는 Storage의 실제 데이터를 가리킴)
+				DirectX::XMFLOAT2 translation = transform->m_translation;
+				float rotationDeg = transform->m_rotation * (180.0f / 3.14159265f); // rad -> deg
+				DirectX::XMFLOAT2 scale = transform->m_scale;
+				DirectX::XMFLOAT2 size = transform->m_size;
+				DirectX::XMFLOAT2 pivot = transform->m_pivot;
+				
+				bool changed = false;
+				
+				// Translation 편집
+				if (ImGui::DragFloat2("Translation", &translation.x, 1.0f))
+				{
+					transform->m_translation = translation;
+					changed = true;
+				}
+				
+				// Rotation 편집 (deg로 표시, 저장소에는 rad로 저장)
+				if (ImGui::DragFloat("Rotation (deg)", &rotationDeg, 1.0f))
+				{
+					transform->m_rotation = rotationDeg * (3.14159265f / 180.0f); // deg -> rad
+					changed = true;
+				}
+				
+				// Scale 편집
+				if (ImGui::DragFloat2("Scale", &scale.x, 0.01f))
+				{
+					transform->m_scale = scale;
+					changed = true;
+				}
+				
+				// Size 편집
+				if (ImGui::DragFloat2("Size", &size.x, 1.0f))
+				{
+					transform->m_size = size;
+					changed = true;
+				}
+				
+				// Pivot 편집
+				if (ImGui::DragFloat2("Pivot", &pivot.x, 0.01f, 0.0f, 1.0f))
+				{
+					transform->m_pivot = pivot;
+					changed = true;
+				}
+				
+				if (changed)
+				{
+					needsLayoutUpdate = true; // Transform 변경 시 레이아웃 갱신 필요
+					extern bool g_SceneDirty;
+					g_SceneDirty = true; // 씬 변경 플래그 설정
+				}
+			}
+			ImGui::Separator();
+		}
+		
+		
+		// 2. UI_ImageComponent (RTTR 기반 편집만, 이미지 경로 변경 제외)
+		if (auto* imageComp = manager.TryGetComponent<UI_ImageComponent>(uiEntityID))
+		{
+			if (ImGui::CollapsingHeader("UI_ImageComponent", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				// RTTR 기반 기본 속성 편집
+				rttr::instance inst = *imageComp;
+				ReflectionUI::UIEditEvent ev = RenderInspectorInstance(inst, nullptr);
+				
+				ImGui::Separator();
+				
+				// 현재 이미지 경로 표시 (읽기 전용)
+				const std::wstring& currentPath = imageComp->GetImagePath();
+				if (!currentPath.empty())
+				{
+					ImGui::TextDisabled("Image Path: %S", currentPath.c_str());
+				}
+				else
+				{
+					ImGui::TextDisabled("Image Path: (None)");
+				}
+			}
+			ImGui::Separator();
+		}
+		
+
+		
+		// ============================================================================
+		// 3. UI_ScriptComponent (Storage 기반 편집)
+		// ============================================================================
+		if (auto* scriptComp = manager.TryGetComponent<UI_ScriptComponent>(uiEntityID))
+		{
+			if (ImGui::CollapsingHeader("UI_ScriptComponent"))
+			{
+				// Storage에서 데이터 읽기 (scriptComp 포인터는 Storage의 실제 데이터를 가리킴)
+				std::string currentScriptName = scriptComp->scriptName;
+				bool enabled = scriptComp->enabled;
+				
+				bool changed = false;
+				
+				// 등록된 스크립트 이름 목록 가져오기
+				std::vector<std::string> registeredScripts = UIScriptSystem::GetRegisteredUIScriptNames();
+				
+				// 스크립트 선택 Combo
+				const char* previewValue = currentScriptName.empty() ? "(None)" : currentScriptName.c_str();
+				if (ImGui::BeginCombo("Script", previewValue))
+				{
+					// "(None)" 옵션 (스크립트 제거)
+					bool isNoneSelected = currentScriptName.empty();
+					if (ImGui::Selectable("(None)", isNoneSelected))
+					{
+						// 스크립트 제거
+						scriptComp->scriptName.clear();
+						scriptComp->enabled = false;
+						scriptComp->awoken = false;
+						scriptComp->started = false;
+						scriptComp->instance.reset(); // 인스턴스 제거
+						changed = true;
+					}
+					if (isNoneSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					
+					// 등록된 스크립트 목록
+					for (const auto& scriptName : registeredScripts)
+					{
+						bool isSelected = (currentScriptName == scriptName);
+						if (ImGui::Selectable(scriptName.c_str(), isSelected))
+						{
+							// 스크립트 변경/추가
+							scriptComp->scriptName = scriptName;
+							scriptComp->enabled = true;
+							scriptComp->awoken = false; // 새 스크립트는 아직 Awake/Start 호출 안 됨
+							scriptComp->started = false;
+							scriptComp->instance.reset(); // 기존 인스턴스 제거 (UIScriptSystem에서 재생성)
+							changed = true;
+						}
+						if (isSelected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+					}
+					ImGui::EndCombo();
+				}
+				
+				// Enabled 체크박스 (스크립트가 있을 때만)
+				if (!currentScriptName.empty())
+				{
+					if (ImGui::Checkbox("Enabled", &enabled))
+					{
+						scriptComp->enabled = enabled;
+						changed = true;
+					}
+					
+					// 읽기 전용 상태 표시
+					ImGui::TextDisabled("State:");
+					ImGui::BulletText("Awoken: %s", scriptComp->awoken ? "Yes" : "No");
+					ImGui::BulletText("Started: %s", scriptComp->started ? "Yes" : "No");
+					ImGui::BulletText("Instance: %s", scriptComp->instance ? "Active" : "None");
+				}
+				
+				// Remove 버튼 (스크립트가 있을 때만)
+				if (!currentScriptName.empty())
+				{
+					ImGui::Separator();
+					if (ImGui::Button("Remove Script"))
+					{
+						// 스크립트 제거
+						scriptComp->scriptName.clear();
+						scriptComp->enabled = false;
+						scriptComp->awoken = false;
+						scriptComp->started = false;
+						scriptComp->instance.reset();
+						changed = true;
+					}
+				}
+				
+				if (changed)
+				{
+					extern bool g_SceneDirty;
+					g_SceneDirty = true; // 씬 변경 플래그 설정
+					// UIScriptSystem이 다음 Tick에서 instance를 재생성함
+				}
+			}
+			ImGui::Separator();
+		}
+		
+		// ============================================================================
+		// UI Script 관리 (여러 스크립트 지원, World Script Inspector와 유사)
+		// ============================================================================
+		ImGui::Separator();
+		ImGui::Text("UI Scripts");
+		
+		// Add UI Script 버튼
+		static std::vector<std::string> uiScriptNames;
+		static bool uiScriptNamesBuilt = false;
+		
+		if (ImGui::BeginCombo("Add UI Script", "Select Script..."))
+		{
+			if (uiScriptNames.empty() || !uiScriptNamesBuilt)
+			{
+				uiScriptNamesBuilt = true;
+				uiScriptNames = UIScriptSystem::GetRegisteredUIScriptNames();
+				std::sort(uiScriptNames.begin(), uiScriptNames.end());
+				uiScriptNames.erase(std::unique(uiScriptNames.begin(), uiScriptNames.end()),
+					uiScriptNames.end());
+			}
+			
+			for (const auto& name : uiScriptNames)
+			{
+				if (ImGui::Selectable(name.c_str()))
+				{
+					// UIWorld에 스크립트 추가
+					uiWorld.AddUIScript(uiEntityID, name);
+					extern bool g_SceneDirty;
+					g_SceneDirty = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+		
+		// UI Script 목록 표시 및 편집
+		if (auto* scripts = uiWorld.GetUIScripts(uiEntityID); scripts && !scripts->empty())
+		{
+			for (size_t i = 0; i < scripts->size();)
+			{
+				auto& entry = (*scripts)[i];
+				bool removed = false;
+				
+				ImGui::PushID(static_cast<int>(i));
+				std::string header = entry.scriptName.empty() ? "UI Script" : entry.scriptName;
+				if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					ImGui::Checkbox("Enabled", &entry.enabled);
+					ImGui::SameLine();
+					if (ImGui::Button("Remove##UIScriptRemove"))
+					{
+						removed = true;
+					}
+					
+					// 스크립트 인스턴스가 있으면 RTTR 기반 속성 편집
+					if (entry.instance)
+					{
+						rttr::instance inst = *entry.instance;
+						rttr::type type = rttr::type::get_by_name(entry.scriptName);
+						if (!type.is_valid())
+						{
+							type = inst.get_type();
+						}
+						
+						if (type.is_valid())
+						{
+							for (auto prop : type.get_properties())
+							{
+								ReflectionUI::UIEditEvent propEvent = ReflectionUI::Detail::RenderProperty(prop, inst, "", nullptr);
+								if (propEvent.changed)
+								{
+									extern bool g_SceneDirty;
+									g_SceneDirty = true;
+								}
+							}
+						}
+					}
+					else
+					{
+						ImGui::TextDisabled("(Script instance not created yet)");
+					}
+				}
+				ImGui::PopID();
+				
+				if (removed)
+				{
+					uiWorld.RemoveUIScript(uiEntityID, i);
+					extern bool g_SceneDirty;
+					g_SceneDirty = true;
+				}
+				else
+				{
+					i++;
+				}
+			}
+		}
+	}
+
+} 
 
 

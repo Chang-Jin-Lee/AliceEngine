@@ -35,7 +35,10 @@ namespace Alice
         swapChainDesc.Windowed = TRUE;
         swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // HDR 지원을 위해 FLIP_DISCARD 사용
 
-        UINT createDeviceFlags = 0;
+
+        // 기존 플래그에 BGRA 지원 플래그를 더합니다 -> 이거 없으면 D2D 못그림!!
+        UINT createDeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+
 #ifdef _DEBUG
         // 디버그 빌드에서는 D3D 디버그 레이어를 활성화합니다.
         createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;

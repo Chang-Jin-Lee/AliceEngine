@@ -1,4 +1,4 @@
-﻿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -425,13 +425,13 @@ namespace Alice
         return !m_pendingSwitch.empty() || !m_pendingSceneFile.empty();
     }
 
-    void ScriptSystem::CommitSceneRequests(World& world)
+    void ScriptSystem::CommitSceneRequests(World& world, UIWorldManager* uiWorldManager)
     {
         // 기존 로직 그대로 사용 (단, 이제 엔진이 안전 지점에서 호출)
-        ProcessSceneRequests(world);
+        ProcessSceneRequests(world, uiWorldManager);
     }
 
-    void ScriptSystem::ProcessSceneRequests(World& world)
+    void ScriptSystem::ProcessSceneRequests(World& world, UIWorldManager* uiWorldManager)
     {
         if (m_pendingSwitch.empty() && m_pendingSceneFile.empty())
             return;
@@ -453,8 +453,8 @@ namespace Alice
             {
                 const std::string path = std::exchange(m_pendingSceneFile, {});
                 const bool ok = (m_resources)
-                    ? SceneFile::LoadAuto(world, *m_resources, std::filesystem::path(path))
-                    : SceneFile::Load(world, std::filesystem::path(path));
+                    ? SceneFile::LoadAuto(world, *m_resources, std::filesystem::path(path), uiWorldManager)
+                    : SceneFile::Load(world, std::filesystem::path(path), uiWorldManager);
                 onTrimVideoMemory.Execute();
                 if (!ok)
                     ALICE_LOG_ERRORF("ScriptSystem: SceneFile::Load failed. path=\"%s\"", path.c_str());
