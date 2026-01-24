@@ -17,6 +17,9 @@ namespace Alice
         /// \param editorMode true 이면 에디터(도킹 UI) 모드, false 이면 게임 전용 모드
         Engine(bool editorMode = true);
         ~Engine();
+        
+        /// 엔진 종료 (명시적 종료 호출)
+        void Shutdown();
 
         /// 엔진과 윈도우, 렌더 디바이스를 초기화합니다.
         bool Initialize(HINSTANCE hInstance, int nCmdShow);
@@ -58,15 +61,18 @@ namespace Alice
         void SetUseForwardRendering(bool useForward);
         bool GetUseForwardRendering() const;
         //===========================================
-        //����
+        //물리
         void RefreshPhysicsForCurrentWorld();
         void TickPhysics(float dt);
+        void ProcessPhysicsEvents();
+        /// 월드와 물리 시스템을 함께 정리하는 안전한 진입점
+        /// World::Clear()와 PhysicsSystem 정리를 함께 처리하여 누락을 방지
+        void ClearWorldAndPhysics();
         //===========================================
 
     private:
         struct Impl;
-		std::unique_ptr<Impl> pImpl;
+        std::unique_ptr<Impl> pImpl;
     };
 }
-
 

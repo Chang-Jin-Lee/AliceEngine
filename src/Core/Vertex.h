@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <DirectXMath.h>
 
@@ -43,6 +43,7 @@ struct VertexTBN
 	DirectX::XMFLOAT3 b;
 	DirectX::XMFLOAT4 color;
 	DirectX::XMFLOAT2 uv;
+	DirectX::XMFLOAT3 smoothNormal;
 };
 
 struct VertexSkinnedTBN
@@ -55,4 +56,5 @@ struct VertexSkinnedTBN
     DirectX::XMFLOAT2 uv;
     unsigned short     boneIdx[4];
     DirectX::XMFLOAT4  boneWeight;
+    DirectX::XMFLOAT3 smoothNormal;
 };

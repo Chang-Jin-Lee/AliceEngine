@@ -23,12 +23,9 @@ void PhysXWorld::DrainEvents(std::vector<PhysicsEvent>& outEvents)
 	outEvents.swap(impl->events);
 }
 
-// enableContactModify=true로 Scene을 만들지 않으면 절대 호출 안 됨
 void PhysXWorld::SetContactModifyCallback(ContactModifyCallback cb, void* userContext)
 {
 	if (!impl) return;
-	// NOTE: This is only effective if the scene was created with contact modify enabled
-	// (PhysXWorld::Desc.enableContactModify = true). Otherwise PhysX will never call it.
 	std::scoped_lock lock(impl->contactModifyMtx);
 	impl->contactModifyCb = cb;
 	impl->contactModifyUser = userContext;
@@ -166,11 +163,13 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateRevoluteJoint(const IPhysicsAct
 	// Drive (motor)
 	j->setRevoluteJointFlag(PxRevoluteJointFlag::eDRIVE_ENABLED, desc.enableDrive);
 	j->setRevoluteJointFlag(PxRevoluteJointFlag::eDRIVE_FREESPIN, desc.driveFreeSpin);
-	j->setDriveVelocity(desc.driveVelocity, true);
-	j->setDriveForceLimit((desc.driveForceLimit > 0.0f) ? desc.driveForceLimit : PX_MAX_F32);
 
-	// NOTE: PhysX default interprets drive force limit as impulse unless this flag is set.
-	j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
+	if (desc.enableDrive)
+	{
+		j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
+		j->setDriveVelocity(desc.driveVelocity, true);
+		j->setDriveForceLimit((desc.driveForceLimit > 0.0f) ? desc.driveForceLimit : PX_MAX_F32);
+	}
 
 	return std::make_unique<PhysXJoint>(j, impl);
 }
@@ -289,7 +288,6 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateD6Joint(const IPhysicsActor& a,
 	if (!j) return {};
 
 	ApplyBreakAndFlags(*j, desc.collideConnected, desc.breakForce, desc.breakTorque, desc.userData);
-	j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
 
 	// Motions
 	j->setMotion(PxD6Axis::eX, ToPxD6Motion(desc.motionX));
@@ -317,9 +315,6 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateD6Joint(const IPhysicsActor& a,
 			desc.linearLimitZ.stiffness, desc.linearLimitZ.damping,
 			desc.linearLimitZ.restitution, desc.linearLimitZ.bounceThreshold));
 
-	// Distance limit for multi-axis linear limits (kept generous; per-axis limits are set above)
-	// If you want a strict spherical distance limit, configure it explicitly via PxD6Joint::setDistanceLimit.
-
 	// Angular limits
 	if (desc.motionTwist == D6Motion::Limited)
 	{
@@ -340,6 +335,7 @@ std::unique_ptr<IPhysicsJoint> PhysXWorld::CreateD6Joint(const IPhysicsActor& a,
 	}
 
 	// Drives
+	j->setConstraintFlag(PxConstraintFlag::eDRIVE_LIMITS_ARE_FORCES, desc.driveLimitsAreForces);
 	j->setDrive(PxD6Drive::eX, MakeD6Drive(desc.driveX));
 	j->setDrive(PxD6Drive::eY, MakeD6Drive(desc.driveY));
 	j->setDrive(PxD6Drive::eZ, MakeD6Drive(desc.driveZ));

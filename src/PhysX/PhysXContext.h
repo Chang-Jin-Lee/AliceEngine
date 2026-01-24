@@ -55,7 +55,7 @@ struct PhysXContextDesc
 	bool enablePvd = false;
 	const char* pvdHost = "127.0.0.1";
 	int pvdPort = 5425;
-	uint32_t pvdTimeoutMs = 10;
+	uint32_t pvdTimeoutMs = 1000;  // 1초: PVD 서버 연결에 충분한 시간 제공
 
 	// Worker threads for PhysX CPU dispatcher
 	uint32_t dispatcherThreads = 2;

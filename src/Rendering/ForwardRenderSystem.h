@@ -85,7 +85,10 @@ namespace Alice
                                const float& roughness,
                                const float& metalness,
                                const bool& useTexture,
-                               const bool& enableNormalMap);
+                               const bool& enableNormalMap,
+                               int shadingMode,
+                               const DirectX::XMFLOAT3& outlineColor = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
+                               float outlineWidth = 0.01f);
 
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
@@ -98,6 +101,7 @@ namespace Alice
                            std::uint32_t boneCount);
 
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
+        DirectX::XMMATRIX BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const;
 
         //void GetSceneBounds(const World& world, DirectX::XMVECTOR& outFocus, float& outRadius);
        // void SetCullState(DirectX::CXMMATRIX worldM, bool isShadowPass);
@@ -149,6 +153,8 @@ namespace Alice
         // 섀도우 맵 깊이 바이어스 전용 RS
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_shadowRasterizerState;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_shadowRasterizerStateReversed;
+        // 아웃라인용 (Cull Front) 래스터라이저
+        Microsoft::WRL::ComPtr<ID3D11RasterizerState>    m_rsCullFront;
 
         // 머티리얼 전용 텍스처 캐시 (경로 -> SRV)
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> m_textureCache;
@@ -192,9 +198,14 @@ namespace Alice
         // ==== 게임 뷰포트용 깊이/스텐실 ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_sceneDSV;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneDepthSRV;
 
         std::uint32_t                                   m_sceneWidth  = 0;
         std::uint32_t                                   m_sceneHeight = 0;
+
+        // 이번 프레임에 실제로 사용한 카메라 정보 (ComputeEffect용)
+        DirectX::XMMATRIX                               m_lastViewProj = DirectX::XMMatrixIdentity();
+        DirectX::XMFLOAT3                                m_lastCameraPos{0, 0, 0};
 
         bool CreateSceneRenderTarget(std::uint32_t width, std::uint32_t height);
 
@@ -216,6 +227,7 @@ namespace Alice
         // ==== 톤매핑 리소스 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_quadVS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>       m_toneMappingPS;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader>       m_particleOverlayPS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_quadInputLayout;
         Microsoft::WRL::ComPtr<ID3D11Buffer>            m_quadVB;
         Microsoft::WRL::ComPtr<ID3D11Buffer>            m_quadIB;
@@ -225,12 +237,17 @@ namespace Alice
         // 톤매핑 전용 상태 객체 (Blend OFF, Depth OFF, Cull OFF)
         Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_ppDepthOff;
         Microsoft::WRL::ComPtr<ID3D11BlendState>        m_ppBlendOpaque;
+        Microsoft::WRL::ComPtr<ID3D11BlendState>        m_ppBlendAdditive;
         Microsoft::WRL::ComPtr<ID3D11RasterizerState>   m_ppRasterNoCull;
 
     public:
         /// 스키닝 메시를 렌더링합니다.
         /// - AliceGame 의 SkinnedMeshSystem 이 만들어 준 DrawCommand 리스트를 사용합니다.
-        void RenderSkinnedMeshes(const Camera& camera, const std::vector<SkinnedDrawCommand>& commands);
+        void RenderSkinnedMeshes(const Camera& camera,
+                                 const std::vector<SkinnedDrawCommand>& commands,
+                                 int shadingMode,
+                                 bool enableFillLight,
+                                 DirectX::CXMMATRIX lightViewProj);
 
         /// 현재 조명 파라미터(색상, 강도, Shininess 등)를 반환합니다.
         /// ImGui 등에서 이 값을 직접 수정해도 됩니다.
@@ -246,6 +263,14 @@ namespace Alice
 
         /// 에디터 뷰포트 표시용(톤매핑 완료) SRV
         ID3D11ShaderResourceView* GetViewportSRV() const { return m_viewportSRV.Get(); }
+        
+        /// Scene Depth SRV (depth test용)
+        ID3D11ShaderResourceView* GetSceneDepthSRV() const { return m_sceneDepthSRV.Get(); }
+
+        /// 이번 프레임에 실제로 사용한 카메라 View-Projection 행렬을 반환합니다 (ComputeEffect용)
+        const DirectX::XMMATRIX& GetLastViewProj() const { return m_lastViewProj; }
+        /// 이번 프레임에 실제로 사용한 카메라 월드 위치를 반환합니다 (ComputeEffect용)
+        const DirectX::XMFLOAT3& GetLastCameraPos() const { return m_lastCameraPos; }
 
         /// IBL 세트를 변경합니다 (Bridge/Indoor/Sample)
         /// - 씬 전환 시 호출하여 환경에 맞는 IBL을 로드합니다.
@@ -263,6 +288,12 @@ namespace Alice
         /// @param targetRTV 백버퍼 RTV
         /// @param viewport 뷰포트 영역
         void RenderToneMapping(ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+
+        /// 파티클 텍스처를 오버레이로 합성합니다 (additive blending)
+        void RenderParticleOverlay(ID3D11ShaderResourceView* particleSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+        
+        /// 뷰포트 렌더 타겟에 파티클 오버레이 합성 (에디터 모드용)
+        void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
