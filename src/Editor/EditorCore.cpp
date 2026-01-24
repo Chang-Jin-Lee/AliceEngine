@@ -4424,10 +4424,10 @@ namespace Alice
 						// UIWorldManager가 있으면 LoadAuto 사용 (World + UI 동시 로드)
 						// 없으면 Load만 사용 (World만 로드)
 						bool loadSuccess = false;
-						if (m_uiWorldManager && m_resources)
+						if (m_uiWorldManager)
 						{
 							// LoadAuto는 World와 UI를 함께 로드함
-							loadSuccess = SceneFile::LoadAuto(world, *m_resources, g_NextScenePath, m_uiWorldManager);
+							loadSuccess = SceneFile::LoadAuto(world, Alice::ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
 						}
 						else
 						{
@@ -4442,11 +4442,11 @@ namespace Alice
 								uiPath.replace_extension(".uiscene");
 								
 								// UI 파일이 존재하면 로드
-								std::filesystem::path uiPathAbs = m_resources ? m_resources->Resolve(uiPath) : uiPath;
+								std::filesystem::path uiPathAbs = Alice::ResourceManager::Get().Resolve(uiPath);
 								if (std::filesystem::exists(uiPathAbs))
 								{
 									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
-									if (!m_uiWorldManager->LoadUI(uiPath, m_resources))
+									if (!m_uiWorldManager->LoadUI(uiPath, &Alice::ResourceManager::Get()))
 									{
 										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
 									}
@@ -4551,10 +4551,10 @@ namespace Alice
 					{
 						// 실행 안 함: 즉시 로드
 						bool loadSuccess = false;
-						if (m_uiWorldManager && m_resources)
+						if (m_uiWorldManager)
 						{
 							// LoadAuto는 World와 UI를 함께 로드함
-							loadSuccess = SceneFile::LoadAuto(world, *m_resources, g_NextScenePath, m_uiWorldManager);
+							loadSuccess = SceneFile::LoadAuto(world, Alice::ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
 						}
 						else
 						{
@@ -4569,11 +4569,11 @@ namespace Alice
 								uiPath.replace_extension(".uiscene");
 								
 								// UI 파일이 존재하면 로드
-								std::filesystem::path uiPathAbs = m_resources ? m_resources->Resolve(uiPath) : uiPath;
+								std::filesystem::path uiPathAbs = Alice::ResourceManager::Get().Resolve(uiPath);
 								if (std::filesystem::exists(uiPathAbs))
 								{
 									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
-									if (!m_uiWorldManager->LoadUI(uiPath, m_resources))
+									if (!m_uiWorldManager->LoadUI(uiPath, &Alice::ResourceManager::Get()))
 									{
 										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
 									}
@@ -4647,10 +4647,10 @@ namespace Alice
 							g_NextScenePath.string().c_str());
 						
 						bool loadSuccess = false;
-						if (m_uiWorldManager && m_resources)
+						if (m_uiWorldManager)
 						{
 							// LoadAuto는 World와 UI를 함께 로드함
-							loadSuccess = SceneFile::LoadAuto(world, *m_resources, g_NextScenePath, m_uiWorldManager);
+							loadSuccess = SceneFile::LoadAuto(world, Alice::ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
 						}
 						else
 						{
@@ -4665,11 +4665,11 @@ namespace Alice
 								uiPath.replace_extension(".uiscene");
 								
 								// UI 파일이 존재하면 로드
-								std::filesystem::path uiPathAbs = m_resources ? m_resources->Resolve(uiPath) : uiPath;
+								std::filesystem::path uiPathAbs = Alice::ResourceManager::Get().Resolve(uiPath);
 								if (std::filesystem::exists(uiPathAbs))
 								{
 									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
-									if (!m_uiWorldManager->LoadUI(uiPath, m_resources))
+									if (!m_uiWorldManager->LoadUI(uiPath, &Alice::ResourceManager::Get()))
 									{
 										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
 									}
@@ -7599,7 +7599,7 @@ namespace Alice
 
 
 			// 저장 실행 (UIWorldManager가 있으면 World와 UI를 함께 저장)
-			std::filesystem::path absPath = m_resources ? m_resources->Resolve(savePath) : savePath;
+		std::filesystem::path absPath = Alice::ResourceManager::Get().Resolve(savePath);
 			if (m_uiWorldManager)
 			{
 				// SceneFile::Save가 내부에서 이미 SaveUI를 호출하므로 중복 호출 제거
