@@ -745,6 +745,10 @@ namespace Alice
 				// 씬 바뀐 프레임이면 물리/카메라(월드 접근)를 스킵하고, 아래 "카메라 최종 적용"만 수행
 			if (!sceneChangedThisFrame)
 			{
+				// 2-1.5 애니메이션/소켓 업데이트 (물리 전에 실행하여 히트박스가 최신 본 행렬 사용)
+				// dt가 0이어도(일시정지) 에디터 조작 반영을 위해 갱신
+				pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+
 				// 2-2. 물리 업데이트
 				// ===================================================================
 				// Phy_SettingsComponent가 있는데 물리 월드가 없으면 생성 시도
@@ -1406,7 +1410,8 @@ namespace Alice
 
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
-		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		// 주의: 실제 애니메이션 업데이트는 Engine::Update()에서 물리 전에 실행됨 (소켓 월드행렬 갱신용)
+		// 여기서는 렌더링용 드로우 커맨드만 빌드 (Update()에서 이미 palette 갱신됨)
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
 		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
@@ -1520,12 +1525,29 @@ namespace Alice
 			{
 				depthSRV = pImpl->m_deferredRenderSystem->GetSceneDepthSRV();
 			}
-
+			
 			// Execute에 depthSRV, near/far, dt를 직접 전달
 			// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
+			// near/far는 실제 렌더에 사용된 카메라의 값 사용 (에디터 뷰포트/게임 카메라 불일치 방지)
 			float dtSec = pImpl->m_timer.DeltaTime();
-			float nearPlane = pImpl->m_camera.GetNearPlane();
-			float farPlane = pImpl->m_camera.GetFarPlane();
+			float nearPlane = 0.1f;
+			float farPlane = 1000.0f;
+			if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+			{
+				nearPlane = pImpl->m_forwardRenderSystem->GetLastNearPlane();
+				farPlane = pImpl->m_forwardRenderSystem->GetLastFarPlane();
+			}
+			else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+			{
+				nearPlane = pImpl->m_deferredRenderSystem->GetLastNearPlane();
+				farPlane = pImpl->m_deferredRenderSystem->GetLastFarPlane();
+			}
+			// fallback: 렌더러 값이 없으면 카메라 값 사용
+			if (nearPlane == 0.1f && farPlane == 1000.0f)
+			{
+				nearPlane = pImpl->m_camera.GetNearPlane();
+				farPlane = pImpl->m_camera.GetFarPlane();
+			}
 			pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV, nearPlane, farPlane, dtSec);
 		}
 

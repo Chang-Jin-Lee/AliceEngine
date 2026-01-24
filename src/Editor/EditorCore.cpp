@@ -49,6 +49,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <Core/Prefab.h>
 #include <Core/IScript.h>
@@ -58,6 +59,7 @@
 #include <Core/SceneFile.h>
 #include <shellapi.h>
 #include <commdlg.h>
+#include "Editor/Inspectors/EditorInspectors.h"
 #include <ShlObj.h>   // 폴더 선택 다이얼로그 (SHBrowseForFolderW)
 #include <Game/FbxAsset.h>
 #include "json/json.hpp"
@@ -83,33 +85,8 @@ namespace Alice
 
 	namespace
 	{
-		// RTTR 기반 Inspector 렌더링 헬퍼
-		ReflectionUI::UIEditEvent RenderInspectorInstance(rttr::instance inst, World* world)
-		{
-			ReflectionUI::UIEditEvent result{};
-			if (!inst.is_valid()) return result;
+		// RegisterEngineInspectors는 Inspectors/EditorInspectors.cpp에 정의됨
 
-			rttr::type t = inst.get_type();
-			for (auto& prop : t.get_properties())
-			{
-				const std::string propName = prop.get_name().to_string();
-
-				ReflectionUI::UIEditEvent ev{};
-				if (propName == "roughness" || propName == "metalness")
-				{
-					ev = ReflectionUI::Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
-				}
-				else
-				{
-					ev = ReflectionUI::Detail::RenderProperty(prop, inst, "", world);
-				}
-
-				result.changed |= ev.changed;
-				result.activated |= ev.activated;
-				result.deactivatedAfterEdit |= ev.deactivatedAfterEdit;
-			}
-			return result;
-		}
 		// Build Game 진행 상황 전역 (아래쪽에서 정의됨)
 		extern std::atomic<bool>  g_BuildInProgress;
 		extern std::atomic<float> g_BuildProgress;
@@ -210,471 +187,40 @@ namespace Alice
 			bool SupportsRedo() const override { return false; }
 		};
 
-		// 엔티티 삭제 명령 (씬 파일 직렬화 함수 사용)
+		// 엔티티 삭제 명령 (SceneFile codec 사용: EntityRef GUID, Material 정규화, registry 루프와 동일)
 		struct DestroyEntityCommand : ICommand
 		{
 			EntityId entityId;
 			std::string entityName;
-			JsonRttr::json serializedData; // 엔티티 전체를 JSON으로 저장
-			JsonRttr::json childrenData; // 자식 엔티티들의 JSON 데이터 배열
+			JsonRttr::json serializedData;
+			JsonRttr::json childrenData;
 			mutable std::string description;
 
 			DestroyEntityCommand(EntityId id, const std::string& name, const World& world)
 				: entityId(id), entityName(name)
 			{
 				description = "Delete Entity";
-				// 엔티티 삭제 전에 전체 상태를 JSON으로 저장
-				// SceneFile의 WriteEntity 함수와 동일한 방식 사용
 				JsonRttr::json entityJson;
-				if (WriteEntityToJson(entityJson, world, id))
-				{
+				if (SceneFile::WriteEntity(entityJson, world, id))
 					serializedData = entityJson;
-				}
 
-				// 자식 엔티티들도 저장 (재귀적으로)
 				childrenData = JsonRttr::json::array();
 				SaveChildrenRecursive(world, id, childrenData);
 			}
 
-			// 재귀적으로 자식 엔티티들을 저장하는 헬퍼 함수
 			static void SaveChildrenRecursive(const World& world, EntityId parentId, JsonRttr::json& outArray)
 			{
-				std::vector<EntityId> children = world.GetChildren(parentId);
-				for (EntityId childId : children)
+				for (EntityId childId : world.GetChildren(parentId))
 				{
 					JsonRttr::json childJson;
-					if (WriteEntityToJson(childJson, world, childId))
-					{
-						// 재귀적으로 손자들도 저장 (push_back 전에 완료)
-						JsonRttr::json grandchildrenArray = JsonRttr::json::array();
-						SaveChildrenRecursive(world, childId, grandchildrenArray);
-						if (!grandchildrenArray.empty())
-						{
-							childJson["_children"] = std::move(grandchildrenArray);
-						}
-
-						// 손자 정보를 포함한 childJson을 push
-						outArray.push_back(std::move(childJson));
-					}
+					if (!SceneFile::WriteEntity(childJson, world, childId))
+						continue;
+					JsonRttr::json grandchildrenArray = JsonRttr::json::array();
+					SaveChildrenRecursive(world, childId, grandchildrenArray);
+					if (!grandchildrenArray.empty())
+						childJson["_children"] = std::move(grandchildrenArray);
+					outArray.push_back(std::move(childJson));
 				}
-			}
-
-			// WriteEntity 함수를 복사한 헬퍼 함수 (SceneFile::WriteEntity와 동일한 방식)
-			static bool WriteEntityToJson(JsonRttr::json& outEntity, const World& world, EntityId id)
-			{
-				outEntity = JsonRttr::json::object();
-
-				const std::string name = world.GetEntityName(id);
-				if (!name.empty())
-					outEntity["name"] = name;
-
-				// GUID 저장
-				if (const auto* idComp = world.GetComponent<IDComponent>(id); idComp)
-				{
-					outEntity["guid"] = std::to_string(idComp->guid);
-				}
-
-				// Parent 관계 저장 (GUID 기반)
-				EntityId parentId = world.GetParent(id);
-				if (parentId != InvalidEntityId)
-				{
-					if (const auto* parentIdComp = world.GetComponent<IDComponent>(parentId); parentIdComp)
-					{
-						outEntity["_parentGuid"] = std::to_string(parentIdComp->guid);
-					}
-				}
-
-				if (const auto* transform = world.GetComponent<TransformComponent>(id); transform)
-				{
-					rttr::instance inst = const_cast<TransformComponent&>(*transform);
-					outEntity["Transform"] = JsonRttr::ToJsonObject(inst);
-				}
-
-				if (const auto* scripts = world.GetScripts(id); scripts && !scripts->empty())
-				{
-					JsonRttr::json arr = JsonRttr::json::array();
-					for (const auto& sc : *scripts)
-					{
-						JsonRttr::json s = JsonRttr::json::object();
-						s["name"] = sc.scriptName;
-						s["enabled"] = sc.enabled;
-
-						if (sc.instance)
-						{
-							rttr::instance inst = *sc.instance;
-							const rttr::type t = rttr::type::get_by_name(sc.scriptName);
-							s["props"] = JsonRttr::ToJsonObject(inst, t);
-						}
-
-						arr.push_back(s);
-					}
-					outEntity["Scripts"] = arr;
-				}
-
-				// Material
-				if (const auto* mat = world.GetComponent<MaterialComponent>(id); mat)
-				{
-					MaterialComponent matCopy = *mat;
-					rttr::instance inst = matCopy;
-					outEntity["Material"] = JsonRttr::ToJsonObject(inst);
-				}
-
-				// SkinnedMesh
-				if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(id); skinned)
-				{
-					SkinnedMeshComponent skinnedCopy = *skinned;
-					rttr::instance inst = skinnedCopy;
-					outEntity["SkinnedMesh"] = JsonRttr::ToJsonObject(inst);
-				}
-
-				// SkinnedAnimation
-				if (const auto* anim = world.GetComponent<SkinnedAnimationComponent>(id); anim)
-				{
-					rttr::instance inst = const_cast<SkinnedAnimationComponent&>(*anim);
-					outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
-				}
-
-				// Camera components
-				if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
-				{
-					rttr::instance inst = const_cast<CameraComponent&>(*cam);
-					outEntity["Camera"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* follow = world.GetComponent<CameraFollowComponent>(id); follow)
-				{
-					rttr::instance inst = const_cast<CameraFollowComponent&>(*follow);
-					outEntity["CameraFollow"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* spring = world.GetComponent<CameraSpringArmComponent>(id); spring)
-				{
-					rttr::instance inst = const_cast<CameraSpringArmComponent&>(*spring);
-					outEntity["CameraSpringArm"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* lookAt = world.GetComponent<CameraLookAtComponent>(id); lookAt)
-				{
-					rttr::instance inst = const_cast<CameraLookAtComponent&>(*lookAt);
-					outEntity["CameraLookAt"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* shake = world.GetComponent<CameraShakeComponent>(id); shake)
-				{
-					rttr::instance inst = const_cast<CameraShakeComponent&>(*shake);
-					outEntity["CameraShake"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* blend = world.GetComponent<CameraBlendComponent>(id); blend)
-				{
-					rttr::instance inst = const_cast<CameraBlendComponent&>(*blend);
-					outEntity["CameraBlend"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* input = world.GetComponent<CameraInputComponent>(id); input)
-				{
-					rttr::instance inst = const_cast<CameraInputComponent&>(*input);
-					outEntity["CameraInput"] = JsonRttr::ToJsonObject(inst);
-				}
-
-				// Lights
-				if (const auto* pl = world.GetComponent<PointLightComponent>(id); pl)
-				{
-					rttr::instance inst = const_cast<PointLightComponent&>(*pl);
-					outEntity["PointLight"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* sl = world.GetComponent<SpotLightComponent>(id); sl)
-				{
-					rttr::instance inst = const_cast<SpotLightComponent&>(*sl);
-					outEntity["SpotLight"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* rl = world.GetComponent<RectLightComponent>(id); rl)
-				{
-					rttr::instance inst = const_cast<RectLightComponent&>(*rl);
-					outEntity["RectLight"] = JsonRttr::ToJsonObject(inst);
-				}
-
-				// Physics Components
-				if (const auto* rigid = world.GetComponent<Phy_RigidBodyComponent>(id); rigid)
-				{
-					rttr::instance inst = const_cast<Phy_RigidBodyComponent&>(*rigid);
-					outEntity["RigidBody"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* collider = world.GetComponent<Phy_ColliderComponent>(id); collider)
-				{
-					rttr::instance inst = const_cast<Phy_ColliderComponent&>(*collider);
-					outEntity["Collider"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* meshCollider = world.GetComponent<Phy_MeshColliderComponent>(id); meshCollider)
-				{
-					rttr::instance inst = const_cast<Phy_MeshColliderComponent&>(*meshCollider);
-					outEntity["MeshCollider"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* cct = world.GetComponent<Phy_CCTComponent>(id); cct)
-				{
-					rttr::instance inst = const_cast<Phy_CCTComponent&>(*cct);
-					outEntity["CharacterController"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* terrain = world.GetComponent<Phy_TerrainHeightFieldComponent>(id); terrain)
-				{
-					rttr::instance inst = const_cast<Phy_TerrainHeightFieldComponent&>(*terrain);
-					outEntity["TerrainHeightField"] = JsonRttr::ToJsonObject(inst);
-				}
-				if (const auto* joint = world.GetComponent<Phy_JointComponent>(id); joint)
-				{
-					rttr::instance inst = const_cast<Phy_JointComponent&>(*joint);
-					outEntity["Joint"] = JsonRttr::ToJsonObject(inst);
-				}
-
-				return true;
-			}
-
-			// GUID 파싱 헬퍼 (SceneFile와 동일)
-			static std::uint64_t ParseGuid(const JsonRttr::json& j)
-			{
-				if (j.is_string())
-				{
-					try
-					{
-						return std::stoull(j.get<std::string>());
-					}
-					catch (...)
-					{
-						// GUID 생성 함수는 World.cpp에 있으므로 여기서는 0 반환 (나중에 덮어쓰기)
-						return 0;
-					}
-				}
-				else if (j.is_number_unsigned())
-				{
-					return j.get<std::uint64_t>();
-				}
-				return 0;
-			}
-
-			// ApplyEntity 함수를 복사한 헬퍼 함수
-			static bool RestoreEntityFromJson(World& world, const JsonRttr::json& e, EntityId& restoredId)
-			{
-				if (!e.is_object()) return false;
-
-				const EntityId id = world.CreateEntity();
-				restoredId = id;
-
-				// RAII 가드: 복원 실패 시 엔티티가 찌꺼기로 남지 않게 자동 정리
-				struct EntityGuard {
-					World& world;
-					EntityId id;
-					bool committed = false;
-
-					EntityGuard(World& w, EntityId i) : world(w), id(i) {}
-					~EntityGuard() {
-						if (!committed) {
-							world.DestroyEntity(id);
-						}
-					}
-				} guard(world, id);
-
-				const std::string name = e.value("name", std::string{});
-				if (!name.empty())
-					world.SetEntityName(id, name);
-
-				// IDComponent: GUID 복원 (저장된 값으로 덮어쓰기)
-				auto* idComp = world.GetComponent<IDComponent>(id);
-				if (idComp)
-				{
-					if (auto itGuid = e.find("guid"); itGuid != e.end())
-					{
-						auto parsed = ParseGuid(*itGuid);
-						if (parsed != 0) idComp->guid = parsed; // 실패면 덮어쓰지 않기
-					}
-					// 없으면 CreateEntity에서 생성한 GUID 유지
-				}
-
-				// Transform
-				TransformComponent& t = world.AddComponent<TransformComponent>(id);
-				auto itT = e.find("Transform");
-				if (itT != e.end())
-				{
-					rttr::instance inst = t;
-					if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
-				}
-
-				// Scripts
-				auto itS = e.find("Scripts");
-				if (itS != e.end() && itS->is_array())
-				{
-					for (const auto& s : *itS)
-					{
-						if (!s.is_object()) continue;
-						const std::string scriptName = s.value("name", std::string{});
-						if (scriptName.empty()) continue;
-
-						ScriptComponent& sc = world.AddScript(id, scriptName);
-						sc.enabled = s.value("enabled", true);
-
-						auto itP = s.find("props");
-						if (itP != s.end() && itP->is_object() && sc.instance)
-						{
-							rttr::instance inst = *sc.instance;
-							const rttr::type t = rttr::type::get_by_name(sc.scriptName);
-							if (!JsonRttr::FromJsonObject(inst, *itP, t)) return false;
-						}
-					}
-				}
-
-				// Material
-				auto itM = e.find("Material");
-				if (itM != e.end() && itM->is_object())
-				{
-					MaterialComponent& mc = world.AddComponent<MaterialComponent>(id, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
-					rttr::instance inst = mc;
-					if (!JsonRttr::FromJsonObject(inst, *itM)) return false;
-				}
-
-				// SkinnedMesh
-				auto itSM = e.find("SkinnedMesh");
-				if (itSM != e.end() && itSM->is_object())
-				{
-					SkinnedMeshComponent tmp;
-					rttr::instance instTmp = tmp;
-					if (!JsonRttr::FromJsonObject(instTmp, *itSM)) return false;
-
-					if (!tmp.meshAssetPath.empty())
-					{
-						SkinnedMeshComponent& sm = world.AddComponent<SkinnedMeshComponent>(id, tmp.meshAssetPath);
-						sm.instanceAssetPath = tmp.instanceAssetPath;
-						static DirectX::XMFLOAT4X4 identityBone = DirectX::XMFLOAT4X4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-						sm.boneMatrices = &identityBone;
-						sm.boneCount = 1;
-					}
-				}
-
-				// SkinnedAnimation
-				auto itSA = e.find("SkinnedAnimation");
-				if (itSA != e.end() && itSA->is_object())
-				{
-					SkinnedAnimationComponent& sa = world.AddComponent<SkinnedAnimationComponent>(id);
-					rttr::instance inst = sa;
-					if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
-				}
-
-				// Camera components
-				auto itC = e.find("Camera");
-				if (itC != e.end() && itC->is_object())
-				{
-					CameraComponent& cc = world.AddComponent<CameraComponent>(id);
-					rttr::instance inst = cc;
-					if (!JsonRttr::FromJsonObject(inst, *itC)) return false;
-				}
-				auto itCF = e.find("CameraFollow");
-				if (itCF != e.end() && itCF->is_object())
-				{
-					CameraFollowComponent& cf = world.AddComponent<CameraFollowComponent>(id);
-					rttr::instance inst = cf;
-					if (!JsonRttr::FromJsonObject(inst, *itCF)) return false;
-				}
-				auto itSpring = e.find("CameraSpringArm");
-				if (itSpring != e.end() && itSpring->is_object())
-				{
-					CameraSpringArmComponent& sa = world.AddComponent<CameraSpringArmComponent>(id);
-					rttr::instance inst = sa;
-					if (!JsonRttr::FromJsonObject(inst, *itSpring)) return false;
-				}
-				auto itLA = e.find("CameraLookAt");
-				if (itLA != e.end() && itLA->is_object())
-				{
-					CameraLookAtComponent& la = world.AddComponent<CameraLookAtComponent>(id);
-					rttr::instance inst = la;
-					if (!JsonRttr::FromJsonObject(inst, *itLA)) return false;
-				}
-				auto itCS = e.find("CameraShake");
-				if (itCS != e.end() && itCS->is_object())
-				{
-					CameraShakeComponent& cs = world.AddComponent<CameraShakeComponent>(id);
-					rttr::instance inst = cs;
-					if (!JsonRttr::FromJsonObject(inst, *itCS)) return false;
-				}
-				auto itCB = e.find("CameraBlend");
-				if (itCB != e.end() && itCB->is_object())
-				{
-					CameraBlendComponent& cb = world.AddComponent<CameraBlendComponent>(id);
-					rttr::instance inst = cb;
-					if (!JsonRttr::FromJsonObject(inst, *itCB)) return false;
-				}
-				auto itCI = e.find("CameraInput");
-				if (itCI != e.end() && itCI->is_object())
-				{
-					CameraInputComponent& ci = world.AddComponent<CameraInputComponent>(id);
-					rttr::instance inst = ci;
-					if (!JsonRttr::FromJsonObject(inst, *itCI)) return false;
-				}
-
-				// Lights
-				auto itPL = e.find("PointLight");
-				if (itPL != e.end() && itPL->is_object())
-				{
-					PointLightComponent& pl = world.AddComponent<PointLightComponent>(id);
-					rttr::instance inst = pl;
-					if (!JsonRttr::FromJsonObject(inst, *itPL)) return false;
-				}
-				auto itSL = e.find("SpotLight");
-				if (itSL != e.end() && itSL->is_object())
-				{
-					SpotLightComponent& sl = world.AddComponent<SpotLightComponent>(id);
-					rttr::instance inst = sl;
-					if (!JsonRttr::FromJsonObject(inst, *itSL)) return false;
-				}
-				auto itRL = e.find("RectLight");
-				if (itRL != e.end() && itRL->is_object())
-				{
-					RectLightComponent& rl = world.AddComponent<RectLightComponent>(id);
-					rttr::instance inst = rl;
-					if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
-				}
-
-				// Physics Components
-				auto itRB = e.find("RigidBody");
-				if (itRB != e.end() && itRB->is_object())
-				{
-					Phy_RigidBodyComponent& rb = world.AddComponent<Phy_RigidBodyComponent>(id);
-					rttr::instance inst = rb;
-					if (!JsonRttr::FromJsonObject(inst, *itRB)) return false;
-				}
-				auto itCollider = e.find("Collider");
-				if (itCollider != e.end() && itCollider->is_object())
-				{
-					Phy_ColliderComponent& col = world.AddComponent<Phy_ColliderComponent>(id);
-					rttr::instance inst = col;
-					if (!JsonRttr::FromJsonObject(inst, *itCollider)) return false;
-				}
-				auto itMeshCollider = e.find("MeshCollider");
-				if (itMeshCollider != e.end() && itMeshCollider->is_object())
-				{
-					Phy_MeshColliderComponent& mc = world.AddComponent<Phy_MeshColliderComponent>(id);
-					rttr::instance inst = mc;
-					if (!JsonRttr::FromJsonObject(inst, *itMeshCollider)) return false;
-				}
-				auto itCCT = e.find("CharacterController");
-				if (itCCT != e.end() && itCCT->is_object())
-				{
-					Phy_CCTComponent& cct = world.AddComponent<Phy_CCTComponent>(id);
-					rttr::instance inst = cct;
-					if (!JsonRttr::FromJsonObject(inst, *itCCT)) return false;
-				}
-				auto itTerrain = e.find("TerrainHeightField");
-				if (itTerrain != e.end() && itTerrain->is_object())
-				{
-					Phy_TerrainHeightFieldComponent& terrain = world.AddComponent<Phy_TerrainHeightFieldComponent>(id);
-					rttr::instance inst = terrain;
-					if (!JsonRttr::FromJsonObject(inst, *itTerrain)) return false;
-				}
-				auto itJoint = e.find("Joint");
-				if (itJoint != e.end() && itJoint->is_object())
-				{
-					Phy_JointComponent& joint = world.AddComponent<Phy_JointComponent>(id);
-					rttr::instance inst = joint;
-					if (!JsonRttr::FromJsonObject(inst, *itJoint)) return false;
-				}
-
-				// Parent 관계는 RestoreEntityFromJson 내부에서 처리하지 않음
-				// Undo에서 GUID로 찾아서 연결 (바깥에서 처리)
-
-				// 모든 컴포넌트 복원이 성공했으므로 가드 커밋
-				guard.committed = true;
-				return true;
 			}
 
 			void Execute(World& world, EntityId& selectedEntity) override
@@ -684,77 +230,64 @@ namespace Alice
 				world.DestroyEntity(entityId);
 			}
 
-			// GUID로 엔티티 찾기 헬퍼
-			static EntityId FindEntityByGuid(World& world, std::uint64_t guid)
+			// 재귀적으로 자식 엔티티들을 복원하는 헬퍼 함수
+			static bool RestoreChildrenRecursive(World& world,
+				const JsonRttr::json& childrenArray,
+				std::unordered_map<std::uint64_t, EntityId>& guidToEntity,
+				std::vector<std::pair<EntityId, std::uint64_t>>& pendingParents)
 			{
-				for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+				if (!childrenArray.is_array()) return true;
+				for (const auto& childJson : childrenArray)
 				{
-					if (idc.guid == guid)
-						return eid;
+					EntityId childId = InvalidEntityId;
+					if (!SceneFile::ApplyEntity(world, childJson, guidToEntity, pendingParents, &childId))
+					{
+						if (childId != InvalidEntityId)
+							world.DestroyEntity(childId);
+						return false;
+					}
+					auto it = childJson.find("_children");
+					if (it != childJson.end() && it->is_array())
+					{
+						if (!RestoreChildrenRecursive(world, *it, guidToEntity, pendingParents))
+							return false;
+					}
 				}
-				return InvalidEntityId;
+				return true;
 			}
 
 			void Undo(World& world, EntityId& selectedEntity) override
 			{
-				// 엔티티 복원
-				if (!serializedData.is_null())
+				if (serializedData.is_null()) return;
+
+				std::unordered_map<std::uint64_t, EntityId> guidToEntity;
+				for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+					guidToEntity[idc.guid] = eid;
+
+				std::vector<std::pair<EntityId, std::uint64_t>> pendingParents;
+
+				EntityId restoredId = InvalidEntityId;
+				if (!SceneFile::ApplyEntity(world, serializedData, guidToEntity, pendingParents, &restoredId))
 				{
-					EntityId restoredId = InvalidEntityId;
-					if (RestoreEntityFromJson(world, serializedData, restoredId))
-					{
-						// 복원된 엔티티를 선택
-						selectedEntity = restoredId;
-
-						// 루트의 외부 부모 복원 (GUID 기반)
-						if (serializedData.contains("_parentGuid"))
-						{
-							std::uint64_t parentGuid = ParseGuid(serializedData["_parentGuid"]);
-							EntityId parent = FindEntityByGuid(world, parentGuid);
-							if (parent != InvalidEntityId)
-							{
-								world.SetParent(restoredId, parent, false);
-							}
-						}
-
-						// 자식 엔티티들도 재귀적으로 복원하고 부모 관계 설정
-						if (childrenData.is_array())
-						{
-							RestoreChildrenRecursive(world, restoredId, childrenData);
-						}
-					}
+					if (restoredId != InvalidEntityId)
+						world.DestroyEntity(restoredId);
+					return;
 				}
-			}
 
-			// 재귀적으로 자식 엔티티들을 복원하는 헬퍼 함수
-			static void RestoreChildrenRecursive(World& world, EntityId parentId, const JsonRttr::json& childrenArray)
-			{
-				if (!childrenArray.is_array()) return;
+				if (childrenData.is_array() && !RestoreChildrenRecursive(world, childrenData, guidToEntity, pendingParents))
+					return;
 
-				for (const auto& childJson : childrenArray)
+				for (const auto& [childId, parentGuid] : pendingParents)
 				{
-					EntityId restoredChildId = InvalidEntityId;
-					if (RestoreEntityFromJson(world, childJson, restoredChildId))
-					{
-						// 부모 관계 복원 (keepWorld=false: 로드이므로)
-						world.SetParent(restoredChildId, parentId, false);
-
-						// 손자들도 재귀적으로 복원
-						auto it = childJson.find("_children");
-						if (it != childJson.end() && it->is_array())
-						{
-							RestoreChildrenRecursive(world, restoredChildId, *it);
-						}
-					}
+					auto it = guidToEntity.find(parentGuid);
+					if (it != guidToEntity.end())
+						world.SetParent(childId, it->second, false);
 				}
+
+				selectedEntity = restoredId;
 			}
 
-			const char* GetDescription() const override
-			{
-				return description.c_str();
-			}
-
-			// Create/Destroy는 ID 변경 문제로 Redo 지원 안 함
+			const char* GetDescription() const override { return description.c_str(); }
 			bool SupportsRedo() const override { return false; }
 		};
 
@@ -1176,40 +709,46 @@ namespace Alice
 #endif
 
 			// ----------------------------------------------------------------------
-			// 1: Configure 명령어 (cmd.exe /C는 ExecuteCommandWithConsole에서 처리)
+			// 1: Configure 명령어 (실패 시 같은 콘솔에서 pause로 로그 확인)
 			// ----------------------------------------------------------------------
 			std::wstring cmdConfig = L"cmake -S \"";
 			cmdConfig += scriptsRoot.wstring();
 			cmdConfig += L"\" -B \"";
 			cmdConfig += scriptsBuildDir.wstring();
-			cmdConfig += L"\"";
+			// 실패 시 pause 실행 후 exit code 유지: command || (pause & exit /b 1)
+			cmdConfig += L"\" || (pause & exit /b 1)";
 
 			// Configure 실행
 			int configResult = ExecuteCommandWithConsole(cmdConfig);
 			if (configResult != 0)
 			{
 				ALICE_LOG_ERRORF("Reload Scripts: CMake Configure failed (exit code: %d).", configResult);
-				// 실패 시에만 pause 실행 (사용자가 에러를 볼 수 있도록)
-				ExecuteCommandWithConsole(L"pause");
+				ALICE_LOG_ERRORF("Reload Scripts: Configure failed. Check the console window for details.");
+				ALICE_LOG_ERRORF("Reload Scripts: Execution stopped. Fix the errors and try again.");
+				// pause가 이미 실행되었고, 사용자가 키를 누르면 여기서 return
+				// 이 시점에서 실행이 중단되므로 후속 단계(Build, DLL 복사 등)는 실행되지 않음
 				return false;
 			}
 
 			// ----------------------------------------------------------------------
-			// 2: Build 명령어 (cmd.exe /C는 ExecuteCommandWithConsole에서 처리)
+			// 2: Build 명령어 (실패 시 같은 콘솔에서 pause로 로그 확인)
 			// ----------------------------------------------------------------------
 			std::wstring cmdBuild = L"cmake --build \"";
 			cmdBuild += scriptsBuildDir.wstring();
 			cmdBuild += L"\" --config ";
 			cmdBuild += kConfig;
-			cmdBuild += L" --target AliceScripts";
+			// 실패 시 pause 실행 후 exit code 유지: command || (pause & exit /b 1)
+			cmdBuild += L" --target AliceScripts || (pause & exit /b 1)";
 
 			// Build 실행
 			int buildResult = ExecuteCommandWithConsole(cmdBuild);
 			if (buildResult != 0)
 			{
 				ALICE_LOG_ERRORF("Reload Scripts: CMake Build failed (exit code: %d).", buildResult);
-				// 실패 시에만 pause 실행 (사용자가 에러를 볼 수 있도록)
-				ExecuteCommandWithConsole(L"pause");
+				ALICE_LOG_ERRORF("Reload Scripts: Build failed. Check the console window for details.");
+				ALICE_LOG_ERRORF("Reload Scripts: Execution stopped. Fix the errors and try again.");
+				// pause가 이미 실행되었고, 사용자가 키를 누르면 여기서 return
+				// 이 시점에서 실행이 중단되므로 후속 단계(DLL 복사, 리로드 등)는 실행되지 않음
 				return false;
 			}
 
@@ -1795,6 +1334,8 @@ namespace Alice
 		style.RotationLineThickness = 3.0f;
 		style.RotationOuterLineThickness = 2.0f;
 
+		RegisterEngineInspectors(*this);
+
 		m_initialized = true;
 		return true;
 	}
@@ -2142,17 +1683,12 @@ namespace Alice
 				{
 					EntityId e = world.CreateRectLight();
 					PushCommand(std::make_unique<CreateEntityCommand>(e, "Rect Light"));
-                    selectedEntity = e;
-                    g_SceneDirty = true;
-                    ImGui::CloseCurrentPopup();
-                }
-                if (ImGui::MenuItem("UI_Image"))
-                {
-                    CreateUIImage();
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::EndPopup();
-            }
+					selectedEntity = e;
+					g_SceneDirty = true;
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
+			}
 
 			ImGui::Separator();
 
@@ -2930,10 +2466,6 @@ namespace Alice
 				g_SceneDirty = true;
 			}
 
-
-			
-
-
 			if (openRenamePopup)
 				ImGui::OpenPopup("Change Name");
 
@@ -2968,22 +2500,38 @@ namespace Alice
 						selectedEntity = InvalidEntityId;
 					}
 					g_SceneDirty = true;
+					ImGui::CloseCurrentPopup();
 				}
-
-				RenderUIHeirarcy();
-				
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel"))
+				{
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
 			}
+
+			// 루프가 끝난 뒤에 실제 삭제를 수행합니다. (반복 중 컨테이너 수정 방지)
+			if (entityToDelete != InvalidEntityId)
+			{
+				const std::string entityName = world.GetEntityName(entityToDelete);
+				PushCommand(std::make_unique<DestroyEntityCommand>(entityToDelete, entityName, world));
+				world.DestroyEntity(entityToDelete);
+				if (selectedEntity == entityToDelete)
+				{
+					selectedEntity = InvalidEntityId;
+				}
+				g_SceneDirty = true;
+			}
+		}
 
 		ImGui::End();
 
-
-			
-			// === Inspector ===
-			if (ImGui::Begin("Inspector")) {
-				// Delete 키 입력 처리: Inspector 창이 포커스를 가지고 있고, 텍스트 입력 중이 아닐 때
-				// isTextInputActive는 이미 DrawEditorUI 시작 부분에서 정의되어 있지만,
-				// Inspector 내부에서도 사용하므로 다시 체크 (Inspector가 포커스를 가진 경우를 위해)
-				const bool inspectorTextInputActive = io.WantTextInput || ImGui::IsAnyItemActive();
+		// === Inspector ===
+		if (ImGui::Begin("Inspector")) {
+			// Delete 키 입력 처리: Inspector 창이 포커스를 가지고 있고, 텍스트 입력 중이 아닐 때
+			// isTextInputActive는 이미 DrawEditorUI 시작 부분에서 정의되어 있지만,
+			// Inspector 내부에서도 사용하므로 다시 체크 (Inspector가 포커스를 가진 경우를 위해)
+			const bool inspectorTextInputActive = io.WantTextInput || ImGui::IsAnyItemActive();
 
 			if (selectedEntity != InvalidEntityId &&
 				ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
@@ -3045,57 +2593,21 @@ namespace Alice
 				ImGui::EndDragDropTarget();
 			}
 
-				// ============================================================================
-				// 엔티티 선택 로직 통합: World / UIWorld 판별
-				// UI 엔티티가 선택되어 있으면 UI Inspector를 우선 표시
-				// ============================================================================
-				if (m_selectedUIEntity != 0 && m_uiWorldManager)
-				{
-					// UI 엔티티 Inspector 표시
-					try
-					{
-						UISceneManager& manager = m_uiWorldManager->GetManager();
-						UIWorld& uiWorld = manager.GetWorld();
-						UIBase* uiBase = uiWorld.Get(m_selectedUIEntity);
-						
-						if (uiBase)
-						{
-							ImGui::Text("UI Object [ID: %lu]", m_selectedUIEntity);
-							ImGui::Separator();
-							
-							// UI 컴포넌트 Inspector 표시
-							DrawUIInspector(manager, uiWorld, m_selectedUIEntity);
-						}
-						else
-						{
-							Alice::ImGuiText(L"선택된 UI 엔티티를 찾을 수 없습니다.");
-							m_selectedUIEntity = 0; // 선택 해제
-						}
-					}
-					catch (...)
-					{
-						Alice::ImGuiText(L"UI 씬이 초기화되지 않았습니다.");
-						m_selectedUIEntity = 0; // 선택 해제
-					}
-				}
-				else if (selectedEntity == InvalidEntityId) {
-					Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
+			if (selectedEntity == InvalidEntityId) {
+				Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
+			}
+			else {
+				// 엔티티 ID와 이름 표시 (한 번만 가져와서 재사용)
+				const std::string entityName = world.GetEntityName(selectedEntity);
+				if (!entityName.empty()) {
+					ImGui::Text("Entity %u - %s", static_cast<uint32_t>(selectedEntity), entityName.c_str());
 				}
 				else {
-					// World 엔티티 Inspector 표시 (기존 로직)
-					// 엔티티 ID와 이름 표시 (한 번만 가져와서 재사용)
-					const std::string entityName = world.GetEntityName(selectedEntity);
-					if (!entityName.empty()) {
-						ImGui::Text("Entity %u - %s", static_cast<uint32_t>(selectedEntity), entityName.c_str());
-					}
-					else {
-						ImGui::Text("Entity %u", static_cast<uint32_t>(selectedEntity));
-					}
-					ImGui::Separator();
-
-				// 1. Transform
-				DrawInspectorTransform(world, selectedEntity);
+					ImGui::Text("Entity %u", static_cast<uint32_t>(selectedEntity));
+				}
 				ImGui::Separator();
+
+				// Transform은 registry 루프에서 처리됨 (FixedLayoutInspectors.cpp에서 등록)
 
 				// 1-1. Animation Status
 				DrawInspectorAnimationStatus(world, selectedEntity);
@@ -3106,36 +2618,13 @@ namespace Alice
 				DrawInspectorScripts(world, selectedEntity);
 				ImGui::Separator();
 
-				// 3. Material
-				DrawInspectorMaterial(world, selectedEntity);
-				ImGui::Separator();
+				// Material, Lights, ComputeEffect는 registry 루프에서 처리됨
 
-				// 3-2. Lights
-				DrawInspectorPointLight(world, selectedEntity);
-				DrawInspectorSpotLight(world, selectedEntity);
-				DrawInspectorRectLight(world, selectedEntity);
-
-				// 3-3. Compute Effect
-				DrawInspectorComputeEffect(world, selectedEntity);
-				// 4. Skinned Mesh / 소켓 프리뷰 (간단 뷰)
+				// 4. Skinned Mesh (Condensed)
 				if (auto* skinned =
 					world.GetComponent<SkinnedMeshComponent>(selectedEntity)) {
 					ImGui::Separator();
 					ImGui::Text("Skinned Mesh: %s", skinned->meshAssetPath.c_str());
-
-					// 본 목록 미니 뷰 (이름 확인용)
-					if (m_skinnedRegistry) {
-						auto mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
-						if (mesh && mesh->sourceModel) {
-							const auto& bones = mesh->sourceModel->GetBoneNames();
-							if (ImGui::TreeNode("Bones")) {
-								for (size_t i = 0; i < bones.size(); ++i) {
-									ImGui::Text("%zu: %s", i, bones[i].c_str());
-								}
-								ImGui::TreePop();
-							}
-						}
-					}
 
 					// 메시 경로 필드에 드롭 타겟 추가
 					if (ImGui::BeginDragDropTarget())
@@ -3156,6 +2645,346 @@ namespace Alice
 								{
 									std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(droppedPath);
 									if (!logical.empty())
+									{
+										logicalPath = logical.string();
+									}
+								}
+								skinned->meshAssetPath = logicalPath;
+								g_SceneDirty = true;
+							}
+						}
+						ImGui::EndDragDropTarget();
+					}
+					// Details omitted for brevity
+				}
+			}
+		}
+		ImGui::End();
+
+		// === Project ===
+		if (ImGui::Begin("Project"))
+		{
+			// 현재 씬 정보 및 저장 버튼
+			ImGui::Text("Current Scene:");
+			ImGui::SameLine();
+			if (g_HasCurrentScenePath)
+			{
+				std::string sceneName = g_CurrentScenePath.filename().string();
+				if (g_SceneDirty)
+				{
+					ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%s *", sceneName.c_str());
+				}
+				else
+				{
+					ImGui::Text("%s", sceneName.c_str());
+				}
+			}
+			else
+			{
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Unsaved Scene");
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Save"))
+			{
+				SaveScene(world);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				if (g_HasCurrentScenePath)
+				{
+					ImGui::SetTooltip("Save to: %s", g_CurrentScenePath.string().c_str());
+				}
+				else
+				{
+					ImGui::SetTooltip("Save scene (will use AutoSaved.scene if no path set)");
+				}
+
+				RenderUIHeirarcy();
+				
+			}
+
+			ImGui::Separator();
+
+			Alice::ImGuiText(L"Assets 폴더");
+			ImGui::Separator();
+
+			// Assets 폴더는 논리 경로로만 다루고, 실제 위치는 ResourceManager 가 해석합니다.
+			const std::filesystem::path assetsRoot = ResourceManager::Get().Resolve("Assets");
+			if (!std::filesystem::exists(assetsRoot))
+			{
+				// 폴더가 없다면 한 번만 생성해 둡니다.
+				std::filesystem::create_directories(assetsRoot);
+			}
+
+			DrawDirectoryNode(world, selectedEntity, assetsRoot);
+		}
+		ImGui::End();
+
+		// === Game ===
+		if (ImGui::Begin("Game"))
+		{
+			// 키보드 단축키로 Gizmo 모드 변경 (InputSystem 사용)
+			// 텍스트 입력 중이 아닐 때만 단축키 작동
+			if (m_inputSystem && !isTextInputActive)
+			{
+				using namespace DirectX;
+				if (m_inputSystem->IsKeyPressed(Keyboard::Keys::W)) gizmoOp = ImGuizmo::TRANSLATE;
+				if (m_inputSystem->IsKeyPressed(Keyboard::Keys::E)) gizmoOp = ImGuizmo::ROTATE;
+				if (m_inputSystem->IsKeyPressed(Keyboard::Keys::R)) gizmoOp = ImGuizmo::SCALE;
+				if (m_inputSystem->IsKeyPressed(Keyboard::Keys::X))
+				{
+					gizmoMode = (gizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+				}
+			}
+
+			// Gizmo Operation 선택 버튼
+			if (ImGui::RadioButton("Translate (W)", gizmoOp == ImGuizmo::TRANSLATE))
+				gizmoOp = ImGuizmo::TRANSLATE;
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Rotate (E)", gizmoOp == ImGuizmo::ROTATE))
+				gizmoOp = ImGuizmo::ROTATE;
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Scale (R)", gizmoOp == ImGuizmo::SCALE))
+				gizmoOp = ImGuizmo::SCALE;
+
+			// Gizmo Mode 선택 (Scale 모드에서는 World만 지원)
+			if (gizmoOp != ImGuizmo::SCALE)
+			{
+				ImGui::SameLine();
+				if (ImGui::RadioButton("Local (X)", gizmoMode == ImGuizmo::LOCAL))
+					gizmoMode = ImGuizmo::LOCAL;
+				ImGui::SameLine();
+				if (ImGui::RadioButton("World (X)", gizmoMode == ImGuizmo::WORLD))
+					gizmoMode = ImGuizmo::WORLD;
+			}
+			else
+			{
+				gizmoMode = ImGuizmo::LOCAL; // Scale은 항상 Local
+			}
+
+			// 게임 상태 표시 (한 줄, 색상 포함)
+			ImGui::SameLine();
+			ImGui::Text(" | ");
+			ImGui::SameLine();
+			ImVec4 stateColor = isPlaying ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+			ImGui::TextColored(stateColor, "%s", isPlaying ? "Playing" : "Stopped");
+
+			// 스냅 토글 버튼
+			ImGui::SameLine();
+			ImGui::Text(" | ");
+			ImGui::SameLine();
+			static bool showSnapSettings = false;
+			if (ImGui::SmallButton("Snap"))
+			{
+				showSnapSettings = !showSnapSettings;
+			}
+
+			// 스냅 설정 UI (토글이 켜져 있을 때만 표시)
+			if (showSnapSettings)
+			{
+				ImGui::Separator();
+				ImGui::Text("Snap Settings");
+
+				// Snap 모드 선택
+				ImGui::Text("Snap Mode:");
+				const char* snapModeItems[] = { "None", "Increment", "Object" };
+				int snapModeInt = static_cast<int>(snapMode);
+				if (ImGui::Combo("##SnapMode", &snapModeInt, snapModeItems, IM_ARRAYSIZE(snapModeItems)))
+				{
+					snapMode = static_cast<SnapMode>(snapModeInt);
+					gizmoSnap = (snapMode == SnapMode::Increment); // 레거시 호환성
+				}
+
+				// Snap 값 설정
+				if (snapMode == SnapMode::Increment)
+				{
+					ImGui::Indent();
+					switch (gizmoOp)
+					{
+					case ImGuizmo::TRANSLATE:
+						ImGui::DragFloat3("Snap Translation", &snapTranslation.x, 0.1f, 0.01f, 100.0f);
+						break;
+					case ImGuizmo::ROTATE:
+						ImGui::DragFloat("Snap Rotation (deg)", &snapRotation, 1.0f, 1.0f, 90.0f);
+						break;
+					case ImGuizmo::SCALE:
+						ImGui::DragFloat("Snap Scale", &snapScale, 0.1f, 0.1f, 10.0f);
+						break;
+					default:
+						break;
+					}
+					ImGui::Unindent();
+				}
+				else if (snapMode == SnapMode::Object)
+				{
+					ImGui::Indent();
+					ImGui::DragFloat("Snap Distance", &objectSnapDistance, 0.1f, 0.01f, 10.0f);
+
+					// 오브젝트 스냅 타입 선택 (Blender 스타일)
+					ImGui::Text("Snap To:");
+					const char* snapTypeItems[] = { "Center", "Vertex", "Edge", "Face" };
+					int snapTypeInt = static_cast<int>(objectSnapType);
+					if (ImGui::Combo("##SnapType", &snapTypeInt, snapTypeItems, IM_ARRAYSIZE(snapTypeItems)))
+					{
+						objectSnapType = static_cast<ObjectSnapType>(snapTypeInt);
+					}
+
+					// 현재 스냅 타입 설명
+					switch (objectSnapType)
+					{
+					case ObjectSnapType::Center:
+						ImGui::TextDisabled("Snap to object center");
+						break;
+					case ObjectSnapType::Vertex:
+						ImGui::TextDisabled("Snap to mesh vertices (if available)");
+						break;
+					case ObjectSnapType::Edge:
+						ImGui::TextDisabled("Snap to mesh edges (if available)");
+						break;
+					case ObjectSnapType::Face:
+						ImGui::TextDisabled("Snap to mesh face centers (if available)");
+						break;
+					}
+					ImGui::Unindent();
+				}
+				ImGui::Separator();
+			}
+
+			// 에디터 뷰포트는 톤매핑 완료(LDR) 텍스처를 표시해야 정상 색감이 나옵니다.
+			ID3D11ShaderResourceView* sceneSRV = nullptr;
+			float sceneWidth = 0.0f;
+			float sceneHeight = 0.0f;
+
+			if (useForwardRendering)
+			{
+				sceneSRV = forward.GetViewportSRV();
+				sceneWidth = static_cast<float>(forward.GetSceneWidth());
+				sceneHeight = static_cast<float>(forward.GetSceneHeight());
+			}
+			else
+			{
+				sceneSRV = deferred.GetViewportSRV();
+				sceneWidth = static_cast<float>(deferred.GetSceneWidth());
+				sceneHeight = static_cast<float>(deferred.GetSceneHeight());
+			}
+
+			if (sceneSRV)
+			{
+				ImVec2 avail = ImGui::GetContentRegionAvail();
+				ImVec2 size = avail;
+
+				if (sceneWidth > 0.0f && sceneHeight > 0.0f)
+				{
+					const float aspectScene = sceneWidth / sceneHeight;
+					const float aspectAvail = (avail.y > 0.0f) ? (avail.x / avail.y) : aspectScene;
+
+					if (aspectAvail > aspectScene)
+					{
+						size.x = avail.y * aspectScene;
+						size.y = avail.y;
+					}
+					else
+					{
+						size.x = avail.x;
+						size.y = avail.x / aspectScene;
+					}
+				}
+
+				// Image를 그린다
+				ImGui::Image(sceneSRV, size);
+
+				// 이미지가 화면에 그려진 사각형(픽셀) - Image 호출 직후에만 유효
+				ImVec2 imgMin = ImGui::GetItemRectMin();
+				ImVec2 imgMax = ImGui::GetItemRectMax();
+				ImVec2 imgSize = ImGui::GetItemRectSize();
+
+				// 프리팹 드래그앤드롭: 뷰포트 이미지 위에 드롭 타겟 추가
+				if (ImGui::BeginDragDropTarget())
+				{
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_FILE_PATH"))
+					{
+						const char* pathStr = static_cast<const char*>(payload->Data);
+						std::filesystem::path droppedPath(pathStr);
+					std::string ext = droppedPath.extension().string();
+					std::transform(ext.begin(), ext.end(), ext.begin(),
+						[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+					if (ext == ".prefab")
+					{
+						if (selectedEntity != InvalidEntityId)
+						{
+							// TODO: modifier(Shift 등) 누르면 selectedEntity 하위로 parent 설정 옵션 추가.
+							// 마우스 위치를 이미지 내 상대 좌표(0~1)로 변환
+							ImVec2 mousePos = ImGui::GetMousePos();
+							float u = (mousePos.x - imgMin.x) / imgSize.x;
+							float v = (mousePos.y - imgMin.y) / imgSize.y;
+
+							// 이미지 영역 내에 있는지 확인
+							if (u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f)
+							{
+								// NDC 좌표로 변환
+								const float ndcX = 2.0f * u - 1.0f;
+								const float ndcY = 1.0f - 2.0f * v;
+
+								// 카메라에서 레이를 쏴서 월드 좌표 계산
+								using namespace DirectX;
+								XMMATRIX viewXM = camera.GetViewMatrix();
+								XMMATRIX projXM = camera.GetProjectionMatrix();
+								XMMATRIX invViewProj = XMMatrixInverse(nullptr, XMMatrixMultiply(viewXM, projXM));
+
+								// 카메라 앞 일정 거리(5미터)에 배치
+								XMVECTOR nearPoint = XMVectorSet(ndcX, ndcY, 0.0f, 1.0f);
+								XMVECTOR farPoint = XMVectorSet(ndcX, ndcY, 1.0f, 1.0f);
+
+								nearPoint = XMVector3TransformCoord(nearPoint, invViewProj);
+								farPoint = XMVector3TransformCoord(farPoint, invViewProj);
+
+								XMVECTOR dirWorld = XMVector3Normalize(XMVectorSubtract(farPoint, nearPoint));
+								XMFLOAT3 camPos = camera.GetPosition();
+								XMVECTOR originWorld = XMLoadFloat3(&camPos);
+
+								// 카메라 앞 5미터 위치에 배치
+								const float distance = 5.0f;
+								XMVECTOR spawnPos = XMVectorAdd(originWorld, XMVectorScale(dirWorld, distance));
+
+								XMFLOAT3 spawnPosition;
+								XMStoreFloat3(&spawnPosition, spawnPos);
+
+								// 프리팹 인스턴스화
+								EntityId e = Alice::Prefab::InstantiateFromFile(world, droppedPath);
+								if (e != InvalidEntityId)
+								{
+									if (auto* transform = world.GetComponent<TransformComponent>(e))
+									{
+										transform->position = spawnPosition;
+										world.MarkTransformDirty(e);
+									}
+									selectedEntity = e;
+									g_SceneDirty = true;
+								}
+							}
+						}
+						else
+						{
+							// 선택된 엔티티가 없으면 루트에 추가
+							EntityId e = Alice::Prefab::InstantiateFromFile(world, droppedPath);
+							if (e != InvalidEntityId)
+							{
+								selectedEntity = e;
+								g_SceneDirty = true;
+							}
+						}
+					}
+				}
+				ImGui::EndDragDropTarget();
+			}
+
+			// 월드 엔티티 선택 시 UI 선택 해제
+			if (selectedEntity != InvalidEntityId)
+			{
+				m_selectedUIEntity = 0;
+			}
 									{
 										logicalPath = logical.string();
 									}
@@ -3487,7 +3316,6 @@ namespace Alice
 						// View/Proj 행렬 준비 (XMFLOAT4X4로 변환)
 						XMMATRIX viewXM = camera.GetViewMatrix();
 						XMMATRIX projXM = camera.GetProjectionMatrix();
-
 						XMFLOAT4X4 viewMatrix, projMatrix;
 						XMStoreFloat4x4(&viewMatrix, viewXM);
 						XMStoreFloat4x4(&projMatrix, projXM);
@@ -3838,6 +3666,11 @@ namespace Alice
 								PushCommand(std::make_unique<TransformCommand>(
 									selectedEntity, gizmoStartTransform, newTransform));
 							}
+							// 월드 엔티티 선택 시 UI 선택 해제
+							if (selectedEntity != InvalidEntityId)
+							{
+								m_selectedUIEntity = 0;
+							}
 						}
 
 						// 상태 업데이트
@@ -3894,6 +3727,7 @@ namespace Alice
 							}
 						}
 					}
+				}
 #endif // _DEBUG
 			}
 			else
@@ -3910,67 +3744,60 @@ namespace Alice
 			{
 				if (ImGui::BeginTabItem("Camera"))
 				{
-					if (ImGui::BeginTable("CameraSplit", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV))
+					Alice::ImGuiText(L"카메라 정보");
+					ImGui::Separator();
+
+					XMFLOAT3 camPos = camera.GetPosition();
+					ImGui::Text("Position : (%.2f, %.2f, %.2f)",
+						camPos.x, camPos.y, camPos.z);
+
+					ImGui::Separator();
+					Alice::ImGuiText(L"카메라 설정");
+
+					float fovDeg = XMConvertToDegrees(camera.GetFovYRadians());
+					float nearPlane = camera.GetNearPlane();
+					float farPlane = camera.GetFarPlane();
+
+					bool changed = false;
+					changed |= ImGui::SliderFloat("FOV (deg)", &fovDeg, 20.0f, 120.0f);
+					changed |= ImGui::DragFloat("Near Plane", &nearPlane, 0.01f, 0.01f, 10.0f, "%.3f");
+					changed |= ImGui::DragFloat("Far Plane", &farPlane, 1.0f, 10.0f, 5000.0f, "%.1f");
+					ImGui::SliderFloat("Move Speed", &cameraMoveSpeed, 0.1f, 50.0f, "%.2f");
+
+					if (changed)
 					{
-						// 왼쪽 카메라 정보 및 설정
-						ImGui::TableNextColumn();
-
-						Alice::ImGuiText(L"카메라 정보");
-						ImGui::Separator();
-
-						auto pos = camera.GetPosition();
-						ImGui::Text("Position : (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
-
-						ImGui::Separator();
-						Alice::ImGuiText(L"카메라 설정");
-						float fov = XMConvertToDegrees(camera.GetFovYRadians());
-						float nearP = camera.GetNearPlane();
-						float farP = camera.GetFarPlane();
-						bool changed = false;
-
-						changed |= ImGui::SliderFloat("FOV (deg)", &fov, 20.0f, 120.0f);
-						changed |= ImGui::DragFloat("Near Plane", &nearP, 0.01f, 0.01f, 10.0f, "%.3f");
-						changed |= ImGui::DragFloat("Far Plane", &farP, 1.0f, 10.0f, 5000.0f, "%.1f");
-						ImGui::SliderFloat("Move Speed", &cameraMoveSpeed, 0.1f, 50.0f, "%.2f");
-
-						if (changed)
-						{
-							nearP = (std::max)(nearP, 0.01f);
-							farP = (std::max)(farP, nearP + 0.1f);
-							camera.SetPerspective(XMConvertToRadians(fov), camera.GetAspectRatio(), nearP, farP);
-						}
-
-						// 오른쪽 버튼 및 액션
-						ImGui::TableNextColumn();
-						Alice::ImGuiText(L"기능");
-						ImGui::Separator();
-
-						if (ImGui::Button("Place Camera", { -FLT_MIN, 0.0f }))
-						{
-							EntityId e = world.CreateCamera();
-							auto* tc = world.GetComponent<TransformComponent>(e);
-							if (!tc) tc = &world.AddComponent<TransformComponent>(e);
-
-							tc->SetPosition(camera.GetPosition());
-							tc->SetRotation(camera.GetRotationQuat());
-							tc->SetScale(camera.GetScale());
-
-							if (auto* cc = world.GetComponent<CameraComponent>(e))
-							{
-								cc->SetFov(XMConvertToDegrees(camera.GetFovYRadians()));
-								cc->SetNear(camera.GetNearPlane());
-								cc->SetFar(camera.GetFarPlane());
-							}
-
-							// 커맨드 시스템에 등록하여 실행 취소(Ctrl+Z)가 가능하게 함
-							PushCommand(std::make_unique<CreateEntityCommand>(e, "Placed Camera"));
-
-							selectedEntity = e;
-							g_SceneDirty = true;
-						}
-
-						ImGui::EndTable();
+						float fovRad = XMConvertToRadians(fovDeg);
+						float aspect = camera.GetAspectRatio();
+						nearPlane = (std::max)(nearPlane, 0.01f);
+						farPlane = (std::max)(farPlane, nearPlane + 0.1f);
+						camera.SetPerspective(fovRad, aspect, nearPlane, farPlane);
 					}
+
+					ImGui::Separator();
+					if (ImGui::Button("Place Camera"))
+					{
+						EntityId e = world.CreateCamera();
+						auto* tc = world.GetComponent<TransformComponent>(e);
+						if (!tc) tc = &world.AddComponent<TransformComponent>(e);
+
+						tc->SetPosition(camera.GetPosition());
+						tc->SetRotation(camera.GetRotationQuat());
+						tc->SetScale(camera.GetScale());
+
+						if (auto* cc = world.GetComponent<CameraComponent>(e))
+						{
+							cc->SetFov(XMConvertToDegrees(camera.GetFovYRadians()));
+							cc->SetNear(camera.GetNearPlane());
+							cc->SetFar(camera.GetFarPlane());
+						}
+
+						// 커맨드 시스템에 등록하여 실행 취소(Ctrl+Z)가 가능하게 함
+						PushCommand(std::make_unique<CreateEntityCommand>(e, "Placed Camera"));
+
+						selectedEntity = e;
+						g_SceneDirty = true;
+					}
+
 					ImGui::EndTabItem();
 				}
 
@@ -4039,7 +3866,6 @@ namespace Alice
 										ImGui::EndCombo();
 									}
 									anim->clipIndex = clip;
-
 									const double dur = mesh->sourceModel->GetClipDurationSec(anim->clipIndex);
 									float timeSec = (float)anim->timeSec;
 									float durF = (dur > 0.0) ? (float)dur : 0.0f;
@@ -4393,88 +4219,54 @@ namespace Alice
 				const std::filesystem::path loadAbs =
 					ResourceManager::Get().Resolve(g_NextScenePath);
 
-					if (isPlaying)
+				if (isPlaying)
+				{
+					// 실행 중: 지연 처리
+					if (sceneManager)
 					{
-						// 실행 중: 지연 처리
-						ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (no-save, playing): \"%s\"\n",
-							g_NextScenePath.string().c_str());
-						if (sceneManager)
+						if (!sceneManager->LoadSceneFileRequest(loadAbs))
 						{
-							if (!sceneManager->LoadSceneFileRequest(loadAbs))
-							{
-								const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-								ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
-								g_SceneLoadErrorMsg = errorMsg;
-								g_ShowSceneLoadError = true;
-							}
-							else
-							{
-								g_CurrentScenePath = g_NextScenePath;
-								g_HasCurrentScenePath = true;
-								g_SceneDirty = false;
-							}
-						}
-					}
-					else
-					{
-						// 실행 안 함: 즉시 로드
-						ALICE_LOG_INFO("[Editor] SceneFile::Load (no-save, not playing): \"%s\"\n",
-							g_NextScenePath.string().c_str());
-						
-						// UIWorldManager가 있으면 LoadAuto 사용 (World + UI 동시 로드)
-						// 없으면 Load만 사용 (World만 로드)
-						bool loadSuccess = false;
-						if (m_uiWorldManager)
-						{
-							// LoadAuto는 World와 UI를 함께 로드함
-							loadSuccess = SceneFile::LoadAuto(world, Alice::ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
-						}
-						else
-						{
-							// UIWorldManager가 없으면 World만 로드
-							loadSuccess = SceneFile::Load(world, loadAbs);
-							
-							// UIWorldManager가 있지만 m_resources가 없으면, 분리 파일로 UI 로드 시도
-							if (loadSuccess && m_uiWorldManager)
-							{
-								// 파일명 기반 UI 파일 경로 계산 (.scene → .uiscene)
-								std::filesystem::path uiPath = g_NextScenePath;
-								uiPath.replace_extension(".uiscene");
-								
-								// UI 파일이 존재하면 로드
-								std::filesystem::path uiPathAbs = Alice::ResourceManager::Get().Resolve(uiPath);
-								if (std::filesystem::exists(uiPathAbs))
-								{
-									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
-									if (!m_uiWorldManager->LoadUI(uiPath, &Alice::ResourceManager::Get()))
-									{
-										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
-									}
-								}
-								else
-								{
-									ALICE_LOG_INFO("[Editor] UI file not found (expected at %s), skipping UI load", uiPath.string().c_str());
-								}
-							}
-						}
-						
-						if (!loadSuccess)
-						{
-							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+							const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+							ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
 							g_SceneLoadErrorMsg = errorMsg;
 							g_ShowSceneLoadError = true;
 						}
 						else
 						{
-							EnsureSkinnedMeshesRegistered(world);
-							selectedEntity = InvalidEntityId;
-							m_selectedUIEntity = 0; // UI 선택도 해제
 							g_CurrentScenePath = g_NextScenePath;
 							g_HasCurrentScenePath = true;
 							g_SceneDirty = false;
-							ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
 						}
+					}
+				}
+				else
+				{
+					// 실행 안 함: 즉시 로드
+					bool loadSuccess = false;
+					if (m_uiWorldManager)
+					{
+						loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
+					}
+					else
+					{
+						loadSuccess = SceneFile::Load(world, loadAbs);
+					}
+					if (!loadSuccess)
+					{
+						const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
+						ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+						g_SceneLoadErrorMsg = errorMsg;
+						g_ShowSceneLoadError = true;
+					}
+					else
+					{
+						EnsureSkinnedMeshesRegistered(world);
+						selectedEntity = InvalidEntityId;
+						m_selectedUIEntity = 0; // UI 선택도 해제
+						g_CurrentScenePath = g_NextScenePath;
+						g_HasCurrentScenePath = true;
+						g_SceneDirty = false;
+						ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
 					}
 				}
 				g_RequestSceneLoad = false;
@@ -4523,89 +4315,94 @@ namespace Alice
 				const std::filesystem::path loadAbs =
 					ResourceManager::Get().Resolve(g_NextScenePath);
 
-					if (isPlaying)
+				if (isPlaying)
+				{
+					// 실행 중: 지연 처리
+					if (sceneManager)
 					{
-						// 실행 중: 지연 처리
-						if (sceneManager)
+						if (!sceneManager->LoadSceneFileRequest(loadAbs))
 						{
-							if (!sceneManager->LoadSceneFileRequest(loadAbs))
-							{
-								const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-								ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
-								g_SceneLoadErrorMsg = errorMsg;
-								g_ShowSceneLoadError = true;
-								g_RequestSceneLoad = false;
-								ImGui::CloseCurrentPopup();
-								return;
-							}
-							g_CurrentScenePath = g_NextScenePath;
-							g_HasCurrentScenePath = true;
-							g_SceneDirty = false;
-						}
-						else
-						{
-							ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
-						}
-					}
-					else
-					{
-						// 실행 안 함: 즉시 로드
-						bool loadSuccess = false;
-						if (m_uiWorldManager)
-						{
-							// LoadAuto는 World와 UI를 함께 로드함
-							loadSuccess = SceneFile::LoadAuto(world, Alice::ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
-						}
-						else
-						{
-							// UIWorldManager가 없으면 World만 로드
-							loadSuccess = SceneFile::Load(world, loadAbs);
-							
-							// UIWorldManager가 있지만 m_resources가 없으면, 분리 파일로 UI 로드 시도
-							if (loadSuccess && m_uiWorldManager)
-							{
-								// 파일명 기반 UI 파일 경로 계산 (Foo.scene → Foo.uiscene)
-								std::filesystem::path uiPath = g_NextScenePath;
-								uiPath.replace_extension(".uiscene");
-								
-								// UI 파일이 존재하면 로드
-								std::filesystem::path uiPathAbs = Alice::ResourceManager::Get().Resolve(uiPath);
-								if (std::filesystem::exists(uiPathAbs))
-								{
-									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
-									if (!m_uiWorldManager->LoadUI(uiPath, &Alice::ResourceManager::Get()))
-									{
-										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
-									}
-								}
-								else
-								{
-									ALICE_LOG_INFO("[Editor] UI file not found (expected at %s), skipping UI load", uiPath.string().c_str());
-								}
-							}
-						}
-						
-						if (!loadSuccess)
-						{
-							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+							const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+							ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
 							g_SceneLoadErrorMsg = errorMsg;
 							g_ShowSceneLoadError = true;
 							g_RequestSceneLoad = false;
 							ImGui::CloseCurrentPopup();
 							return;
 						}
-						EnsureSkinnedMeshesRegistered(world);
-						selectedEntity = InvalidEntityId;
-						m_selectedUIEntity = 0; // UI 선택도 해제
 						g_CurrentScenePath = g_NextScenePath;
 						g_HasCurrentScenePath = true;
 						g_SceneDirty = false;
 					}
-					selectedEntity = InvalidEntityId;
-					g_RequestSceneLoad = false;
-					ImGui::CloseCurrentPopup();
+					else
+					{
+						ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
+					}
 				}
+				else
+				{
+					// 실행 안 함: 즉시 로드
+					bool loadSuccess = false;
+					if (m_uiWorldManager)
+					{
+						loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
+					}
+					else
+					{
+						loadSuccess = SceneFile::Load(world, loadAbs);
+					}
+					if (!loadSuccess)
+					{
+						const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
+						ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+						g_SceneLoadErrorMsg = errorMsg;
+						g_ShowSceneLoadError = true;
+						g_RequestSceneLoad = false;
+						ImGui::CloseCurrentPopup();
+						return;
+					}
+					EnsureSkinnedMeshesRegistered(world);
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+					ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
+				}
+				selectedEntity = InvalidEntityId;
+				m_selectedUIEntity = 0; // UI 선택도 해제
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
+					// 실행 안 함: 즉시 로드
+					bool loadSuccess = false;
+					if (m_uiWorldManager)
+					{
+						loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
+					}
+					else
+					{
+						loadSuccess = SceneFile::Load(world, loadAbs);
+					}
+					if (!loadSuccess)
+					{
+						const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
+						ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+						g_SceneLoadErrorMsg = errorMsg;
+						g_ShowSceneLoadError = true;
+						g_RequestSceneLoad = false;
+						ImGui::CloseCurrentPopup();
+						return;
+					}
+					EnsureSkinnedMeshesRegistered(world);
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+					ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
+				}
+				selectedEntity = InvalidEntityId;
+				m_selectedUIEntity = 0; // UI 선택도 해제
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
 
 			ImGui::SameLine();
 			if (ImGui::Button("Don't Save"))
@@ -4614,94 +4411,63 @@ namespace Alice
 				const std::filesystem::path loadAbs =
 					ResourceManager::Get().Resolve(g_NextScenePath);
 
-					if (isPlaying)
+				if (isPlaying)
+				{
+					// 실행 중: 지연 처리
+					if (sceneManager)
 					{
-						// 실행 중: 지연 처리
-						if (sceneManager)
+						if (!sceneManager->LoadSceneFileRequest(loadAbs))
 						{
-							ALICE_LOG_INFO("[Editor] LoadSceneFileRequest (dont-save, playing): \"%s\"\n",
-								g_NextScenePath.string().c_str());
-							if (!sceneManager->LoadSceneFileRequest(loadAbs))
-							{
-								const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-								ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
-								g_SceneLoadErrorMsg = errorMsg;
-								g_ShowSceneLoadError = true;
-								g_RequestSceneLoad = false;
-								ImGui::CloseCurrentPopup();
-								return;
-							}
-							g_CurrentScenePath = g_NextScenePath;
-							g_HasCurrentScenePath = true;
-							g_SceneDirty = false;
-						}
-						else
-						{
-							ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
-						}
-					}
-					else
-					{
-						// 실행 안 함: 즉시 로드
-						ALICE_LOG_INFO("[Editor] SceneFile::Load (dont-save, not playing): \"%s\"\n",
-							g_NextScenePath.string().c_str());
-						
-						bool loadSuccess = false;
-						if (m_uiWorldManager)
-						{
-							// LoadAuto는 World와 UI를 함께 로드함
-							loadSuccess = SceneFile::LoadAuto(world, Alice::ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
-						}
-						else
-						{
-							// UIWorldManager가 없으면 World만 로드
-							loadSuccess = SceneFile::Load(world, loadAbs);
-							
-							// UIWorldManager가 있지만 m_resources가 없으면, 분리 파일로 UI 로드 시도
-							if (loadSuccess && m_uiWorldManager)
-							{
-								// 파일명 기반 UI 파일 경로 계산 (Foo.scene → Foo.uiscene)
-								std::filesystem::path uiPath = g_NextScenePath;
-								uiPath.replace_extension(".uiscene");
-								
-								// UI 파일이 존재하면 로드
-								std::filesystem::path uiPathAbs = Alice::ResourceManager::Get().Resolve(uiPath);
-								if (std::filesystem::exists(uiPathAbs))
-								{
-									ALICE_LOG_INFO("[Editor] Loading UI from separate file: %s", uiPath.string().c_str());
-									if (!m_uiWorldManager->LoadUI(uiPath, &Alice::ResourceManager::Get()))
-									{
-										ALICE_LOG_WARN("[Editor] Failed to load UI from separate file: %s", uiPath.string().c_str());
-									}
-								}
-								else
-								{
-									ALICE_LOG_INFO("[Editor] UI file not found (expected at %s), skipping UI load", uiPath.string().c_str());
-								}
-							}
-						}
-						
-						if (!loadSuccess)
-						{
-							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+							const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
+							ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
 							g_SceneLoadErrorMsg = errorMsg;
 							g_ShowSceneLoadError = true;
 							g_RequestSceneLoad = false;
 							ImGui::CloseCurrentPopup();
 							return;
 						}
-						EnsureSkinnedMeshesRegistered(world);
-						selectedEntity = InvalidEntityId;
-						m_selectedUIEntity = 0; // UI 선택도 해제
 						g_CurrentScenePath = g_NextScenePath;
 						g_HasCurrentScenePath = true;
 						g_SceneDirty = false;
 					}
-					selectedEntity = InvalidEntityId;
-					g_RequestSceneLoad = false;
-					ImGui::CloseCurrentPopup();
+					else
+					{
+						ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
+					}
 				}
+				else
+				{
+					// 실행 안 함: 즉시 로드
+					bool loadSuccess = false;
+					if (m_uiWorldManager)
+					{
+						loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
+					}
+					else
+					{
+						loadSuccess = SceneFile::Load(world, loadAbs);
+					}
+					if (!loadSuccess)
+					{
+						const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
+						ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+						g_SceneLoadErrorMsg = errorMsg;
+						g_ShowSceneLoadError = true;
+						g_RequestSceneLoad = false;
+						ImGui::CloseCurrentPopup();
+						return;
+					}
+					EnsureSkinnedMeshesRegistered(world);
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+					ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
+				}
+				selectedEntity = InvalidEntityId;
+				m_selectedUIEntity = 0; // UI 선택도 해제
+				g_RequestSceneLoad = false;
+				ImGui::CloseCurrentPopup();
+			}
 
 			ImGui::SameLine();
 			if (ImGui::Button("Cancel"))
@@ -4941,7 +4707,7 @@ namespace Alice
 			ImGui::EndDragDropTarget();
 		}
 
-		// 엔진 컴포넌트 추가 UI - 레지스트리 기반
+		// 엔진 컴포넌트 추가 UI - exposeInAddMenu 등록된 것만
 		if (ImGui::BeginCombo("Add Engine Component", "Select Component..."))
 		{
 			auto& reg = EditorComponentRegistry::Get();
@@ -4951,6 +4717,8 @@ namespace Alice
 			for (auto& d : list)
 			{
 				if (!d.addable) continue;
+				if (!d.exposeInAddMenu) continue;
+				if (!d.drawInspector) continue;  // 인스펙터 없는 컴포넌트는 Add 메뉴에서도 숨김
 
 				if (d.category != currentCat)
 				{
@@ -4977,60 +4745,46 @@ namespace Alice
 
 
 
-		// 엔진 컴포넌트 표시 - 레지스트리 기반
-		// 레지스트리 순회로 컴포넌트 표시
+		// 엔진 컴포넌트 표시 - 수동 인스펙터만 (exposeInInspector + drawInspector)
 		auto& reg = EditorComponentRegistry::Get();
-		for (auto& d : reg.All())
+		static EntityId s_lastEditedEntity = InvalidEntityId;
+		static std::optional<rttr::type> s_lastEditedType;
+		static JsonRttr::json s_editStartJson;
+		static const EditorComponentDesc* s_lastEditedDesc = nullptr;
+
+		// inspectorOrder로 정렬된 리스트 생성
+		std::vector<const EditorComponentDesc*> sortedDescs;
+		for (const auto& d : reg.All())
 		{
-			// 고정 레이아웃에서 처리되는 컴포넌트들은 제외 (중복 방지)
-			std::string typeName = d.type.get_name().to_string();
-			if (typeName == "TransformComponent" ||
-				typeName == "MaterialComponent" ||
-				typeName == "ComputeEffectComponent" ||
-				typeName == "PointLightComponent" ||
-				typeName == "SpotLightComponent" ||
-				typeName == "RectLightComponent" ||
-				typeName == "SkinnedMeshComponent" ||
-				typeName == "SkinnedAnimationComponent")  // Animation Status 섹션에서 처리됨
-				continue;
-
-			// 특수 처리 필요한 컴포넌트들 (물리 컴포넌트 등)
-			if (typeName == "Phy_ColliderComponent")
-			{
-				DrawInspectorCollider(world, _selectedEntity);
-				continue;
-			}
-			else if (typeName == "Phy_MeshColliderComponent")
-			{
-				DrawInspectorMeshCollider(world, _selectedEntity);
-				continue;
-			}
-			else if (typeName == "Phy_CCTComponent")
-			{
-				DrawInspectorCharacterController(world, _selectedEntity);
-				continue;
-			}
-			else if (typeName == "Phy_TerrainHeightFieldComponent")
-			{
-				DrawInspectorTerrainHeightField(world, _selectedEntity);
-				continue;
-			}
-			else if (typeName == "Phy_SettingsComponent")
-			{
-				DrawInspectorPhysicsSceneSettings(world, _selectedEntity);
-				continue;
-			}
-			else if (typeName == "Phy_JointComponent")
-			{
-				DrawInspectorJoint(world, _selectedEntity);
-				continue;
-			}
-
-			// 일반 컴포넌트: 레지스트리 기반 렌더링
 			if (!d.has(world, _selectedEntity)) continue;
-
-			if (ImGui::CollapsingHeader(d.displayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+			if (!d.exposeInInspector) continue;
+			if (!d.drawInspector) continue;
+			sortedDescs.push_back(&d);
+		}
+		std::sort(sortedDescs.begin(), sortedDescs.end(),
+			[](const EditorComponentDesc* a, const EditorComponentDesc* b)
 			{
+				return a->inspectorOrder < b->inspectorOrder;
+			});
+
+		for (const auto* dPtr : sortedDescs)
+		{
+			const auto& d = *dPtr;
+
+			if (!d.drawInspector)
+			{
+				if (ImGui::CollapsingHeader(d.displayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					ImGui::TextDisabled("No inspector registered for this component.");
+				}
+				continue;
+			}
+
+			// drawInspector가 CollapsingHeader를 포함하는지에 따라 분기
+			if (!d.drawInspectorIncludesHeader)
+			{
+				if (!ImGui::CollapsingHeader(d.displayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+					continue;
 				if (d.removable)
 				{
 					std::string btn = "Remove##" + d.displayName;
@@ -5041,50 +4795,35 @@ namespace Alice
 						continue;
 					}
 				}
+			}
 
-				// 편집 시작/종료 감지 및 Undo 스냅샷
-				static EntityId lastEditedEntity = InvalidEntityId;
-				static std::string lastEditedComponentType;
-				static JsonRttr::json editStartJson;
-				static const EditorComponentDesc* lastEditedDesc = nullptr;
+			InspectorUI ui;
+			d.drawInspector(world, _selectedEntity, ui);
 
-				rttr::instance inst = d.getInstance(world, _selectedEntity);
-				ReflectionUI::UIEditEvent ev = RenderInspectorInstance(inst, &world);
+			if (ui.changed)
+				g_SceneDirty = true;
 
-				// 편집 시작: oldJson 스냅샷 저장
-				if (ev.activated && (_selectedEntity != lastEditedEntity || lastEditedComponentType != typeName))
-				{
-					editStartJson = JsonRttr::ToJsonObject(inst);
-					lastEditedEntity = _selectedEntity;
-					lastEditedComponentType = typeName;
-					lastEditedDesc = &d;
-				}
+			if (!d.serialize) continue;
 
-				// 편집 종료: newJson 저장하고 커맨드 푸시
-				if (ev.deactivatedAfterEdit && _selectedEntity == lastEditedEntity && lastEditedComponentType == typeName)
-				{
-					JsonRttr::json editEndJson = JsonRttr::ToJsonObject(inst);
+			if (ui.activated && (_selectedEntity != s_lastEditedEntity || !s_lastEditedType || *s_lastEditedType != d.type))
+			{
+				s_editStartJson = d.serialize(world, _selectedEntity);
+				s_lastEditedEntity = _selectedEntity;
+				s_lastEditedType = d.type;
+				s_lastEditedDesc = &d;
+			}
 
-					// 변경사항이 있으면 커맨드 푸시
-					if (editStartJson != editEndJson && lastEditedDesc)
-					{
-						PushCommand(std::make_unique<ComponentEditCommandRTTR>(
-							_selectedEntity, lastEditedDesc, editStartJson, editEndJson));
-						g_SceneDirty = true;
-					}
-
-					lastEditedEntity = InvalidEntityId;
-					lastEditedComponentType.clear();
-					lastEditedDesc = nullptr;
-				}
-
-				if (ev.changed)
-				{
-					g_SceneDirty = true;
-				}
+			if (ui.deactivatedAfterEdit && _selectedEntity == s_lastEditedEntity && s_lastEditedType && *s_lastEditedType == d.type)
+			{
+				JsonRttr::json editEndJson = d.serialize(world, _selectedEntity);
+				if (s_editStartJson != editEndJson && s_lastEditedDesc)
+					PushCommand(std::make_unique<ComponentEditCommandRTTR>(
+						_selectedEntity, s_lastEditedDesc, s_editStartJson, editEndJson));
+				s_lastEditedEntity = InvalidEntityId;
+				s_lastEditedType.reset();
+				s_lastEditedDesc = nullptr;
 			}
 		}
-
 		// List Scripts
 		if (auto* scripts = world.GetScripts(_selectedEntity);
 			scripts && !scripts->empty()) {
@@ -6736,16 +6475,16 @@ namespace Alice
 				changed |= ImGui::DragFloat("Break Torque", &joint->breakTorque, 1.0f, 0.0f);
 
 				auto drawFrame = [&](const char* label, Phy_JointFrame& frame) -> bool
-				{
-					bool frameChanged = false;
-					if (ImGui::TreeNode(label))
 					{
-						frameChanged |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
-						frameChanged |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
-						ImGui::TreePop();
-					}
-					return frameChanged;
-				};
+						bool frameChanged = false;
+						if (ImGui::TreeNode(label))
+						{
+							frameChanged |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
+							frameChanged |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
+							ImGui::TreePop();
+						}
+						return frameChanged;
+					};
 
 				changed |= drawFrame("Frame A", joint->frameA);
 				changed |= drawFrame("Frame B", joint->frameB);
@@ -6830,14 +6569,14 @@ namespace Alice
 				{
 					const char* motionLabels[] = { "Locked", "Limited", "Free" };
 					auto drawMotion = [&](const char* label, Phy_D6Motion& m)
-					{
-						int idx = static_cast<int>(m);
-						if (ImGui::Combo(label, &idx, motionLabels, IM_ARRAYSIZE(motionLabels)))
 						{
-							m = static_cast<Phy_D6Motion>(idx);
-							changed = true;
-						}
-					};
+							int idx = static_cast<int>(m);
+							if (ImGui::Combo(label, &idx, motionLabels, IM_ARRAYSIZE(motionLabels)))
+							{
+								m = static_cast<Phy_D6Motion>(idx);
+								changed = true;
+							}
+						};
 
 					if (ImGui::TreeNode("Motions"))
 					{
@@ -6906,16 +6645,16 @@ namespace Alice
 						changed |= ImGui::Checkbox("Drive Limits Are Forces", &joint->d6.driveLimitsAreForces);
 
 						auto drawDrive = [&](const char* label, Phy_D6JointDriveSettings& d)
-						{
-							if (ImGui::TreeNode(label))
 							{
-								changed |= ImGui::DragFloat("Stiffness", &d.stiffness, 0.01f);
-								changed |= ImGui::DragFloat("Damping", &d.damping, 0.01f);
-								changed |= ImGui::DragFloat("Force Limit", &d.forceLimit, 1.0f, 0.0f);
-								changed |= ImGui::Checkbox("Acceleration", &d.isAcceleration);
-								ImGui::TreePop();
-							}
-						};
+								if (ImGui::TreeNode(label))
+								{
+									changed |= ImGui::DragFloat("Stiffness", &d.stiffness, 0.01f);
+									changed |= ImGui::DragFloat("Damping", &d.damping, 0.01f);
+									changed |= ImGui::DragFloat("Force Limit", &d.forceLimit, 1.0f, 0.0f);
+									changed |= ImGui::Checkbox("Acceleration", &d.isAcceleration);
+									ImGui::TreePop();
+								}
+							};
 
 						drawDrive("Drive X", joint->d6.driveX);
 						drawDrive("Drive Y", joint->d6.driveY);
@@ -7035,36 +6774,6 @@ namespace Alice
 
 					std::error_code ec;
 					fs::create_directories(newPath, ec);
-				}
-
-				// 새 Material 파일 생성
-				if (ImGui::MenuItem("Create Material"))
-				{
-					const std::string baseName = "NewMaterial";
-					fs::path matPath = path / (baseName + ".mat");
-
-					int index = 1;
-					while (fs::exists(matPath))
-					{
-						matPath = path / (baseName + std::to_string(index) + ".mat");
-						++index;
-					}
-
-					// 기본 MaterialComponent 생성 및 저장
-					MaterialComponent defaultMat;
-					defaultMat.color = DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
-					defaultMat.roughness = 0.5f;
-					defaultMat.metalness = 0.0f;
-					defaultMat.shadingMode = -1; // Global
-
-					if (MaterialFile::Save(matPath, defaultMat))
-					{
-						ALICE_LOG_INFO("[EditorCore] Created new Material file: %s", matPath.string().c_str());
-					}
-					else
-					{
-						ALICE_LOG_ERRORF("[EditorCore] Failed to create Material file: %s", matPath.string().c_str());
-					}
 				}
 
 				// Unity 스타일: C++ 스크립트(.h/.cpp)와 프리팹을 간단하게 생성합니다.
@@ -7196,6 +6905,49 @@ namespace Alice
 					mat.albedoTexturePath.clear();
 					MaterialFile::Save(newPath, mat);
 				}
+
+				if (ImGui::MenuItem("Create Scene"))
+				{
+					fs::path newPath = path / "NewScene.scene";
+					int index = 1;
+					while (fs::exists(newPath))
+					{
+						newPath = path / ("NewScene" + std::to_string(index) + ".scene");
+						++index;
+					}
+
+					// 기본 씬: 큐브(Transform 1개) + 기본 Material 1개
+					// ForwardRenderSystem은 Transform만 있어도 기본 큐브를 그립니다.
+					World temp;
+					const EntityId e = temp.CreateEntity();
+					temp.AddComponent<TransformComponent>(e);
+					temp.AddComponent<MaterialComponent>(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
+					SceneFile::Save(temp, newPath);
+				}
+
+				// 디렉터리 삭제 (Assets 안에서만 사용)
+				if (ImGui::MenuItem("Delete Folder"))
+				{
+					std::error_code ec;
+					fs::remove_all(path, ec);
+				}
+
+				ImGui::EndPopup();
+			}
+
+			if (open)
+			{
+				// 이 노드가 그 사이에 삭제되었으면 순회를 건너뜁니다.
+				if (fs::exists(path) && fs::is_directory(path))
+				{
+					for (const auto& entry : fs::directory_iterator(path))
+					{
+						DrawDirectoryNode(world, selectedEntity, entry.path());
+					}
+
+					ImGui::TreePop();
+				}
+			}
 
 				if (ImGui::MenuItem("Create Scene"))
 				{
@@ -7508,6 +7260,12 @@ namespace Alice
 			}
 		}
 	}
+				}
+
+				ImGui::EndPopup();
+			}
+		}
+	}
 
 	// BuildSettings.json 파싱 및 시작 씬 로드
 	bool LoadStartupSceneFromBuildSettings(World& world, const std::filesystem::path& exeDir)
@@ -7597,19 +7355,16 @@ namespace Alice
 
 		ALICE_LOG_INFO("[Editor] Saving Scene: %s", savePath.string().c_str());
 
-
-			// 저장 실행 (UIWorldManager가 있으면 World와 UI를 함께 저장)
-		std::filesystem::path absPath = Alice::ResourceManager::Get().Resolve(savePath);
-			if (m_uiWorldManager)
-			{
-				// SceneFile::Save가 내부에서 이미 SaveUI를 호출하므로 중복 호출 제거
-				SceneFile::Save(world, absPath, m_uiWorldManager);
-			}
-			else
-			{
-				SceneFile::Save(world, absPath);
-			}
-
+		// 저장 실행 (UIWorldManager가 있으면 World와 UI를 함께 저장)
+		std::filesystem::path absPath = ResourceManager::Get().Resolve(savePath);
+		if (m_uiWorldManager)
+		{
+			SceneFile::Save(world, absPath, m_uiWorldManager);
+		}
+		else
+		{
+			SceneFile::Save(world, absPath);
+		}
 
 		// 상태 갱신
 		g_CurrentScenePath = savePath;
@@ -7694,18 +7449,18 @@ namespace Alice
 
 	void ComponentEditCommandRTTR::Execute(World& world, EntityId&)
 	{
-		if (!desc) return;
-		rttr::instance inst = desc->getInstance(world, entityId);
-		if (!inst.is_valid()) return;
-		JsonRttr::FromJsonObject(inst, newJson);
+		if (!desc || !desc->deserialize || !desc->has) return;
+		// 컴포넌트가 존재하지 않으면 Undo/Redo로 부활시키지 않음 (좀비 부활 방지)
+		if (!desc->has(world, entityId)) return;
+		desc->deserialize(world, entityId, newJson);
 	}
 
 	void ComponentEditCommandRTTR::Undo(World& world, EntityId&)
 	{
-		if (!desc) return;
-		rttr::instance inst = desc->getInstance(world, entityId);
-		if (!inst.is_valid()) return;
-		JsonRttr::FromJsonObject(inst, oldJson);
+		if (!desc || !desc->deserialize || !desc->has) return;
+		// 컴포넌트가 존재하지 않으면 Undo/Redo로 부활시키지 않음 (좀비 부활 방지)
+		if (!desc->has(world, entityId)) return;
+		desc->deserialize(world, entityId, oldJson);
 	}
 
 	// 씬 로드 (레거시 함수 - 이제는 LoadSceneFileRequest 사용 권장)
@@ -7720,35 +7475,6 @@ namespace Alice
 			g_UndoStack.erase(g_UndoStack.begin());
 		}
 	}
-
-	void EditorCore::LoadScene(World& world)
-	{
-		// 이 함수는 더 이상 사용하지 않음. SceneManager::LoadSceneFileRequest을 사용해야 함.
-		// 하지만 호환성을 위해 남겨둠 (내부적으로는 즉시 로드)
-		ALICE_LOG_WARN("[Editor] LoadScene() is deprecated. Use SceneManager::LoadSceneFileRequest() instead.");
-
-		const std::filesystem::path loadAbs = ResourceManager::Get().Resolve(g_NextScenePath);
-
-		// 로드 실행 및 반환값 체크
-		if (!SceneFile::Load(world, loadAbs))
-		{
-			// 로드 실패: 에러 로그 및 팝업 표시
-			const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
-			ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
-
-			g_SceneLoadErrorMsg = errorMsg;
-			g_ShowSceneLoadError = true;
-
-			// 후처리하지 않고 종료 (부분 로드 방지)
-			return;
-		}
-
-			// 로드 성공: 후처리 및 상태 갱신
-			EnsureSkinnedMeshesRegistered(world);
-			g_CurrentScenePath = g_NextScenePath;
-			g_HasCurrentScenePath = true;
-			g_SceneDirty = false;
-		}
 
 	void EditorCore::CreateUIImage()
 	{
@@ -7777,6 +7503,36 @@ namespace Alice
 			ALICE_LOG_ERRORF("[EditorCore] CreateUIImage: Failed to create UIImage");
 		}
 	}
+
+	void EditorCore::LoadScene(World& world)
+	{
+		// 이 함수는 더 이상 사용하지 않음. SceneManager::LoadSceneFileRequest을 사용해야 함.
+		// 하지만 호환성을 위해 남겨둠 (내부적으로는 즉시 로드)
+		ALICE_LOG_WARN("[Editor] LoadScene() is deprecated. Use SceneManager::LoadSceneFileRequest() instead.");
+
+		const std::filesystem::path loadAbs = ResourceManager::Get().Resolve(g_NextScenePath);
+
+		// 로드 실행 및 반환값 체크
+		if (!SceneFile::Load(world, loadAbs))
+		{
+			// 로드 실패: 에러 로그 및 팝업 표시
+			const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.\n일부 컴포넌트만 로드되었을 수 있습니다.";
+			ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
+
+			g_SceneLoadErrorMsg = errorMsg;
+			g_ShowSceneLoadError = true;
+
+			// 후처리하지 않고 종료 (부분 로드 방지)
+			return;
+		}
+
+		// 로드 성공: 후처리 및 상태 갱신
+		EnsureSkinnedMeshesRegistered(world);
+		g_CurrentScenePath = g_NextScenePath;
+		g_HasCurrentScenePath = true;
+		g_SceneDirty = false;
+	}
+}
 
 
 	void EditorCore::RenderUIHeirarcy()
