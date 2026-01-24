@@ -127,6 +127,12 @@ namespace Alice
         auto* blend = go.GetComponent<CameraBlendComponent>();
         if (!blend) return;
 
+        // 이전 블렌드(예: 5번 키)에서 남은 슬로우 모션 설정을 초기화합니다.
+        // 이걸 안 하면 3번 키를 눌렀을 때도 중간에 갑자기 느려지는 현상이 생깁니다.
+        blend->slowDuration = 0.0f; 
+        blend->slowTriggerT = 0.5f;
+        blend->slowTimeScale = 1.0f;
+
         // 블렌드 요청: 이제 복잡한 계산 없이 플래그만 설정
         blend->targetName = camName;
         blend->targetId = InvalidEntityId; // 이름으로 다시 찾게 함
@@ -321,8 +327,5 @@ namespace Alice
             TriggerShake(Get_m_shakeAmplitude(), Get_m_shakeFrequency(), 
                         Get_m_shakeDuration(), Get_m_shakeDecay());
         }
-
-        // ---- 게임플레이(프리뷰가 아닐 때만) ----
-        // UpdateOrbit(), UpdateZoom() 호출은 제거! (시스템이 처리함)
     }
 }

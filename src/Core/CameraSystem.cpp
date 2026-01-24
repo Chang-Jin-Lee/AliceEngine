@@ -150,7 +150,7 @@ namespace Alice
             return camId;
         }
 
-        // [중요] 타겟 카메라의 속성을 안전하게 가져오는 함수
+        // 타겟 카메라의 속성을 안전하게 가져오는 함수
         static bool FetchTargetCameraInfo(World& world, EntityId id,
                                           DirectX::XMFLOAT3& outPos, DirectX::XMFLOAT3& outRot,
                                           float& outFov, float& outNear, float& outFar)
@@ -351,12 +351,12 @@ namespace Alice
                 cam.SetPerspective(fov, cam.GetAspectRatio(), nr, fr);
             }
 
-            // [핵심 수정] 블렌드 종료 시 처리
+            // 블렌드 종료 시 처리
             if (t >= 1.0f)
             {
                 blendComp->active = false; // 블렌드 종료
 
-                // ★ FollowComponent 내부 상태 동기화 ★
+                // FollowComponent 내부 상태 동기화
                 // 블렌드가 끝난 위치를 FollowComponent의 '현재 위치'로 갱신해 주어야
                 // 다음 프레임에 Follow가 켜질 때 과거 위치로 튀지 않습니다.
                 if (followComp)
@@ -368,13 +368,11 @@ namespace Alice
                     followComp->yawDeg   = RadToDeg(outputTr->rotation.y);
                     followComp->pitchDeg = RadToDeg(outputTr->rotation.x);
                 }
-                
                 // SpringArm 거리도 필요하다면 여기서 타겟과의 거리를 계산해 갱신할 수 있습니다.
-                // (지금은 위치/회전 동기화만으로도 튐 현상은 대부분 해결됩니다)
             }
         }
 
-        // [수정] 변수 재정의 제거 (위에서 선언한 blending 변수 갱신)
+        // 변수 재정의 제거 (위에서 선언한 blending 변수 갱신)
         blending = (blendComp && blendComp->active);
         const bool externalLook = (!blending && lookAtComp && lookAtComp->enabled);
 
