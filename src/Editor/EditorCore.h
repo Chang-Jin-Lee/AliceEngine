@@ -34,7 +34,6 @@ class UISceneManager;
 namespace Alice
 {
     struct ID3D11RenderDevice;
-    class ResourceManager;
     class SkinnedMeshRegistry;
     class DeferredRenderSystem;
 
@@ -272,7 +271,6 @@ namespace Alice
                                             std::string_view entityName);
 
     public:
-        void SetResourceManager(ResourceManager* resources) { m_resources = resources; }
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
         void SetInputSystem(InputSystem* inputSystem) { m_inputSystem = inputSystem; }
         void SetUIWorldManager(class UIWorldManager* uiWorldManager) { m_uiWorldManager = uiWorldManager; }
@@ -298,7 +296,6 @@ namespace Alice
 		bool               m_initialized = false;
 		HWND               m_hwnd = nullptr;
 		ID3D11RenderDevice* m_renderDevice = nullptr;
-		ResourceManager* m_resources = nullptr;
 		SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
 		InputSystem* m_inputSystem = nullptr;
 		UIWorldManager* m_uiWorldManager = nullptr;

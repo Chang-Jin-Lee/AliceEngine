@@ -380,6 +380,28 @@ namespace Alice
                 outEntity["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* audio = world.GetComponent<AudioSourceComponent>(id); audio)
+            {
+                AudioSourceComponent copy = *audio;
+                rttr::instance inst = copy;
+                outEntity["AudioSource"] = JsonRttr::ToJsonObject(inst);
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
+            }
+
+            if (const auto* listener = world.GetComponent<AudioListenerComponent>(id); listener)
+            {
+                rttr::instance inst = const_cast<AudioListenerComponent&>(*listener);
+                outEntity["AudioListener"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* sb = world.GetComponent<SoundBoxComponent>(id); sb)
+
+            {
+                SoundBoxComponent copy = *sb;
+                rttr::instance inst = copy;
+                outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
+            }
+
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
             {
                 rttr::instance inst = const_cast<CameraComponent&>(*cam);
@@ -775,6 +797,33 @@ namespace Alice
                 Phy_SettingsComponent& ps = world.AddComponent<Phy_SettingsComponent>(id);
                 // 수동 역직렬화 사용 (중첩 배열 보장)
                 if (!LoadPhysicsSceneSettings(ps, *itPhysicsSettings)) return false;
+            }
+
+            // AudioSource (선택)
+            auto itAS = e.find("AudioSource");
+            if (itAS != e.end() && itAS->is_object())
+            {
+                AudioSourceComponent& asc = world.AddComponent<AudioSourceComponent>(id);
+                rttr::instance inst = asc;
+                if (!JsonRttr::FromJsonObject(inst, *itAS)) return false;
+            }
+
+            // AudioListener (선택)
+            auto itAL = e.find("AudioListener");
+            if (itAL != e.end() && itAL->is_object())
+            {
+                AudioListenerComponent& alc = world.AddComponent<AudioListenerComponent>(id);
+                rttr::instance inst = alc;
+                if (!JsonRttr::FromJsonObject(inst, *itAL)) return false;
+            }
+
+            // SoundBox (선택)
+            auto itSB = e.find("SoundBox");
+            if (itSB != e.end() && itSB->is_object())
+            {
+                SoundBoxComponent& sb = world.AddComponent<SoundBoxComponent>(id);
+                rttr::instance inst = sb;
+                if (!JsonRttr::FromJsonObject(inst, *itSB)) return false;
             }
 
             return true;

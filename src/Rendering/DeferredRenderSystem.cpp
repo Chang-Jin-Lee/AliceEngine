@@ -957,9 +957,9 @@ namespace Alice
 		HRESULT hrDepthSRV = m_device->CreateShaderResourceView(m_sceneDepthTex.Get(), &depthSrvDesc, m_sceneDepthSRV.ReleaseAndGetAddressOf());
 		if (FAILED(hrDepthSRV))
 		{
-			ALICE_LOG_WARN("DeferredRenderSystem::CreateToneMappingResources: CreateShaderResourceView(depthSRV) failed (0x%08X) - depth test will be disabled", (unsigned)hrDepthSRV);
+			ALICE_LOG_WARN("DeferredRenderSystem::CreateToneMappingResources: CreateShaderResourceView(depthSRV) failed (0x%08X) - depth test disabled", (unsigned)hrDepthSRV);
 			m_sceneDepthSRV.Reset();
-            return false;
+			// 초기화는 성공으로 계속 진행 (depth test 없이 렌더링)
 		}
 
         // HDR 지원 여부 확인 및 적절한 톤매핑 셰이더 선택
@@ -2537,9 +2537,11 @@ namespace Alice
         // 리소스 해제
         ID3D11ShaderResourceView* nullSRV = nullptr;
         m_context->PSSetShaderResources(0, 1, &nullSRV);
-        
-        // Blend state 복원
+
+        // 파이프라인 상태 복원 (다음 렌더링을 위해)
         m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+        m_context->OMSetDepthStencilState(m_depthStencilState.Get(), 0);
+        m_context->RSSetState(m_rasterizerState.Get());
         
         // 뷰포트 RTV를 SRV로 읽을 수 있도록 BackBuffer로 복귀 (ImGui::Image가 viewportSRV를 읽기 위해 필수)
         // DirectX11에서는 같은 리소스를 RTV와 SRV로 동시에 바인딩할 수 없음

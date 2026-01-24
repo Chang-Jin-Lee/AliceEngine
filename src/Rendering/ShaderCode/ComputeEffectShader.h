@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace Alice
 {
@@ -101,6 +101,7 @@ struct EmitterGPU
     float4 p1; // xyz = color, w = sizePx
     float4 p2; // xyz = gravity, w = drag
     float4 p3; // x = lifeMin, y = lifeMax, z = intensity, w = depthBiasMeters
+    float4 p4; // x = depthTest (1.0 or 0.0), yzw unused
 };
 
 cbuffer CBParams : register(b0)
@@ -213,6 +214,7 @@ struct EmitterGPU
     float4 p1; // xyz = color, w = sizePx
     float4 p2; // xyz = gravity, w = drag
     float4 p3; // x = lifeMin, y = lifeMax, z = intensity, w = depthBiasMeters
+    float4 p4; // x = depthTest (1.0 or 0.0), yzw unused
 };
 
 cbuffer CBParams : register(b0)
@@ -255,9 +257,8 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
-    bool depthTest = (e.p3.z >= 0.0);
-    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    bool depthTest = (e.p4.x > 0.5);
+    float emitterIntensity = e.p3.z;
     float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
     float size = max(e.p1.w, 1.0);
     float depthBiasMeters = e.p3.w;  // emitter별 depth bias
@@ -287,7 +288,9 @@ void main(uint3 id : SV_DispatchThreadID)
         
         // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
         // LH 투영: z = (nearZ * farZ) / (farZ - depthValue * (farZ - nearZ))
-        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        // Load()로 정수 픽셀 좌표 직접 읽기 (샘플러 경로 없이 정확함)
+        int2 pixelCoord = int2(screenPos);
+        float sceneDepthValue = sceneDepth.Load(int3(pixelCoord, 0)).r;
         float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
         
         // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
@@ -348,6 +351,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -455,6 +459,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -494,9 +499,8 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
-    bool depthTest = (e.p3.z >= 0.0);
-    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    bool depthTest = (e.p4.x > 0.5);
+    float emitterIntensity = e.p3.z;
     float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
     float baseSize = max(e.p1.w, 1.0);
     float depthBiasMeters = e.p3.w;  // emitter별 depth bias
@@ -520,7 +524,9 @@ void main(uint3 id : SV_DispatchThreadID)
         float bias = depthBiasMeters;  // emitter별 bias 사용
         
         // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
-        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        // Load()로 정수 픽셀 좌표 직접 읽기 (샘플러 경로 없이 정확함)
+        int2 pixelCoord = int2(screenPos);
+        float sceneDepthValue = sceneDepth.Load(int3(pixelCoord, 0)).r;
         float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
         
         // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
@@ -597,6 +603,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -706,6 +713,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -747,9 +755,8 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
-    bool depthTest = (e.p3.z >= 0.0);
-    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    bool depthTest = (e.p4.x > 0.5);
+    float emitterIntensity = e.p3.z;
     float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
     float baseSize = max(e.p1.w, 1.0);
     float depthBiasMeters = e.p3.w;  // emitter별 depth bias
@@ -775,7 +782,9 @@ void main(uint3 id : SV_DispatchThreadID)
         float bias = depthBiasMeters;  // emitter별 bias 사용
         
         // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
-        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        // Load()로 정수 픽셀 좌표 직접 읽기 (샘플러 경로 없이 정확함)
+        int2 pixelCoord = int2(screenPos);
+        float sceneDepthValue = sceneDepth.Load(int3(pixelCoord, 0)).r;
         float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
         
         // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
@@ -833,6 +842,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -951,6 +961,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -990,9 +1001,8 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
-    bool depthTest = (e.p3.z >= 0.0);
-    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    bool depthTest = (e.p4.x > 0.5);
+    float emitterIntensity = e.p3.z;
     float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
     float size = clamp(max(e.p1.w, 1.0) * 0.9, 1.0, 10.0);
     float depthBiasMeters = e.p3.w;  // emitter별 depth bias
@@ -1016,7 +1026,9 @@ void main(uint3 id : SV_DispatchThreadID)
         float bias = depthBiasMeters;  // emitter별 bias 사용
         
         // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
-        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        // Load()로 정수 픽셀 좌표 직접 읽기 (샘플러 경로 없이 정확함)
+        int2 pixelCoord = int2(screenPos);
+        float sceneDepthValue = sceneDepth.Load(int3(pixelCoord, 0)).r;
         float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
         
         // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
@@ -1067,6 +1079,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -1172,6 +1185,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -1211,9 +1225,8 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
-    bool depthTest = (e.p3.z >= 0.0);
-    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    bool depthTest = (e.p4.x > 0.5);
+    float emitterIntensity = e.p3.z;
     float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
     float size = clamp(max(e.p1.w, 1.0) * 0.6, 1.0, 6.0);
     float depthBiasMeters = e.p3.w;  // emitter별 depth bias
@@ -1237,7 +1250,9 @@ void main(uint3 id : SV_DispatchThreadID)
         float bias = depthBiasMeters;  // emitter별 bias 사용
         
         // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
-        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        // Load()로 정수 픽셀 좌표 직접 읽기 (샘플러 경로 없이 정확함)
+        int2 pixelCoord = int2(screenPos);
+        float sceneDepthValue = sceneDepth.Load(int3(pixelCoord, 0)).r;
         float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
         
         // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)
@@ -1288,6 +1303,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -1394,6 +1410,7 @@ struct EmitterGPU
     float4 p1;
     float4 p2;
     float4 p3;
+    float4 p4; // x = depthTest (1.0 or 0.0)
 };
 
 cbuffer CBParams : register(b0)
@@ -1435,9 +1452,8 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    // intensity 부호로 depthTest 디코딩: 양수=true, 음수=false
-    bool depthTest = (e.p3.z >= 0.0);
-    float emitterIntensity = abs(e.p3.z);  // 절댓값으로 실제 intensity 사용 (변수명 변경하여 충돌 방지)
+    bool depthTest = (e.p4.x > 0.5);
+    float emitterIntensity = e.p3.z;
     float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
     float baseSize = max(e.p1.w, 1.0);
     float depthBiasMeters = e.p3.w;  // emitter별 depth bias
@@ -1461,7 +1477,9 @@ void main(uint3 id : SV_DispatchThreadID)
         float bias = depthBiasMeters;  // emitter별 bias 사용
         
         // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
-        float sceneDepthValue = sceneDepth.SampleLevel(PointSampler, screenPos * resolution.zw, 0).r;
+        // Load()로 정수 픽셀 좌표 직접 읽기 (샘플러 경로 없이 정확함)
+        int2 pixelCoord = int2(screenPos);
+        float sceneDepthValue = sceneDepth.Load(int3(pixelCoord, 0)).r;
         float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
         
         // 파티클 view-space Z: clipPos.w가 view-space Z (표준 프로젝션)

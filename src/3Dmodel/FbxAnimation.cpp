@@ -1,4 +1,4 @@
-﻿#include "FbxAnimation.h"
+#include "FbxAnimation.h"
 #include "../Core/Helper.h"
 
 #include <assimp/scene.h>
@@ -164,9 +164,10 @@ void FbxAnimation::EnsureBoneCB(ID3D11Device* device, int maxBones)
 	HR_T(device->CreateBuffer(&bd, nullptr, &m_pBoneCB));
 }
 
-static aiVector3D InterpVec(const aiVectorKey* keys, unsigned count, double t)
+// ★ 핵심: fallback 값을 받도록 수정 (키가 없을 때 바인드 포즈 사용)
+static aiVector3D InterpVec(const aiVectorKey* keys, unsigned count, double t, const aiVector3D& fallback = aiVector3D(0, 0, 0))
 {
-	if (count == 0) return aiVector3D(0, 0, 0);
+	if (count == 0) return fallback;  // 키가 없으면 fallback 사용 (바인드 포즈)
 	if (count == 1) return keys[0].mValue;
 	unsigned i = 0; while (i + 1 < count && t >= keys[i + 1].mTime) ++i; unsigned j = (i + 1 < count) ? i + 1 : i;
 	double dt = keys[j].mTime - keys[i].mTime; double a = (dt > 0.0) ? (t - keys[i].mTime) / dt : 0.0;
@@ -180,6 +181,21 @@ static aiQuaternion InterpQuat(const aiQuatKey* keys, unsigned count, double t)
 	unsigned i = 0; while (i + 1 < count && t >= keys[i + 1].mTime) ++i; unsigned j = (i + 1 < count) ? i + 1 : i;
 	double dt = keys[j].mTime - keys[i].mTime; double a = (dt > 0.0) ? (t - keys[i].mTime) / dt : 0.0;
 	aiQuaternion q; aiQuaternion::Interpolate(q, keys[i].mValue, keys[j].mValue, (float)a); q.Normalize(); return q;
+}
+
+static void DecomposeAiMatrix(const aiMatrix4x4& m, FbxLocalSRT& out)
+{
+	// ★ 핵심: XMMatrixDecompose 대신 Assimp의 Decompose 사용
+	// FBX 노드 변환(프리/포스트 회전, 피벗 베이크, 축 변환 포함)에서 정확함
+	// 이렇게 하면 EvaluateLocalsAt()에서 채널이 있는데 position key가 없는 본도
+	// bind translation이 정상으로 들어감
+	aiVector3D s, t;
+	aiQuaternion r;
+	m.Decompose(s, r, t);
+
+	out.scale = { (float)s.x, (float)s.y, (float)s.z };
+	out.translation = { (float)t.x, (float)t.y, (float)t.z };
+	out.rotation = { (float)r.x, (float)r.y, (float)r.z, (float)r.w }; // (x,y,z,w)
 }
 
 void FbxAnimation::EvaluateGlobals(
@@ -206,10 +222,25 @@ void FbxAnimation::EvaluateGlobals(
 				const aiNodeAnim* ch = m_ChannelOfNode[(size_t)idx];
 				if (ch)
 				{
+					FbxLocalSRT bindSrt{};
+					DecomposeAiMatrix(node->mTransformation, bindSrt);
+
 					double tTicks = m_TimeSec * ((m_Current >= 0 && (size_t)m_Current < m_TicksPerSec.size()) ? m_TicksPerSec[m_Current] : 25.0);
-					aiVector3D S = (ch->mNumScalingKeys   > 0) ? InterpVec(ch->mScalingKeys,   ch->mNumScalingKeys,   tTicks) : aiVector3D(1,1,1);
-					aiVector3D T = (ch->mNumPositionKeys  > 0) ? InterpVec(ch->mPositionKeys,  ch->mNumPositionKeys,  tTicks) : aiVector3D(0,0,0);
-					aiQuaternion R = (ch->mNumRotationKeys  > 0) ? InterpQuat(ch->mRotationKeys, ch->mNumRotationKeys,  tTicks) : aiQuaternion();
+					// ★ 핵심: Scale 기본값 보장
+					aiVector3D bindScale = aiVector3D(bindSrt.scale.x, bindSrt.scale.y, bindSrt.scale.z);
+					if (bindScale.x < 0.001f) bindScale.x = 1.0f;
+					if (bindScale.y < 0.001f) bindScale.y = 1.0f;
+					if (bindScale.z < 0.001f) bindScale.z = 1.0f;
+					
+					// ★ 핵심: InterpVec에 fallback 값 전달 (키가 없을 때 바인드 포즈 사용)
+					aiVector3D S = (ch->mNumScalingKeys   > 0) ? InterpVec(ch->mScalingKeys,   ch->mNumScalingKeys,   tTicks, bindScale)
+						: bindScale;
+					// ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용 (본이 뭉치는 현상 방지)
+					aiVector3D bindT = aiVector3D(bindSrt.translation.x, bindSrt.translation.y, bindSrt.translation.z);
+					aiVector3D T = (ch->mNumPositionKeys  > 0) ? InterpVec(ch->mPositionKeys,  ch->mNumPositionKeys,  tTicks, bindT)
+						: bindT;
+					aiQuaternion R = (ch->mNumRotationKeys  > 0) ? InterpQuat(ch->mRotationKeys, ch->mNumRotationKeys,  tTicks)
+						: aiQuaternion(bindSrt.rotation.w, bindSrt.rotation.x, bindSrt.rotation.y, bindSrt.rotation.z);
 					aiMatrix4x4 mS; mS.Scaling(S, mS); aiMatrix4x4 mR = aiMatrix4x4(R.GetMatrix()); aiMatrix4x4 mT; mT.Translation(T, mT);
 					mLocal = mT * mR * mS;
 				}
@@ -239,10 +270,23 @@ void FbxAnimation::EvaluateGlobals(
                 const aiNodeAnim* ch = m_ChannelOfNode[(size_t)nodeIdx];
                 if (ch)
                 {
+                    // ★ 핵심: 바인드 포즈 SRT 추출 (키가 없을 때 사용)
+                    FbxLocalSRT bindSrt{};
+                    DecomposeAiMatrix(node->mTransformation, bindSrt);
+                    
+                    // Scale 기본값 보장
+                    aiVector3D bindScale = aiVector3D(bindSrt.scale.x, bindSrt.scale.y, bindSrt.scale.z);
+                    if (bindScale.x < 0.001f) bindScale.x = 1.0f;
+                    if (bindScale.y < 0.001f) bindScale.y = 1.0f;
+                    if (bindScale.z < 0.001f) bindScale.z = 1.0f;
+                    
                     double tTicks = m_TimeSec * ((m_Current >= 0 && (size_t)m_Current < m_TicksPerSec.size()) ? m_TicksPerSec[m_Current] : 25.0);
-                    S = (ch->mNumScalingKeys   > 0) ? InterpVec(ch->mScalingKeys,   ch->mNumScalingKeys,   tTicks) : aiVector3D(1,1,1);
-                    T = (ch->mNumPositionKeys  > 0) ? InterpVec(ch->mPositionKeys,  ch->mNumPositionKeys,  tTicks) : aiVector3D(0,0,0);
-                    R = (ch->mNumRotationKeys  > 0) ? InterpQuat(ch->mRotationKeys, ch->mNumRotationKeys,  tTicks) : aiQuaternion();
+                    // ★ 핵심: 키가 없으면 바인드 포즈 값 사용 (Translation이 (0,0,0)이 되지 않도록)
+                    S = (ch->mNumScalingKeys   > 0) ? InterpVec(ch->mScalingKeys,   ch->mNumScalingKeys,   tTicks, bindScale) : bindScale;
+                    T = (ch->mNumPositionKeys  > 0) ? InterpVec(ch->mPositionKeys,  ch->mNumPositionKeys,  tTicks, aiVector3D(bindSrt.translation.x, bindSrt.translation.y, bindSrt.translation.z)) 
+                        : aiVector3D(bindSrt.translation.x, bindSrt.translation.y, bindSrt.translation.z);
+                    R = (ch->mNumRotationKeys  > 0) ? InterpQuat(ch->mRotationKeys, ch->mNumRotationKeys,  tTicks) 
+                        : aiQuaternion(bindSrt.rotation.w, bindSrt.rotation.x, bindSrt.rotation.y, bindSrt.rotation.z);
                     aiMatrix4x4 mS; mS.Scaling(S, mS); aiMatrix4x4 mR = aiMatrix4x4(R.GetMatrix()); aiMatrix4x4 mT; mT.Translation(T, mT);
                     mLocal = mT * mR * mS;
                 }
@@ -502,6 +546,9 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 		XMStoreFloat4x4(&outPalette[i], m);
 	}
 
+	// ★ precomputed 경로로 채웠으면 여기서 반환 (fallback 실행 방지)
+	return;
+
 	// Fallback: on-the-fly 평가
 	// 1. 기본 유효성 검사
 	if (!m_Scene || !m_BoneNames || !m_GlobalInverse) return;
@@ -547,6 +594,143 @@ void FbxAnimation::BuildCurrentPaletteFloat4x4(std::vector<DirectX::XMFLOAT4X4>&
 
 				XMStoreFloat4x4(&outPalette[i], FinalM);
 			}
+		}
+	}
+}
+
+void FbxAnimation::BuildPaletteAt(int clipIndex, double timeSec, std::vector<DirectX::XMFLOAT4X4>& outPalette)
+{
+	int oldClip = m_Current;
+	double oldTime = m_TimeSec;
+	bool oldPlaying = m_Playing;
+	bool oldDirty = m_ChannelDirty;
+
+	m_Current = clipIndex;
+	SetTimeSec(timeSec);
+	m_Playing = false;
+	m_ChannelDirty = true;
+
+	BuildCurrentPaletteFloat4x4(outPalette);
+
+	m_Current = oldClip;
+	m_TimeSec = oldTime;
+	m_Playing = oldPlaying;
+	m_ChannelDirty = oldDirty;
+}
+
+void FbxAnimation::EvaluateGlobalsAt(int clipIndex, double timeSec, std::vector<DirectX::XMFLOAT4X4>& outGlobal)
+{
+	if (!m_Scene)
+	{
+		outGlobal.clear();
+		return;
+	}
+
+	int oldClip = m_Current;
+	double oldTime = m_TimeSec;
+	bool oldPlaying = m_Playing;
+	bool oldDirty = m_ChannelDirty;
+
+	m_Current = clipIndex;
+	SetTimeSec(timeSec);
+	m_Playing = false;
+	m_ChannelDirty = true;
+	if (m_ChannelDirty && !m_ChannelOfNode.empty())
+	{
+		RebuildChannelMapIfNeeded(m_Scene, m_Current, m_NodeIndexOfName, m_ChannelOfNode);
+		m_ChannelDirty = false;
+	}
+
+	EvaluateGlobals(m_Scene, m_NodeIndexOfName, outGlobal);
+
+	m_Current = oldClip;
+	m_TimeSec = oldTime;
+	m_Playing = oldPlaying;
+	m_ChannelDirty = oldDirty;
+}
+
+void FbxAnimation::EvaluateLocalsAt(int clipIndex, double timeSec,
+	std::vector<FbxLocalSRT>& outLocals,
+	std::vector<std::uint8_t>* outHasChannel) const
+{
+	outLocals.clear();
+	if (outHasChannel) outHasChannel->clear();
+
+	if (!m_Scene || clipIndex < 0 || (size_t)clipIndex >= m_Scene->mNumAnimations)
+		return;
+
+	const size_t nodeCount = m_NodeIndexOfName.size();
+	if (nodeCount == 0 || m_NodePtrByIndex.size() != nodeCount)
+		return;
+
+	outLocals.resize(nodeCount);
+	if (outHasChannel) outHasChannel->assign(nodeCount, 0);
+
+	const aiAnimation* anim = m_Scene->mAnimations[clipIndex];
+	const double tps = (anim->mTicksPerSecond != 0.0) ? anim->mTicksPerSecond : 25.0;
+	const double tTicks = timeSec * tps;
+
+	std::vector<const aiNodeAnim*> channelOfNode;
+	channelOfNode.assign(nodeCount, nullptr);
+	for (unsigned i = 0; i < anim->mNumChannels; ++i)
+	{
+		const aiNodeAnim* ch = anim->mChannels[i];
+		auto it = m_NodeIndexOfName.find(ch->mNodeName.C_Str());
+		if (it != m_NodeIndexOfName.end())
+		{
+			int idx = it->second;
+			if (idx >= 0 && (size_t)idx < channelOfNode.size())
+				channelOfNode[(size_t)idx] = ch;
+		}
+	}
+
+	for (size_t i = 0; i < nodeCount; ++i)
+	{
+		const aiNode* node = m_NodePtrByIndex[i];
+		if (!node)
+			continue;
+
+		const aiNodeAnim* ch = channelOfNode[i];
+		if (ch)
+		{
+			if (outHasChannel) (*outHasChannel)[i] = 1;
+
+			FbxLocalSRT bindSrt{};
+			DecomposeAiMatrix(node->mTransformation, bindSrt);
+
+			// ★ 핵심: Scale 기본값을 (1, 1, 1)로 보장 (0이면 본이 사라짐)
+			// bindSrt.scale이 0이거나 매우 작으면 (1, 1, 1)로 강제
+			aiVector3D bindScale = aiVector3D(bindSrt.scale.x, bindSrt.scale.y, bindSrt.scale.z);
+			if (bindScale.x < 0.001f) bindScale.x = 1.0f;
+			if (bindScale.y < 0.001f) bindScale.y = 1.0f;
+			if (bindScale.z < 0.001f) bindScale.z = 1.0f;
+
+			// ★ 핵심: InterpVec에 fallback 값 전달 (키가 없을 때 바인드 포즈 사용)
+			aiVector3D S = (ch->mNumScalingKeys > 0) ? InterpVec(ch->mScalingKeys, ch->mNumScalingKeys, tTicks, bindScale)
+				: bindScale;
+			// Scale이 0이 되지 않도록 최종 보장
+			if (S.x < 0.001f) S.x = 1.0f;
+			if (S.y < 0.001f) S.y = 1.0f;
+			if (S.z < 0.001f) S.z = 1.0f;
+
+			// ★ 핵심: Translation 키가 없을 때 바인드 포즈 Translation 사용 (본이 뭉치는 현상 방지)
+			aiVector3D bindT = aiVector3D(bindSrt.translation.x, bindSrt.translation.y, bindSrt.translation.z);
+			aiVector3D T = (ch->mNumPositionKeys > 0) ? InterpVec(ch->mPositionKeys, ch->mNumPositionKeys, tTicks, bindT)
+				: bindT;
+			aiQuaternion R = (ch->mNumRotationKeys > 0) ? InterpQuat(ch->mRotationKeys, ch->mNumRotationKeys, tTicks)
+				: aiQuaternion(bindSrt.rotation.w, bindSrt.rotation.x, bindSrt.rotation.y, bindSrt.rotation.z);
+
+			outLocals[i].scale = { (float)S.x, (float)S.y, (float)S.z };
+			outLocals[i].translation = { (float)T.x, (float)T.y, (float)T.z };
+			outLocals[i].rotation = { (float)R.x, (float)R.y, (float)R.z, (float)R.w };
+		}
+		else
+		{
+			DecomposeAiMatrix(node->mTransformation, outLocals[i]);
+			// ★ 채널이 없는 노드도 Scale 기본값 보장
+			if (outLocals[i].scale.x < 0.001f) outLocals[i].scale.x = 1.0f;
+			if (outLocals[i].scale.y < 0.001f) outLocals[i].scale.y = 1.0f;
+			if (outLocals[i].scale.z < 0.001f) outLocals[i].scale.z = 1.0f;
 		}
 	}
 }
