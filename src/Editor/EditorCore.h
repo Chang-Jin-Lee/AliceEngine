@@ -26,7 +26,6 @@
 #include <functional>
 #include <string>
 #include <memory>
-#include "UI/UIWorldManager.h"
 
 namespace Alice
 {
@@ -146,8 +145,7 @@ namespace Alice
                           bool& useForwardRendering,
                           bool& pvdEnabled,
                           std::string& pvdHost,
-                          int& pvdPort,
-						  UIWorldManager* uiWorldManager);
+                          int& pvdPort);
 
 		template<typename T>
 		void DrawEngineComponent(const char* label, T* comp, std::function<void()> removeFn, const EntityId& _selectedEntity, const std::string& compTypeName)
@@ -247,10 +245,6 @@ namespace Alice
         void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
 
-	void DrawInspectorUITransform(UIWorld& uiWorld, unsigned long selectedUI);
-	void DrawInspectorUIScripts(UIWorld& uiWorld, unsigned long selectedUI);
-	
-
 		// 물리
 		bool DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames);
 		bool DrawLayerMaskChipEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames);
@@ -262,12 +256,10 @@ namespace Alice
 		void DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorJoint(World& world, const EntityId& _selectedEntity);
 
-		/// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
-		void DrawDirectoryNode(World& world,
+        /// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
+        void DrawDirectoryNode(World& world,
                                EntityId& selectedEntity,
-			const std::filesystem::path& path,
-			UIWorldManager* uiWorldManager = nullptr
-		);
+                               const std::filesystem::path& path);
 
         /// FBX 에셋을 월드에 인스턴스화합니다.
         EntityId InstantiateFbxAssetToWorld(World& world,
@@ -279,16 +271,16 @@ namespace Alice
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
         void SetInputSystem(InputSystem* inputSystem) { m_inputSystem = inputSystem; }
 
-	private:
-		/// 씬을 로드한 뒤, World 에 존재하는 SkinnedMeshComponent 들이
-		/// SkinnedMeshRegistry 에도 등록되어 있는지 확인하고,
-		/// 누락된 경우 .fbxasset / FBX 원본을 통해 간단히 재-임포트합니다.
-		void EnsureSkinnedMeshesRegistered(World& world);
-		void SaveScene(World&, UIWorldManager* uiWorldManager = nullptr);
-		void LoadScene(World&, UIWorldManager* uiWorldManager = nullptr);
+    private:
+        /// 씬을 로드한 뒤, World 에 존재하는 SkinnedMeshComponent 들이
+        /// SkinnedMeshRegistry 에도 등록되어 있는지 확인하고,
+        /// 누락된 경우 .fbxasset / FBX 원본을 통해 간단히 재-임포트합니다.
+        void EnsureSkinnedMeshesRegistered(World& world);
+        void SaveScene(World& );
+        void LoadScene(World& );
 
-	private:
-		bool               m_initialized = false;
+		// Undo 시스템
+		void PushCommand(std::unique_ptr<struct ICommand> cmd);
 
 	private:
 		bool               m_initialized = false;
