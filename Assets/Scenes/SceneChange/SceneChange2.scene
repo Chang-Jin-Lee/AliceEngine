@@ -10,9 +10,18 @@
                     "z": 1.0
                 },
                 "metalness": 1.0,
-                "roughness": 0.0
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.0,
+                "shadingMode": -1
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": 0.0,
                     "y": 3.000617742538452,
@@ -29,7 +38,7 @@
                     "z": 1.0
                 }
             },
-            "id": 1
+            "guid": "8391382352650265924"
         },
         {
             "Material": {
@@ -41,9 +50,18 @@
                     "z": 1.0
                 },
                 "metalness": 0.5049999952316284,
-                "roughness": 0.0
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.0,
+                "shadingMode": -1
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": 0.0,
                     "y": -2.3555243015289307,
@@ -60,21 +78,18 @@
                     "z": 20.796457290649414
                 }
             },
-            "id": 2,
+            "guid": "10678209540132580737",
             "name": "Entity2"
         },
         {
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "SceneSwitchExample",
-                    "props": {
-                        "m_targetName1": "SceneChange/SceneChange1",
-                        "m_targetName2": ""
-                    }
+                    "name": "SceneSwitchExample"
                 }
             ],
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": 0.0,
                     "y": 0.0,
@@ -91,7 +106,7 @@
                     "z": 1.0
                 }
             },
-            "id": 3,
+            "guid": "12627764042847929771",
             "name": "GameObject3"
         },
         {
@@ -104,6 +119,7 @@
                 "useAspectOverride": false
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": 0.0,
                     "y": 2.0,
@@ -120,9 +136,10 @@
                     "z": 1.0
                 }
             },
-            "id": 4,
+            "guid": "3636309116445919589",
             "name": "Camera1"
         }
     ],
+    "sceneName": "SceneChange2",
     "version": 1
 }

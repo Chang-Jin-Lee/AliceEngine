@@ -1193,7 +1193,8 @@ namespace Alice
 				pImpl->m_isPlaying, shadingMode, pImpl->m_useFillLight,
 				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
 				pImpl->m_useForwardRendering,
-				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort, &pImpl->m_uiWorld
+				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort,
+				&pImpl->m_uiWorld
 			);
 			pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
 
@@ -1471,13 +1472,14 @@ namespace Alice
 				if (pImpl->m_useForwardRendering)
 				{
 					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+					// UI 렌더링: Post-processing 이후
+					pImpl->m_uiWorld.Render();  // D2D → UI 텍스처 렌더링
 					pImpl->m_forwardRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
 				}
 				else
 				{
 					DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
 					ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
-					//pImpl->m_deferredRenderSystem->RenderToneMapping(backBufferRTV, viewport);
 					if (deferred->GetBloomSettings().enabled)
 					{
 						deferred->RenderBloomPass(sceneSRV, backBufferRTV, viewport);
@@ -1486,6 +1488,9 @@ namespace Alice
 					{
 						deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
 					}
+					// UI 렌더링: Post-processing 이후
+					pImpl->m_uiWorld.Render();  // D2D → UI 텍스처 렌더링
+					deferred->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
 				}
 			}
 		}
@@ -1651,7 +1656,7 @@ namespace Alice
 		if(pImpl->m_uiWorld.m_d3dDev)
 		{
 			// UI 시스템 리사이즈 (텍스처 재생성)
-			pImpl->m_uiWorld.Create2DTex(width, height);
+			//pImpl->m_uiWorld.Create2DTex(width, height);
 		}
 		
 	}

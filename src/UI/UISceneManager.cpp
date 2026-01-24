@@ -16,6 +16,7 @@
 #include "IUIComponent.h"
 #include "UIBase.h"
 #include "UIScriptSystem.h"
+#include "UIScriptFactory.h"
 #include "UI_InputComponent.h"
 #include "UIButton.h"
 // ============================================================================
@@ -169,6 +170,14 @@ UITransform* UIWorld::CreateTransformComponent(unsigned long ownerID)
 	comp->owner = ownerID;
 	UITransform* raw = comp.get();
 	
+	// Owner/OwnerID는 AddComponent 델리게이트에서 설정됨
+	// 직접 호출 시에는 여기서 설정 (델리게이트를 거치지 않는 경우)
+	if (UIBase* owner = this->Get(ownerID))
+	{
+		raw->Owner = owner;
+		raw->OwnerID = ownerID;
+	}
+	
 	m_transformStorage.emplace(ownerID, std::move(comp));
 	return raw;
 }
@@ -214,9 +223,16 @@ UI_ImageComponent* UIWorld::CreateImageComponent(unsigned long ownerID)
 
 	// 새 컴포넌트 생성 후 저장
 	auto comp = std::make_unique<UI_ImageComponent>();
-	comp->owner = ownerID;
 	comp->Initalize(*m_UIRenderStruct);
 	UI_ImageComponent* raw = comp.get();
+	
+	// Owner/OwnerID는 AddComponent 델리게이트에서 설정됨
+	// 직접 호출 시에는 여기서 설정 (델리게이트를 거치지 않는 경우)
+	if (UIBase* owner = this->Get(ownerID))
+	{
+		raw->Owner = owner;
+		raw->OwnerID = ownerID;
+	}
 	m_imageComponentStorage.emplace(ownerID, std::move(comp));
 	return raw;
 }
@@ -246,8 +262,15 @@ UI_ScriptComponent* UIWorld::CreateScriptComponent(unsigned long ownerID)
 		return it->second.get();
 
 	auto comp = std::make_unique<UI_ScriptComponent>();
-	comp->owner = ownerID;
 	UI_ScriptComponent* raw = comp.get();
+	
+	// Owner/OwnerID는 AddComponent 델리게이트에서 설정됨
+	// 직접 호출 시에는 여기서 설정 (델리게이트를 거치지 않는 경우)
+	if (UIBase* owner = this->Get(ownerID))
+	{
+		raw->Owner = owner;
+		raw->OwnerID = ownerID;
+	}
 	m_scriptComponentStorage.emplace(ownerID, std::move(comp));
 	return raw;
 }
@@ -275,6 +298,76 @@ void UIWorld::RemoveScriptComponent(unsigned long ownerID)
 		}
 		m_scriptComponentStorage.erase(it);
 	}
+}
+
+// ============================================================================
+// UI Script 관리 구현 (여러 스크립트 지원)
+// ============================================================================
+UIScriptEntry& UIWorld::AddUIScript(unsigned long ownerID, const std::string& scriptName)
+{
+	UIScriptEntry entry{};
+	entry.scriptName = scriptName;
+	
+	// UIBase 참조 가져오기
+	UIBase* owner = Get(ownerID);
+	if (!owner)
+	{
+		ALICE_LOG_WARN("[UIWorld] AddUIScript: Owner UIBase not found for ID=%lu", ownerID);
+		// owner가 없어도 entry는 추가 (나중에 EnsureInstance에서 처리)
+	}
+	
+	// 스크립트 인스턴스 생성 시도
+	entry.instance = UIScriptFactory::Create(scriptName.c_str());
+	if (entry.instance)
+	{
+		entry.instance->Owner = owner;
+		entry.instance->OwnerID = ownerID;
+		ALICE_LOG_INFO("[UIWorld] AddUIScript: Created script '%s' for UI ID=%lu", scriptName.c_str(), ownerID);
+	}
+	else
+	{
+		ALICE_LOG_WARN("[UIWorld] AddUIScript: Failed to create script '%s' for UI ID=%lu (will be created later)", scriptName.c_str(), ownerID);
+	}
+	
+	m_scripts[ownerID].push_back(std::move(entry));
+	return m_scripts[ownerID].back();
+}
+
+std::vector<UIScriptEntry>* UIWorld::GetUIScripts(unsigned long ownerID)
+{
+	auto it = m_scripts.find(ownerID);
+	if (it == m_scripts.end())
+		return nullptr;
+	return &it->second;
+}
+
+const std::vector<UIScriptEntry>* UIWorld::GetUIScripts(unsigned long ownerID) const
+{
+	auto it = m_scripts.find(ownerID);
+	if (it == m_scripts.end())
+		return nullptr;
+	return &it->second;
+}
+
+void UIWorld::RemoveUIScript(unsigned long ownerID, std::size_t index)
+{
+	auto it = m_scripts.find(ownerID);
+	if (it == m_scripts.end())
+		return;
+	
+	auto& list = it->second;
+	if (index >= list.size())
+		return;
+	
+	// OnRemoved 호출
+	if (list[index].instance)
+	{
+		list[index].instance->OnRemoved();
+	}
+	
+	list.erase(list.begin() + static_cast<std::ptrdiff_t>(index));
+	if (list.empty())
+		m_scripts.erase(it);
 }
 
 UIBase* UIWorld::Get(long unsigned int ID)

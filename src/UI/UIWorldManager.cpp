@@ -361,7 +361,7 @@ static bool WriteUIEntity(Alice::JsonRttr::json& outEntity, const UIWorld& world
         components["Image"] = compJson;
     }
 
-    // UI_ScriptComponent 저장 (scriptName, enabled만 저장, instance 포인터 저장 금지)
+    // UI_ScriptComponent 저장 (레거시, 단일 스크립트용)
     if (const auto* scriptComp = world.TryGetComponent<UI_ScriptComponent>(id); scriptComp)
     {
         Alice::JsonRttr::json compJson = Alice::JsonRttr::json::object();
@@ -369,6 +369,38 @@ static bool WriteUIEntity(Alice::JsonRttr::json& outEntity, const UIWorld& world
         compJson["enabled"] = scriptComp->enabled;
         // instance는 저장하지 않음 (UIScriptSystem에서 자동 생성)
         components["Script"] = compJson;
+    }
+    
+    // ============================================================================
+    // UI Script 저장 (여러 스크립트 지원, World Script와 유사)
+    // ============================================================================
+    if (const auto* scripts = world.GetUIScripts(id); scripts && !scripts->empty())
+    {
+        Alice::JsonRttr::json arr = Alice::JsonRttr::json::array();
+        for (const auto& entry : *scripts)
+        {
+            Alice::JsonRttr::json s = Alice::JsonRttr::json::object();
+            s["name"] = entry.scriptName;
+            s["enabled"] = entry.enabled;
+            
+            // 스크립트 인스턴스가 있으면 RTTR로 속성 저장
+            if (entry.instance)
+            {
+                rttr::instance inst = *entry.instance;
+                rttr::type t = rttr::type::get_by_name(entry.scriptName);
+                if (!t.is_valid())
+                {
+                    t = inst.get_type();
+                }
+                if (t.is_valid())
+                {
+                    s["props"] = Alice::JsonRttr::ToJsonObject(inst, t);
+                }
+            }
+            
+            arr.push_back(s);
+        }
+        components["UIScripts"] = arr;
     }
 
     // components가 비어있지 않으면 저장
@@ -506,7 +538,7 @@ static bool ApplyUIEntity(UISceneManager& manager, const Alice::JsonRttr::json& 
         }
     }
 
-    // UI_ScriptComponent 복원 (scriptName, enabled만, instance는 자동 생성)
+    // UI_ScriptComponent 복원 (레거시, 단일 스크립트용)
     auto itScript = itComponents->find("Script");
     if (itScript != itComponents->end() && itScript->is_object())
     {
@@ -520,6 +552,34 @@ static bool ApplyUIEntity(UISceneManager& manager, const Alice::JsonRttr::json& 
                 scriptComp->enabled = itScript->value("enabled", true);
                 // instance는 저장하지 않았으므로 로드하지 않음
                 // UIScriptSystem::Tick → EnsureInstance()에서 자동 생성됨
+            }
+        }
+    }
+    
+    // ============================================================================
+    // UI Script 복원 (여러 스크립트 지원, World Script와 유사)
+    // ============================================================================
+    auto itUIScripts = itComponents->find("UIScripts");
+    if (itUIScripts != itComponents->end() && itUIScripts->is_array())
+    {
+        UIWorld& uiWorld = manager.GetWorld();
+        for (const auto& s : *itUIScripts)
+        {
+            if (!s.is_object()) continue;
+            const std::string name = s.value("name", std::string{});
+            if (name.empty()) continue;
+            
+            UIScriptEntry& entry = uiWorld.AddUIScript(id, name);
+            entry.enabled = s.value("enabled", true);
+            
+            // RTTR 속성 복원
+            auto itP = s.find("props");
+            if (itP != s.end() && itP->is_object())
+            {
+                // 인스턴스가 생성될 때까지 대기 (UIScriptSystem에서 생성)
+                // 속성은 나중에 복원하거나, 인스턴스 생성 후 복원
+                // 일단 스크립트 이름과 enabled만 저장하고, 속성은 다음 Tick에서 복원
+                // (또는 EnsureUIScriptInstance 후 즉시 복원)
             }
         }
     }

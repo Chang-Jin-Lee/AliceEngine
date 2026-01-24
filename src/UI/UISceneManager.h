@@ -28,6 +28,19 @@
 // Forward declaration
 class UIButton;
 
+// ============================================================================
+// UI Script Entry: UIWorld에서 여러 스크립트를 관리하기 위한 구조체
+// (World의 ScriptComponent와 유사한 구조)
+// ============================================================================
+struct UIScriptEntry
+{
+	std::string scriptName;                    // 스크립트 이름 (동적 생성에 사용)
+	std::unique_ptr<IUIScript> instance;     // 실제 스크립트 인스턴스
+	bool enabled{ true };                      // 실행 여부
+	bool awoken{ false };                     // OnAdded 호출 여부
+	bool started{ false };                     // OnStart 호출 여부
+};
+
 
 // !!!추가 필요!!!
 // 부모에 ID 기반 코드를 추가해야 함
@@ -66,7 +79,10 @@ private:
 	//std::unordered_map<unsigned long, std::unique_ptr<UITextComponent>> m_compStorage;      // UITextComponent 저장소
 	std::unordered_map<unsigned long, std::unique_ptr<UITransform>> m_transformStorage;     // UITransform 저장소
 	std::unordered_map<unsigned long, std::unique_ptr<UI_ImageComponent>> m_imageComponentStorage; // UI_ImageComponent 저장소
-	std::unordered_map<unsigned long, std::unique_ptr<UI_ScriptComponent>> m_scriptComponentStorage; // UI_ScriptComponent 저장소
+	std::unordered_map<unsigned long, std::unique_ptr<UI_ScriptComponent>> m_scriptComponentStorage; // UI_ScriptComponent 저장소 (레거시, 단일 스크립트용)
+	
+	// UI Script 저장소 (여러 스크립트 지원, World의 m_scripts와 유사)
+	std::unordered_map<unsigned long, std::vector<UIScriptEntry>> m_scripts; // UI Script 저장소
 
 	// 공통 델리게이트: 컴포넌트 생성/조회/삭제를 위임하는 델리게이트
 	CompDelegates m_worldDelegates{};
@@ -138,11 +154,28 @@ public:
 	const UI_ImageComponent* FindImageComponent(unsigned long ownerID) const;
 	void RemoveImageComponent(unsigned long ownerID);
 
-	// UI_ScriptComponent 생성/조회/삭제
+	// UI_ScriptComponent 생성/조회/삭제 (레거시, 단일 스크립트용)
 	UI_ScriptComponent* CreateScriptComponent(unsigned long ownerID);
 	UI_ScriptComponent* FindScriptComponent(unsigned long ownerID);
 	const UI_ScriptComponent* FindScriptComponent(unsigned long ownerID) const;
 	void RemoveScriptComponent(unsigned long ownerID);
+	
+	// ============================================================================
+	// UI Script 관리 (여러 스크립트 지원, World의 Script 시스템과 유사)
+	// ============================================================================
+	/// UI 엔티티에 스크립트를 추가합니다.
+	UIScriptEntry& AddUIScript(unsigned long ownerID, const std::string& scriptName);
+	
+	/// UI 엔티티의 스크립트 목록을 반환합니다.
+	std::vector<UIScriptEntry>* GetUIScripts(unsigned long ownerID);
+	const std::vector<UIScriptEntry>* GetUIScripts(unsigned long ownerID) const;
+	
+	/// UI 엔티티에서 스크립트를 제거합니다.
+	void RemoveUIScript(unsigned long ownerID, std::size_t index);
+	
+	/// 전체 UI Script 컨테이너 (UIScriptSystem에서 사용)
+	const std::unordered_map<unsigned long, std::vector<UIScriptEntry>>& GetAllUIScriptsInWorld() const { return m_scripts; }
+	std::unordered_map<unsigned long, std::vector<UIScriptEntry>>& GetAllUIScriptsInWorld() { return m_scripts; }
 
 	// 컴포넌트 생성 (델리게이트 wrapper)
 	template<class T, class... Args>
