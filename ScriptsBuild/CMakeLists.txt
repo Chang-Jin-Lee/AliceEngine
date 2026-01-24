@@ -120,6 +120,22 @@ target_include_directories(AliceScripts
         "${ALICE_ROOT}/ThirdParty/rttr/src"
 )
 
+# ==============================================================================
+# [FMOD] 스크립트 프로젝트용 설정 (수정됨)
+# ==============================================================================
+# 1. 경로 설정 (ALICE_ROOT는 상단에서 정의된 프로젝트 루트)
+set(FMOD_ROOT_SCRIPT "${ALICE_ROOT}/ThirdParty/FMOD")
+set(FMOD_LIB_DIR_SCRIPT "${FMOD_ROOT_SCRIPT}/64x") # 폴더명: 64x
+set(FMOD_INC_DIR_SCRIPT "${FMOD_ROOT_SCRIPT}/inc")
+
+# 2. 헤더 경로 포함
+if(EXISTS "${FMOD_INC_DIR_SCRIPT}")
+    target_include_directories(AliceScripts PRIVATE "${FMOD_INC_DIR_SCRIPT}")
+endif()
+
+# 3. [핵심 수정] 라이브러리 검색 경로 등록 (이게 없어서 LNK1104 에러 발생)
+target_link_directories(AliceScripts PRIVATE "${FMOD_LIB_DIR_SCRIPT}")
+
 # 라이브러리 링크
 target_link_libraries(AliceScripts
     PRIVATE
@@ -135,6 +151,19 @@ target_link_libraries(AliceScripts
         $<$<CONFIG:Debug>:assimp-vc143-mtd>
         $<$<CONFIG:Release>:assimp-vc143-mt>
 )
+
+# 4. FMOD 라이브러리 링크 (Debug/Release 구분)
+#    Debug 빌드에서는 fmodL_vc.lib, Release 빌드에서는 fmod_vc.lib를 사용하도록 설정
+if(EXISTS "${FMOD_LIB_DIR_SCRIPT}/fmod_vc.lib" AND EXISTS "${FMOD_LIB_DIR_SCRIPT}/fmodL_vc.lib")
+    target_link_libraries(AliceScripts PRIVATE
+        debug     fmodL_vc
+        optimized fmod_vc
+    )
+endif()
+
+# 참고: 이미 엔진(Engine.lib)이 FMOD DLL 복사를 담당하므로, 
+# 스크립트 빌드에서는 DLL 복사 명령을 굳이 넣지 않아도 실행에는 문제없습니다.
+# (실행 파일인 Launch.exe/Editor.exe가 있는 폴더에 DLL이 모이기 때문)
 
 set_target_properties(AliceScripts PROPERTIES
     OUTPUT_NAME "AliceScripts"

@@ -54,7 +54,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
 set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
-set(IMGUI_NODE_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/imgui-node-editor")
+#set(IMGUI_NODE_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/imgui-node-editor")
 set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 set(FMOD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/FMOD")
 
@@ -280,6 +280,26 @@ target_link_libraries(Engine PUBLIC RTTR::Core)
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
 # ==========================================
+# [ThirdParty] FMOD
+# ==========================================
+# FMOD 경로 변수 설정 (기존 FMOD_DIR 사용)
+set(FMOD_INC_DIR "${FMOD_DIR}/inc")
+set(FMOD_LIB_DIR "${FMOD_DIR}/64x")
+
+# Engine에 FMOD 헤더 포함 (PUBLIC: 엔진을 쓰는 프로젝트도 FMOD 헤더 사용 가능)
+if(EXISTS "${FMOD_INC_DIR}")
+    target_include_directories(Engine PUBLIC "${FMOD_INC_DIR}")
+endif()
+
+# Engine에 FMOD 라이브러리 링크 (Debug는 fmodL_vc.lib, Release는 fmod_vc.lib)
+if(EXISTS "${FMOD_LIB_DIR}/fmod_vc.lib" AND EXISTS "${FMOD_LIB_DIR}/fmodL_vc.lib")
+    target_link_libraries(Engine PUBLIC
+        debug     "${FMOD_LIB_DIR}/fmodL_vc.lib"
+        optimized "${FMOD_LIB_DIR}/fmod_vc.lib"
+    )
+endif()
+
+# ==========================================
 # [Target] Launch & AlicePlayer
 # ==========================================
 # 공통 게임 코드
@@ -337,10 +357,6 @@ target_include_directories(Engine
         ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR 헤더 경로
 )
 
-# FMOD include
-if(EXISTS "${FMOD_DIR}/inc")
-    target_include_directories(Engine PRIVATE "${FMOD_DIR}/inc")
-endif()
 
 # ImGui 정적 라이브러리
 add_library(imgui STATIC
@@ -433,36 +449,36 @@ endforeach()
 # ==========================================
 
 # 경로 반영
-set(IMGUI_NODE_EDITOR_INCLUDE "${IMGUI_NODE_EDITOR_DIR}")
-set(IMGUI_NODE_EDITOR_SOURCE  "${IMGUI_NODE_EDITOR_DIR}")
-
-if(NOT EXISTS "${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp")
-    message(FATAL_ERROR
-        "오류: imgui-node-editor 소스를 찾을 수 없습니다!\n"
-        "경로 확인: ${IMGUI_NODE_EDITOR_SOURCE}\n"
-        "cpp/h 파일들이 하위 폴더 없이 해당 위치에 바로 있는지 확인해주세요."
-    )
-endif()
-
-add_library(imgui_node_editor STATIC
-    ${IMGUI_NODE_EDITOR_SOURCE}/crude_json.cpp
-    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_canvas.cpp
-    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp
-    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor_api.cpp
-)
-
-target_include_directories(imgui_node_editor PUBLIC
-    ${IMGUI_NODE_EDITOR_INCLUDE}
-)
-
-target_link_libraries(imgui_node_editor PUBLIC
-    imgui
-)
-
-target_compile_definitions(imgui_node_editor PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+#set(IMGUI_NODE_EDITOR_INCLUDE "${IMGUI_NODE_EDITOR_DIR}")
+#set(IMGUI_NODE_EDITOR_SOURCE  "${IMGUI_NODE_EDITOR_DIR}")
+#
+#if(NOT EXISTS "${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp")
+#    message(FATAL_ERROR
+#        "오류: imgui-node-editor 소스를 찾을 수 없습니다!\n"
+#        "경로 확인: ${IMGUI_NODE_EDITOR_SOURCE}\n"
+#        "cpp/h 파일들이 하위 폴더 없이 해당 위치에 바로 있는지 확인해주세요."
+#    )
+#endif()
+#
+#add_library(imgui_node_editor STATIC
+#    ${IMGUI_NODE_EDITOR_SOURCE}/crude_json.cpp
+#    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_canvas.cpp
+#    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp
+#    ${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor_api.cpp
+#)
+#
+#target_include_directories(imgui_node_editor PUBLIC
+#    ${IMGUI_NODE_EDITOR_INCLUDE}
+#)
+#
+#target_link_libraries(imgui_node_editor PUBLIC
+#    imgui
+#)
+#
+#target_compile_definitions(imgui_node_editor PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
 
 # Engine에서 쓰는게 보통이니 Engine에만 물림(실행파일에는 중복 링크 X)
-target_link_libraries(Engine PUBLIC imgui_node_editor)
+#target_link_libraries(Engine PUBLIC imgui_node_editor)
 
 # ==========================================
 # [설정] 컴파일 옵션 및 vcpkg 적용
@@ -512,7 +528,7 @@ foreach(target Launch AlicePlayer)
             Engine          # 핵심 엔진
             imgui
             imguizmo
-            imgui_node_editor
+            #imgui_node_editor
             d3d11
             dxgi
             dxguid
@@ -521,8 +537,6 @@ foreach(target Launch AlicePlayer)
             directxtex
             $<$<CONFIG:Debug>:assimp-vc143-mtd>
             $<$<CONFIG:Release>:assimp-vc143-mt>
-            $<$<CONFIG:Debug>:fmodL_vc>
-            $<$<CONFIG:Release>:fmod_vc>
     )
 endforeach()
 
@@ -618,24 +632,23 @@ endif()
 # [Post-Build] FMOD DLL 복사
 # ==========================================
 if(WIN32)
-  set(FMOD_BIN_DIR "${FMOD_DIR}/64x")
+    if(NOT EXISTS "${FMOD_LIB_DIR}/fmod.dll")
+        message(FATAL_ERROR "[FMOD] not found: ${FMOD_LIB_DIR}/fmod.dll")
+    endif()
+    if(NOT EXISTS "${FMOD_LIB_DIR}/fmodL.dll")
+        message(FATAL_ERROR "[FMOD] not found: ${FMOD_LIB_DIR}/fmodL.dll")
+    endif()
 
-  if(NOT EXISTS "${FMOD_BIN_DIR}/fmod.dll")
-    message(FATAL_ERROR "[FMOD] not found: ${FMOD_BIN_DIR}/fmod.dll")
-  endif()
-  if(NOT EXISTS "${FMOD_BIN_DIR}/fmodL.dll")
-    message(FATAL_ERROR "[FMOD] not found: ${FMOD_BIN_DIR}/fmodL.dll")
-  endif()
-
-  foreach(t Launch AlicePlayer)
-    add_custom_command(TARGET ${t} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${FMOD_BIN_DIR}/fmod.dll"
-              "$<TARGET_FILE_DIR:${t}>/fmod.dll"
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${FMOD_BIN_DIR}/fmodL.dll"
-              "$<TARGET_FILE_DIR:${t}>/fmodL.dll"
-      VERBATIM
-    )
-  endforeach()
+    # Launch와 AlicePlayer 타겟에 DLL 복사
+    foreach(t Launch AlicePlayer)
+        add_custom_command(TARGET ${t} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FMOD_LIB_DIR}/fmod.dll"
+                "$<TARGET_FILE_DIR:${t}>/fmod.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FMOD_LIB_DIR}/fmodL.dll"
+                "$<TARGET_FILE_DIR:${t}>/fmodL.dll"
+            VERBATIM
+        )
+    endforeach()
 endif()
