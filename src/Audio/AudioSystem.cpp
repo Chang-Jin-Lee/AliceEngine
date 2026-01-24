@@ -27,7 +27,8 @@ namespace Alice
             return L"SoundBox#" + std::to_wstring(static_cast<std::uint64_t>(id));
         }
 
-        bool IsInsideBox(const SoundBoxComponent& box, const TransformComponent* tr, const DirectX::XMFLOAT3& pos)
+        // 검사 위치(checkPos)를 인자로 받도록 수정
+        bool IsInsideBox(const SoundBoxComponent& box, const TransformComponent* tr, const DirectX::XMFLOAT3& checkPos)
         {
             DirectX::XMFLOAT3 p = tr ? tr->position : DirectX::XMFLOAT3(0, 0, 0);
             DirectX::XMFLOAT3 s = tr ? tr->scale : DirectX::XMFLOAT3(1, 1, 1);
@@ -46,12 +47,13 @@ namespace Alice
             const float minZ = std::min(z0, z1);
             const float maxZ = std::max(z0, z1);
 
-            return (pos.x >= minX && pos.x <= maxX &&
-                    pos.y >= minY && pos.y <= maxY &&
-                    pos.z >= minZ && pos.z <= maxZ);
+            return (checkPos.x >= minX && checkPos.x <= maxX &&
+                    checkPos.y >= minY && checkPos.y <= maxY &&
+                    checkPos.z >= minZ && checkPos.z <= maxZ);
         }
 
-        float CenterWeight01(const SoundBoxComponent& box, const TransformComponent* tr, const DirectX::XMFLOAT3& pos)
+        // 검사 위치(checkPos)를 인자로 받도록 수정
+        float CenterWeight01(const SoundBoxComponent& box, const TransformComponent* tr, const DirectX::XMFLOAT3& checkPos)
         {
             DirectX::XMFLOAT3 p = tr ? tr->position : DirectX::XMFLOAT3(0, 0, 0);
             DirectX::XMFLOAT3 s = tr ? tr->scale : DirectX::XMFLOAT3(1, 1, 1);
@@ -77,9 +79,9 @@ namespace Alice
             const float ey = std::max(1e-6f, (maxY - minY) * 0.5f);
             const float ez = std::max(1e-6f, (maxZ - minZ) * 0.5f);
 
-            const float nx = std::fabs(pos.x - cx) / ex;
-            const float ny = std::fabs(pos.y - cy) / ey;
-            const float nz = std::fabs(pos.z - cz) / ez;
+            const float nx = std::fabs(checkPos.x - cx) / ex;
+            const float ny = std::fabs(checkPos.y - cy) / ey;
+            const float nz = std::fabs(checkPos.z - cz) / ez;
             float u = std::max(nx, std::max(ny, nz));
             u = std::clamp(u, 0.0f, 1.0f);
 
@@ -91,8 +93,7 @@ namespace Alice
 
     void AudioSystem::Update(World& world, double)
     {
-        // [중요 수정] 리소스가 없어도 Sound::Update는 무조건 호출해야 FMOD가 돌아갑니다.
-        // 기존: if (!m_resources) return;  <-- 이 부분이 문제였음
+        // 리소스가 없어도 Sound::Update는 무조건 호출해야 FMOD가 돌아갑니다.
 
         if (m_resources)
         {
@@ -181,7 +182,7 @@ namespace Alice
                 }
             }
 
-            // SoundBox 처리 (listener 위치 기준)
+            // SoundBox 처리 (타겟 엔티티 또는 listener 위치 기준)
             for (auto [id, box] : world.GetComponents<SoundBoxComponent>())
             {
                 if (box.soundPath.empty())
@@ -204,12 +205,27 @@ namespace Alice
                 if (!rt.loaded)
                     continue;
 
-                const TransformComponent* tr = world.GetComponent<TransformComponent>(id);
-                const bool inside = IsInsideBox(box, tr, listenerPos);
+                const TransformComponent* boxTr = world.GetComponent<TransformComponent>(id);
+                
+                // 반응할 위치(checkPos) 결정
+                DirectX::XMFLOAT3 checkPos = listenerPos; // 기본값: 카메라(리스너)
+
+                if (box.targetEntity != InvalidEntityId)
+                {
+                    // 타겟 엔티티가 설정되어 있다면 그 엔티티의 위치를 사용
+                    if (const auto* targetTr = world.GetComponent<TransformComponent>(box.targetEntity))
+                    {
+                        checkPos = targetTr->position;
+                    }
+                }
+
+                // 결정된 위치(checkPos)를 기준으로 박스 안인지 체크
+                const bool inside = IsInsideBox(box, boxTr, checkPos);
 
                 if (inside && !rt.wasInside && box.playOnEnter)
                 {
-                    const DirectX::XMFLOAT3 srcPos = tr ? tr->position : listenerPos;
+                    // 소리는 박스 자신의 위치에서 나게 설정
+                    const DirectX::XMFLOAT3 srcPos = boxTr ? boxTr->position : DirectX::XMFLOAT3(0, 0, 0);
                     Sound::Play3D(rt.instanceId, rt.key, srcPos, 0.0f, 1.0f, box.loop);
                 }
                 if (!inside && rt.wasInside && box.stopOnExit)
@@ -221,16 +237,17 @@ namespace Alice
 
                 if (inside)
                 {
-                    const float w = CenterWeight01(box, tr, listenerPos);
+                    // 볼륨 가중치도 checkPos(타겟 위치) 기준으로 계산
+                    const float w = CenterWeight01(box, boxTr, checkPos);
                     const float vol = box.edgeVolume + (box.centerVolume - box.edgeVolume) * w;
-                    const DirectX::XMFLOAT3 srcPos = tr ? tr->position : DirectX::XMFLOAT3(0, 0, 0);
+                    const DirectX::XMFLOAT3 srcPos = boxTr ? boxTr->position : DirectX::XMFLOAT3(0, 0, 0);
                     Sound::Update3D(rt.instanceId, srcPos, vol, box.minDistance, box.maxDistance);
                 }
             }
 
         }
 
-        // [핵심] FMOD 시스템 업데이트 및 채널 정리 (항상 실행)
+        // FMOD 시스템 업데이트 및 채널 정리 (항상 실행)
         // 리소스 유무와 무관하게 매 프레임 호출하여 채널 정리 및 시스템 업데이트 보장
         Sound::Update();
     }

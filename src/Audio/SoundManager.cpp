@@ -22,11 +22,11 @@ namespace
     struct SoundData
     {
         FMOD::Sound* fmodSound = nullptr;
-        // [현재] Editor Mode: vector로 데이터 소유 (안정화를 위한 과도기적 방식)
-        // [향후] Game Mode (Chunk): DataBlob 같은 추상화 구조로 변경하여
+        // 현재는 Editor Mode가 vector로 데이터 소유함
+        // 이후 미래에는 Game Mode (Chunk): DataBlob 같은 추상화 구조로 변경하여
         //        - Editor: vector 소유 (ownedBuffer)
         //        - Game: Chunk 메모리 참조만 (ptr + size, 소유권 없음)
-        //        FMOD_OPENMEMORY_POINT 플래그 사용하여 Zero-copy 구현
+        //        FMOD_OPENMEMORY_POINT 플래그 사용하여 Zero-copy 구현해야함 
         std::vector<std::uint8_t> memoryBuffer; // 메모리 로드 시 버퍼 유지용
     };
     std::map<std::wstring, SoundData> g_SoundBank;
@@ -42,11 +42,11 @@ namespace
         bool loop = false;
     };
 
-    // [1] Loop SFX 관리: Key별로 하나의 채널만 유지 (인스턴스 1개)
+    // Loop SFX 관리: Key별로 하나의 채널만 유지 (인스턴스 1개)
     std::map<std::wstring, SfxEntry> g_SfxChannels;
 
-    // [2] One-Shot SFX 관리: 중첩 재생을 위한 채널 리스트 (인스턴스 N개)
-    // 여기가 "미리 만들어 놓은 여러개의 인스턴스" 개념을 처리하는 벡터입니다.
+    // One-Shot SFX 관리: 중첩 재생을 위한 채널 리스트입니다 (인스턴스 N개)
+    // 여기가 미리 만들어 놓은 여러개의 인스턴스을 처리하는 벡터입니다.
     std::vector<FMOD::Channel*> g_ChannelsSFX;
     float g_VolSFX = 1.0f;
     float g_PitchSFX = 1.0f;
@@ -55,6 +55,7 @@ namespace
     std::map<std::wstring, Inst3D> g_Inst3D;
 
     int g_SoftwareChannels = 64;
+    int g_ReserveVoices = 4; // BGM/3D 여유분
 
     inline bool Check(FMOD_RESULT r, const char* msg = "")
     {
@@ -74,8 +75,8 @@ namespace
         return FMOD_VECTOR{ f3.x, f3.y, f3.z };
     }
 
-    // [중요] 데모 프로젝트의 CleanupSFX 로직을 100% 동일하게 구현
-    // 재생이 끝난 채널을 벡터에서 제거하여 "소리가 안 나오는 현상" 방지
+    // 재생이 끝난 채널을 벡터에서 제거
+    // 소리가 여러개 동시에 나올때 안들리게 되는 현상을 막음 
     void CleanupSFX()
     {
         // 1. One-Shot 채널 청소
@@ -135,6 +136,25 @@ namespace
         g_ChannelsSFX.erase(g_ChannelsSFX.begin());
     }
 
+    void StopAllOneShot()
+    {
+        for (auto c : g_ChannelsSFX) if (c) c->stop();
+        g_ChannelsSFX.clear();
+    }
+
+    void TrimOneShotLimit()
+    {
+        int limit = g_SoftwareChannels - g_ReserveVoices;
+        if (limit < 1) limit = 1;
+
+        int excess = (int)g_ChannelsSFX.size() - limit;
+        if (excess <= 0) return;
+
+        // 최대 excess개수 만큼만 정리
+        for (int i = 0; i < excess; ++i)
+            StopOldestOneShot();
+    }
+
     bool CreateSoundFromMemory(const std::wstring& key, const std::vector<std::uint8_t>& bytes, Alice::Sound::Type type)
     {
         if (!g_System) return false;
@@ -169,7 +189,7 @@ namespace Alice::Sound
         FMOD_RESULT r = FMOD::System_Create(&g_System);
         if (!Check(r, "System Create") || !g_System) return false;
 
-        // (기본값이 낮으면 64~근처에서 새 소리가 가상화되어 안 들릴 수 있음)
+        // 기본값이 낮으면 64~근처에서 새 소리가 가상화되어 안 들릴 수 있음
         g_SoftwareChannels = 64;
         Check(g_System->setSoftwareChannels(g_SoftwareChannels), "Set Software Channels");
 
@@ -259,7 +279,7 @@ namespace Alice::Sound
     {
         if (!g_System) return;
         
-        // C++20 erase_if: 재생 중이지 않은 3D 인스턴스 정리
+        // erase_if: 재생 중이지 않은 3D 인스턴스 정리
         std::erase_if(g_Inst3D, [](const auto& pair) {
             bool playing = false;
             return (pair.second.ch && pair.second.ch->isPlaying(&playing) == FMOD_OK) ? !playing : true;
@@ -298,24 +318,26 @@ namespace Alice::Sound
         if (g_SoundBank.contains(key)) return true;
 
         // ====================================================================
-        // [현재 구현] Editor Mode / Loose File 방식
+        // @details : 
+        // 현재 구현 Editor Mode / Loose File 방식
         // - ResourceManager가 파일을 읽어서 vector를 할당
         // - SoundManager가 이 vector를 소유하여 메모리 주소 고정
         // - 장점: 안정적, 메모리 접근 위반 방지
         // - 단점: 파일 개수만큼 할당 발생, 메모리 파편화 우려
         // ====================================================================
-        // [향후 개선] Game Mode / Chunk 시스템 지원
+        // @details :
+        // 향후 개선 Game Mode / Chunk 시스템 지원
         // - ResourceManager가 Chunk 메모리의 포인터(ptr + offset + size)만 반환
         // - SoundManager는 데이터를 소유하지 않고 참조만 함
         // - FMOD_OPENMEMORY_POINT 플래그 사용하여 Zero-copy 구현
         // - 장점: 제로 카피, 로딩 속도 극대화, 메모리 효율
         // ====================================================================
         
-        // [핵심 수정] 메모리 주소 고정을 위해 맵에 먼저 항목 생성
+        // 메모리 주소 고정을 위해 맵에 먼저 항목 생성함
         SoundData& data = g_SoundBank[key];
 
         // 고정된 버퍼에 데이터를 직접 로드 (메모리 주소가 변경되지 않음)
-        // TODO: 향후 DataBlob 구조로 변경하여 Chunk 시스템 지원
+        // TODO: 향후 DataBlob 구조로 변경하여 Chunk 시스템 지원해야함 
         //       - Editor: resources.LoadBinaryAuto() -> vector 소유
         //       - Game: resources.LoadChunkData() -> ptr + size 참조만
         if (!resources.LoadBinaryAuto(logicalPath, data.memoryBuffer) || data.memoryBuffer.empty())
@@ -331,15 +353,15 @@ namespace Alice::Sound
         exinfo.cbsize = sizeof(exinfo);
         exinfo.length = static_cast<unsigned int>(data.memoryBuffer.size());
 
-        // [현재] FMOD_OPENMEMORY: FMOD가 데이터를 복사함 (안전하지만 비효율)
-        // [향후] FMOD_OPENMEMORY_POINT: FMOD가 참조만 함 (Chunk 시스템과 함께 사용)
+        // 현재는 FMOD_OPENMEMORY: FMOD가 데이터를 복사함 (안전하지만 비효율)
+        // 미래에는 FMOD_OPENMEMORY_POINT: FMOD가 참조만 하도록 해야함 (Chunk 시스템과 함께 사용)
         FMOD_MODE mode = FMOD_OPENMEMORY;
         mode |= (type == Type::BGM) ? (FMOD_CREATESTREAM | FMOD_LOOP_NORMAL) : (FMOD_CREATESAMPLE | FMOD_LOOP_OFF);
         if (type != Type::BGM) mode |= FMOD_3D; // SFX는 3D 지원
 
         FMOD::Sound* newSound = nullptr;
         // data.memoryBuffer.data()는 맵 내부의 메모리이므로 이동되거나 해제되지 않음
-        // 향후 Chunk 시스템에서는 data.dataBlob.ptr을 사용
+        // 마래에는 Chunk 시스템에서는 data.dataBlob.ptr을 사용
         FMOD_RESULT r = g_System->createSound(reinterpret_cast<const char*>(data.memoryBuffer.data()), mode, &exinfo, &newSound);
         
         if (!Check(r, "LoadAuto") || !newSound)
@@ -395,10 +417,29 @@ namespace Alice::Sound
             return;
         }
 
-        FMOD_RESULT r = g_System->playSound(g_SoundBank[key].fmodSound, g_BgmGroup, false, &g_ChannelBGM);
-        if (!Check(r, "PlayBGM")) return;
-        if (g_ChannelBGM) g_ChannelBGM->setVolume(g_VolBGM);
-        g_CurrentBGMKey = key;
+        for (int attempt = 0; attempt < 8; ++attempt)
+        {
+            FMOD::Channel* ch = nullptr;
+            FMOD_RESULT r = g_System->playSound(g_SoundBank[key].fmodSound, g_BgmGroup, false, &ch);
+            if (!Check(r, "PlayBGM") || !ch) return;
+
+            ch->setMode(FMOD_2D);
+            ch->setVolume(g_VolBGM);
+            ch->setPriority(0);          // BGM 최우선
+
+            g_System->update();          // virtual 판정이 바로 반영되게 1번 업데이트
+
+            if (!IsVirtual(ch))
+            {
+                g_ChannelBGM = ch;
+                g_CurrentBGMKey = key;
+                return;
+            }
+
+            // virtual(무음)로 시작했으면 지금 프레임에서 해결하고 다시 시도
+            ch->stop();
+            StopOldestOneShot();         // 원샷 하나만 비워서 보이스 확보
+        }
     }
 
     void PauseBGM(bool pause)
@@ -472,7 +513,7 @@ namespace Alice::Sound
         volume = std::clamp(volume, 0.f, 1.f);
         pitch = std::clamp(pitch, 0.5f, 2.f);
 
-        // [중요] 데모 방식: 재생 전에 Sound 자체의 Mode를 변경
+        // 재생 전에 Sound 자체의 Mode를 변경
         FMOD_MODE mode;
         if (sound->getMode(&mode) == FMOD_OK)
         {
@@ -483,7 +524,7 @@ namespace Alice::Sound
 
         if (loop)
         {
-            // [Loop SFX] Map 사용 (1개 인스턴스)
+            // Loop SFX에선 Map 사용 (1개를 인스턴스함)
             auto it = g_SfxChannels.find(key);
             // 이미 재생 중이면 속성만 업데이트
             if (it != g_SfxChannels.end() && it->second.channel)
@@ -509,34 +550,58 @@ namespace Alice::Sound
         {
             CleanupSFX();
 
-            // 원샷이 소프트웨어 보이스를 다 잡아먹지 않게 약간 남겨둠 (BGM/3D용)
-            while ((int)g_ChannelsSFX.size() >= g_SoftwareChannels - 4)
-                StopOldestOneShot();
-
+            // 이 함수 한 번에서 "그 클릭이 안 들리면" 바로 재시도해서
+            // 최종적으로는 이번 클릭에서 소리가 나게 만든다.
             FMOD::Channel* ch = nullptr;
-            FMOD_RESULT r = g_System->playSound(sound, g_SfxGroup, false, &ch);
-            if (!Check(r, "PlaySFX OneShot") || !ch) return;
 
-            ch->setMode(FMOD_2D);
-            ch->setVolume(volume * g_VolSFX);
-            ch->setPitch(pitch);
-
-            // ✅ "안 들림" 감지: 가상 보이스면(=믹싱 안됨) 오래된 것 끊고 재시도
-            for (int i = 0; i < 8 && IsVirtual(ch); ++i)
+            for (int attempt = 0; attempt < 8; ++attempt) // 무한루프 방지함. 최대 8번만
             {
-                ch->stop();
-                StopOldestOneShot();
+                TrimOneShotLimit();
 
                 ch = nullptr;
-                r = g_System->playSound(sound, g_SfxGroup, false, &ch);
-                if (r != FMOD_OK || !ch) continue;
+                FMOD_RESULT r = g_System->playSound(sound, g_SfxGroup, false, &ch);
+                if (r != FMOD_OK || !ch)
+                {
+                    StopOldestOneShot();
+                    continue;
+                }
 
                 ch->setMode(FMOD_2D);
                 ch->setVolume(volume * g_VolSFX);
                 ch->setPitch(pitch);
+                // 원샷은 BGM보다 덜 중요. (새 클릭 보장은 우리가 "원샷끼리" 스틸로 해결)
+                ch->setPriority(128);
+
+                // 키 연타로 한 프레임에 여러 번 호출될 때도
+                // 가상화 여부를 즉시 반영시키려고 update 1번 돌림
+                g_System->update();
+
+                if (!IsVirtual(ch))
+                {
+                    g_ChannelsSFX.push_back(ch);
+                    return;
+                }
+
+                // 안 들리는 클릭 발생시 자리 확보 후 즉시 재시도
+                ch->stop();
+
+                // 한 번에 하나씩만 정리하면서 재시도 (안전)
+                if (!g_ChannelsSFX.empty()) StopOldestOneShot();
+                else StopAllOneShot();
             }
 
-            if (!ch) return;
+            // 원샷 전부 비우고 1번 더 재생 시도함. 이번 클릭 살리는 것
+            StopAllOneShot();
+
+            ch = nullptr;
+            FMOD_RESULT r = g_System->playSound(sound, g_SfxGroup, false, &ch);
+            if (r != FMOD_OK || !ch) return;
+
+            ch->setMode(FMOD_2D);
+            ch->setVolume(volume * g_VolSFX);
+            ch->setPitch(pitch);
+            // 원샷은 BGM보다 덜 중요. 새 클릭 보장은 우리가 원샷끼리 스틸로 해결
+            ch->setPriority(128);
 
             g_ChannelsSFX.push_back(ch);
         }
@@ -623,7 +688,7 @@ namespace Alice::Sound
     {
         if (!g_System) return false;
 
-        // C++20 contains 사용
+        // contains 사용
         if (!g_SoundBank.contains(key)) return false;
 
         // 이미 재생 중인 인스턴스 확인
@@ -650,9 +715,9 @@ namespace Alice::Sound
         channel->setMode(loop ? FMOD_LOOP_NORMAL : FMOD_LOOP_OFF);
         channel->set3DMinMaxDistance(1.0f, 50.0f); // 기본값
         
-        // 3D는 중요도가 높으므로 우선순위를 높여도 괜찮지만, 
-        // 여기서도 너무 많이 생성되면 2D 소리가 끊길 수 있으므로 기본값 사용 권장.
-        // 필요하다면: ch->setPriority(64); (중간 우선순위)
+        // 3D는 중요도가 높으므로 우선순위를 높여도 괜찮지만
+        // 여기서도 너무 많이 생성되면 2D 소리가 끊길 수 있으므로 기본값을 사용하는걸로 함
+        // 필요하다면 다음처럼 우선순위를 나누세요  ch->setPriority(64); (중간 우선순위)
         
         channel->setPaused(false);
 

@@ -507,7 +507,6 @@ namespace Alice
             {
                 static void Run(WorkerCtx ctx)
                 {
-                    Alice::ResourceManager rm;
                     while (true)
                     {
                         const size_t idx = ctx.nextIdx->fetch_add(1);
@@ -529,7 +528,7 @@ namespace Alice
                                                job.inPath.string().c_str(),
                                                job.outPath.string().c_str());
                             }
-                            ok = rm.CookAndSave(job.inPath, job.outPath);
+                            ok = Alice::ResourceManager::Get().CookAndSave(job.inPath, job.outPath);
                             if (!ok)
                             {
                                 std::lock_guard<std::mutex> lock(*ctx.logMutex);
@@ -703,8 +702,7 @@ namespace Alice
                     return;
                 }
                 {
-                    Alice::ResourceManager rm;
-                    if (!rm.CookResourceToChunkStore(args.projectRoot / "Assets", stageMetas, 256 * 1024))
+                    if (!Alice::ResourceManager::Get().CookResourceToChunkStore(args.projectRoot / "Assets", stageMetas, 256 * 1024))
                     {
                         ALICE_LOG_ERRORF("Build Game: failed to cook Assets -> Metas/Chunks.");
                         g_BuildExitCode.store(3);
@@ -730,8 +728,7 @@ namespace Alice
 
                 // (3) Resource: 원본 폴더를 넣지 않고 Cooked/Chunks로 패킹
                 {
-                    Alice::ResourceManager rm;
-                    if (!rm.CookResourceToChunkStore(args.projectRoot / "Resource", stageCooked))
+                    if (!Alice::ResourceManager::Get().CookResourceToChunkStore(args.projectRoot / "Resource", stageCooked))
                     {
                         ALICE_LOG_ERRORF("Build Game: failed to cook Resource -> Cooked/Chunks (stage).");
                         g_BuildExitCode.store(6);
