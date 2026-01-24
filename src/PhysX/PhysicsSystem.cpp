@@ -1957,6 +1957,7 @@ void PhysicsSystem::Update(float deltaTime)
             ccc.collisionFlags = static_cast<uint8_t>(cf);
 
             transform->position = ToXMFLOAT3(ctrl->GetFootPosition());
+            m_world.MarkTransformDirty(entityId);
         }
     }
 }
@@ -2939,6 +2940,7 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
                 t->position = ToXMFLOAT3(actor->GetPosition());
                 t->rotation = ToEulerRadians(actor->GetRotation());
                 m_lastTransforms[entityId] = { t->position, t->rotation, t->scale };
+                m_world.MarkTransformDirty(entityId);
             }
         }
         return;
@@ -2970,6 +2972,7 @@ void PhysicsSystem::SyncPhysicsToGame(const ActiveTransform& transform)
         transformComp->rotation,
         transformComp->scale
     };
+    m_world.MarkTransformDirty(entityId);
 }
 
 bool PhysicsSystem::IsTrackedEntity(Alice::EntityId id) const noexcept

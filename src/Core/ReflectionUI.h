@@ -132,7 +132,8 @@ namespace Alice
                     
                     // 드래그앤드롭 지원 감지
                     std::string propNameLower = propName;
-                    std::transform(propNameLower.begin(), propNameLower.end(), propNameLower.begin(), ::tolower);
+                    std::transform(propNameLower.begin(), propNameLower.end(), propNameLower.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                     
                     // 파일 경로 필드 감지: "Path", "path", "Asset", "asset", "File", "file" 등이 포함된 경우
                     bool isPathField = propNameLower.find("path") != std::string::npos ||
@@ -189,7 +190,8 @@ namespace Alice
                                 if (isSceneField)
                                 {
                                     std::string ext = droppedPath.extension().string();
-                                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                                    std::transform(ext.begin(), ext.end(), ext.begin(),
+                                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                                     if (ext != ".scene")
                                     {
                                         // .scene 파일이 아니면 무시

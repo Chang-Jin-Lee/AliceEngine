@@ -44,6 +44,8 @@ namespace Alice {
 		m_scripts.clear();
 		m_delayedDestructions.clear();
 		m_entityGenerations.clear();
+		m_transformDirty.clear();
+		m_worldMatrixCache.clear();
 		InvalidateChildrenCache();
 
 		// 3. World Epoch 증가 (씬 전환 시 이전 userData 무효화)
@@ -117,16 +119,15 @@ namespace Alice {
 
 		m_names.erase(id);
 
+		// Transform 캐시 제거
+		m_transformDirty.erase(id);
+		m_worldMatrixCache.erase(id);
+
 		// children 캐시 무효화
 		InvalidateChildrenCache();
 
-		// 모든 엔진 컴포넌트 저장소에서 해당 엔티티 제거
-		for (auto& [typeIndex, storage] : m_engineStorages)
-		{
-			storage->Remove(id);
-		}
-
-		// 스크립트 제거
+		// 스크립트 OnDisable/OnDestroy를 컴포넌트 제거 전에 호출
+		// (스크립트가 OnDestroy에서 GetComponent 등을 호출할 수 있으므로)
 		auto it = m_scripts.find(id);
 		if (it != m_scripts.end()) {
 			for (auto& sc : it->second)
@@ -137,6 +138,12 @@ namespace Alice {
 				sc.instance->OnDestroy();
 			}
 			m_scripts.erase(it);
+		}
+
+		// 모든 엔진 컴포넌트 저장소에서 해당 엔티티 제거
+		for (auto& [typeIndex, storage] : m_engineStorages)
+		{
+			storage->Remove(id);
 		}
 	}
 
@@ -432,7 +439,73 @@ namespace Alice {
 	// Transform 행렬 계산 (공용 API)
 	DirectX::XMMATRIX World::ComputeWorldMatrix(EntityId entityId) const
 	{
-		return ComputeWorldMatrix_Internal(*this, entityId);
+		if (entityId == InvalidEntityId)
+			return DirectX::XMMatrixIdentity();
+		
+		// 캐시 확인
+		auto cacheIt = m_worldMatrixCache.find(entityId);
+		if (cacheIt != m_worldMatrixCache.end())
+		{
+			// dirty 플래그 확인
+			auto dirtyIt = m_transformDirty.find(entityId);
+			if (dirtyIt == m_transformDirty.end() || !dirtyIt->second)
+			{
+				// 캐시가 유효하면 반환
+				return DirectX::XMLoadFloat4x4(&cacheIt->second);
+			}
+		}
+		
+		// 캐시 미스 또는 dirty: 재계산
+		DirectX::XMMATRIX worldMatrix = ComputeWorldMatrix_Internal(*this, entityId);
+		
+		// 캐시에 저장 (const 함수이지만 mutable 멤버이므로 가능)
+		DirectX::XMFLOAT4X4 cachedMatrix;
+		DirectX::XMStoreFloat4x4(&cachedMatrix, worldMatrix);
+		m_worldMatrixCache[entityId] = cachedMatrix;		
+		m_transformDirty[entityId] = false; // dirty 플래그 클리어
+		
+		return worldMatrix;
+	}
+	
+	void World::MarkTransformDirty(EntityId entityId)
+	{
+		if (entityId == InvalidEntityId)
+			return;
+		
+		m_transformDirty[entityId] = true;
+		
+		// 자식은 children 캐시 없이 Transform 스토리지 스캔 (SetParent 시 캐시 타이밍 이슈 방지)
+		const auto& transforms = GetComponents<TransformComponent>();
+		for (const auto& [eid, tr] : transforms)
+		{
+			if (tr.parent == entityId)
+				MarkTransformDirty(eid);
+		}
+	}
+	
+	void World::UpdateTransformMatrices()
+	{
+		// dirty 플래그가 있는 모든 엔티티의 월드행렬을 재계산
+		std::vector<EntityId> dirtyEntities;
+		dirtyEntities.reserve(m_transformDirty.size());
+		
+		for (const auto& [entityId, isDirty] : m_transformDirty)
+		{
+			if (isDirty)
+			{
+				dirtyEntities.push_back(entityId);
+			}
+		}
+		
+		// 각 dirty 엔티티의 월드행렬 재계산
+		for (EntityId entityId : dirtyEntities)
+		{
+			DirectX::XMMATRIX worldMatrix = ComputeWorldMatrix_Internal(*this, entityId);
+			DirectX::XMFLOAT4X4 cachedMatrix;
+			DirectX::XMStoreFloat4x4(&cachedMatrix, worldMatrix);
+			m_worldMatrixCache[entityId] = cachedMatrix;
+			m_transformDirty[entityId] = false;
+		}
 	}
 
 	inline DirectX::XMFLOAT3 QuaternionToYPR_Rad(DirectX::FXMVECTOR q)
@@ -523,6 +596,9 @@ namespace Alice {
 
 		// 새 부모 설정
 		childTransform->parent = parent;
+		
+		// Transform 변경: child와 모든 자식을 dirty로 표시
+		MarkTransformDirty(child);
 
 		if (keepWorld)
 		{
@@ -576,5 +652,40 @@ namespace Alice {
 		return GetChildren(InvalidEntityId);
 	}
 
+	void World::SetLocalPosition(EntityId id, const DirectX::XMFLOAT3& position)
+	{
+		if (auto* t = GetComponent<TransformComponent>(id))
+		{
+			t->position = position;
+			MarkTransformDirty(id);
+		}
+	}
+
+	void World::SetLocalRotation(EntityId id, const DirectX::XMFLOAT3& rotationRad)
+	{
+		if (auto* t = GetComponent<TransformComponent>(id))
+		{
+			t->rotation = rotationRad;
+			MarkTransformDirty(id);
+		}
+	}
+
+	void World::SetLocalScale(EntityId id, const DirectX::XMFLOAT3& scale)
+	{
+		if (auto* t = GetComponent<TransformComponent>(id))
+		{
+			t->scale = scale;
+			MarkTransformDirty(id);
+		}
+	}
+
+	void World::SetTransformEnabled(EntityId id, bool enabled)
+	{
+		if (auto* t = GetComponent<TransformComponent>(id))
+		{
+			t->enabled = enabled;
+			MarkTransformDirty(id);
+		}
+	}
 
 } // namespace Alice

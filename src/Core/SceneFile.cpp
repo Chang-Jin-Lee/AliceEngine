@@ -856,6 +856,42 @@ namespace Alice
             return true;
         }
 
+        bool SaveToJsonString(const World& world, std::string& out)
+        {
+            JsonRttr::json root = JsonRttr::json::object();
+            root["version"] = 1;
+            root["entities"] = JsonRttr::json::array();
+
+            const auto& transforms = world.GetComponents<TransformComponent>();
+            for (const auto& [id, transform] : transforms)
+            {
+                (void)transform;
+                JsonRttr::json e;
+                if (!WriteEntity(e, world, id)) return false;
+                root["entities"].push_back(e);
+            }
+
+            out = root.dump(4);
+            return true;
+        }
+
+        bool LoadFromJsonString(World& world, const std::string& json)
+        {
+            ThreadSafety::AssertMainThread();
+            JsonRttr::json root;
+            try
+            {
+                root = JsonRttr::json::parse(json);
+            }
+            catch (...)
+            {
+                ALICE_LOG_ERRORF("[SceneFile] LoadFromJsonString: JSON parse failed.");
+                return false;
+            }
+            world.Clear();
+            return LoadFromRoot(world, root);
+        }
+
         bool Load(World& world, const std::filesystem::path& path)
         {
             ThreadSafety::AssertMainThread();
