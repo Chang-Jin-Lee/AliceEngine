@@ -1,5 +1,7 @@
 {
-    "materials": [],
+    "materials": [
+        "Assets/Materials/IcoSphere_0.mat"
+    ],
     "mesh": "IcoSphere",
     "source_fbx": "Resource/fbx/Study/IcoSphere.fbx"
 }
