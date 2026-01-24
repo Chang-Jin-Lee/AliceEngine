@@ -3,6 +3,7 @@
 #include <string>
 
 #include <DirectXMath.h>
+#include "Core/Entity.h"
 
 namespace Alice
 {
@@ -40,6 +41,15 @@ namespace Alice
 
         // 디버그 드로우 활성화 여부
         bool debugDraw{ false };
+
+        // 반응할 타겟 엔티티 (기본값: Invalid -> 카메라/리스너에 반응)
+        EntityId targetEntity = InvalidEntityId;
+
+        // 타겟 설정 함수
+        void SetTarget(EntityId id)
+        {
+            targetEntity = id;
+        }
     };
 }
 

@@ -77,7 +77,6 @@ namespace Alice::Sound
                   float minDistance,
                   float maxDistance);
     
-    // 하위 호환성 (기존 코드용)
     bool Play3DInstance(const std::wstring& instanceId, const std::wstring& soundKey, bool loop = true);
     void Stop3DInstance(const std::wstring& instanceId);
     void Update3DInstance(const std::wstring& instanceId,
