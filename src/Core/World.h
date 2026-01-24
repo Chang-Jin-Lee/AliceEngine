@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 #include <typeindex>
+#include <functional>
 
 #include "Core/Entity.h"
 #include "Core/IScript.h"
@@ -15,16 +16,15 @@
 #include "Components/ComponentStorage.h"
 
 // 컴포넌트 헤더들
+#include "Components/IDComponent.h"
 #include "Components/TransformComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
-#include "Components/AnimBlueprintComponent.h"
-#include "Components/AdvancedAnimComponent.h"
-#include "Components/SocketComponent.h"
-#include "Components/AudioSourceComponent.h"
-#include "Components/AudioListenerComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
 #include "Components/SoundBoxComponent.h"
+#include "Components/AudioListenerComponent.h"
+#include "Components/AudioSourceComponent.h"
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
@@ -35,11 +35,21 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
+#include "Components/ComputeEffectComponent.h"
 
-// ���� ������Ʈ
-#include "PhysX/Components/PhysicsSceneSettingsComponent.h"
 
-class IPhysicsWorld; // ���� �������̽� ���漱��
+// 물리 컴포넌트들
+#include "PhysX/Components/Phy_RigidBodyComponent.h"
+#include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_MeshColliderComponent.h"
+#include "PhysX/Components/Phy_SettingsComponent.h"
+#include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
+#include "PhysX/Components/Phy_CCTComponent.h"
+#include "PhysX/Components/Phy_JointComponent.h"
+
+class IPhysicsWorld; // 물리 인터페이스 전방선언
 
 namespace Alice
 {
@@ -58,13 +68,30 @@ namespace Alice
         GameObject FindGameObject(const std::string& name);
         void SetEntityName(EntityId id, const std::string& name);
         std::string GetEntityName(EntityId id) const;
+        
+        // ==== 부모-자식 관계 관리 ====
+        /// 엔티티의 부모를 설정합니다. 순환 참조를 방지합니다.
+        /// @param keepWorld true면 월드 위치를 유지하고 로컬을 재계산, false면 관계만 변경
+        void SetParent(EntityId child, EntityId parent, bool keepWorld = false);
+        /// 엔티티의 부모를 가져옵니다. InvalidEntityId면 부모 없음
+        EntityId GetParent(EntityId child) const;
+        /// 엔티티의 모든 자식을 가져옵니다.
+        std::vector<EntityId> GetChildren(EntityId parent) const;
+        /// 루트 엔티티들(부모가 없는 엔티티들)을 가져옵니다.
+        std::vector<EntityId> GetRootEntities() const;
+
+        // ==== Transform 변경 API (스크립트/로직은 여기 경유 권장 — dirty 자동 반영) ====
+        void SetLocalPosition(EntityId id, const DirectX::XMFLOAT3& position);
+        void SetLocalRotation(EntityId id, const DirectX::XMFLOAT3& rotationRad);
+        void SetLocalScale(EntityId id, const DirectX::XMFLOAT3& scale);
+        void SetTransformEnabled(EntityId id, bool enabled);
 
         // ==== 게임 오브젝트 생성 헬퍼 ====
         /// 빈 게임 오브젝트를 생성합니다 (Transform만 가짐)
         EntityId CreateEmpty();
         
-        /// 큐브 게임 오브젝트를 생성합니다 (Transform + Material)
-        EntityId CreateCube();
+		/// 큐브 게임 오브젝트를 생성합니다 (Transform + Material)
+		EntityId CreateCube();
         
         /// 카메라 게임 오브젝트를 생성합니다 (Transform + Camera)
         EntityId CreateCamera();
@@ -97,7 +124,11 @@ namespace Alice
 
                 // 컨테이너 생성 및 데이터 채우기
                 ScriptComponent newScriptComp{};
-                newScriptComp.scriptName = typeid(T).name();
+                // RTTR 이름 사용. "Alice::" 접두사 제거하여 ScriptFactory 등록 키(REGISTER_SCRIPT)와 일치시킴.
+                std::string scriptName = rttr::type::get<T>().get_name().to_string();
+                if (scriptName.size() > 6 && scriptName.compare(0, 6, "Alice::") == 0)
+                    scriptName = scriptName.substr(6);
+                newScriptComp.scriptName = std::move(scriptName);
                 newScriptComp.instance = std::move(instance); // 소유권 이전
 
                 // 초기화 루틴
@@ -112,18 +143,28 @@ namespace Alice
             else
             {
                 auto& storage = GetStorage<T>();
+                T* result = nullptr;
                 if constexpr (std::is_default_constructible_v<T> && sizeof...(Args) == 0)
                 {
                     // 기본 생성자만 호출
                     T defaultComp{};
-                    return storage.Add(id, std::move(defaultComp));
+                    result = &storage.Add(id, std::move(defaultComp));
                 }
                 else
                 {
                     // 인자가 있는 경우 생성 후 추가
                     T newComp(std::forward<Args>(args)...);
-                    return storage.Add(id, std::move(newComp));
+                    result = &storage.Add(id, std::move(newComp));
                 }
+                
+                // TransformComponent 추가/제거 시 children 캐시 무효화 및 Transform dirty 마킹
+                if constexpr (std::is_same_v<T, TransformComponent>)
+                {
+                    InvalidateChildrenCache();
+                    MarkTransformDirty(id);
+                }
+                
+                return *result;
             }
         }
 
@@ -275,6 +316,14 @@ namespace Alice
             else
             {
                 auto& storage = GetStorage<T>();
+                
+                // TransformComponent 제거 시 children 캐시 무효화 및 Transform dirty 마킹
+                if constexpr (std::is_same_v<T, TransformComponent>)
+                {
+                    InvalidateChildrenCache();
+                    MarkTransformDirty(id);
+                }
+                
                 storage.Remove(id);
             }
         }
@@ -282,16 +331,16 @@ namespace Alice
         // ==== 전체 컴포넌트 순회 (시스템/에디터용) ====
         // 
         // 사용 예시 (읽기 전용):
-        //   for (const auto& [entityId, transform] : world.GetComponents<TransformComponent>())
+        //   for (auto&& [entityId, transform] : world.GetComponents<TransformComponent>())
         //   {
-        //       // transform은 const TransformComponent&
+        //       // transform은 TransformComponent& (auto&& 사용으로 참조 보장)
         //       // 연속 메모리에서 효율적으로 순회됨 (캐시 친화적)
         //   }
         //
         // 사용 예시 (수정 가능):
-        //   for (auto& [entityId, transform] : world.GetComponents<TransformComponent>())
+        //   for (auto&& [entityId, transform] : world.GetComponents<TransformComponent>())
         //   {
-        //       // transform은 TransformComponent&
+        //       // transform은 TransformComponent& (auto&& 사용으로 참조 보장)
         //       transform.position.x += 1.0f; // 수정 가능
         //   }
         //
@@ -346,6 +395,20 @@ namespace Alice
         // 필요하다면 별도 헬퍼 함수 유지
         EntityId GetMainCameraEntityId();
 
+        // ==== Transform 행렬 계산 (공용 API) ====
+        /// 엔티티의 월드 행렬을 계산합니다 (부모-자식 계층 포함)
+        /// 에디터/런타임 모두 이 함수를 사용하여 일관성 보장
+        /// 캐시를 사용하므로 UpdateTransformMatrices()를 먼저 호출해야 최신 값이 보장됩니다.
+        DirectX::XMMATRIX ComputeWorldMatrix(EntityId entityId) const;
+        
+        /// Transform 월드행렬 캐시를 갱신합니다. (매 프레임 호출 권장)
+        /// dirty 플래그가 있는 엔티티들의 월드행렬을 재계산합니다.
+        void UpdateTransformMatrices();
+        
+        /// 특정 엔티티와 모든 자식의 Transform을 dirty로 표시합니다.
+        /// Transform 변경 시 자동으로 호출되지만, 수동 호출도 가능합니다.
+        void MarkTransformDirty(EntityId entityId);
+
         // ==== 지연 파괴 시스템 ====
         /// 지연 파괴를 예약합니다. (delay 초 후에 파괴)
         void ScheduleDelayedDestruction(EntityId id, float delay);
@@ -360,14 +423,27 @@ namespace Alice
         /// 엔티티가 유효한지 확인합니다. (generation 비교)
         bool IsEntityValid(EntityId id, std::uint32_t generation) const;
 
+        // ==== World Epoch (씬 전환 시 증가하여 이전 userData 무효화) ====
+        /// 현재 World의 Epoch를 가져옵니다. (씬 전환 시 증가)
+        uint64_t GetWorldEpoch() const { return m_worldEpoch; }
+        
+        /// userData에서 EntityId를 추출합니다. (worldEpoch 검증 포함)
+        /// 이전 씬의 userData인 경우 InvalidEntityId를 반환합니다.
+        EntityId ExtractEntityIdFromUserData(void* userData) const;
 
         //==============================================================
-        // ���� �� �Լ�
+        // 물리
         void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
         IPhysicsWorld* GetPhysicsWorld();
-        const IPhysicsWorld* GetPhysicsWorld() const;
+        const IPhysicsWorld* GetPhysicsWorld() const;        
+        std::shared_ptr<IPhysicsWorld> GetPhysicsWorldShared() const { return m_physicsWorld; }
+        
+        /// World::Clear() 호출 전에 호출될 콜백 설정
+        /// Engine에서 물리 시스템 정리를 위해 사용
+        void SetOnBeforeClearCallback(std::function<void()> callback) { m_onBeforeClear = std::move(callback); }
     private:
         std::shared_ptr<IPhysicsWorld> m_physicsWorld;
+        std::function<void()> m_onBeforeClear; // Clear() 호출 전 실행될 콜백
         //==============================================================
 
     private:
@@ -415,6 +491,7 @@ namespace Alice
 
     private:
         EntityId m_nextEntityId{ 1 };
+        uint64_t m_worldEpoch{ 1 }; // 씬 전환 시 증가하여 이전 userData 무효화
 
         std::unordered_map<EntityId, std::string> m_names;
 
@@ -432,6 +509,21 @@ namespace Alice
         // SlotMap 기반 유효성 검사 (EntityId -> Generation)
         // 엔티티가 생성될 때 0으로 시작하고, 파괴될 때마다 증가합니다.
         std::unordered_map<EntityId, std::uint32_t> m_entityGenerations;
+
+        // children 캐시 (parent -> children vector)
+        // InvalidEntityId는 루트 엔티티들을 의미
+        mutable std::unordered_map<EntityId, std::vector<EntityId>> m_children;
+        
+        // children 캐시 무효화 (SetParent, DestroyEntity, Clear에서 호출)
+        void InvalidateChildrenCache() const { m_children.clear(); }
+        
+        // Transform 월드행렬 캐싱 시스템
+        // dirty 플래그: 엔티티의 Transform이 변경되어 월드행렬 재계산이 필요한지 표시
+        mutable std::unordered_map<EntityId, bool> m_transformDirty;
+        
+        // 월드행렬 캐시: EntityId -> 월드행렬 (XMMATRIX는 값 타입이므로 직접 저장)
+        // XMMATRIX는 16개 float이므로 XMFLOAT4X4로 저장
+        mutable std::unordered_map<EntityId, DirectX::XMFLOAT4X4> m_worldMatrixCache;
     };
 
     template <typename T>

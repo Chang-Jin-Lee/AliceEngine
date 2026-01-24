@@ -1,5 +1,7 @@
 {
-    "materials": [],
+    "materials": [
+        "Assets/Materials/Monkey_0.mat"
+    ],
     "mesh": "Monkey",
     "source_fbx": "Resource/fbx/Study/Monkey.fbx"
 }

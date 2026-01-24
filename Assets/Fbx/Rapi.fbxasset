@@ -4,7 +4,10 @@
         "Assets/Materials/Rapi_1.mat",
         "Assets/Materials/Rapi_2.mat",
         "Assets/Materials/Rapi_3.mat",
-        "Assets/Materials/Rapi_4.mat"
+        "Assets/Materials/Rapi_4.mat",
+        "Assets/Materials/Rapi_5.mat",
+        "Assets/Materials/Rapi_6.mat",
+        "Assets/Materials/Rapi_7.mat"
     ],
     "mesh": "Rapi",
     "source_fbx": "Resource/fbx/Rapi/Rapi.fbx"

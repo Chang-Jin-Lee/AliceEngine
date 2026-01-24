@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <cassert>
 
 /*
@@ -43,6 +43,12 @@
 //private:
 //	static T* s_instance;
 //};
+//
+//template <typename T>
+//T* Singleton<T>::s_instance = nullptr;
+//
+//#define GetSingleton(type) Singleton<type>::Get()
+
 
 template <typename T>
 class Singleton

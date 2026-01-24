@@ -3,8 +3,44 @@
 // PhysXWorld_Internal.h (split from PhysXWorld.cpp)
 #include "PhysXWorld.h"
 #include "PhysicsMath.h"
+#include "Core/Logger.h"
 
-#include <Physx/PxPhysicsAPI.h>
+#include <PhysX/PxPhysicsAPI.h>
+
+// ============================================================
+// ContactModify 가드 (공유 thread_local)
+// ============================================================
+namespace physxwrap_detail {
+	// ContactModify 콜백 내부에서 쿼리 호출을 방지하기 위한 depth 카운터
+	// inline을 사용하여 모든 번역단위에서 같은 변수를 공유
+	// depth > 0이면 ContactModify 콜백 내부
+	inline thread_local int g_contactModifyDepth = 0;
+
+	// 차단된 쿼리 횟수 카운터 (경고 로깅용)
+	inline std::atomic<uint32_t> g_blockedQueryCount{ 0 };
+
+	// RAII 헬퍼: 콜백 진입 시 자동으로 depth 증가/감소
+	struct ContactModifyScope {
+		ContactModifyScope() { 
+			++g_contactModifyDepth;
+			if (g_contactModifyDepth > 1) {
+				// 재진입 감지: 경고 로그
+				ALICE_LOG_WARN("[PhysXWorld] ContactModify callback reentrant detected (depth=%d)! This may cause deadlock.", g_contactModifyDepth);
+			}
+		}
+		~ContactModifyScope() { 
+			--g_contactModifyDepth;
+			if (g_contactModifyDepth < 0) {
+				g_contactModifyDepth = 0; // 안전장치
+			}
+		}
+	};
+	
+	// ContactModify 콜백 내부인지 확인 (호환성 유지)
+	inline bool IsInContactModifyCallback() {
+		return g_contactModifyDepth > 0;
+	}
+}
 
 // ------------------------------------------------------------
 // PhysX Character Controller (CCT) header detection
@@ -207,6 +243,7 @@ struct FilterShaderData
 	PxU32 enableContactEvents = 1;
 	PxU32 enableContactPoints = 0;
 	PxU32 enableContactModify = 0;
+	PxU32 enableCCD = 0;  // Scene-level CCD 활성화 여부
 };
 
 static PxFilterFlags LayerFilterShader(
@@ -251,6 +288,13 @@ static PxFilterFlags LayerFilterShader(
 		pairFlags |= PxPairFlag::eMODIFY_CONTACTS;
 	}
 
+	// PhysX 5.5: Scene이 CCD를 활성화했으면 contact pair에도 eDETECT_CCD_CONTACT 플래그 필요
+	// 개별 body의 eENABLE_CCD 플래그와는 별개로, collision filtering에서도 명시해야 함
+	if (fsd && fsd->enableCCD)
+	{
+		pairFlags |= PxPairFlag::eDETECT_CCD_CONTACT;
+	}
+
 	return PxFilterFlag::eDEFAULT;
 }
 
@@ -283,16 +327,34 @@ enum class QueryHitMode : uint8_t { Block, Touch };
 class MaskQueryCallback final : public PxQueryFilterCallback
 {
 public:
-	MaskQueryCallback(uint32_t layerMaskBits, uint32_t queryMaskBits, bool hitTriggers, QueryHitMode mode)
-		: layerMask(layerMaskBits), queryMask(queryMaskBits), includeTriggers(hitTriggers), hitMode(mode)
+	MaskQueryCallback(
+		uint32_t layerMaskBits,
+		uint32_t queryMaskBits,
+		bool hitTriggers,
+		QueryHitMode mode,
+		const PxRigidActor* ignoreActor = nullptr,
+		const PxShape* ignoreShape = nullptr,
+		void* ignoreUserData = nullptr)
+		: layerMask(layerMaskBits)
+		, queryMask(queryMaskBits)
+		, includeTriggers(hitTriggers)
+		, hitMode(mode)
+		, ignoreActor(ignoreActor)
+		, ignoreShape(ignoreShape)
+		, ignoreUserData(ignoreUserData)
 	{
 	}
 
 	PxQueryHitType::Enum preFilter(
 		const PxFilterData& /*filterData*/, const PxShape* shape,
-		const PxRigidActor* /*actor*/, PxHitFlags& /*queryFlags*/) override
+		const PxRigidActor* actor, PxHitFlags& /*queryFlags*/) override
 	{
-		if (!shape) return PxQueryHitType::eNONE;
+		if (!shape || !actor) return PxQueryHitType::eNONE;
+
+		//  ignore 먼저
+		if (ignoreShape && shape == ignoreShape) return PxQueryHitType::eNONE;
+		if (ignoreActor && actor == ignoreActor) return PxQueryHitType::eNONE;
+		if (ignoreUserData && actor->userData == ignoreUserData) return PxQueryHitType::eNONE;
 
 		const PxShapeFlags sf = shape->getFlags();
 
@@ -329,6 +391,11 @@ private:
 	uint32_t queryMask = 0xFFFFFFFFu;
 	bool includeTriggers = false;
 	QueryHitMode hitMode = QueryHitMode::Block;
+
+
+	const PxRigidActor* ignoreActor = nullptr;
+	const PxShape* ignoreShape = nullptr;
+	void* ignoreUserData = nullptr;
 };
 
 // ============================================================
@@ -346,6 +413,13 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		enableSceneLocks = desc.enableSceneLocks;
 		enableActiveTransforms = desc.enableActiveTransforms;
 
+		// Pre-reserve activeTransforms to avoid reallocation during simulation
+		// (onAdvance callback runs during simulation, so allocations should be minimized)
+		if (enableActiveTransforms)
+		{
+			activeTransforms.reserve(256);  // 예상치: 일반적인 씬에서 활성 액터 수
+		}
+
 		// Default material (used for planes and as a fallback)
 		defaultMaterial = physics->createMaterial(0.5f, 0.5f, 0.0f);
 		if (!defaultMaterial) throw std::runtime_error("createMaterial failed");
@@ -359,6 +433,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		shaderData.enableContactEvents = desc.enableContactEvents ? 1u : 0u;
 		shaderData.enableContactPoints = desc.enableContactPoints ? 1u : 0u;
 		shaderData.enableContactModify = desc.enableContactModify ? 1u : 0u;
+		shaderData.enableCCD = desc.enableCCD ? 1u : 0u;  // Scene-level CCD를 필터 셰이더에 전달
 		sdesc.filterShaderData = &shaderData;
 		sdesc.filterShaderDataSize = sizeof(FilterShaderData);
 
@@ -372,11 +447,29 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		// Use PCM by default (better contact generation in most cases)
 		sdesc.flags |= PxSceneFlag::eENABLE_PCM;
 
+		// Require RW locks for thread safety (will assert if accessed without locks)
+		// This helps catch bugs in multi-threaded scenarios and editor/tooling code.
+		if (desc.enableSceneLocks)
+			sdesc.flags |= PxSceneFlag::eREQUIRE_RW_LOCK;
+
 		scene = physics->createScene(sdesc);
 		if (!scene) throw std::runtime_error("createScene failed");
 
-		// NOTE: enable_shared_from_this isn't active inside the raw constructor.
-		// PhysXWorld repairs eventCb.owner after Impl is owned by a shared_ptr.
+		{
+			SceneWriteLock wl(scene, desc.enableSceneLocks);
+
+			scene->setVisualizationParameter(physx::PxVisualizationParameter::eSCALE, 1.0f);
+			scene->setVisualizationParameter(physx::PxVisualizationParameter::eCOLLISION_SHAPES, 1.0f);
+			scene->setVisualizationParameter(physx::PxVisualizationParameter::eACTOR_AXES, 1.0f);
+
+			if (physx::PxPvdSceneClient* client = scene->getScenePvdClient())
+			{
+				client->setScenePvdFlag(physx::PxPvdSceneFlag::eTRANSMIT_CONSTRAINTS, true);
+				client->setScenePvdFlag(physx::PxPvdSceneFlag::eTRANSMIT_CONTACTS, true);
+				client->setScenePvdFlag(physx::PxPvdSceneFlag::eTRANSMIT_SCENEQUERIES, true);
+			}
+		}
+
 		eventCb.owner.reset();
 
 #if PHYSXWRAP_ENABLE_CCT && PHYSXWRAP_HAS_CCT_HEADERS
@@ -419,9 +512,51 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	{
 		std::weak_ptr<Impl> owner;
 
-		void onConstraintBreak(PxConstraintInfo*, PxU32) override {}
+		void onConstraintBreak(PxConstraintInfo* constraints, PxU32 count) override
+		{
+			auto s = owner.lock();
+			if (!s || !constraints || count == 0) return;
+
+			std::scoped_lock lock(s->eventMtx);
+
+			for (PxU32 i = 0; i < count; ++i)
+			{
+				PxConstraintInfo& ci = constraints[i];
+
+				PxJoint* joint = reinterpret_cast<PxJoint*>(ci.externalReference);
+
+				PhysicsEvent e;
+				e.type = PhysicsEventType::JointBreak;
+
+				if (joint)
+				{
+					e.nativeJoint = joint;
+					e.jointUserData = joint->userData;
+
+					PxRigidActor* a = nullptr;
+					PxRigidActor* b = nullptr;
+					joint->getActors(a, b);
+
+					e.nativeActorA = a;
+					e.nativeActorB = b;
+					e.userDataA = a ? a->userData : nullptr;
+					e.userDataB = b ? b->userData : nullptr;
+				}
+				else
+				{
+					// externalReference가 없는 케이스 대비
+					e.nativeJoint = ci.constraint;
+				}
+
+				s->events.push_back(e);
+			}
+		}
 		void onWake(PxActor**, PxU32) override {}
 		void onSleep(PxActor**, PxU32) override {}
+		// onAdvance는 simulate~fetchResults 사이(시뮬레이션 도는 중)에 호출됨
+		// PhysX 문서: PxSimulationEventCallback::onAdvance는 eENABLE_POSE_INTEGRATION_PREVIEW가
+		// 켜진 바디들의 포즈를 미리 제공하기 위해 시뮬레이션 중간에 호출됨
+		// 주의: 이 콜백 내에서는 할당/로그/복잡한 연산을 피해야 함 (성능/안정성)
 		void onAdvance(const PxRigidBody* const* bodyBuffer, const PxTransform* poseBuffer, const PxU32 count) override
 		{
 			auto s = owner.lock();
@@ -429,6 +564,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (!bodyBuffer || !poseBuffer || count == 0) return;
 
 			std::scoped_lock lock(s->activeMtx);
+			// reserve로 할당 최소화 (시뮬레이션 중 할당을 피하기 위함)
 			s->activeTransforms.reserve(s->activeTransforms.size() + count);
 
 			for (PxU32 i = 0; i < count; ++i)
@@ -457,14 +593,38 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			{
 				const PxTriggerPair& tp = pairs[i];
 
-				if (HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER) ||
-					HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_OTHER))
-					continue;
+				const bool removedShape = HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER) ||
+					HasTriggerPairFlag(tp.flags, PxTriggerPairFlag::eREMOVED_SHAPE_OTHER);
 
 				const PxShape* shA = tp.triggerShape;
 				const PxShape* shB = tp.otherShape;
 				const PxActor* acA = tp.triggerActor;
 				const PxActor* acB = tp.otherActor;
+
+				// if shape removed, 정리 후 스킵
+				if (removedShape)
+				{
+					// 가능한 범위에서 상태 정리 (누수 방지)
+					// shape가 유효하면 shapeKey를 계산해서 제거
+					if (shA && shB && acA && acB)
+					{
+						const uint64_t shapeKey = PtrPairKey(shA, shB);
+						const uint64_t actorKey = PtrPairKey(acA, acB);
+						
+						if (s->activeTriggerShapePairs.erase(shapeKey) > 0)
+						{
+							// actorCount 감소
+							auto it = s->activeTriggerActorCounts.find(actorKey);
+							if (it != s->activeTriggerActorCounts.end())
+							{
+								if (it->second > 0) --it->second;
+								if (it->second == 0)
+									s->activeTriggerActorCounts.erase(it);
+							}
+						}
+					}
+					continue;
+				}
 
 				if (!shA || !shB || !acA || !acB)
 					continue;
@@ -541,14 +701,36 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			{
 				const PxContactPair& cp = pairs[i];
 
-				// if shape removed, ignore
-				if ((static_cast<PxU32>(cp.flags) &
+				const bool removedShape = (static_cast<PxU32>(cp.flags) &
 					(static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_0) |
-						static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_1))) != 0u)
-					continue;
+						static_cast<PxU32>(PxContactPairFlag::eREMOVED_SHAPE_1))) != 0u;
 
 				const PxShape* sh0 = cp.shapes[0];
 				const PxShape* sh1 = cp.shapes[1];
+
+				// if shape removed, 정리 후 스킵
+				if (removedShape)
+				{
+					// 가능한 범위에서 상태 정리 (누수 방지)
+					// shape가 유효하면 shapeKey를 계산해서 제거
+					if (sh0 && sh1)
+					{
+						const uint64_t shapeKey = PtrPairKey(sh0, sh1);
+						if (s->activeContactShapePairs.erase(shapeKey) > 0)
+						{
+							// actorCount 감소
+							auto it = s->activeContactActorCounts.find(actorKey);
+							if (it != s->activeContactActorCounts.end())
+							{
+								if (it->second > 0) --it->second;
+								if (it->second == 0)
+									s->activeContactActorCounts.erase(it);
+							}
+						}
+					}
+					continue;
+				}
+
 				if (!sh0 || !sh1) continue;
 
 				const uint64_t shapeKey = PtrPairKey(sh0, sh1);
@@ -618,6 +800,19 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 		}
 
+		// !!!주의!!!주의!!!주의!!! DEADLOCK WARNING: ContactModify 콜백은 PhysX 시뮬레이션 스레드에서 호출될 수 있습니다.
+		// Step()이 scene write lock을 잡은 채로 simulate~fetch 사이에 실행되므로,
+		// 이 콜백 내에서 Raycast(), Overlap() 등 scene lock이 필요한 함수를 호출하면 데드락이 발생할 수 있습니다.
+		// 
+		// 안전한 사용:
+		//   - ContactModifyPair의 데이터만 읽고 수정
+		//   - 로컬 변수/메모리만 접근
+		//   - scene lock이 필요 없는 작업만 수행
+		//
+		// !!!위험!!!위험!!!위험!!!위험한 사용 (데드락 위험):
+		//   - world->Raycast(), world->Overlap() 등 쿼리 함수 호출
+		//   - scene에 접근하는 모든 함수 호출
+		//   - 다른 스레드와의 동기화가 필요한 작업
 		void onContactModify(PxContactModifyPair* const pairs, PxU32 count) override
 		{
 			auto s = owner.lock();
@@ -633,8 +828,12 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 			if (!cb) return;
 
-			// IMPORTANT: PhysX calls this on the simulation thread.
-			// Keep work minimal and avoid locking other engine systems.
+			// ContactModify 콜백 진입 플래그 설정 (데드락 방지)
+			// 재진입 방지: 이미 콜백 내부에 있으면 즉시 리턴
+			if (physxwrap_detail::IsInContactModifyCallback()) return;
+			// RAII를 사용하여 자동으로 플래그 설정/해제
+			physxwrap_detail::ContactModifyScope scope;
+
 			for (PxU32 i = 0; i < count; ++i)
 			{
 				PxContactModifyPair& mp = pairs[i];
@@ -648,8 +847,6 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 				ContactModifyPair pair;
 				pair.userDataA = a->userData;
 				pair.userDataB = b->userData;
-				// Store as opaque handles. We intentionally erase const here because the public
-				// interface exposes native pointers as void*.
 				pair.nativeActorA = const_cast<PxRigidActor*>(a);
 				pair.nativeActorB = const_cast<PxRigidActor*>(b);
 				pair.nativeShapeA = const_cast<PxShape*>(shA);
@@ -668,6 +865,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 					dst.maxImpulse = cs.getMaxImpulse(c);
 				}
 
+				// !!! 사용자 콜백 호출: 이 콜백 내에서 scene lock이 필요한 함수를 호출하지 마세요!
 				cb(pair, user);
 
 				if (pair.ignorePair)
@@ -677,7 +875,6 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 					continue;
 				}
 
-				// Apply modifications back to PhysX contact set.
 				const PxU32 m = static_cast<PxU32>(std::min<size_t>(n, pair.contacts.size()));
 				for (PxU32 c = 0; c < m; ++c)
 				{
@@ -695,6 +892,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 						cs.setMaxImpulse(c, src.maxImpulse);
 				}
 			}
+			// scope 소멸 시 자동으로 플래그 해제됨
 		}
 	};
 
@@ -752,6 +950,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	// Caches
 	std::mutex materialCacheMtx;
 	std::unordered_map<uint64_t, PxMaterial*> materialCache;
+
+	// HeightField cache (does not require cooking)
+	std::mutex heightFieldCacheMtx;
+	std::unordered_map<uint64_t, PxHeightField*> heightFieldCache;
 
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
 	std::mutex meshCacheMtx;
@@ -845,11 +1047,14 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			}
 		}
 
-		// Release after applying scene ops.
+		// TODO: 나중에 구조를 변경해서 중복을 허용하지 않게 만들자
+		// 솔트해서 중복 제거하는 방식이 좋은건 아니라고 생각함
+		std::sort(rels.begin(), rels.end());
+		rels.erase(std::unique(rels.begin(), rels.end()), rels.end());
+
 		for (PxBase* b : rels)
 		{
 			if (!b) continue;
-			// If this is an actor still in the scene, remove it first.
 			if (scene)
 			{
 				if (PxActor* a = b->is<PxActor>())
@@ -865,7 +1070,6 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		}
 
 #if PHYSXWRAP_ENABLE_CCT && PHYSXWRAP_HAS_CCT_HEADERS
-		// Release controllers last (they own a kinematic actor inside the scene).
 		if (!ctrls.empty())
 		{
 			if (scene)
@@ -941,10 +1145,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (it != triMeshCache.end()) return it->second;
 		}
 
-		PxTriangleMeshDesc desc{};
-		desc.points.count = mesh.vertexCount;
-		desc.points.stride = sizeof(PxVec3);
-		desc.points.data = mesh.vertices;
+	PxTriangleMeshDesc desc{};
+	desc.points.count = mesh.vertexCount;
+	desc.points.stride = sizeof(Vec3); // Vec3의 실제 크기 사용 (PxVec3와 레이아웃이 다를 수 있음)
+	desc.points.data = mesh.vertices;
 
 		if (mesh.indices32)
 		{
@@ -1002,10 +1206,10 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			if (it != convexMeshCache.end()) return it->second;
 		}
 
-		PxConvexMeshDesc desc{};
-		desc.points.count = mesh.vertexCount;
-		desc.points.stride = sizeof(PxVec3);
-		desc.points.data = mesh.vertices;
+	PxConvexMeshDesc desc{};
+	desc.points.count = mesh.vertexCount;
+	desc.points.stride = sizeof(Vec3); // Vec3의 실제 크기 사용 (PxVec3와 레이아웃이 다를 수 있음)
+	desc.points.data = mesh.vertices;
 		desc.flags |= PxConvexFlag::eCOMPUTE_CONVEX;
 		if (mesh.shiftVertices)
 			desc.flags |= PxConvexFlag::eSHIFT_VERTICES;
@@ -1030,6 +1234,68 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	}
 #endif
 
+	// HeightField creation (requires cooking path in PhysX 5.x)
+	PxHeightField* GetOrCreateHeightField(const HeightFieldColliderDesc& hf)
+	{
+		if (!physics) return nullptr;
+		if (!hf.heightSamples) return nullptr;
+		if (hf.numRows < 2 || hf.numCols < 2) return nullptr;
+
+		if (hf.heightScale <= 0.0f) return nullptr;
+		if (hf.rowScale <= 0.0f) return nullptr;
+		if (hf.colScale <= 0.0f) return nullptr;
+
+		const uint64_t seed = 14695981039346656037ull;
+		uint64_t h = seed;
+		h = HashU32(h, hf.numRows);
+		h = HashU32(h, hf.numCols);
+		h = HashU32(h, FloatBits(hf.heightScale));
+		h = HashFNV1a64(h, hf.heightSamples, sizeof(float) * hf.numRows * hf.numCols);
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			auto it = heightFieldCache.find(h);
+			if (it != heightFieldCache.end()) return it->second;
+		}
+
+		std::vector<PxHeightFieldSample> samples(hf.numRows * hf.numCols);
+		
+		for (uint32_t i = 0; i < hf.numRows * hf.numCols; ++i)
+		{
+			PxHeightFieldSample s{};
+			const float hWorld = hf.heightSamples[i];
+
+			const float q = hWorld / hf.heightScale;
+			long qi = std::lround(q);
+			qi = std::clamp<long>(qi, -32768, 32767);
+
+			s.height = static_cast<PxI16>(qi);
+			s.materialIndex0 = 0;
+			s.materialIndex1 = 0;
+			s.clearTessFlag();
+
+			samples[i] = s;
+		}
+
+		// Create PxHeightFieldDesc
+		PxHeightFieldDesc desc{};
+		desc.format = PxHeightFieldFormat::eS16_TM;
+		desc.nbRows = static_cast<PxU32>(hf.numRows);
+		desc.nbColumns = static_cast<PxU32>(hf.numCols);
+		desc.samples.data = samples.data();
+		desc.samples.stride = sizeof(PxHeightFieldSample);
+
+		PxHeightField* heightField = PxCreateHeightField(desc, physics->getPhysicsInsertionCallback());
+		if (!heightField) return nullptr;
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			heightFieldCache.emplace(h, heightField);
+		}
+
+		return heightField;
+	}
+
 	void ClearMeshCachesInternal()
 	{
 		{
@@ -1037,6 +1303,13 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			for (auto& kv : materialCache)
 				if (kv.second) kv.second->release();
 			materialCache.clear();
+		}
+
+		{
+			std::scoped_lock lock(heightFieldCacheMtx);
+			for (auto& kv : heightFieldCache)
+				if (kv.second) kv.second->release();
+			heightFieldCache.clear();
 		}
 
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
@@ -1119,35 +1392,6 @@ static inline PxForceMode::Enum ToPxForceMode(ForceMode m)
 	}
 }
 
-static void ApplyRbDesc(PxRigidDynamic& body, const RigidBodyDesc& rb)
-{
-	body.userData = rb.userData;
-
-	body.setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !rb.gravityEnabled);
-
-	body.setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, rb.isKinematic);
-	body.setLinearDamping(rb.linearDamping);
-	body.setAngularDamping(rb.angularDamping);
-
-	if (rb.maxLinearVelocity > 0.0f)  body.setMaxLinearVelocity(rb.maxLinearVelocity);
-	if (rb.maxAngularVelocity > 0.0f) body.setMaxAngularVelocity(rb.maxAngularVelocity);
-
-	body.setSolverIterationCounts(
-		static_cast<PxU32>(std::max(1u, rb.solverPositionIterations)),
-		static_cast<PxU32>(std::max(1u, rb.solverVelocityIterations)));
-
-	if (rb.sleepThreshold >= 0.0f) body.setSleepThreshold(rb.sleepThreshold);
-	if (rb.stabilizationThreshold >= 0.0f) body.setStabilizationThreshold(rb.stabilizationThreshold);
-
-	body.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, rb.enableCCD);
-	body.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_SPECULATIVE_CCD, rb.enableSpeculativeCCD);
-
-	body.setRigidDynamicLockFlags(ToPxLockFlags(rb.lockFlags));
-
-	if (!rb.startAwake)
-		body.putToSleep();
-}
-
 static void ApplyMass(PxRigidDynamic& body, const RigidBodyDesc& rb)
 {
 	if (rb.isKinematic)
@@ -1189,7 +1433,11 @@ public:
 
 	bool IsInWorld() const override
 	{
-		return actor && actor->getScene() != nullptr;
+		if (!actor) return false;
+		auto s = world.lock();
+		if (!s || !s->scene) return false;
+		SceneReadLock rl(s->scene, s->enableSceneLocks);
+		return actor->getScene() != nullptr;
 	}
 
 	void SetInWorld(bool inWorld) override
@@ -1197,17 +1445,12 @@ public:
 		if (!actor) return;
 		auto s = world.lock();
 		if (!s || !s->scene) return;
-		// Defer-safe: queue adds/removes and let FlushPending handle ordering.
+		// getScene() 호출 자체가 simulate/fetchResults 타이밍에 불법이 될 수 있음.
+		// 그냥 enqueue만 하고, FlushPending에서 중복/불필요 작업을 걸러내게 둔다.
 		if (inWorld)
-		{
-			if (!actor->getScene())
-				s->EnqueueAdd(actor);
-		}
+			s->EnqueueAdd(actor);
 		else
-		{
-			if (actor->getScene())
-				s->EnqueueRemove(actor);
-		}
+			s->EnqueueRemove(actor);
 	}
 
 	void SetTransform(const Vec3& p, const Quat& q) override
@@ -1240,12 +1483,19 @@ public:
 	void SetUserData(void* ptr) override
 	{
 		if (!actor) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
 		actor->userData = ptr;
 	}
 
 	void* GetUserData() const override
 	{
-		return actor ? actor->userData : nullptr;
+		if (!actor) return nullptr;
+		auto s = world.lock();
+		if (!s || !s->scene) return nullptr;
+		SceneReadLock rl(s->scene, s->enableSceneLocks);
+		return actor->userData;
 	}
 
 	void SetLayerMasks(uint32_t layerBits, uint32_t collideMask, uint32_t queryMask) override
@@ -1337,8 +1587,7 @@ public:
 			if (!sh) continue;
 			PxShapeFlags f = sh->getFlags();
 			if (HasShapeFlag(f, PxShapeFlag::eTRIGGER_SHAPE))
-				continue; // triggers never participate in simulation contacts
-			// PhysX 5.x: PxFlags doesn't expose a .set() helper. Use PxShape::setFlag().
+				continue;
 			sh->setFlag(PxShapeFlag::eSIMULATION_SHAPE, enabled);
 		}
 	}
@@ -1377,7 +1626,6 @@ public:
 		for (PxShape* sh : shapes)
 		{
 			if (!sh) continue;
-			// PhysX 5.x: PxFlags doesn't expose a .set() helper. Use PxShape::setFlag().
 			sh->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, enabled);
 		}
 	}
@@ -1399,16 +1647,16 @@ public:
 
 	void Destroy() override
 	{
-		if (!actor) return;
-		auto s = world.lock();
-		if (s)
-		{
-			// Remove first (if present), then release.
-			if (actor->getScene())
-				s->EnqueueRemove(actor);
-			s->EnqueueRelease(actor);
-		}
+		PxRigidActor* a = actor;
+		if (!a) return;
 		actor = nullptr;
+
+		auto s = world.lock();
+		if (!s) return;
+
+		if (s->scene)
+			s->EnqueueRemove(a);
+		s->EnqueueRelease(a);
 	}
 
 	// ---- Shapes
@@ -1440,12 +1688,11 @@ public:
 		if (!s || !s->scene) return false;
 
 		const PxCapsuleGeometry geom(capsule.radius, capsule.halfHeight);
-		// Optional alignment to +Y
 		Quat q = localRot;
 		if (capsule.alignYAxis)
 		{
 			Quat align = FromPx(CapsuleAlignQuatPx());
-			q = align * q;
+			q = q * align; // 쿼리 쪽(q = q * align)과 순서 통일
 		}
 		return AddShapeCommon(geom, capsule, localPos, q);
 	}
@@ -1454,19 +1701,29 @@ public:
 	{
 #if PHYSXWRAP_ENABLE_COOKING && PHYSXWRAP_HAS_COOKING_HEADERS
 		if (!actor) return false;
+		
+		// PhysX 5.5: TriangleMesh는 트리거 shape로 지원하지 않음
+		if (mesh.isTrigger)
+		{
+			// 경고는 PhysicsSystem에서 이미 출력했으므로 여기서는 false만 반환
+			return false;
+		}
+		
 		auto s = world.lock();
 		if (!s || !s->scene) return false;
 
 		PxTriangleMesh* tm = s->GetOrCreateTriangleMesh(mesh);
 		if (!tm) return false;
 
-		PxMeshGeometryFlags gflags;
+		PxMeshGeometryFlags gflags{}; // 초기화 필수: 미초기화 시 랜덤 플래그로 인한 크래시 위험
 		if (mesh.doubleSidedQueries) gflags |= PxMeshGeometryFlag::eDOUBLE_SIDED;
 
 		const PxMeshScale scale(ToPx(mesh.scale));
 		const PxTriangleMeshGeometry geom(tm, scale, gflags);
 		return AddShapeCommon(geom, mesh, localPos, localRot);
 #else
+		// 쿠킹이 비활성화된 경우: TriangleMesh는 런타임 쿠킹이 필요하므로 생성 불가
+		// 매개변수 미사용 경고 방지를 위한 void 캐스팅
 		(void)mesh; (void)localPos; (void)localRot;
 		return false;
 #endif
@@ -1486,9 +1743,37 @@ public:
 		const PxConvexMeshGeometry geom(cm, scale);
 		return AddShapeCommon(geom, mesh, localPos, localRot);
 #else
+		// 쿠킹이 비활성화된 경우: ConvexMesh는 런타임 쿠킹이 필요하므로 생성 불가
+		// 매개변수 미사용 경고 방지를 위한 void 캐스팅
 		(void)mesh; (void)localPos; (void)localRot;
 		return false;
 #endif
+	}
+
+	bool AddHeightFieldShape(const HeightFieldColliderDesc& hf, const Vec3& localPos, const Quat& localRot) override
+	{
+		if (!actor) return false;
+		auto s = world.lock();
+		if (!s || !s->scene) return false;
+
+		if (hf.isTrigger) return false;
+
+		if (PxRigidDynamic* dyn = actor->is<PxRigidDynamic>())
+		{
+			SceneReadLock rl(s->scene, s->enableSceneLocks);
+			if (!HasRigidBodyFlag(dyn->getRigidBodyFlags(), PxRigidBodyFlag::eKINEMATIC))
+				return false;
+		}
+
+		PxHeightField* heightField = s->GetOrCreateHeightField(hf);
+		if (!heightField) return false;
+
+		PxMeshGeometryFlags gflags{}; // 초기화 필수: 미초기화 시 랜덤 플래그로 인한 크래시 위험
+		if (hf.doubleSidedQueries) gflags |= PxMeshGeometryFlag::eDOUBLE_SIDED;
+		const PxHeightFieldGeometry geom(heightField, gflags, hf.heightScale, hf.rowScale, hf.colScale);
+		if (!geom.isValid()) return false;
+
+		return AddShapeCommon(geom, hf, localPos, localRot);
 	}
 
 	bool ClearShapes() override
@@ -1512,7 +1797,11 @@ public:
 
 	uint32_t GetShapeCount() const override
 	{
-		return actor ? actor->getNbShapes() : 0u;
+		if (!actor) return 0u;
+		auto s = world.lock();
+		if (!s || !s->scene) return 0u;
+		SceneReadLock rl(s->scene, s->enableSceneLocks);
+		return actor->getNbShapes();
 	}
 
 	void* GetNativeActor() const override { return actor; }
@@ -1531,7 +1820,6 @@ protected:
 		if (!sh) return false;
 
 		ApplyFilterToShape(*sh, desc);
-		// Optional per-shape tag (useful for compound bodies / per-collider identification).
 		sh->userData = desc.userData;
 		sh->setLocalPose(ToPxTransform(localPos, localRot));
 
@@ -1616,6 +1904,11 @@ public:
 		return base.AddConvexMeshShape(mesh, localPos, localRot);
 	}
 
+	bool AddHeightFieldShape(const HeightFieldColliderDesc& hf, const Vec3& localPos, const Quat& localRot) override
+	{
+		return base.AddHeightFieldShape(hf, localPos, localRot);
+	}
+
 	bool ClearShapes() override { return base.ClearShapes(); }
 	uint32_t GetShapeCount() const override { return base.GetShapeCount(); }
 
@@ -1630,7 +1923,6 @@ public:
 		auto s = world.lock();
 		if (!s || !s->scene) return;
 		SceneWriteLock wl(s->scene, s->enableSceneLocks);
-		// PhysX will assert if you call this on a non-kinematic.
 		if (!HasRigidBodyFlag(body->getRigidBodyFlags(), PxRigidBodyFlag::eKINEMATIC))
 		{
 			body->setGlobalPose(ToPxTransform(p, q));
@@ -1641,7 +1933,11 @@ public:
 
 	bool IsKinematic() const override
 	{
-		return body ? HasRigidBodyFlag(body->getRigidBodyFlags(), PxRigidBodyFlag::eKINEMATIC) : false;
+		if (!body) return false;
+		auto s = world.lock();
+		if (!s || !s->scene) return false;
+		SceneReadLock rl(s->scene, s->enableSceneLocks);
+		return HasRigidBodyFlag(body->getRigidBodyFlags(), PxRigidBodyFlag::eKINEMATIC);
 	}
 
 	void SetKinematic(bool isKinematic) override
@@ -1751,8 +2047,13 @@ public:
 		auto s = world.lock();
 		if (!s || !s->scene) return;
 		SceneWriteLock wl(s->scene, s->enableSceneLocks);
-		if (maxLinear > 0.0f) body->setMaxLinearVelocity(maxLinear);
-		if (maxAngular > 0.0f) body->setMaxAngularVelocity(maxAngular);
+
+		const float ml = (maxLinear > 0.0f) ? maxLinear : PX_MAX_F32;
+		const float ma = (maxAngular > 0.0f) ? maxAngular : PX_MAX_F32;
+
+		body->setMaxLinearVelocity(ml);
+		body->setMaxAngularVelocity(ma);
+
 		cachedRb.maxLinearVelocity = maxLinear;
 		cachedRb.maxAngularVelocity = maxAngular;
 	}
@@ -1782,6 +2083,9 @@ public:
 	float GetMass() const override
 	{
 		if (!body) return 0.0f;
+		auto s = world.lock();
+		if (!s || !s->scene) return 0.0f;
+		SceneReadLock rl(s->scene, s->enableSceneLocks);
 		return body->getMass();
 	}
 
@@ -1812,25 +2116,81 @@ public:
 	void WakeUp() override
 	{
 		if (!body) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
 		body->wakeUp();
 	}
 
 	void PutToSleep() override
 	{
 		if (!body) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
 		body->putToSleep();
 	}
 
 	bool IsAwake() const override
 	{
 		if (!body) return false;
+		auto s = world.lock();
+		if (!s || !s->scene) return false;
+		SceneReadLock rl(s->scene, s->enableSceneLocks);
 		return !body->isSleeping();
 	}
 
 	bool IsSleeping() const override
 	{
-		if (!body) return false;
+		if (!body) return true;
+		auto s = world.lock();
+		if (!s || !s->scene) return true;
+		SceneReadLock rl(s->scene, s->enableSceneLocks);
 		return body->isSleeping();
+	}
+
+	//  density + massOverride 같이 갱신
+	void SetMassProperties(float density, float massOverride) override
+	{
+		cachedRb.density = density;
+		cachedRb.massOverride = massOverride;
+		RecomputeMass(); // cachedRb 기반으로 updateMassAndInertia or setMassAndUpdateInertia
+	}
+
+	// 런타임 튜닝용
+	void SetSolverIterations(uint32_t posIts, uint32_t velIts) override
+	{
+		if (!body) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setSolverIterationCounts(
+			static_cast<PxU32>(std::max(1u, posIts)),
+			static_cast<PxU32>(std::max(1u, velIts)));
+		cachedRb.solverPositionIterations = posIts;
+		cachedRb.solverVelocityIterations = velIts;
+	}
+
+	void SetSleepThreshold(float sleepThreshold) override
+	{
+		if (!body) return;
+		if (sleepThreshold < 0.0f) return; // -1이면 "변경 안 함"으로 처리(기본값 복원은 재생성으로)
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setSleepThreshold(sleepThreshold);
+		cachedRb.sleepThreshold = sleepThreshold;
+	}
+
+	void SetStabilizationThreshold(float stabilizationThreshold) override
+	{
+		if (!body) return;
+		if (stabilizationThreshold < 0.0f) return;
+		auto s = world.lock();
+		if (!s || !s->scene) return;
+		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		body->setStabilizationThreshold(stabilizationThreshold);
+		cachedRb.stabilizationThreshold = stabilizationThreshold;
 	}
 
 private:
@@ -1940,12 +2300,6 @@ public:
 		filter.queryMask = desc.queryMask;
 		filter.isTrigger = false;
 
-		if (actor)
-		{
-			actor->userData = desc.userData;
-			// Ensure kinematic (should already be)
-			actor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
-		}
 	}
 
 	~PhysXCharacterController() override

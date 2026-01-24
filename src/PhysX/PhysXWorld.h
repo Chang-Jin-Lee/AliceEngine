@@ -112,6 +112,11 @@ public:
 		const Quat& rot,
 		const ConvexMeshColliderDesc& mesh) override;
 
+	std::unique_ptr<IPhysicsActor> CreateStaticHeightField(
+		const Vec3& pos,
+		const Quat& rot,
+		const HeightFieldColliderDesc& heightField) override;
+
 	std::unique_ptr<IRigidBody> CreateDynamicConvexMesh(
 		const Vec3& pos,
 		const Quat& rot,
@@ -247,6 +252,135 @@ public:
 		bool hitTriggers = false,
 		bool alignYAxis = true) const override;
 
+	// Extended Queries (Q)
+	bool RaycastQ(
+		const Vec3& origin,
+		const Vec3& dir,
+		float maxDist,
+		RaycastHit& outHit,
+		const SceneQueryFilter& filter) const override;
+
+	uint32_t RaycastAllQ(
+		const Vec3& origin,
+		const Vec3& dir,
+		float maxDist,
+		std::vector<RaycastHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const override;
+
+	uint32_t OverlapBoxQ(
+		const Vec3& center,
+		const Quat& rot,
+		const Vec3& halfExtents,
+		std::vector<OverlapHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const override;
+
+	uint32_t OverlapSphereQ(
+		const Vec3& center,
+		float radius,
+		std::vector<OverlapHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const override;
+
+	uint32_t OverlapCapsuleQ(
+		const Vec3& center,
+		const Quat& rot,
+		float radius,
+		float halfHeight,
+		std::vector<OverlapHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64,
+		bool alignYAxis = true) const override;
+
+	bool SweepBoxQ(
+		const Vec3& origin,
+		const Quat& rot,
+		const Vec3& halfExtents,
+		const Vec3& dir,
+		float maxDist,
+		SweepHit& outHit,
+		const SceneQueryFilter& filter) const override;
+
+	bool SweepSphereQ(
+		const Vec3& origin,
+		float radius,
+		const Vec3& dir,
+		float maxDist,
+		SweepHit& outHit,
+		const SceneQueryFilter& filter) const override;
+
+	bool SweepCapsuleQ(
+		const Vec3& origin,
+		const Quat& rot,
+		float radius,
+		float halfHeight,
+		const Vec3& dir,
+		float maxDist,
+		SweepHit& outHit,
+		const SceneQueryFilter& filter,
+		bool alignYAxis = true) const override;
+
+	uint32_t SweepBoxAllQ(
+		const Vec3& origin,
+		const Quat& rot,
+		const Vec3& halfExtents,
+		const Vec3& dir,
+		float maxDist,
+		std::vector<SweepHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const override;
+
+	uint32_t SweepSphereAllQ(
+		const Vec3& origin,
+		float radius,
+		const Vec3& dir,
+		float maxDist,
+		std::vector<SweepHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64) const override;
+
+	uint32_t SweepCapsuleAllQ(
+		const Vec3& origin,
+		const Quat& rot,
+		float radius,
+		float halfHeight,
+		const Vec3& dir,
+		float maxDist,
+		std::vector<SweepHit>& outHits,
+		const SceneQueryFilter& filter,
+		uint32_t maxHits = 64,
+		bool alignYAxis = true) const override;
+
+	// Penetration (MTD) 헬퍼
+	bool ComputePenetrationBoxVsShape(
+		const Vec3& center,
+		const Quat& rot,
+		const Vec3& halfExtents,
+		void* otherNativeActor,
+		void* otherNativeShape,
+		Vec3& outDirection,
+		float& outDepth) const override;
+
+	bool ComputePenetrationSphereVsShape(
+		const Vec3& center,
+		float radius,
+		void* otherNativeActor,
+		void* otherNativeShape,
+		Vec3& outDirection,
+		float& outDepth) const override;
+
+	bool ComputePenetrationCapsuleVsShape(
+		const Vec3& center,
+		const Quat& rot,
+		float radius,
+		float halfHeight,
+		bool alignYAxis,
+		void* otherNativeActor,
+		void* otherNativeShape,
+		Vec3& outDirection,
+		float& outDepth) const override;
+
 	void DrainActiveTransforms(std::vector<ActiveTransform>& outTransforms) override;
 
 	void DrainEvents(std::vector<PhysicsEvent>& outEvents) override;
@@ -255,4 +389,7 @@ public:
 private:
 	PhysXContext& ctx;
 	std::shared_ptr<Impl> impl;
+	// 월드가 소유하는 내부 액터들 (CreateStaticPlane 등 void 반환 함수용)
+	// impl 다음에 선언하여 파괴 순서 보장: m_internalActors 먼저 파괴 → impl 파괴 (C++ 파괴 순서는 역순)
+	std::vector<std::unique_ptr<IPhysicsActor>> m_internalActors;
 };

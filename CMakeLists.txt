@@ -94,6 +94,7 @@ set(ENGINE_SOURCES
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
+    ${ALICE_SRC_DIR}/Core/ThreadSafety.cpp
     ${ALICE_SRC_DIR}/Core/IScript.cpp
     ${ALICE_SRC_DIR}/Core/ScriptFactory.cpp
     ${ALICE_SRC_DIR}/Core/ScriptSystem.cpp
@@ -102,6 +103,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Material.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.cpp
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.cpp
     ${ALICE_SRC_DIR}/Core/CameraSystem.cpp
     ${ALICE_SRC_DIR}/Core/ResourceManager.cpp
     ${ALICE_SRC_DIR}/Core/Scene.cpp
@@ -112,6 +114,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/Helper.cpp
     ${ALICE_SRC_DIR}/Core/Vertex.cpp
     ${ALICE_SRC_DIR}/Core/Input.cpp
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.cpp
 
     # Audio
     ${ALICE_SRC_DIR}/Audio/AudioSystem.cpp
@@ -132,8 +135,10 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.cpp
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.cpp
-    ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.h
+    ${ALICE_SRC_DIR}/Rendering/SkinnedMeshRegistry.cpp
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
     
     #PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -141,16 +146,18 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Core.cpp
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Joints.cpp
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Queries.cpp
-    ${ALICE_SRC_DIR}/PhysX/Module/
+    ${ALICE_SRC_DIR}/PhysX/PhysicsSystem.cpp
     #Physx Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
-    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.cpp
 
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
+	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
+	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
 )
 
 set(ENGINE_HEADERS
@@ -162,6 +169,7 @@ set(ENGINE_HEADERS
 
     # 코어
     ${ALICE_SRC_DIR}/Core/World.h
+    ${ALICE_SRC_DIR}/Core/ThreadSafety.h
     ${ALICE_SRC_DIR}/Core/GameObject.h
     ${ALICE_SRC_DIR}/Core/Delegate.h
     ${ALICE_SRC_DIR}/Core/IScript.h
@@ -178,6 +186,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/ReflectionSerializer.h
     ${ALICE_SRC_DIR}/Core/ReflectionUI.h
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.h
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.h
+    ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.inl
     ${ALICE_SRC_DIR}/Core/Component.h
     ${ALICE_SRC_DIR}/Core/Entity.h
     ${ALICE_SRC_DIR}/Core/System.h
@@ -191,6 +201,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/Singleton.h
     ${ALICE_SRC_DIR}/Core/Helper.h
     ${ALICE_SRC_DIR}/Core/Vertex.h
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.h
     ${ALICE_SRC_DIR}/Core/JsonRttr.h
     ${ALICE_SRC_DIR}/Core/InputTypes.h
 
@@ -199,6 +210,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Audio/SoundManager.h
     
     #컴포넌트들
+    ${ALICE_SRC_DIR}/Components/ComponentStorage.h
     ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h
     ${ALICE_SRC_DIR}/Components/CameraComponent.h
     ${ALICE_SRC_DIR}/Components/CameraFollowComponent.h
@@ -206,12 +218,11 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/CameraLookAtComponent.h
     ${ALICE_SRC_DIR}/Components/CameraShakeComponent.h
     ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
-    ${ALICE_SRC_DIR}/Components/AnimBlueprintComponent.h
-    ${ALICE_SRC_DIR}/Components/AdvancedAnimComponent.h
-    ${ALICE_SRC_DIR}/Components/SocketComponent.h
-    ${ALICE_SRC_DIR}/Components/AudioSourceComponent.h
-    ${ALICE_SRC_DIR}/Components/AudioListenerComponent.h
+    ${ALICE_SRC_DIR}/Components/AdvancedAnimationComponent.h
+    ${ALICE_SRC_DIR}/Components/AdvancedAnimator.h
     ${ALICE_SRC_DIR}/Components/SoundBoxComponent.h
+    ${ALICE_SRC_DIR}/Components/AudioListenerComponent.h
+    ${ALICE_SRC_DIR}/Components/AudioSourceComponent.h
     ${ALICE_SRC_DIR}/Components/MaterialComponent.h
     ${ALICE_SRC_DIR}/Components/PointLightComponent.h
     ${ALICE_SRC_DIR}/Components/RectLightComponent.h
@@ -220,6 +231,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/SkinnedMeshComponent.h
     ${ALICE_SRC_DIR}/Components/SpotLightComponent.h
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
+    ${ALICE_SRC_DIR}/Components/TrailEffectComponent.h
+    ${ALICE_SRC_DIR}/Components/EffectComponent.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
@@ -239,34 +252,50 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
     ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
+    ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
     
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
-
-    # AnimBlueprint
-    ${ALICE_SRC_DIR}/Game/AnimBlueprintAsset.h
-    ${ALICE_SRC_DIR}/Game/AnimBlueprintSystem.h
+    ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
     ${ALICE_SRC_DIR}/Game/AdvancedAnimSystem.h
-
     #PhysX 물리
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
+	${ALICE_SRC_DIR}/PhysX/PhysicsSystem.h
     #Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
-    ${ALICE_SRC_DIR}/PhysX/Module/PhysicsScene.h
     #Components
-    ${ALICE_SRC_DIR}/PhysX/Components/PhysicsSceneSettingsComponent.h
-
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_SettingsComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_MeshColliderComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_JointComponent.h
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
+
+	${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
+	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
+	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
 )
 
 add_library(Engine STATIC
@@ -276,6 +305,11 @@ add_library(Engine STATIC
 
 # [설정] Engine에 RTTR 연결 (PUBLIC: 엔진을 쓰는 프로젝트도 RTTR 사용 가능)
 target_link_libraries(Engine PUBLIC RTTR::Core)
+
+if(MSVC)
+    # ComponentRegistry.cpp의 RTTR 등록이 커져서 obj가 커짐
+    target_compile_options(Engine PRIVATE /bigobj)
+endif()
 
 source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 
@@ -314,7 +348,7 @@ set(APP_HEADERS
     ${ALICE_SRC_DIR}/Game/FbxImporter.h
     ${ALICE_SRC_DIR}/Game/FbxAsset.h
     ${ALICE_SRC_DIR}/Game/SkinnedMeshSystem.h
-    ${ALICE_SRC_DIR}/Game/SkinnedAnimationSystem.h
+    ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.h
 )
 
 # 1. Launch (에디터/툴 모드) 엔트리 포인트
@@ -486,8 +520,8 @@ endforeach()
 if(MSVC)
     # 경고 레벨
     target_compile_options(Engine      PRIVATE /W4 /permissive- /bigobj)
-    target_compile_options(Launch      PRIVATE /W4 /permissive-)
-    target_compile_options(AlicePlayer PRIVATE /W4 /permissive-)
+    target_compile_options(Launch      PRIVATE /W4 /permissive- /bigobj)
+    target_compile_options(AlicePlayer PRIVATE /W4 /permissive- /bigobj)
 
     # Include 경로 추가 (상단에서 설정한 VCPKG_ROOT 사용)
     target_include_directories(Engine
