@@ -144,10 +144,31 @@ namespace Alice
             EntityId camId = InvalidEntityId;
             for (const auto& [id, cam] : world.GetComponents<CameraComponent>())
             {
-                if (cam.primary) { camId = id; break; }
+                if (cam.GetPrimary()) { camId = id; break; }
                 if (camId == InvalidEntityId) camId = id;
             }
             return camId;
+        }
+
+        // [중요] 타겟 카메라의 속성을 안전하게 가져오는 함수
+        static bool FetchTargetCameraInfo(World& world, EntityId id,
+                                          DirectX::XMFLOAT3& outPos, DirectX::XMFLOAT3& outRot,
+                                          float& outFov, float& outNear, float& outFar)
+        {
+            if (id == InvalidEntityId) return false;
+            auto* tr = world.GetComponent<TransformComponent>(id);
+            auto* cam = world.GetComponent<CameraComponent>(id);
+            if (!tr || !cam) return false;
+
+            outPos = tr->position;
+            outRot = tr->rotation; // Euler Radian
+            
+            // CameraComponent 내부 객체에서 정보 가져옴
+            const Camera& c = cam->GetCamera();
+            outFov = c.GetFovYRadians();
+            outNear = c.GetNearPlane();
+            outFar = c.GetFarPlane();
+            return true;
         }
 
         static bool GetCameraSnapshot(World& world, EntityId id,
@@ -157,16 +178,7 @@ namespace Alice
                                       float& outNear,
                                       float& outFar)
         {
-            if (id == InvalidEntityId) return false;
-            const auto* tr = world.GetComponent<TransformComponent>(id);
-            const auto* cam = world.GetComponent<CameraComponent>(id);
-            if (!tr || !cam) return false;
-            outPos = tr->position;
-            outRot = tr->rotation;
-            outFovY = cam->fovYRad;
-            outNear = cam->nearPlane;
-            outFar = cam->farPlane;
-            return true;
+            return FetchTargetCameraInfo(world, id, outPos, outRot, outFovY, outNear, outFar);
         }
 
         static void ApplyCameraSnapshot(World& world, EntityId id,
@@ -182,15 +194,36 @@ namespace Alice
             if (!tr || !cam) return;
             tr->position = pos;
             tr->rotation = rot;
-            cam->fovYRad = fovY;
-            cam->nearPlane = nearPlane;
-            cam->farPlane = farPlane;
+            // Camera 객체에 FOV, Near, Far 설정
+            Camera& camera = cam->GetCamera();
+            camera.SetPerspective(fovY, camera.GetAspectRatio(), nearPlane, farPlane);
         }
     }
 
     void CameraSystem::Update(World& world, InputSystem& input, float deltaTime)
     {
-        (void)input; // 입력은 Script(CameraController)가 처리
+        // 1. [동기화] TransformComponent -> Camera Object
+        // (스크립트나 다른 시스템이 Transform을 움직였을 때 Camera 뷰 행렬 갱신)
+        world.UpdateTransformMatrices();
+
+        for (auto [id, camComp] : world.GetComponents<CameraComponent>())
+        {
+            auto* tc = world.GetComponent<TransformComponent>(id);
+            if (!tc) continue;
+
+            // TransformComponent는 오일러 회전을 가짐 (내부적으로 Euler 저장)
+            // Camera 객체에 동기화
+            Camera& camera = camComp.GetCamera();
+            camera.SetPosition(tc->position);
+            
+            // Transform의 오일러 회전을 쿼터니언으로 변환해서 카메라에 전달
+            DirectX::XMVECTOR q = DirectX::XMQuaternionRotationRollPitchYaw(tc->rotation.x, tc->rotation.y, tc->rotation.z);
+            DirectX::XMFLOAT4 quat;
+            DirectX::XMStoreFloat4(&quat, q);
+            camera.SetRotation(quat);
+
+            camera.SetScale(tc->scale);
+        }
 
         const EntityId outputId = FindPrimaryCamera(world);
         if (outputId == InvalidEntityId)
@@ -207,9 +240,65 @@ namespace Alice
         auto* springComp = world.GetComponent<CameraSpringArmComponent>(outputId);
         auto* lookAtComp = world.GetComponent<CameraLookAtComponent>(outputId);
 
-        // === 블렌드 처리 ===
-        if (blendComp && blendComp->active)
+        // --- 입력 처리 (System에서 담당) ---
+        if (followComp && followComp->enabled && followComp->enableInput)
         {
+            // LockOn 상태이고 매뉴얼 조작 불가능하면 스킵
+            bool skipInput = (followComp->lockOnActive && !followComp->allowManualOrbitInLockOn);
+            if (!skipInput)
+            {
+                // 마우스 드래그로 회전
+                if (input.IsLeftButtonDown() || input.IsRightButtonDown())
+                {
+                    float dx = static_cast<float>(input.GetMouseDelta().x);
+                    float dy = static_cast<float>(input.GetMouseDelta().y);
+                    followComp->yawDeg -= dx * followComp->sensitivity;
+                    followComp->pitchDeg -= dy * followComp->sensitivity;
+                    followComp->pitchDeg = std::clamp(followComp->pitchDeg, followComp->pitchMinDeg, followComp->pitchMaxDeg);
+                }
+            }
+        }
+        
+        if (springComp && springComp->enabled && springComp->enableZoom)
+        {
+            float wheel = input.GetMouseScrollDelta();
+            if (std::abs(wheel) > 0.001f)
+            {
+                springComp->desiredDistance -= wheel * springComp->zoomSpeed;
+                springComp->desiredDistance = std::clamp(springComp->desiredDistance, springComp->minDistance, springComp->maxDistance);
+            }
+        }
+
+        // --- 블렌드 로직 ---
+        bool blending = (blendComp && blendComp->active);
+        
+        if (blending)
+        {
+            // 스냅샷 캡처 (블렌드 시작 시점)
+            if (blendComp->needsSnapshot)
+            {
+                // 현재 상태를 Source로 저장
+                const Camera& cam = outputCam->GetCamera();
+                blendComp->sourcePosition = outputTr->position;
+                blendComp->sourceRotation = outputTr->rotation;
+                blendComp->sourceFovY = cam.GetFovYRadians();
+                blendComp->sourceNear = cam.GetNearPlane();
+                blendComp->sourceFar  = cam.GetFarPlane();
+                
+                blendComp->elapsed = 0.0f;
+                blendComp->slowTriggered = false;
+                blendComp->slowElapsed = 0.0f;
+                blendComp->needsSnapshot = false; // 처리 완료
+
+                // 타겟 ID 확인 (이름으로 찾기)
+                if (blendComp->targetId == InvalidEntityId && !blendComp->targetName.empty())
+                {
+                    auto go = world.FindGameObject(blendComp->targetName);
+                    if (go.IsValid()) blendComp->targetId = go.id();
+                }
+            }
+
+            // 슬로우 모션 등 시간 조절
             float dt = deltaTime;
             if (blendComp->slowDuration > 0.0f && !blendComp->slowTriggered)
             {
@@ -230,40 +319,63 @@ namespace Alice
             }
 
             blendComp->elapsed += dt;
-            const float duration = (blendComp->duration > 0.0f) ? blendComp->duration : 0.0001f;
-            float t01 = std::clamp(blendComp->elapsed / duration, 0.0f, 1.0f);
+            float duration = std::max(blendComp->duration, 0.0001f);
+            float t = std::clamp(blendComp->elapsed / duration, 0.0f, 1.0f);
+            
+            // Curve 사용 여부에 따라 보간 방식 결정
             if (blendComp->useSmoothStep)
-                t01 = t01 * t01 * (3.0f - 2.0f * t01);
+                t = t * t * (3.0f - 2.0f * t);
 
-            DirectX::XMFLOAT3 targetPos{}, targetRot{};
-            float targetFov{}, targetNear{}, targetFar{};
-            EntityId targetId = blendComp->targetId;
-            if (targetId == InvalidEntityId && !blendComp->targetName.empty())
+            // 타겟 정보 가져오기
+            DirectX::XMFLOAT3 tPos, tRot;
+            float tFov, tNear, tFar;
+            if (FetchTargetCameraInfo(world, blendComp->targetId, tPos, tRot, tFov, tNear, tFar))
             {
-                auto go = world.FindGameObject(blendComp->targetName);
-                if (go.IsValid()) targetId = go.id();
-            }
-            if (GetCameraSnapshot(world, targetId, targetPos, targetRot, targetFov, targetNear, targetFar))
-            {
-                const DirectX::XMFLOAT3 pos = LerpVec(blendComp->sourcePosition, targetPos, t01);
-                const DirectX::XMFLOAT4 qA = EulerToQuaternion(blendComp->sourceRotation);
-                const DirectX::XMFLOAT4 qB = EulerToQuaternion(targetRot);
-                DirectX::XMFLOAT4 qOut{};
-                DirectX::XMStoreFloat4(&qOut, DirectX::XMQuaternionSlerp(DirectX::XMLoadFloat4(&qA),
-                                                                         DirectX::XMLoadFloat4(&qB),
-                                                                         t01));
-                const DirectX::XMFLOAT3 rot = QuaternionToEuler(qOut);
-                const float fovY = blendComp->sourceFovY + (targetFov - blendComp->sourceFovY) * t01;
-                const float nearP = blendComp->sourceNear + (targetNear - blendComp->sourceNear) * t01;
-                const float farP = blendComp->sourceFar + (targetFar - blendComp->sourceFar) * t01;
-                ApplyCameraSnapshot(world, outputId, pos, rot, fovY, nearP, farP);
+                // 보간 적용
+                outputTr->position = LerpVec(blendComp->sourcePosition, tPos, t);
+                
+                DirectX::XMVECTOR qA = DirectX::XMQuaternionRotationRollPitchYaw(blendComp->sourceRotation.x, blendComp->sourceRotation.y, blendComp->sourceRotation.z);
+                DirectX::XMVECTOR qB = DirectX::XMQuaternionRotationRollPitchYaw(tRot.x, tRot.y, tRot.z);
+                DirectX::XMVECTOR qOut = DirectX::XMQuaternionSlerp(qA, qB, t);
+                
+                // 쿼터니언 -> 오일러 변환 후 Transform에 저장
+                DirectX::XMFLOAT4 qf; DirectX::XMStoreFloat4(&qf, qOut);
+                outputTr->rotation = QuaternionToEuler(qf);
+
+                // 카메라 렌즈 설정 (FOV 등)
+                float fov = blendComp->sourceFovY + (tFov - blendComp->sourceFovY) * t;
+                float nr  = blendComp->sourceNear + (tNear - blendComp->sourceNear) * t;
+                float fr  = blendComp->sourceFar  + (tFar - blendComp->sourceFar) * t;
+                
+                Camera& cam = outputCam->GetCamera();
+                cam.SetPerspective(fov, cam.GetAspectRatio(), nr, fr);
             }
 
-            if (t01 >= 1.0f)
-                blendComp->active = false;
+            // [핵심 수정] 블렌드 종료 시 처리
+            if (t >= 1.0f)
+            {
+                blendComp->active = false; // 블렌드 종료
+
+                // ★ FollowComponent 내부 상태 동기화 ★
+                // 블렌드가 끝난 위치를 FollowComponent의 '현재 위치'로 갱신해 주어야
+                // 다음 프레임에 Follow가 켜질 때 과거 위치로 튀지 않습니다.
+                if (followComp)
+                {
+                    followComp->smoothedPosition = outputTr->position;
+                    followComp->smoothedRotation = outputTr->rotation;
+                    
+                    // Yaw/Pitch도 현재 회전값에 맞춰 갱신 (쿼터니언->오일러 변환된 값 사용)
+                    followComp->yawDeg   = RadToDeg(outputTr->rotation.y);
+                    followComp->pitchDeg = RadToDeg(outputTr->rotation.x);
+                }
+                
+                // SpringArm 거리도 필요하다면 여기서 타겟과의 거리를 계산해 갱신할 수 있습니다.
+                // (지금은 위치/회전 동기화만으로도 튐 현상은 대부분 해결됩니다)
+            }
         }
 
-        const bool blending = (blendComp && blendComp->active);
+        // [수정] 변수 재정의 제거 (위에서 선언한 blending 변수 갱신)
+        blending = (blendComp && blendComp->active);
         const bool externalLook = (!blending && lookAtComp && lookAtComp->enabled);
 
         // === 팔로우 처리 (블렌드 중이 아닐 때) ===
@@ -453,7 +565,10 @@ namespace Alice
 
             const float fovAlpha = ExpSmooth(followComp->fovDamping, dt);
             const float targetFovRad = DegToRad(modeFovDeg);
-            outputCam->fovYRad = outputCam->fovYRad + (targetFovRad - outputCam->fovYRad) * fovAlpha;
+            Camera& camera = outputCam->GetCamera();
+            float currentFov = camera.GetFovYRadians();
+            float newFov = currentFov + (targetFovRad - currentFov) * fovAlpha;
+            camera.SetPerspective(newFov, camera.GetAspectRatio(), camera.GetNearPlane(), camera.GetFarPlane());
         }
     FollowDone:
 
