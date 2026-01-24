@@ -809,6 +809,7 @@ namespace Alice
 					transform->rotation = newData.rotation;
 					transform->scale = newData.scale;
 					transform->enabled = newData.enabled;
+					world.MarkTransformDirty(entityId);
 				}
 			}
 
@@ -820,6 +821,7 @@ namespace Alice
 					transform->rotation = oldData.rotation;
 					transform->scale = oldData.scale;
 					transform->enabled = oldData.enabled;
+					world.MarkTransformDirty(entityId);
 				}
 			}
 
@@ -2027,7 +2029,7 @@ namespace Alice
 					{
 						cachedOnce = true;
 
-						auto dirAbs = m_resources->Resolve("Assets/Fbx/Primitives");
+						auto dirAbs = m_resources->Resolve("Assets/Fbx");
 						if (std::filesystem::exists(dirAbs))
 						{
 							for (auto& it : std::filesystem::directory_iterator(dirAbs))
@@ -2035,7 +2037,8 @@ namespace Alice
 								if (!it.is_regular_file()) continue;
 								auto p = it.path();
 								auto ext = p.extension().string();
-								std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+								std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 								if (ext == ".fbxasset")
 									cached.push_back(p);
 							}
@@ -2445,7 +2448,8 @@ namespace Alice
 						const char* pathStr = static_cast<const char*>(payload->Data);
 						std::filesystem::path droppedPath(pathStr);
 						std::string ext = droppedPath.extension().string();
-						std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+						std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 						
 						// 씬 파일(.scene)을 드래그하면 해당 씬 파일의 디렉토리 경로를 Export Path로 설정
 						if (ext == ".scene")
@@ -2875,7 +2879,8 @@ namespace Alice
 						const char* pathStr = static_cast<const char*>(payload->Data);
 						std::filesystem::path droppedPath(pathStr);
 						std::string ext = droppedPath.extension().string();
-						std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+						std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
 						if (ext == ".prefab")
 						{
@@ -2974,7 +2979,8 @@ namespace Alice
 						const char* pathStr = static_cast<const char*>(payload->Data);
 						std::filesystem::path droppedPath(pathStr);
 						std::string ext = droppedPath.extension().string();
-						std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+						std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
 						if (ext == ".prefab")
 						{
@@ -3067,7 +3073,8 @@ namespace Alice
 								std::string ext = droppedPath.extension().string();
 
 								// FBX 파일인지 확인
-								std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+								std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 								if (ext == ".fbx" || ext == ".fbxasset")
 								{
 									// 논리 경로로 변환
@@ -3337,7 +3344,8 @@ namespace Alice
 							const char* pathStr = static_cast<const char*>(payload->Data);
 							std::filesystem::path droppedPath(pathStr);
 							std::string ext = droppedPath.extension().string();
-							std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+							std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
 							if (ext == ".prefab")
 							{
@@ -3384,6 +3392,7 @@ namespace Alice
 										if (auto* transform = world.GetComponent<TransformComponent>(e))
 										{
 											transform->position = spawnPosition;
+											world.MarkTransformDirty(e);
 										}
 										selectedEntity = e;
 										g_SceneDirty = true;
@@ -3512,35 +3521,26 @@ namespace Alice
 									parentWorldMatrix = world.ComputeWorldMatrix(transform->parent);
 								}
 								
-								// 부모의 월드 행렬을 역으로 곱해서 로컬 행렬 추출 (row-vector 컨벤션)
-								XMMATRIX parentWorldMatrixInv = XMMatrixInverse(nullptr, parentWorldMatrix);
-								XMMATRIX localMatrix = manipulatedWorldMatrix * parentWorldMatrixInv;
-								
-								// 어댑터 함수를 사용하여 로컬 행렬을 TRS로 분해
-								XMFLOAT3 newPosition, newRotation, newScale;
-								if (DecomposeLocalMatrix(localMatrix, newPosition, newRotation, newScale))
-								{
-									transform->position = newPosition;
-									transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
-									transform->scale = newScale;
-								}
-								
+							// 부모의 월드 행렬을 역으로 곱해서 로컬 행렬 추출 (row-vector 컨벤션)
+							XMMATRIX parentWorldMatrixInv = XMMatrixInverse(nullptr, parentWorldMatrix);
+							
+							// 오브젝트 스냅 모드: 다른 엔티티에 스냅 (스냅이 있으면 월드 행렬 수정)
+							XMMATRIX finalWorldMatrix = manipulatedWorldMatrix;
+							if (snapMode == SnapMode::Object && gizmoOp == ImGuizmo::TRANSLATE)
+							{
 								// 오브젝트 스냅 모드용 위치 (월드 공간)
 								XMFLOAT3 worldPosition;
 								XMStoreFloat3(&worldPosition, XMVector3TransformCoord(XMVectorZero(), manipulatedWorldMatrix));
+								XMVECTOR currentPos = XMLoadFloat3(&worldPosition);
+								
+								float minDistance = objectSnapDistance;
+								XMFLOAT3 snappedPosition = worldPosition;
+								bool foundSnap = false;
 
-								// 오브젝트 스냅 모드: 다른 엔티티에 스냅
-								if (snapMode == SnapMode::Object && gizmoOp == ImGuizmo::TRANSLATE)
+								// 모든 엔티티를 순회하며 가장 가까운 위치 찾기
+								for (auto&& [eid, otherTransform] : world.GetComponents<TransformComponent>())
 								{
-									XMVECTOR currentPos = XMLoadFloat3(&worldPosition);
-									float minDistance = objectSnapDistance;
-									XMFLOAT3 snappedPosition = worldPosition;
-									bool foundSnap = false;
-
-									// 모든 엔티티를 순회하며 가장 가까운 위치 찾기
-									for (auto&& [eid, otherTransform] : world.GetComponents<TransformComponent>())
-									{
-										if (eid == selectedEntity) continue; // 자기 자신은 제외
+									if (eid == selectedEntity) continue; // 자기 자신은 제외
 
 									// 스냅 타입에 따라 타겟 위치 결정
 									// 초기값: 월드 위치로 설정 (폴백용)
@@ -3564,170 +3564,164 @@ namespace Alice
 										}
 										break;
 
-										case ObjectSnapType::Vertex:
-										case ObjectSnapType::Edge:
-										case ObjectSnapType::Face:
+									case ObjectSnapType::Vertex:
+									case ObjectSnapType::Edge:
+									case ObjectSnapType::Face:
+									{
+										// 메시 데이터 접근하여 버텍스/엣지/면 스냅
+										if (auto* skinned = world.GetComponent<SkinnedMeshComponent>(eid))
 										{
-											// 메시 데이터 접근하여 버텍스/엣지/면 스냅
-											if (auto* skinned = world.GetComponent<SkinnedMeshComponent>(eid))
+											if (m_skinnedRegistry && !skinned->meshAssetPath.empty())
 											{
-												if (m_skinnedRegistry && !skinned->meshAssetPath.empty())
+												auto mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+												if (mesh && mesh->sourceModel)
 												{
-													auto mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
-													if (mesh && mesh->sourceModel)
+													// 어댑터 함수를 사용하여 월드 행렬 계산
+													XMMATRIX worldMatrix = world.ComputeWorldMatrix(eid);
+
+													const auto& vertices = mesh->sourceModel->GetCPUVertices();
+													const auto& indices = mesh->sourceModel->GetCPUIndices();
+
+													if (!vertices.empty())
 													{
-														// 어댑터 함수를 사용하여 월드 행렬 계산
-														XMMATRIX worldMatrix = world.ComputeWorldMatrix(eid);
-
-														const auto& vertices = mesh->sourceModel->GetCPUVertices();
-														const auto& indices = mesh->sourceModel->GetCPUIndices();
-
-														if (!vertices.empty())
+														if (objectSnapType == ObjectSnapType::Vertex)
 														{
-															if (objectSnapType == ObjectSnapType::Vertex)
+															// 버텍스 스냅: 모든 버텍스를 월드 공간으로 변환
+															for (const auto& vert : vertices)
 															{
-																// 버텍스 스냅: 모든 버텍스를 월드 공간으로 변환
-																for (const auto& vert : vertices)
-																{
-																	XMVECTOR localPos = XMLoadFloat3(&vert.pos);
-																	XMVECTOR worldPos = XMVector3TransformCoord(localPos, worldMatrix);
+																XMVECTOR localPos = XMLoadFloat3(&vert.pos);
+																XMVECTOR worldPos = XMVector3TransformCoord(localPos, worldMatrix);
 
-																	XMVECTOR diff = currentPos - worldPos;
+																XMVECTOR diff = currentPos - worldPos;
+																float dist = XMVectorGetX(XMVector3Length(diff));
+
+																if (dist < bestSnapDist)
+																{
+																	bestSnapDist = dist;
+																	bestSnapPos = worldPos;
+																	hasMeshSnap = true;
+																}
+															}
+														}
+														else if (objectSnapType == ObjectSnapType::Edge && !indices.empty())
+														{
+															// 엣지 스냅: 인덱스를 사용해 엣지 중점 계산
+															// 삼각형 리스트 가정 (3개씩)
+															for (size_t i = 0; i < indices.size(); i += 3)
+															{
+																if (i + 2 >= indices.size()) break;
+
+																uint32_t i0 = indices[i];
+																uint32_t i1 = indices[i + 1];
+																uint32_t i2 = indices[i + 2];
+
+																if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size())
+																	continue;
+
+																// 삼각형의 3개 엣지
+																XMVECTOR v0 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i0].pos), worldMatrix);
+																XMVECTOR v1 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i1].pos), worldMatrix);
+																XMVECTOR v2 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i2].pos), worldMatrix);
+
+																// 각 엣지의 중점
+																XMVECTOR edgeMidpoints[3] = {
+																	(v0 + v1) * 0.5f,
+																	(v1 + v2) * 0.5f,
+																	(v2 + v0) * 0.5f
+																};
+
+																for (int e = 0; e < 3; ++e)
+																{
+																	XMVECTOR diff = currentPos - edgeMidpoints[e];
 																	float dist = XMVectorGetX(XMVector3Length(diff));
 
 																	if (dist < bestSnapDist)
 																	{
 																		bestSnapDist = dist;
-																		bestSnapPos = worldPos;
+																		bestSnapPos = edgeMidpoints[e];
 																		hasMeshSnap = true;
 																	}
 																}
 															}
-															else if (objectSnapType == ObjectSnapType::Edge && !indices.empty())
+														}
+														else if (objectSnapType == ObjectSnapType::Face && !indices.empty())
+														{
+															// 면 스냅: 삼각형 중심 계산
+															for (size_t i = 0; i < indices.size(); i += 3)
 															{
-																// 엣지 스냅: 인덱스를 사용해 엣지 중점 계산
-																// 삼각형 리스트 가정 (3개씩)
-																for (size_t i = 0; i < indices.size(); i += 3)
+																if (i + 2 >= indices.size()) break;
+
+																uint32_t i0 = indices[i];
+																uint32_t i1 = indices[i + 1];
+																uint32_t i2 = indices[i + 2];
+
+																if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size())
+																	continue;
+
+																XMVECTOR v0 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i0].pos), worldMatrix);
+																XMVECTOR v1 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i1].pos), worldMatrix);
+																XMVECTOR v2 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i2].pos), worldMatrix);
+
+																// 삼각형 중심 (3개 버텍스의 평균)
+																XMVECTOR faceCenter = (v0 + v1 + v2) / 3.0f;
+
+																XMVECTOR diff = currentPos - faceCenter;
+																float dist = XMVectorGetX(XMVector3Length(diff));
+
+																if (dist < bestSnapDist)
 																{
-																	if (i + 2 >= indices.size()) break;
-
-																	uint32_t i0 = indices[i];
-																	uint32_t i1 = indices[i + 1];
-																	uint32_t i2 = indices[i + 2];
-
-																	if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size())
-																		continue;
-
-																	// 삼각형의 3개 엣지
-																	XMVECTOR v0 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i0].pos), worldMatrix);
-																	XMVECTOR v1 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i1].pos), worldMatrix);
-																	XMVECTOR v2 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i2].pos), worldMatrix);
-
-																	// 각 엣지의 중점
-																	XMVECTOR edgeMidpoints[3] = {
-																		(v0 + v1) * 0.5f,
-																		(v1 + v2) * 0.5f,
-																		(v2 + v0) * 0.5f
-																	};
-
-																	for (int e = 0; e < 3; ++e)
-																	{
-																		XMVECTOR diff = currentPos - edgeMidpoints[e];
-																		float dist = XMVectorGetX(XMVector3Length(diff));
-
-																		if (dist < bestSnapDist)
-																		{
-																			bestSnapDist = dist;
-																			bestSnapPos = edgeMidpoints[e];
-																			hasMeshSnap = true;
-																		}
-																	}
-																}
-															}
-															else if (objectSnapType == ObjectSnapType::Face && !indices.empty())
-															{
-																// 면 스냅: 삼각형 중심 계산
-																for (size_t i = 0; i < indices.size(); i += 3)
-																{
-																	if (i + 2 >= indices.size()) break;
-
-																	uint32_t i0 = indices[i];
-																	uint32_t i1 = indices[i + 1];
-																	uint32_t i2 = indices[i + 2];
-
-																	if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size())
-																		continue;
-
-																	XMVECTOR v0 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i0].pos), worldMatrix);
-																	XMVECTOR v1 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i1].pos), worldMatrix);
-																	XMVECTOR v2 = XMVector3TransformCoord(XMLoadFloat3(&vertices[i2].pos), worldMatrix);
-
-																	// 삼각형 중심 (3개 버텍스의 평균)
-																	XMVECTOR faceCenter = (v0 + v1 + v2) / 3.0f;
-
-																	XMVECTOR diff = currentPos - faceCenter;
-																	float dist = XMVectorGetX(XMVector3Length(diff));
-
-																	if (dist < bestSnapDist)
-																	{
-																		bestSnapDist = dist;
-																		bestSnapPos = faceCenter;
-																		hasMeshSnap = true;
-																	}
+																	bestSnapDist = dist;
+																	bestSnapPos = faceCenter;
+																	hasMeshSnap = true;
 																}
 															}
 														}
 													}
 												}
 											}
-
-											// 메시가 없으면 중심점으로 폴백 (이미 bestSnapPos에 월드 위치 설정됨)
-											if (!hasMeshSnap)
-											{
-												hasMeshSnap = true;
-											}
-											break;
-										}
 										}
 
-										if (hasMeshSnap)
+										// 메시가 없으면 중심점으로 폴백 (이미 bestSnapPos에 월드 위치 설정됨)
+										if (!hasMeshSnap)
 										{
-											XMVECTOR diff = currentPos - bestSnapPos;
-											float distance = XMVectorGetX(XMVector3Length(diff));
-
-											if (distance < minDistance)
-											{
-												minDistance = distance;
-												XMStoreFloat3(&snappedPosition, bestSnapPos);
-												foundSnap = true;
-											}
+											hasMeshSnap = true;
 										}
+										break;
+									}
 									}
 
-									if (foundSnap)
+									if (hasMeshSnap)
 									{
-										// 스냅된 월드 위치를 조작된 월드 행렬에 반영
-										// 조작된 월드 행렬의 translation 부분만 업데이트
-										XMMATRIX snappedWorldMatrix = manipulatedWorldMatrix;
-										snappedWorldMatrix.r[3] = XMVectorSet(snappedPosition.x, snappedPosition.y, snappedPosition.z, 1.0f);
-										
-										// 스냅된 월드 행렬을 로컬 행렬로 변환
-										XMMATRIX snappedLocalMatrix = snappedWorldMatrix * parentWorldMatrixInv;
-										
-										// 어댑터 함수를 사용하여 로컬 행렬을 TRS로 분해
-										XMFLOAT3 newPosition, newRotation, newScale;
-										if (DecomposeLocalMatrix(snappedLocalMatrix, newPosition, newRotation, newScale))
+										XMVECTOR diff = currentPos - bestSnapPos;
+										float distance = XMVectorGetX(XMVector3Length(diff));
+
+										if (distance < minDistance)
 										{
-											transform->position = newPosition;
-											transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
-											transform->scale = newScale;
+											minDistance = distance;
+											XMStoreFloat3(&snappedPosition, bestSnapPos);
+											foundSnap = true;
 										}
 									}
 								}
-								else
+
+								if (foundSnap)
 								{
-									// 스냅이 없으면 이미 위에서 설정한 transform 사용 (변경 없음)
+									// 스냅된 월드 위치를 최종 월드 행렬에 반영
+									finalWorldMatrix.r[3] = XMVectorSet(snappedPosition.x, snappedPosition.y, snappedPosition.z, 1.0f);
 								}
+							}
+							
+							// 최종 월드 행렬을 로컬 행렬로 변환 (스냅 적용 여부와 관계없이 한 번만)
+							XMMATRIX localMatrix = finalWorldMatrix * parentWorldMatrixInv;
+							
+							// 어댑터 함수를 사용하여 로컬 행렬을 TRS로 분해
+							XMFLOAT3 newPosition, newRotation, newScale;
+							if (DecomposeLocalMatrix(localMatrix, newPosition, newRotation, newScale))
+							{
+								transform->position = newPosition;
+								transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
+								transform->scale = newScale;
+							}
 
 								// ImGuizmo로 Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
 								if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(selectedEntity))
@@ -3738,6 +3732,7 @@ namespace Alice
 								{
 									cct->teleport = true;
 								}
+								world.MarkTransformDirty(selectedEntity);
 								g_SceneDirty = true;
 							}
 
@@ -4527,25 +4522,6 @@ namespace Alice
 					}
 
 					bool changed = false;
-					// Transform은 TransformCommand 사용 (별도 처리)
-					if (ReflectionUI::RenderProperty(*transform, "position", "Position").changed)
-						changed = true;
-
-					DirectX::XMFLOAT3 rotDeg = {
-						DirectX::XMConvertToDegrees(transform->rotation.x),
-						DirectX::XMConvertToDegrees(transform->rotation.y),
-						DirectX::XMConvertToDegrees(transform->rotation.z),
-					};
-					if (ImGui::DragFloat3("Rotation (deg)", &rotDeg.x, 1.0f)) {
-						transform->rotation = {
-							DirectX::XMConvertToRadians(rotDeg.x),
-							DirectX::XMConvertToRadians(rotDeg.y),
-							DirectX::XMConvertToRadians(rotDeg.z),
-						};
-						changed = true;
-					}
-													
-
 					bool anyTransformItemActive = false;
 					bool anyTransformItemActivated = false;
 
@@ -4593,7 +4569,7 @@ namespace Alice
 						editStartTransform.enabled = transform->enabled;
 					}
 
-					// === Transform 변경 시: 물리 텔레포트 + dirty
+					// === Transform 변경 시: 물리 텔레포트 + 월드행렬 캐시 무효화 + dirty
 					if (changed)
 					{
 						if (auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(_selectedEntity))
@@ -4602,6 +4578,7 @@ namespace Alice
 						if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
 							cct->teleport = true;
 
+						world.MarkTransformDirty(_selectedEntity);
 						g_SceneDirty = true;
 					}
 
@@ -4710,7 +4687,8 @@ namespace Alice
 					std::string ext = droppedPath.extension().string();
 
 					// 스크립트 파일인지 확인 (.h, .cpp)
-					std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+					std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 					if (ext == ".h" || ext == ".hpp" || ext == ".cpp" || ext == ".cxx")
 					{
 						// 파일명에서 스크립트 이름 추출 (확장자 제외)
@@ -5033,7 +5011,8 @@ namespace Alice
 						std::string ext = droppedPath.extension().string();
 
 						// Material 파일인지 확인
-						std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+						std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 						if (ext == ".mat")
 						{
 							// 논리 경로로 변환
@@ -5077,7 +5056,8 @@ namespace Alice
 
 			auto IsImageExt = [](std::string ext)
 				{
-					std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+					std::transform(ext.begin(), ext.end(), ext.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 					return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".dds" || ext == ".tga" || ext == ".bmp";
 				};
 

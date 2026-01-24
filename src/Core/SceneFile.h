@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
 
 #include <filesystem>
+#include <string>
 
 namespace Alice
 {
@@ -18,6 +19,13 @@ namespace Alice
         /// .scene(JSON)을 읽어서 World 를 재구성합니다.
         /// 기존 엔티티들은 모두 제거됩니다.
         bool Load(World& world, const std::filesystem::path& path);
+
+        /// World 상태를 JSON 문자열로 직렬화합니다. (Play 스냅샷용)
+        bool SaveToJsonString(const World& world, std::string& out);
+
+        /// JSON 문자열에서 World 를 복원합니다. (Stop 시 편집본 복원용)
+        /// 기존 엔티티는 Clear 후 로드됩니다.
+        bool LoadFromJsonString(World& world, const std::string& json);
 
         /// 에디터/최종빌드 모두에서 동작하는 자동 로더입니다.
         /// - editorMode: 실제 파일(Assets/...)을 읽습니다.

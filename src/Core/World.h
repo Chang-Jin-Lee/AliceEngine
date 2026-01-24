@@ -77,6 +77,12 @@ namespace Alice
         /// 루트 엔티티들(부모가 없는 엔티티들)을 가져옵니다.
         std::vector<EntityId> GetRootEntities() const;
 
+        // ==== Transform 변경 API (스크립트/로직은 여기 경유 권장 — dirty 자동 반영) ====
+        void SetLocalPosition(EntityId id, const DirectX::XMFLOAT3& position);
+        void SetLocalRotation(EntityId id, const DirectX::XMFLOAT3& rotationRad);
+        void SetLocalScale(EntityId id, const DirectX::XMFLOAT3& scale);
+        void SetTransformEnabled(EntityId id, bool enabled);
+
         // ==== 게임 오브젝트 생성 헬퍼 ====
         /// 빈 게임 오브젝트를 생성합니다 (Transform만 가짐)
         EntityId CreateEmpty();
@@ -115,7 +121,11 @@ namespace Alice
 
                 // 컨테이너 생성 및 데이터 채우기
                 ScriptComponent newScriptComp{};
-                newScriptComp.scriptName = typeid(T).name();
+                // RTTR 이름 사용. "Alice::" 접두사 제거하여 ScriptFactory 등록 키(REGISTER_SCRIPT)와 일치시킴.
+                std::string scriptName = rttr::type::get<T>().get_name().to_string();
+                if (scriptName.size() > 6 && scriptName.compare(0, 6, "Alice::") == 0)
+                    scriptName = scriptName.substr(6);
+                newScriptComp.scriptName = std::move(scriptName);
                 newScriptComp.instance = std::move(instance); // 소유권 이전
 
                 // 초기화 루틴
@@ -144,10 +154,11 @@ namespace Alice
                     result = &storage.Add(id, std::move(newComp));
                 }
                 
-                // TransformComponent 추가/제거 시 children 캐시 무효화
+                // TransformComponent 추가/제거 시 children 캐시 무효화 및 Transform dirty 마킹
                 if constexpr (std::is_same_v<T, TransformComponent>)
                 {
                     InvalidateChildrenCache();
+                    MarkTransformDirty(id);
                 }
                 
                 return *result;
@@ -303,10 +314,11 @@ namespace Alice
             {
                 auto& storage = GetStorage<T>();
                 
-                // TransformComponent 제거 시 children 캐시 무효화
+                // TransformComponent 제거 시 children 캐시 무효화 및 Transform dirty 마킹
                 if constexpr (std::is_same_v<T, TransformComponent>)
                 {
                     InvalidateChildrenCache();
+                    MarkTransformDirty(id);
                 }
                 
                 storage.Remove(id);
@@ -383,7 +395,16 @@ namespace Alice
         // ==== Transform 행렬 계산 (공용 API) ====
         /// 엔티티의 월드 행렬을 계산합니다 (부모-자식 계층 포함)
         /// 에디터/런타임 모두 이 함수를 사용하여 일관성 보장
+        /// 캐시를 사용하므로 UpdateTransformMatrices()를 먼저 호출해야 최신 값이 보장됩니다.
         DirectX::XMMATRIX ComputeWorldMatrix(EntityId entityId) const;
+        
+        /// Transform 월드행렬 캐시를 갱신합니다. (매 프레임 호출 권장)
+        /// dirty 플래그가 있는 엔티티들의 월드행렬을 재계산합니다.
+        void UpdateTransformMatrices();
+        
+        /// 특정 엔티티와 모든 자식의 Transform을 dirty로 표시합니다.
+        /// Transform 변경 시 자동으로 호출되지만, 수동 호출도 가능합니다.
+        void MarkTransformDirty(EntityId entityId);
 
         // ==== 지연 파괴 시스템 ====
         /// 지연 파괴를 예약합니다. (delay 초 후에 파괴)
@@ -492,6 +513,14 @@ namespace Alice
         
         // children 캐시 무효화 (SetParent, DestroyEntity, Clear에서 호출)
         void InvalidateChildrenCache() const { m_children.clear(); }
+        
+        // Transform 월드행렬 캐싱 시스템
+        // dirty 플래그: 엔티티의 Transform이 변경되어 월드행렬 재계산이 필요한지 표시
+        mutable std::unordered_map<EntityId, bool> m_transformDirty;
+        
+        // 월드행렬 캐시: EntityId -> 월드행렬 (XMMATRIX는 값 타입이므로 직접 저장)
+        // XMMATRIX는 16개 float이므로 XMFLOAT4X4로 저장
+        mutable std::unordered_map<EntityId, DirectX::XMFLOAT4X4> m_worldMatrixCache;
     };
 
     template <typename T>
