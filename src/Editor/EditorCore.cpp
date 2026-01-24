@@ -1758,8 +1758,7 @@ namespace Alice
 		ImFontConfig baseConfig{};
 		baseConfig.MergeMode = false;
 		const std::wstring fontKr =
-			(m_resources ? m_resources->Resolve("Resource/Fonts/NotoSansKR-Regular.ttf").wstring()
-				: std::wstring(L"Resource/Fonts/NotoSansKR-Regular.ttf"));
+			ResourceManager::Get().Resolve("Resource/Fonts/NotoSansKR-Regular.ttf").wstring();
 		io.FontDefault = io.Fonts->AddFontFromFileTTF(
 			Utf8FromWString(fontKr).c_str(),
 			18.0f,
@@ -1770,8 +1769,7 @@ namespace Alice
 		jpConfig.MergeMode = true;
 		jpConfig.PixelSnapH = true;
 		const std::wstring fontJp =
-			(m_resources ? m_resources->Resolve("Resource/Fonts/meiryo.ttc").wstring()
-				: std::wstring(L"Resource/Fonts/meiryo.ttc"));
+			ResourceManager::Get().Resolve("Resource/Fonts/meiryo.ttc").wstring();
 		io.Fonts->AddFontFromFileTTF(
 			Utf8FromWString(fontJp).c_str(),
 			18.0f,
@@ -2025,11 +2023,11 @@ namespace Alice
 					static std::vector<std::filesystem::path> cached;
 					static bool cachedOnce = false;
 
-					if (!cachedOnce && m_resources)
+					if (!cachedOnce)
 					{
 						cachedOnce = true;
 
-						auto dirAbs = m_resources->Resolve("Assets/Fbx");
+						auto dirAbs = ResourceManager::Get().Resolve("Assets/Fbx");
 						if (std::filesystem::exists(dirAbs))
 						{
 							for (auto& it : std::filesystem::directory_iterator(dirAbs))
@@ -2168,7 +2166,7 @@ namespace Alice
 
 				if (GetOpenFileNameW(&ofn))
 				{
-					if (m_resources && m_renderDevice)
+					if (m_renderDevice)
 					{
 						std::filesystem::path fbxPath = fileBuffer;
 
@@ -2182,7 +2180,7 @@ namespace Alice
 
 						// 간단한 FBX 임포트 옵션
 						FbxImportOptions opt{};
-						FbxImporter importer(*m_resources, m_skinnedRegistry);
+						FbxImporter importer(ResourceManager::Get(), m_skinnedRegistry);
 
 						auto* d3dDevice = m_renderDevice->GetDevice();
 						FbxImportResult result = importer.Import(d3dDevice, fbxPath, opt);
@@ -2219,7 +2217,7 @@ namespace Alice
                                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                                 MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
                                 mat.assetPath = result.materialAssetPaths.front();
-                                MaterialFile::Load(mat.assetPath, mat, m_resources);
+                                MaterialFile::Load(mat.assetPath, mat, &ResourceManager::Get());
                             }
                             else
                             {
@@ -2386,9 +2384,7 @@ namespace Alice
 					s_SceneSelected.clear();
 					s_DefaultScene = -1;
 
-					const fs::path assetsRoot =
-						(m_resources ? m_resources->Resolve("Assets")
-							: fs::path("Assets"));
+					const fs::path assetsRoot = ResourceManager::Get().Resolve("Assets");
 					if (fs::exists(assetsRoot))
 					{
 						for (const auto& entry : fs::recursive_directory_iterator(assetsRoot))
@@ -2765,9 +2761,7 @@ namespace Alice
 					if (ImGui::MenuItem("Save as Prefab"))
 					{
 						namespace fs = std::filesystem;
-						const fs::path prefabDir =
-							(m_resources ? m_resources->Resolve("Assets/Prefabs")
-								: fs::path("Assets/Prefabs"));
+						const fs::path prefabDir = ResourceManager::Get().Resolve("Assets/Prefabs");
 						if (!fs::exists(prefabDir))
 						{
 							fs::create_directories(prefabDir);
@@ -3079,9 +3073,8 @@ namespace Alice
 								{
 									// 논리 경로로 변환
 									std::string logicalPath = droppedPath.string();
-									if (m_resources)
 									{
-										std::filesystem::path logical = m_resources->NormalizeResourcePathAbsoluteToLogical(droppedPath);
+										std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(droppedPath);
 										if (!logical.empty())
 										{
 											logicalPath = logical.string();
@@ -3145,9 +3138,7 @@ namespace Alice
 				ImGui::Separator();
 
 				// Assets 폴더는 논리 경로로만 다루고, 실제 위치는 ResourceManager 가 해석합니다.
-				const std::filesystem::path assetsRoot =
-					(m_resources ? m_resources->Resolve("Assets")
-						: std::filesystem::path("Assets"));
+				const std::filesystem::path assetsRoot = ResourceManager::Get().Resolve("Assets");
 				if (!std::filesystem::exists(assetsRoot))
 				{
 					// 폴더가 없다면 한 번만 생성해 둡니다.
@@ -4227,9 +4218,7 @@ namespace Alice
 							
 							// 절대 경로를 논리 경로로 변환
 							std::string logicalPath = absolutePath.string();
-							if (m_resources)
 							{
-								// NormalizeResourcePathAbsoluteToLogical는 static 함수이므로 인스턴스 불필요
 								std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(absolutePath);
 								if (!logical.empty() && !logical.is_absolute())
 								{
@@ -4283,7 +4272,7 @@ namespace Alice
 				{
 					// 저장할 필요가 없으면 바로 로드
 					const std::filesystem::path loadAbs =
-						(m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+						ResourceManager::Get().Resolve(g_NextScenePath);
 
 					if (isPlaying)
 					{
@@ -4374,7 +4363,7 @@ namespace Alice
 					SaveScene(world);
 					// 씬 로드
 					const std::filesystem::path loadAbs =
-						(m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+						ResourceManager::Get().Resolve(g_NextScenePath);
 
 					if (isPlaying)
 					{
@@ -4428,7 +4417,7 @@ namespace Alice
 				{
 					// 씬 로드
 					const std::filesystem::path loadAbs =
-						(m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath);
+						ResourceManager::Get().Resolve(g_NextScenePath);
 
 					if (isPlaying)
 					{
@@ -4760,9 +4749,16 @@ namespace Alice
 			auto& reg = EditorComponentRegistry::Get();
 			for (auto& d : reg.All())
 			{
-				// Transform과 Material은 별도 처리되므로 제외
+				// 고정 레이아웃에서 처리되는 컴포넌트들은 제외 (중복 방지)
 				std::string typeName = d.type.get_name().to_string();
-				if (typeName == "TransformComponent" || typeName == "MaterialComponent")
+				if (typeName == "TransformComponent" || 
+					typeName == "MaterialComponent" || 
+					typeName == "ComputeEffectComponent" ||
+					typeName == "PointLightComponent" ||
+					typeName == "SpotLightComponent" ||
+					typeName == "RectLightComponent" ||
+					typeName == "SkinnedMeshComponent" ||
+					typeName == "SkinnedAnimationComponent")  // Animation Status 섹션에서 처리됨
 					continue;
 
 				// 특수 처리 필요한 컴포넌트들 (물리 컴포넌트 등)
@@ -5017,9 +5013,8 @@ namespace Alice
 						{
 							// 논리 경로로 변환
 							std::string logicalPath = droppedPath.string();
-							if (m_resources)
 							{
-								std::filesystem::path logical = m_resources->NormalizeResourcePathAbsoluteToLogical(droppedPath);
+								std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(droppedPath);
 								if (!logical.empty())
 								{
 									logicalPath = logical.string();
@@ -5027,7 +5022,7 @@ namespace Alice
 							}
 							mat->assetPath = logicalPath;
 							// Material 파일에서 속성 로드
-							MaterialFile::Load(droppedPath, *mat, m_resources);
+							MaterialFile::Load(droppedPath, *mat, &ResourceManager::Get());
 							changed = true;
 							g_SceneDirty = true;
 						}
@@ -5067,13 +5062,8 @@ namespace Alice
 					std::string out = p.string();
 
 					// 가능하면 "논리 경로"로 변환
-					if (m_resources)
 					{
-						// 여기 API는 프로젝트에 맞는 "하나"로 통일해라.
-						// 아래는 예시: static 함수가 진짜 맞다면 이걸로.
 						std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(p);
-
-						// 변환 성공 + 논리 경로(상대 경로)면 적용
 						if (!logical.empty() && !logical.is_absolute())
 							out = logical.string();
 					}
@@ -7100,7 +7090,7 @@ namespace Alice
 						g_MaterialEditorPath = path;
 						g_MaterialEditorData = {};
 						// 파일에서 값을 불러옵니다. 실패하면 기본 값으로 남겨둡니다.
-						MaterialFile::Load(path, g_MaterialEditorData, m_resources);
+						MaterialFile::Load(path, g_MaterialEditorData, &ResourceManager::Get());
 						g_MaterialEditorData.assetPath = path.string();
 						g_MaterialEditorOpen = true;
 					}
@@ -7176,7 +7166,7 @@ namespace Alice
 
 							if (mat)
 							{
-								MaterialFile::Load(path, *mat, m_resources);
+								MaterialFile::Load(path, *mat, &ResourceManager::Get());
 								mat->assetPath = path.string();
 								g_SceneDirty = true;
 							}
@@ -7216,16 +7206,14 @@ namespace Alice
 									asset.materialAssetPaths.size());
 
 								// 레지스트리에 GPU 메시가 없다면, 원본 FBX 를 다시 임포트해서 등록합니다.
-								if (m_skinnedRegistry && m_resources && m_renderDevice)
+								if (m_skinnedRegistry && m_renderDevice)
 								{
 									if (!m_skinnedRegistry->Find(asset.meshAssetPath))
 									{
 										FbxImportOptions opt{};
-										FbxImporter importer(*m_resources, m_skinnedRegistry);
+										FbxImporter importer(ResourceManager::Get(), m_skinnedRegistry);
 										auto* device = m_renderDevice->GetDevice();
-										// 원본 FBX 경로는 .fbxasset 안의 source_fbx 에 저장되어 있습니다.
-										std::filesystem::path srcFbxPath =
-											(m_resources ? m_resources->Resolve(asset.sourceFbx) : std::filesystem::path(asset.sourceFbx));
+										std::filesystem::path srcFbxPath = ResourceManager::Get().Resolve(asset.sourceFbx);
 										importer.Import(device, srcFbxPath, opt);
 
 										ALICE_LOG_INFO("[Editor] Instantiate FBX: mesh was not in registry, re-imported FBX");
@@ -7261,7 +7249,7 @@ namespace Alice
 									DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
 									MaterialComponent& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
 									mat.assetPath = asset.materialAssetPaths.front();
-									MaterialFile::Load(mat.assetPath, mat, m_resources);
+									MaterialFile::Load(mat.assetPath, mat, &ResourceManager::Get());
 								}
 
 								selectedEntity = e;
@@ -7325,7 +7313,7 @@ namespace Alice
 		// 스킨 메쉬 등록 보장
 		void EditorCore::EnsureSkinnedMeshesRegistered(World & world)
 		{
-			if (!m_skinnedRegistry || !m_resources || !m_renderDevice || world.GetComponents<SkinnedMeshComponent>().empty())
+			if (!m_skinnedRegistry || !m_renderDevice || world.GetComponents<SkinnedMeshComponent>().empty())
 				return;
 
 			for (const auto& [entityId, comp] : world.GetComponents<SkinnedMeshComponent>())
@@ -7339,7 +7327,7 @@ namespace Alice
 					: std::filesystem::path(comp.instanceAssetPath);
 
 				Alice::FbxInstanceAsset instance{};
-				std::filesystem::path absPath = m_resources->Resolve(fbxPath);
+				std::filesystem::path absPath = ResourceManager::Get().Resolve(fbxPath);
 
 				// 로드 실패 검사
 				if (!Alice::LoadFbxInstanceAsset(absPath, instance) || instance.sourceFbx.empty())
@@ -7349,8 +7337,8 @@ namespace Alice
 				}
 
 				// 재임포트 및 등록
-				FbxImporter importer(*m_resources, m_skinnedRegistry);
-				FbxImportResult res = importer.Import(m_renderDevice->GetDevice(), m_resources->Resolve(instance.sourceFbx), {});
+				FbxImporter importer(ResourceManager::Get(), m_skinnedRegistry);
+				FbxImportResult res = importer.Import(m_renderDevice->GetDevice(), ResourceManager::Get().Resolve(instance.sourceFbx), {});
 
 				ALICE_LOG_INFO("[Editor] Re-imported FBX: %s -> %s", instance.sourceFbx.c_str(), res.meshAssetPath.c_str());
 			}
@@ -7364,7 +7352,7 @@ namespace Alice
 			ALICE_LOG_INFO("[Editor] Saving Scene: %s", savePath.string().c_str());
 
 			// 저장 실행 (실패 처리는 내부 로직에 맡김)
-			SceneFile::Save(world, m_resources ? m_resources->Resolve(savePath) : savePath);
+			SceneFile::Save(world, ResourceManager::Get().Resolve(savePath));
 
 			// 상태 갱신
 			g_CurrentScenePath = savePath;
@@ -7377,14 +7365,12 @@ namespace Alice
 	                                                const std::filesystem::path& fbxAssetPath,
 	                                                std::string_view entityName)
 	{
-		if (!m_resources) return InvalidEntityId;
-
 		Alice::FbxInstanceAsset asset{};
 		std::filesystem::path abs = fbxAssetPath;
 
 		// path가 논리 경로면 Resolve
 		if (!abs.is_absolute())
-			abs = m_resources->Resolve(abs);
+			abs = ResourceManager::Get().Resolve(abs);
 
 		if (!Alice::LoadFbxInstanceAsset(abs, asset) || asset.meshAssetPath.empty())
 			return InvalidEntityId;
@@ -7395,12 +7381,12 @@ namespace Alice
 			if (!m_skinnedRegistry->Find(asset.meshAssetPath))
 			{
 				FbxImportOptions opt{};
-				FbxImporter importer(*m_resources, m_skinnedRegistry);
+				FbxImporter importer(ResourceManager::Get(), m_skinnedRegistry);
 				auto* device = m_renderDevice->GetDevice();
 
 				std::filesystem::path src = asset.sourceFbx;
 				if (!src.is_absolute())
-					src = m_resources->Resolve(src);
+					src = ResourceManager::Get().Resolve(src);
 
 				importer.Import(device, src, opt);
 			}
@@ -7429,7 +7415,7 @@ namespace Alice
 			DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
 			auto& mat = world.AddComponent<MaterialComponent>(e, defaultColor);
 			mat.assetPath = asset.materialAssetPaths.front();
-			MaterialFile::Load(mat.assetPath, mat, m_resources);
+			MaterialFile::Load(mat.assetPath, mat, &ResourceManager::Get());
 		}
 
 		if (!entityName.empty())
@@ -7484,7 +7470,7 @@ namespace Alice
 			// 하지만 호환성을 위해 남겨둠 (내부적으로는 즉시 로드)
 			ALICE_LOG_WARN("[Editor] LoadScene() is deprecated. Use SceneManager::LoadSceneFileRequest() instead.");
 
-			const std::filesystem::path loadAbs = m_resources ? m_resources->Resolve(g_NextScenePath) : g_NextScenePath;
+			const std::filesystem::path loadAbs = ResourceManager::Get().Resolve(g_NextScenePath);
 
 			// 로드 실행 및 반환값 체크
 			if (!SceneFile::Load(world, loadAbs))
