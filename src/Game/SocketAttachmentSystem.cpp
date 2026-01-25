@@ -140,17 +140,7 @@ namespace Alice
                 XMMatrixRotationRollPitchYaw(att.extraRotRad.x, att.extraRotRad.y, att.extraRotRad.z) *
                 XMMatrixTranslation(att.extraPos.x, att.extraPos.y, att.extraPos.z);
 
-            XMMATRIX ownerWorld = XMMatrixIdentity();
-            if (auto* ownerTr = world.GetComponent<TransformComponent>(owner))
-            {
-                ownerWorld =
-                    XMMatrixScaling(ownerTr->scale.x, ownerTr->scale.y, ownerTr->scale.z) *
-                    XMMatrixRotationRollPitchYaw(ownerTr->rotation.x, ownerTr->rotation.y, ownerTr->rotation.z) *
-                    XMMatrixTranslation(ownerTr->position.x, ownerTr->position.y, ownerTr->position.z);
-            }
-
-            // 소켓 행렬에 오너 트랜스폼을 더해 월드로 보정
-            const XMMATRIX finalM = extra * socketWorld * ownerWorld;
+            const XMMATRIX finalM =socketWorld * extra;
 
             XMVECTOR S, R, T;
             if (!XMMatrixDecompose(&S, &R, &T, finalM))

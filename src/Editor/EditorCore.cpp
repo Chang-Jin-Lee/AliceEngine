@@ -21,6 +21,7 @@
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/EditorComponentRegistry.h"
 #include "Core/JsonRttr.h"
+#include "Core/SocketSerialization.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/WeaponTraceComponent.h"
@@ -339,6 +340,21 @@ namespace Alice
 					outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
 				}
 
+				// Socket
+				if (const auto* socketComp = world.GetComponent<SocketComponent>(id); socketComp)
+				{
+					outEntity["Socket"] = SocketSerialization::SocketComponentToJson(*socketComp);
+				}
+
+				// SocketAttachment
+				if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(id); socketAttach)
+				{
+					rttr::instance inst = const_cast<SocketAttachmentComponent&>(*socketAttach);
+					JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+					obj["ownerGuid"] = std::to_string(socketAttach->ownerGuid);
+					outEntity["SocketAttachment"] = obj;
+				}
+
 				// Camera components
 				if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
 				{
@@ -554,6 +570,28 @@ namespace Alice
 					SkinnedAnimationComponent& sa = world.AddComponent<SkinnedAnimationComponent>(id);
 					rttr::instance inst = sa;
 					if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
+				}
+
+				// Socket
+				auto itSocket = e.find("Socket");
+				if (itSocket != e.end() && itSocket->is_object())
+				{
+					SocketComponent& sc = world.AddComponent<SocketComponent>(id);
+					if (!SocketSerialization::JsonToSocketComponent(*itSocket, sc)) return false;
+				}
+
+				// SocketAttachment
+				auto itSAc = e.find("SocketAttachment");
+				if (itSAc != e.end() && itSAc->is_object())
+				{
+					SocketAttachmentComponent& sa = world.AddComponent<SocketAttachmentComponent>(id);
+					if (auto itGuid = itSAc->find("ownerGuid"); itGuid != itSAc->end())
+						sa.ownerGuid = ParseGuid(*itGuid);
+
+					JsonRttr::json copy = *itSAc;
+					copy.erase("ownerGuid");
+					rttr::instance inst = sa;
+					if (!JsonRttr::FromJsonObject(inst, copy)) return false;
 				}
 
 				// Camera components

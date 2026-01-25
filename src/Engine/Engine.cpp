@@ -723,14 +723,10 @@ namespace Alice
 				// 씬 바뀐 프레임이면 물리/카메라(월드 접근)를 스킵하고, 아래 "카메라 최종 적용"만 수행
 			if (!sceneChangedThisFrame)
 			{
-				// 2-2. 애니메이션/소켓 업데이트 (물리 직전)
-				pImpl->m_attackDriverSystem.Update(pImpl->m_world);
-				pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
-				pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
-				pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
-				pImpl->m_animUpdatedThisFrame = true;
+			// 2-2. 공격 드라이버(노티 등록)
+			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
 
-				// 2-3. 물리 업데이트
+			// 2-3. 물리 업데이트
 				// ===================================================================
 				// Phy_SettingsComponent가 있는데 물리 월드가 없으면 생성 시도
 				if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
@@ -752,10 +748,16 @@ namespace Alice
 					pImpl->m_physicsSystem->Update(dt);
 				}
 
-				TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
+			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
 
-				// 소켓 기반 무기 스윕 판정
-				pImpl->m_weaponTraceSystem.Update(pImpl->m_world, dt, &pImpl->m_combatHitQueue);
+			// 2-4. 애니메이션/소켓 업데이트 (물리 이후: 최신 Transform 반영)
+			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
+			pImpl->m_animUpdatedThisFrame = true;
+
+			// 소켓 기반 무기 스윕 판정
+			pImpl->m_weaponTraceSystem.Update(pImpl->m_world, dt, &pImpl->m_combatHitQueue);
 
 				// 물리 이벤트 처리
 				ProcessPhysicsEvents();
@@ -763,10 +765,10 @@ namespace Alice
 				pImpl->m_combatSystem.Update(pImpl->m_world, dt);
 				// ===================================================================
 
-				// 2-4. 카메라 시스템 (컴포넌트 기반)
+			// 2-5. 카메라 시스템 (컴포넌트 기반)
 				pImpl->m_cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
 
-				// 2-5. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
+			// 2-6. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
 				// CameraSystem에서 이미 Camera 객체가 업데이트되었으므로, primary 카메라의 Camera 객체를 가져옴
 				EntityId camId = InvalidEntityId;
 				for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
