@@ -108,28 +108,6 @@ namespace Alice
             ProcessAdvanced(entityId, world, animComp, *skinned, mesh, dtSec);
         }
 
-        // ------------------------------
-        // 2) Simple animation fallback
-        // ------------------------------
-        for (auto [entityId, animComp] : world.GetComponents<SkinnedAnimationComponent>())
-        {
-            // AdvancedAnimationComponent가 있고 enabled이면 건너뛰기
-            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(entityId))
-            {
-                if (advAnim->enabled)
-                    continue;
-            }
-
-            auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId);
-            if (!skinned || skinned->meshAssetPath.empty())
-                continue;
-
-            auto mesh = m_registry.Find(skinned->meshAssetPath);
-            if (!mesh || !mesh->sourceModel)
-                continue;
-
-            ProcessSimple(entityId, world, animComp, *skinned, mesh, dtSec);
-        }
     }
 
     bool AdvancedAnimSystem::EnsureRuntime(Runtime& rt,

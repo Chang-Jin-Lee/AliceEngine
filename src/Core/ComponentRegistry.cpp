@@ -27,6 +27,11 @@
 #include "Components/AudioListenerComponent.h"
 #include "Components/AudioSourceComponent.h"
 #include "Components/SoundBoxComponent.h"
+#include "Components/SocketAttachmentComponent.h"
+#include "Components/HurtboxComponent.h"
+#include "Components/WeaponTraceComponent.h"
+#include "Components/HealthComponent.h"
+#include "Components/AttackDriverComponent.h"
 
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
@@ -186,6 +191,14 @@ namespace Alice
             .property("yawRad", &AdvancedAnimAim::yawRad)
             .property("weight", &AdvancedAnimAim::weight);
 
+        rttr::registration::class_<AdvancedAnimSocket>("AdvancedAnimSocket")
+            .constructor<>()
+            .property("name", &AdvancedAnimSocket::name)
+            .property("parentBone", &AdvancedAnimSocket::parentBone)
+            .property("pos", &AdvancedAnimSocket::pos)
+            .property("rotDeg", &AdvancedAnimSocket::rotDeg)
+            .property("scale", &AdvancedAnimSocket::scale);
+
         rttr::registration::class_<AdvancedAnimationComponent>("AdvancedAnimationComponent")
             .constructor<>()
             .property("enabled", &AdvancedAnimationComponent::enabled)
@@ -195,7 +208,8 @@ namespace Alice
             .property("additive", &AdvancedAnimationComponent::additive)
             .property("procedural", &AdvancedAnimationComponent::procedural)
             .property("ik", &AdvancedAnimationComponent::ik)
-            .property("aim", &AdvancedAnimationComponent::aim);
+            .property("aim", &AdvancedAnimationComponent::aim)
+            .property("sockets", &AdvancedAnimationComponent::sockets);
 
 
 		//  Enum 등록
@@ -229,6 +243,59 @@ namespace Alice
 			.property("maxDistance", &SoundBoxComponent::maxDistance)
 			.property("debugDraw", &SoundBoxComponent::debugDraw)
 			.property("targetEntity", &SoundBoxComponent::targetEntity);
+
+		// SocketAttachmentComponent 등록
+		rttr::registration::class_<SocketAttachmentComponent>("SocketAttachmentComponent")
+			.constructor<>()
+			.property("ownerGuid", &SocketAttachmentComponent::ownerGuid)
+			.property("ownerNameDebug", &SocketAttachmentComponent::ownerNameDebug)
+			.property("socketName", &SocketAttachmentComponent::socketName)
+			.property("followScale", &SocketAttachmentComponent::followScale)
+			.property("extraPos", &SocketAttachmentComponent::extraPos)
+			.property("extraRotRad", &SocketAttachmentComponent::extraRotRad)
+			.property("extraScale", &SocketAttachmentComponent::extraScale);
+
+		// HurtboxComponent 등록
+		rttr::registration::class_<HurtboxComponent>("HurtboxComponent")
+			.constructor<>()
+			.property("ownerGuid", &HurtboxComponent::ownerGuid)
+			.property("ownerNameDebug", &HurtboxComponent::ownerNameDebug)
+			.property("teamId", &HurtboxComponent::teamId)
+			.property("part", &HurtboxComponent::part)
+			.property("damageScale", &HurtboxComponent::damageScale);
+
+		// WeaponTraceComponent 등록
+		rttr::registration::class_<WeaponTraceComponent>("WeaponTraceComponent")
+			.constructor<>()
+			.property("ownerGuid", &WeaponTraceComponent::ownerGuid)
+			.property("ownerNameDebug", &WeaponTraceComponent::ownerNameDebug)
+			.property("traceSocketNames", &WeaponTraceComponent::traceSocketNames)
+			.property("radius", &WeaponTraceComponent::radius)
+			.property("active", &WeaponTraceComponent::active)
+			.property("debugDraw", &WeaponTraceComponent::debugDraw)
+			.property("baseDamage", &WeaponTraceComponent::baseDamage)
+			.property("teamId", &WeaponTraceComponent::teamId)
+			.property("attackInstanceId", &WeaponTraceComponent::attackInstanceId)
+			.property("targetLayerBits", &WeaponTraceComponent::targetLayerBits)
+			.property("queryLayerBits", &WeaponTraceComponent::queryLayerBits);
+
+		// HealthComponent 등록
+		rttr::registration::class_<HealthComponent>("HealthComponent")
+			.constructor<>()
+			.property("maxHealth", &HealthComponent::maxHealth)
+			.property("currentHealth", &HealthComponent::currentHealth)
+			.property("invulnDuration", &HealthComponent::invulnDuration)
+			.property("invulnRemaining", &HealthComponent::invulnRemaining)
+			.property("alive", &HealthComponent::alive)
+			.property("teamId", &HealthComponent::teamId);
+
+		// AttackDriverComponent 등록
+		rttr::registration::class_<AttackDriverComponent>("AttackDriverComponent")
+			.constructor<>()
+			.property("traceGuid", &AttackDriverComponent::traceGuid)
+			.property("clipName", &AttackDriverComponent::clipName)
+			.property("startTimeSec", &AttackDriverComponent::startTimeSec)
+			.property("endTimeSec", &AttackDriverComponent::endTimeSec);
 
 		//  AudioListenerComponent 등록
 		rttr::registration::class_<AudioListenerComponent>("AudioListenerComponent")
@@ -814,6 +881,12 @@ namespace Alice
         r.Register<Phy_JointComponent>("Joint", "Physics");
         r.Register<Phy_SettingsComponent>("Physics Settings", "Physics",
             /*addFn*/{}, /*addable*/true, /*removable*/false);
+
+        r.Register<SocketAttachmentComponent>("Socket Attachment", "Combat");
+        r.Register<HurtboxComponent>("Hurtbox", "Combat");
+        r.Register<WeaponTraceComponent>("Weapon Trace", "Combat");
+        r.Register<HealthComponent>("Health", "Combat");
+        r.Register<AttackDriverComponent>("Attack Driver", "Combat");
 
         r.SortByCategoryThenName();
     }

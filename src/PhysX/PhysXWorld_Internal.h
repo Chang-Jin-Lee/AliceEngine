@@ -1037,7 +1037,14 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 				{
 				case ActorOpType::Add:
 					if (!a->getScene())
+					{
 						scene->addActor(*a);
+						if (enableActiveTransforms)
+						{
+							if (auto* dyn = a->is<PxRigidDynamic>())
+								dyn->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_POSE_INTEGRATION_PREVIEW, true);
+						}
+					}
 					break;
 				case ActorOpType::Remove:
 					if (a->getScene() == scene)
@@ -1922,6 +1929,12 @@ public:
 		if (!body) return;
 		auto s = world.lock();
 		if (!s || !s->scene) return;
+		// If the actor hasn't been added to the scene yet, kinematic target is invalid in PhysX.
+		if (!body->getScene())
+		{
+			body->setGlobalPose(ToPxTransform(p, q));
+			return;
+		}
 		SceneWriteLock wl(s->scene, s->enableSceneLocks);
 		if (!HasRigidBodyFlag(body->getRigidBodyFlags(), PxRigidBodyFlag::eKINEMATIC))
 		{

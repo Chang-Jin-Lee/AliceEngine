@@ -43,6 +43,11 @@
 #include "Game/SkinnedMeshSystem.h"
 #include "Core/AdvancedAnimSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
+#include "Game/SocketAttachmentSystem.h"
+#include "Game/WeaponTraceSystem.h"
+#include "Game/CombatHitEvent.h"
+#include "Game/CombatSystem.h"
+#include "Game/AttackDriverSystem.h"
 #include "Audio/AudioSystem.h"
 #include "Audio/SoundManager.h"
 
@@ -116,6 +121,7 @@ namespace Alice
 
 		// 물리 이벤트 큐 (한 프레임 안전하게 처리하기 위함)
 		std::vector<PhysicsEvent> m_physicsEventQueue;
+		std::vector<CombatHitEvent> m_combatHitQueue;
 
 		// PVD (PhysX Visual Debugger) 설정
 		bool m_pvdEnabled = false;
@@ -161,8 +167,14 @@ namespace Alice
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		AdvancedAnimSystem  m_advancedAnimSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		SocketAttachmentSystem m_socketAttachmentSystem;
+		WeaponTraceSystem m_weaponTraceSystem;
+		CombatSystem m_combatSystem;
+		AttackDriverSystem m_attackDriverSystem;
 		AudioSystem m_audioSystem;
 		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
+
+		bool m_animUpdatedThisFrame = false;
 	};
 	namespace
 	{
@@ -657,6 +669,7 @@ namespace Alice
 		pImpl->m_timer.Tick();
 		const float dt = pImpl->m_timer.DeltaTime();
 		pImpl->m_inputSystem.Update(dt);
+		pImpl->m_animUpdatedThisFrame = false;
 
 		using namespace DirectX;
 
@@ -745,7 +758,14 @@ namespace Alice
 				// 씬 바뀐 프레임이면 물리/카메라(월드 접근)를 스킵하고, 아래 "카메라 최종 적용"만 수행
 			if (!sceneChangedThisFrame)
 			{
-				// 2-2. 물리 업데이트
+				// 2-2. 애니메이션/소켓 업데이트 (물리 직전)
+				pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+				pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+				pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+				pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
+				pImpl->m_animUpdatedThisFrame = true;
+
+				// 2-3. 물리 업데이트
 				// ===================================================================
 				// Phy_SettingsComponent가 있는데 물리 월드가 없으면 생성 시도
 				if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
@@ -769,14 +789,19 @@ namespace Alice
 
 				TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
 
+				// 소켓 기반 무기 스윕 판정
+				pImpl->m_weaponTraceSystem.Update(pImpl->m_world, dt, &pImpl->m_combatHitQueue);
+
 				// 물리 이벤트 처리
 				ProcessPhysicsEvents();
+				ProcessCombatHits();
+				pImpl->m_combatSystem.Update(pImpl->m_world, dt);
 				// ===================================================================
 
-				// 2-3. 카메라 시스템 (컴포넌트 기반)
+				// 2-4. 카메라 시스템 (컴포넌트 기반)
 				pImpl->m_cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
 
-				// 2-4. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
+				// 2-5. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
 				// CameraSystem에서 이미 Camera 객체가 업데이트되었으므로, primary 카메라의 Camera 객체를 가져옴
 				EntityId camId = InvalidEntityId;
 				for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
@@ -1155,6 +1180,15 @@ namespace Alice
 		pImpl->m_physicsEventQueue.clear();
 	}
 
+	void Engine::ProcessCombatHits()
+	{
+		if (pImpl->m_combatHitQueue.empty())
+			return;
+
+		pImpl->m_combatSystem.ProcessHits(pImpl->m_world, pImpl->m_combatHitQueue);
+		pImpl->m_combatHitQueue.clear();
+	}
+
 	//=========================================================
 
 
@@ -1406,7 +1440,15 @@ namespace Alice
 
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
-		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+		if (!pImpl->m_animUpdatedThisFrame)
+		{
+			const double dtSec = static_cast<double>(pImpl->m_timer.DeltaTime());
+			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, dtSec);
+			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, dtSec);
+			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
+			pImpl->m_animUpdatedThisFrame = true;
+		}
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
 		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
