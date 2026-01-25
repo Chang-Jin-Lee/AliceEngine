@@ -7017,7 +7017,18 @@ namespace Alice
 			if (ImGui::CollapsingHeader("Camera Follow", ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				bool changed = false;
-				changed |= ReflectionUI::RenderInspector(*comp, nullptr, &world).changed;
+				
+				// 런타임 상태 필터 (직렬화/편집 대상 아님)
+				auto filter = [](const std::string& propName) -> bool {
+					// 런타임 상태 필드들은 인스펙터에서 제외
+					return propName != "lockOnTargetId" && 
+					       propName != "lockOnActive" && 
+					       propName != "initialized" &&
+					       propName != "smoothedPosition" &&
+					       propName != "smoothedRotation";
+				};
+				
+				changed |= ReflectionUI::RenderInspector(*comp, filter, &world).changed;
 				
 				if (changed) g_SceneDirty = true;
 			}
@@ -7311,25 +7322,6 @@ namespace Alice
 						ofs << j.dump(4);
 				}
 
-				if (ImGui::MenuItem("Create Material"))
-				{
-					fs::path newPath = path / "NewMaterial.mat";
-					int index = 1;
-					while (fs::exists(newPath))
-					{
-						newPath = path / ("NewMaterial" + std::to_string(index) + ".mat");
-						++index;
-					}
-
-					// JSON(.mat)로 저장 (RTTR + ReflectionSerializer 내부 사용)
-					MaterialComponent mat;
-					mat.color = DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
-					mat.roughness = 0.5f;
-					mat.metalness = 0.0f;
-					mat.assetPath = newPath.string();
-					mat.albedoTexturePath.clear();
-					MaterialFile::Save(newPath, mat);
-				}
 
 				if (ImGui::MenuItem("Create Scene"))
 				{
