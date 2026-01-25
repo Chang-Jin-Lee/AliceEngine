@@ -305,6 +305,8 @@ namespace Alice
 
         bool               m_scriptBuilded = false;
     };
+
+    // 인스펙터 등록 (Inspectors/EditorInspectors.cpp에서 정의)
 }
 
 

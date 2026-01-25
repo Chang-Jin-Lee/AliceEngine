@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // PhysXWorld_Internal.h (split from PhysXWorld.cpp)
 #include "PhysXWorld.h"
@@ -2525,19 +2525,46 @@ public:
 	void SetBreakForce(float force, float torque) override
 	{
 		if (!joint) return;
-		joint->setBreakForce(force, torque);
+		auto s = world.lock();
+		if (s && s->scene)
+		{
+			SceneWriteLock wl(s->scene, s->enableSceneLocks);
+			joint->setBreakForce(force, torque);
+		}
+		else
+		{
+			joint->setBreakForce(force, torque);
+		}
 	}
 
 	void SetCollideConnected(bool enabled) override
 	{
 		if (!joint) return;
-		joint->setConstraintFlag(PxConstraintFlag::eCOLLISION_ENABLED, enabled);
+		auto s = world.lock();
+		if (s && s->scene)
+		{
+			SceneWriteLock wl(s->scene, s->enableSceneLocks);
+			joint->setConstraintFlag(PxConstraintFlag::eCOLLISION_ENABLED, enabled);
+		}
+		else
+		{
+			joint->setConstraintFlag(PxConstraintFlag::eCOLLISION_ENABLED, enabled);
+		}
 	}
 
 	void SetUserData(void* ptr) override
 	{
 		if (!joint) return;
-		joint->userData = ptr;
+		auto s = world.lock();
+		if (s && s->scene)
+		{
+			SceneWriteLock wl(s->scene, s->enableSceneLocks);
+			joint->userData = ptr;
+		}
+		else
+		{
+			joint->userData = ptr;
+		}
 	}
 
 	void* GetUserData() const override

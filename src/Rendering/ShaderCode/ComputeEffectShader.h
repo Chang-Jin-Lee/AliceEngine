@@ -286,10 +286,15 @@ void main(uint3 id : SV_DispatchThreadID)
         float farZ = emitterInfo.z;
         float bias = depthBiasMeters;  // emitter별 bias 사용
         
+        // 화면 범위 체크 (OOB Load 방지)
+        int2 pixelCoord = int2(screenPos);
+        if (pixelCoord.x < 0 || pixelCoord.x >= (int)resolution.x ||
+            pixelCoord.y < 0 || pixelCoord.y >= (int)resolution.y)
+            return;
+        
         // sceneDepthValue(0..1) -> view-space Z로 선형화 (LH 기준)
         // LH 투영: z = (nearZ * farZ) / (farZ - depthValue * (farZ - nearZ))
         // Load()로 정수 픽셀 좌표 직접 읽기 (샘플러 경로 없이 정확함)
-        int2 pixelCoord = int2(screenPos);
         float sceneDepthValue = sceneDepth.Load(int3(pixelCoord, 0)).r;
         float sceneViewZ = (nearZ * farZ) / (farZ - sceneDepthValue * (farZ - nearZ));
         

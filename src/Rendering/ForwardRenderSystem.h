@@ -209,6 +209,8 @@ namespace Alice
         // 이번 프레임에 실제로 사용한 카메라 정보 (ComputeEffect용)
         DirectX::XMMATRIX                               m_lastViewProj = DirectX::XMMatrixIdentity();
         DirectX::XMFLOAT3                                m_lastCameraPos{0, 0, 0};
+        float                                           m_lastNearPlane = 0.1f;
+        float                                           m_lastFarPlane = 1000.0f;
 
         bool CreateSceneRenderTarget(std::uint32_t width, std::uint32_t height);
 
@@ -274,6 +276,8 @@ namespace Alice
         const DirectX::XMMATRIX& GetLastViewProj() const { return m_lastViewProj; }
         /// 이번 프레임에 실제로 사용한 카메라 월드 위치를 반환합니다 (ComputeEffect용)
         const DirectX::XMFLOAT3& GetLastCameraPos() const { return m_lastCameraPos; }
+        float GetLastNearPlane() const { return m_lastNearPlane; }
+        float GetLastFarPlane() const { return m_lastFarPlane; }
 
         /// IBL 세트를 변경합니다 (Bridge/Indoor/Sample)
         /// - 씬 전환 시 호출하여 환경에 맞는 IBL을 로드합니다.

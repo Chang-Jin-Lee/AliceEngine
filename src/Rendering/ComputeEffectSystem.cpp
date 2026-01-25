@@ -310,6 +310,8 @@ namespace Alice
         // Clear: 모든 프리셋이 m_outputUAV(출력 텍스처)를 공유하므로,
         // 시스템 전역 공통 m_clearShader로 1회만 Clear.
         // (프리셋별 타겟이 있었다면 순회 시 프리셋마다 개별 Clear 필요)
+        // Clear 전에 CB 갱신 필요 (resolution이 CB에 들어가므로)
+        UpdateConstantBuffer(0); // emitterCount는 Clear에 의미 없음
         if (m_clearShader)
             DispatchClear(m_clearShader.Get());
 
