@@ -189,8 +189,12 @@ namespace Alice
         // 179도(약 3.124 라디안)를 넘지 않도록 제한 (180도 이상은 투영 행렬 생성 불가)
         if (cullingFov > XM_PI - 0.02f) cullingFov = XM_PI - 0.02f;
 
+        float safeAspectRatio = m_aspectRatio;
+        if (safeAspectRatio < 0.001f)
+            safeAspectRatio = 1.0f;
+
         // 넓어진 각도로 임시 투영 행렬 생성
-        XMMATRIX cullProj = XMMatrixPerspectiveFovLH(cullingFov, m_aspectRatio, m_nearPlane, m_farPlane);
+        XMMATRIX cullProj = XMMatrixPerspectiveFovLH(cullingFov, safeAspectRatio, m_nearPlane, m_farPlane);
 
         // 프러스텀 생성
         BoundingFrustum::CreateFromMatrix(frustum, cullProj);
