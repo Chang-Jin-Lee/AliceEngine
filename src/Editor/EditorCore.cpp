@@ -21,7 +21,6 @@
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/EditorComponentRegistry.h"
 #include "Core/JsonRttr.h"
-#include "Components/AdvancedAnimationComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/WeaponTraceComponent.h"
@@ -5065,53 +5064,11 @@ namespace Alice
 				DrawInspectorSocketAttachment(world, _selectedEntity);
 				continue;
 			}
-			else if (d.type == rttr::type::get<AdvancedAnimationComponent>())
+			else if (typeName == "SocketComponent")
 			{
-				if (!d.has(world, _selectedEntity)) continue;
-				if (ImGui::CollapsingHeader(d.displayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					if (d.removable)
-					{
-						std::string btn = "Remove##" + d.displayName;
-						if (ImGui::Button(btn.c_str()))
-						{
-							d.remove(world, _selectedEntity);
-							g_SceneDirty = true;
-							continue;
-						}
-					}
-					static EntityId lastEditedEntity = InvalidEntityId;
-					static std::string lastEditedComponentType;
-					static JsonRttr::json editStartJson;
-					static const EditorComponentDesc* lastEditedDesc = nullptr;
-					rttr::instance inst = d.getInstance(world, _selectedEntity);
-					ReflectionUI::UIEditEvent ev = DrawInspectorAdvancedAnimation(world, _selectedEntity);
-					if (ev.activated && (_selectedEntity != lastEditedEntity || lastEditedComponentType != typeName))
-					{
-						editStartJson = JsonRttr::ToJsonObject(inst);
-						lastEditedEntity = _selectedEntity;
-						lastEditedComponentType = typeName;
-						lastEditedDesc = &d;
-					}
-					if (ev.deactivatedAfterEdit && _selectedEntity == lastEditedEntity && lastEditedComponentType == typeName)
-					{
-						JsonRttr::json editEndJson = JsonRttr::ToJsonObject(inst);
-						if (editStartJson != editEndJson && lastEditedDesc)
-						{
-							PushCommand(std::make_unique<ComponentEditCommandRTTR>(
-								_selectedEntity, lastEditedDesc, editStartJson, editEndJson));
-							g_SceneDirty = true;
-						}
-						lastEditedEntity = InvalidEntityId;
-						lastEditedComponentType.clear();
-						lastEditedDesc = nullptr;
-					}
-					if (ev.changed)
-						g_SceneDirty = true;
-				}
+				DrawInspectorSocketComponent(world, _selectedEntity);
 				continue;
 			}
-
 			// 일반 컴포넌트: 레지스트리 기반 렌더링
 			if (!d.has(world, _selectedEntity)) continue;
 
@@ -8443,15 +8400,6 @@ namespace Alice
 						if (std::find(ownerSocketOptions.begin(), ownerSocketOptions.end(), value) == ownerSocketOptions.end())
 							ownerSocketOptions.push_back(value);
 					};
-					if (const auto* adv = world.GetComponent<AdvancedAnimationComponent>(traceOwnerId))
-					{
-						for (const auto& s : adv->sockets)
-						{
-							addOpt(s.name);
-							if (!s.parentBone.empty() && s.parentBone != s.name)
-								addOpt(s.parentBone);
-						}
-					}
 					if (const auto* sc = world.GetComponent<SocketComponent>(traceOwnerId))
 					{
 						for (const auto& s : sc->sockets)
@@ -8511,11 +8459,6 @@ namespace Alice
 							changed = true;
 						};
 
-						if (const auto* adv = world.GetComponent<AdvancedAnimationComponent>(ownerId))
-						{
-							for (const auto& s : adv->sockets)
-								addIfMatch(s.name);
-						}
 						if (const auto* sc = world.GetComponent<SocketComponent>(ownerId))
 						{
 							for (const auto& s : sc->sockets)
@@ -8595,15 +8538,6 @@ namespace Alice
 						if (std::find(socketOptions.begin(), socketOptions.end(), value) == socketOptions.end())
 							socketOptions.push_back(value);
 					};
-					if (const auto* adv = world.GetComponent<AdvancedAnimationComponent>(resolvedOwner))
-					{
-						for (const auto& s : adv->sockets)
-						{
-							addOption(s.name);
-							if (!s.parentBone.empty() && s.parentBone != s.name)
-								addOption(s.parentBone);
-						}
-					}
 					if (const auto* sc = world.GetComponent<SocketComponent>(resolvedOwner))
 					{
 						for (const auto& s : sc->sockets)
@@ -8646,7 +8580,7 @@ namespace Alice
 				}
 				else if (resolvedOwner != InvalidEntityId)
 				{
-					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Owner has no sockets (AdvancedAnimation.sockets 추가)");
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Owner has no sockets (SocketComponent.sockets 추가)");
 					// 목록 없을 때만 현재값 표시 (읽기 전용)
 					ImGui::Text("Socket Name: %s", att->socketName.empty() ? "(none)" : att->socketName.c_str());
 				}
@@ -8670,26 +8604,16 @@ namespace Alice
 		}
 	}
 
-	ReflectionUI::UIEditEvent EditorCore::DrawInspectorAdvancedAnimation(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorSocketComponent(World& world, const EntityId& _selectedEntity)
 	{
-		ReflectionUI::UIEditEvent result{};
-		AdvancedAnimationComponent* comp = world.GetComponent<AdvancedAnimationComponent>(_selectedEntity);
+		auto* comp = world.GetComponent<SocketComponent>(_selectedEntity);
 		if (!comp)
-		{
-			ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Advanced Animation component not found.");
-			return result;
-		}
+			return;
 
-		// 상단 기본 필드 (항상 노출)
-		if (ImGui::Checkbox("Enabled", &comp->enabled))
-			result.changed = true;
-		result.activated |= ImGui::IsItemActivated();
-		result.deactivatedAfterEdit |= ImGui::IsItemDeactivatedAfterEdit();
-		if (ImGui::Checkbox("Playing", &comp->playing))
-			result.changed = true;
-		result.activated |= ImGui::IsItemActivated();
-		result.deactivatedAfterEdit |= ImGui::IsItemDeactivatedAfterEdit();
-		ImGui::Separator();
+		if (!ImGui::CollapsingHeader("Sockets", ImGuiTreeNodeFlags_DefaultOpen))
+			return;
+
+		bool changed = false;
 
 		// 본 이름 목록 (동일 엔티티의 SkinnedMesh에서)
 		std::vector<std::string> boneNames;
@@ -8706,120 +8630,90 @@ namespace Alice
 			}
 		}
 
-		rttr::instance inst = *comp;
-		rttr::type t = inst.get_type();
-
-		for (auto& prop : t.get_properties())
+		// 소켓 전용 UI: 본 드롭다운, 이름/위치/회전/스케일, + 추가 / 항목별 삭제
+		const size_t size = comp->sockets.size();
+		for (size_t i = 0; i < size; ++i)
 		{
-			const std::string propName = prop.get_name().to_string();
-			if (propName == "enabled" || propName == "playing")
-				continue; // 이미 상단에서 그림
-			if (propName == "sockets")
+			SocketDef& s = comp->sockets[i];
+			ImGui::PushID(static_cast<int>(i));
+
+			bool open = ImGui::TreeNode("Socket", "%s [%s]", s.name.empty() ? "(unnamed)" : s.name.c_str(), s.parentBone.empty() ? "?" : s.parentBone.c_str());
+			ImGui::SameLine();
+			if (ImGui::SmallButton("-"))
 			{
-				// 소켓 전용 UI: 본 드롭다운, 이름/위치/회전/스케일, + 추가 / 항목별 삭제
-				if (ImGui::TreeNodeEx("Sockets", ImGuiTreeNodeFlags_DefaultOpen))
+				comp->sockets.erase(comp->sockets.begin() + static_cast<ptrdiff_t>(i));
+				changed = true;
+				ImGui::PopID();
+				if (open) ImGui::TreePop();
+				break;
+			}
+			if (open)
+			{
+				// Name
+				char nameBuf[256];
+				std::snprintf(nameBuf, sizeof(nameBuf), "%.255s", s.name.c_str());
+				if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
 				{
-					const size_t size = comp->sockets.size();
-					for (size_t i = 0; i < size; ++i)
+					s.name = nameBuf;
+					changed = true;
+				}
+
+				// Parent Bone: 드롭다운 (본 목록)
+				int currentBoneIndex = -1;
+				if (!boneNames.empty())
+				{
+					for (size_t k = 0; k < boneNames.size(); ++k)
+						if (boneNames[k] == s.parentBone) { currentBoneIndex = static_cast<int>(k); break; }
+
+					const char* preview = (currentBoneIndex >= 0 && currentBoneIndex < static_cast<int>(boneNames.size()))
+						? boneNames[static_cast<size_t>(currentBoneIndex)].c_str()
+						: (s.parentBone.empty() ? "(선택)" : s.parentBone.c_str());
+					if (ImGui::BeginCombo("Parent Bone", preview))
 					{
-						AdvancedAnimSocket& s = comp->sockets[i];
-						ImGui::PushID(static_cast<int>(i));
-
-						bool open = ImGui::TreeNode("Socket", "%s [%s]", s.name.empty() ? "(unnamed)" : s.name.c_str(), s.parentBone.empty() ? "?" : s.parentBone.c_str());
-						ImGui::SameLine();
-						if (ImGui::SmallButton("-"))
+						for (size_t k = 0; k < boneNames.size(); ++k)
 						{
-							comp->sockets.erase(comp->sockets.begin() + static_cast<ptrdiff_t>(i));
-							result.changed = true;
-							ImGui::PopID();
-							if (open) ImGui::TreePop();
-							break;
+							const bool sel = (currentBoneIndex == static_cast<int>(k));
+							if (ImGui::Selectable(boneNames[k].c_str(), sel))
+							{
+								s.parentBone = boneNames[k];
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
 						}
-						if (open)
-						{
-							// Name
-							char nameBuf[256];
-							std::snprintf(nameBuf, sizeof(nameBuf), "%.255s", s.name.c_str());
-							if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
-							{
-								s.name = nameBuf;
-								result.changed = true;
-							}
-							result.activated |= ImGui::IsItemActivated();
-							result.deactivatedAfterEdit |= ImGui::IsItemDeactivatedAfterEdit();
-							// Parent Bone: 드롭다운 (본 목록)
-							int currentBoneIndex = -1;
-							if (!boneNames.empty())
-							{
-								for (size_t k = 0; k < boneNames.size(); ++k)
-								if (boneNames[k] == s.parentBone) { currentBoneIndex = static_cast<int>(k); break; }
-
-								const char* preview = (currentBoneIndex >= 0 && currentBoneIndex < static_cast<int>(boneNames.size()))
-									? boneNames[static_cast<size_t>(currentBoneIndex)].c_str()
-									: (s.parentBone.empty() ? "(선택)" : s.parentBone.c_str());
-								if (ImGui::BeginCombo("Parent Bone", preview))
-								{
-									for (size_t k = 0; k < boneNames.size(); ++k)
-									{
-										const bool sel = (currentBoneIndex == static_cast<int>(k));
-										if (ImGui::Selectable(boneNames[k].c_str(), sel))
-										{
-											s.parentBone = boneNames[k];
-											result.changed = true;
-										}
-										if (sel)
-											ImGui::SetItemDefaultFocus();
-									}
-									ImGui::EndCombo();
-								}
-								result.activated |= ImGui::IsItemActivated();
-								result.deactivatedAfterEdit |= ImGui::IsItemDeactivatedAfterEdit();
-							}
-							else
-							{
-								char boneBuf[256];
-								std::snprintf(boneBuf, sizeof(boneBuf), "%.255s", s.parentBone.c_str());
-								if (ImGui::InputText("Parent Bone", boneBuf, sizeof(boneBuf)))
-								{
-									s.parentBone = boneBuf;
-									result.changed = true;
-								}
-								if (ImGui::IsItemHovered())
-									ImGui::SetTooltip("SkinnedMesh가 없으면 본 이름을 직접 입력");
-								result.activated |= ImGui::IsItemActivated();
-								result.deactivatedAfterEdit |= ImGui::IsItemDeactivatedAfterEdit();
-							}
-							result.changed |= ImGui::DragFloat3("Position", &s.pos.x, 0.01f);
-							result.activated |= ImGui::IsItemActivated();
-							result.deactivatedAfterEdit |= ImGui::IsItemDeactivatedAfterEdit();
-							result.changed |= ImGui::DragFloat3("Rotation (deg)", &s.rotDeg.x, 1.0f);
-							result.activated |= ImGui::IsItemActivated();
-							result.deactivatedAfterEdit |= ImGui::IsItemDeactivatedAfterEdit();
-							result.changed |= ImGui::DragFloat3("Scale", &s.scale.x, 0.01f);
-							result.activated |= ImGui::IsItemActivated();
-							result.deactivatedAfterEdit |= ImGui::IsItemDeactivatedAfterEdit();
-							ImGui::TreePop();
-						}
-						ImGui::PopID();
+						ImGui::EndCombo();
 					}
-					if (ImGui::Button("+ Add Socket"))
+				}
+				else
+				{
+					char boneBuf[256];
+					std::snprintf(boneBuf, sizeof(boneBuf), "%.255s", s.parentBone.c_str());
+					if (ImGui::InputText("Parent Bone", boneBuf, sizeof(boneBuf)))
 					{
-						comp->sockets.push_back(AdvancedAnimSocket{});
-						result.changed = true;
+						s.parentBone = boneBuf;
+						changed = true;
 					}
 					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("이 오브젝트에 소켓을 추가합니다.");
-					ImGui::TreePop();
+						ImGui::SetTooltip("SkinnedMesh가 없으면 본 이름을 직접 입력");
 				}
-				continue;
-			}
 
-			ReflectionUI::UIEditEvent ev = ReflectionUI::Detail::RenderProperty(prop, inst, "", &world);
-			result.changed |= ev.changed;
-			result.activated |= ev.activated;
-			result.deactivatedAfterEdit |= ev.deactivatedAfterEdit;
+				changed |= ImGui::DragFloat3("Position", &s.position.x, 0.01f);
+				changed |= ImGui::DragFloat3("Rotation (deg)", &s.rotation.x, 1.0f);
+				changed |= ImGui::DragFloat3("Scale", &s.scale.x, 0.01f);
+				ImGui::TreePop();
+			}
+			ImGui::PopID();
 		}
-		return result;
+		if (ImGui::Button("+ Add Socket"))
+		{
+			comp->sockets.push_back(SocketDef{});
+			changed = true;
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("이 오브젝트에 소켓을 추가합니다.");
+
+		if (changed)
+			g_SceneDirty = true;
 	}
 }
 
