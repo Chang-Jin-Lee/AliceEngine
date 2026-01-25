@@ -20,6 +20,12 @@
                 "roughness": 1.0,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/Cube.fbxasset",
@@ -250,6 +256,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/Cube.fbxasset",
@@ -406,6 +418,11 @@
                 "boneCount": 248,
                 "instanceAssetPath": "Assets/Fbx/Alice.fbxasset",
                 "meshAssetPath": "Alice"
+            },
+            "Socket": {
+                "sockets": [
+                    {}
+                ]
             },
             "Transform": {
                 "enabled": true,

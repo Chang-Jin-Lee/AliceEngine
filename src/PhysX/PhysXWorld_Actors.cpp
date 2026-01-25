@@ -1,4 +1,4 @@
-﻿// PhysXWorld_Actors.cpp
+// PhysXWorld_Actors.cpp
 #include "PhysXWorld_Internal.h"
 
 // ============================================================
@@ -49,9 +49,6 @@ std::unique_ptr<IRigidBody> PhysXWorld::CreateDynamicEmpty(const Vec3& pos, cons
 	if (!body) return {};
 
 	ApplyRbDesc(*body, rb);
-
-		if (impl->enableActiveTransforms)
-		body->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_POSE_INTEGRATION_PREVIEW, true);
 
 	body->setMass(1.0f);
 	body->setMassSpaceInertiaTensor(PxVec3(1.0f, 1.0f, 1.0f));

@@ -13,6 +13,7 @@
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/TransformComponent.h"
+#include "Components/SocketComponent.h"
 #include "Core/World.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "3Dmodel/FbxModel.h"
@@ -108,28 +109,6 @@ namespace Alice
             ProcessAdvanced(entityId, world, animComp, *skinned, mesh, dtSec);
         }
 
-        // ------------------------------
-        // 2) Simple animation fallback
-        // ------------------------------
-        for (auto [entityId, animComp] : world.GetComponents<SkinnedAnimationComponent>())
-        {
-            // AdvancedAnimationComponent가 있고 enabled이면 건너뛰기
-            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(entityId))
-            {
-                if (advAnim->enabled)
-                    continue;
-            }
-
-            auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId);
-            if (!skinned || skinned->meshAssetPath.empty())
-                continue;
-
-            auto mesh = m_registry.Find(skinned->meshAssetPath);
-            if (!mesh || !mesh->sourceModel)
-                continue;
-
-            ProcessSimple(entityId, world, animComp, *skinned, mesh, dtSec);
-        }
     }
 
     bool AdvancedAnimSystem::EnsureRuntime(Runtime& rt,
@@ -425,16 +404,42 @@ namespace Alice
         skinned.boneCount = static_cast<std::uint32_t>(animComp.palette.size());
 
         // ------------------------------
-        // Socket world outputs
+        // Socket world outputs (엔진 로우 컨벤션)
         // ------------------------------
         DirectX::XMMATRIX charWorld = DirectX::XMMatrixIdentity();
         if (const auto* t = world.GetComponent<TransformComponent>(id))
             charWorld = BuildWorldMatrix(*t);
+        DirectX::XMMATRIX charWorldRow = charWorld;
 
         for (auto& s : animComp.sockets)
         {
-            DirectX::XMMATRIX socketWorld = rt.animator->GetSocketWorldMatrix(s.name, charWorld);
+            DirectX::XMMATRIX socketWorld = rt.animator->GetSocketWorldMatrix(s.name, charWorldRow);
             DirectX::XMStoreFloat4x4(&s.worldMatrix, socketWorld);
+        }
+
+        // ------------------------------
+        // SocketComponent.sockets[].world 갱신 (스크립트/에디터로 추가한 소켓, 로우 컨벤션)
+        // ------------------------------
+        if (auto* socketComp = world.GetComponent<SocketComponent>(id))
+        {
+            for (auto& s : socketComp->sockets)
+            {
+                DirectX::XMMATRIX boneGlobalRow;
+                if (!rt.animator->GetBoneGlobalMatrix(s.parentBone, boneGlobalRow))
+                    continue;
+
+                DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&s.scale);
+                DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&s.rotation);
+                DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&s.position);
+                DirectX::XMMATRIX localRow =
+                    DirectX::XMMatrixScalingFromVector(scale) *
+                    DirectX::XMMatrixRotationRollPitchYawFromVector(rotation) *
+                    DirectX::XMMatrixTranslationFromVector(translation);
+
+                DirectX::XMMATRIX socketWorld = localRow * boneGlobalRow * charWorldRow;
+                DirectX::XMStoreFloat4x4(&s.local, localRow);
+                DirectX::XMStoreFloat4x4(&s.world, socketWorld);
+            }
         }
     }
 

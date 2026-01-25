@@ -10,6 +10,7 @@
 #include <rttr/variant.h>
 #include <rttr/instance.h>
 #include <rttr/property.h>
+#include <rttr/variant_sequential_view.h>
 #include <imgui.h>
 #include <DirectXMath.h>
 #include <string>
@@ -266,6 +267,40 @@ namespace Alice
                         }
                         
                         ImGui::EndDragDropTarget();
+                    }
+                }
+                else if (propType.is_sequential_container())
+                {
+                    // std::vector<T> 등: 각 요소를 트리 노드로 표시 (AdvancedAnimSocket 등)
+                    rttr::variant_sequential_view view = value.create_sequential_view();
+                    if (view.is_valid())
+                    {
+                        for (size_t i = 0; i < view.get_size(); ++i)
+                        {
+                            rttr::variant itemVal = view.get_value(i);
+                            if (!itemVal.is_valid()) continue;
+                            rttr::type itemType = itemVal.get_type();
+                            std::string nodeLabel = displayName + "[" + std::to_string(i) + "]";
+                            if (itemType.is_class())
+                            {
+                                if (ImGui::TreeNode(nodeLabel.c_str()))
+                                {
+                                    rttr::instance elemInst = itemVal;
+                                    for (auto& subProp : itemType.get_properties())
+                                    {
+                                        UIEditEvent e = RenderProperty(subProp, elemInst, "", world);
+                                        event.changed |= e.changed;
+                                        event.activated |= e.activated;
+                                        event.deactivatedAfterEdit |= e.deactivatedAfterEdit;
+                                    }
+                                    ImGui::TreePop();
+                                }
+                            }
+                            else
+                            {
+                                ImGui::Text("%s: %s", nodeLabel.c_str(), itemVal.to_string().c_str());
+                            }
+                        }
                     }
                 }
                 else if (propType.is_class())
