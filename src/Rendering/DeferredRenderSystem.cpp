@@ -1360,6 +1360,8 @@ namespace Alice
         // 실제로 사용한 카메라 정보 저장 (ComputeEffect용)
         m_lastViewProj = camera.GetViewProjectionMatrix();
         m_lastCameraPos = camera.GetPosition();
+        m_lastNearPlane = camera.GetNearPlane();
+        m_lastFarPlane = camera.GetFarPlane();
 
         // Viewport 설정
         D3D11_VIEWPORT vp{};

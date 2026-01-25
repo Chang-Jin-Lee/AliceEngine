@@ -1333,6 +1333,8 @@ namespace Alice
         // 실제로 사용한 카메라 정보 저장 (ComputeEffect용)
         m_lastViewProj = camera.GetViewProjectionMatrix();
         m_lastCameraPos = camera.GetPosition();
+        m_lastNearPlane = camera.GetNearPlane();
+        m_lastFarPlane = camera.GetFarPlane();
 
         // 1. 섀도우 맵 패스 (Shadow Map Generation) - 반환값: Main Pass에서 사용할 Light View-Projection 행렬
         XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities);

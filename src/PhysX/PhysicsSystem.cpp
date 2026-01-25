@@ -2978,7 +2978,8 @@ void PhysicsSystem::SyncPhysicsToGame(const ActiveTransform& transform)
 bool PhysicsSystem::IsTrackedEntity(Alice::EntityId id) const noexcept
 {
     return (m_entityToActor.find(id) != m_entityToActor.end()) ||
-           (m_entityToCCT.find(id) != m_entityToCCT.end());
+           (m_entityToCCT.find(id) != m_entityToCCT.end()) ||
+           (m_entityToJoint.find(id) != m_entityToJoint.end());
 }
 
 IPhysicsActor* PhysicsSystem::ValidateAndGetActor(void* handle, Alice::EntityId entityId) const noexcept

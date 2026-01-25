@@ -1,14 +1,17 @@
-﻿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
 #include "Core/Prefab.h"
-#include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
+#include "Core/ComponentRegistry.h"
 #include "Core/JsonRttr.h"
 #include "Core/ResourceManager.h"
+#include "Core/Logger.h"
+#include "Core/SceneSerializationHelpers.h"
 
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
+#include "Components/IDComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
@@ -39,224 +42,162 @@ namespace Alice
     {
         namespace
         {
-            // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
-            // 1개짜리 항등 본 팔레트입니다.
-            static DirectX::XMFLOAT4X4 g_IdentityBone(
-                1, 0, 0, 0,
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1);
-
-            // 프로젝트 루트 경로를 구하는 헬퍼 함수
-            static std::filesystem::path GetProjectRoot()
+            // GUID 파싱 (EntityRef용, 실패 시 0 반환)
+            static std::uint64_t ParseGuidAny(const JsonRttr::json& j)
             {
-                wchar_t exePathW[MAX_PATH] = {};
-                GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
-                std::filesystem::path exePath = exePathW;
-                std::filesystem::path exeDir = exePath.parent_path();
-                // build/bin/Debug 또는 build/bin/Release 가 나옴. 프로젝트 루트임
-                return exeDir.parent_path().parent_path().parent_path();
-            }
-
-            // 절대 경로를 상대 경로로 변환하는 헬퍼 함수
-            static std::string NormalizePathToRelative(const std::string& path)
-            {
-                if (path.empty())
-                    return path;
-
-                std::filesystem::path p(path);
-                
-                // 이미 상대 경로이거나 Assets/ 또는 Resource/로 시작하면 그대로 반환
-                if (!p.is_absolute())
+                if (j.is_string())
                 {
-                    const std::string s = p.generic_string();
-                    if (s.find("Assets/") == 0 || s.find("Resource/") == 0 || s.find("Cooked/") == 0)
-                        return s;
-                }
-
-                // 절대 경로인 경우 프로젝트 루트 기준 상대 경로로 변환
-                if (p.is_absolute())
-                {
-                    const std::filesystem::path projectRoot = GetProjectRoot();
                     try
                     {
-                        std::filesystem::path relative = std::filesystem::relative(p, projectRoot);
-                        if (!relative.empty())
-                        {
-                            const std::string result = relative.generic_string();
-                            // Assets/ 또는 Resource/로 시작하는지 확인
-                            if (result.find("Assets/") == 0 || result.find("Resource/") == 0 || result.find("Cooked/") == 0)
-                                return result;
-                        }
+                        return std::stoull(j.get<std::string>());
                     }
                     catch (...)
                     {
-                        // relative() 실패 시 원본 반환
+                        return 0;
                     }
                 }
-
-                return path;
+                if (j.is_number_unsigned())
+                {
+                    return j.get<std::uint64_t>();
+                }
+                return 0;
             }
 
-            // Phy_SettingsComponent 수동 직렬화
-            static JsonRttr::json WritePhysicsSceneSettings(const Phy_SettingsComponent& settings)
+            // 프로퍼티가 EntityId/EntityRef인지 확인
+            static bool IsEntityRefProp(const rttr::property& prop)
+            {
+                const rttr::type pt = prop.get_type();
+                const std::string tn = pt.get_name().to_string();
+                if (pt == rttr::type::get<EntityId>())
+                    return true;
+                if (tn == "EntityId" || tn == "Alice::EntityId")
+                    return true;
+                if (prop.get_metadata("EntityRef").is_valid())
+                    return true;
+                return false;
+            }
+
+            // 프리팹 저장 대상 엔티티의 스크립트에서, 다른 엔티티를 참조하는 경우 경고
+            static void WarnExternalEntityRefsInPrefab(const World& world, EntityId prefabRoot)
+            {
+                const auto* scripts = world.GetScripts(prefabRoot);
+                if (!scripts) return;
+                for (const auto& sc : *scripts)
+                {
+                    if (!sc.instance) continue;
+                    rttr::instance inst = *sc.instance;
+                    rttr::type type = rttr::type::get_by_name(sc.scriptName);
+                    if (!type.is_valid()) type = inst.get_type();
+                    for (auto prop : type.get_properties())
+                    {
+                        if (!IsEntityRefProp(prop)) continue;
+                        rttr::variant v = prop.get_value(inst);
+                        if (!v.is_valid() || !v.can_convert<EntityId>()) continue;
+                        EntityId ref = v.get_value<EntityId>();
+                        if (ref == InvalidEntityId || ref == prefabRoot) continue;
+                        ALICE_LOG_WARN("Prefab: script '%s' has EntityRef to external entity (not prefab root). "
+                                       "Ref will be Invalid when prefab is instantiated in another scene/project.",
+                                       sc.scriptName.c_str());
+                    }
+                }
+            }
+
+            // 스크립트 props 저장 (EntityId → GUID 변환)
+            static JsonRttr::json WriteScriptProps_WithEntityRefGuid(const World& world, const ScriptComponent& sc)
             {
                 JsonRttr::json out = JsonRttr::json::object();
-                
-                // 기본 프로퍼티
-                out["enablePhysics"] = settings.enablePhysics;
-                out["enableGroundPlane"] = settings.enableGroundPlane;
-                out["groundStaticFriction"] = settings.groundStaticFriction;
-                out["groundDynamicFriction"] = settings.groundDynamicFriction;
-                out["groundRestitution"] = settings.groundRestitution;
-                out["groundLayerBits"] = settings.groundLayerBits;
-                out["groundCollideMask"] = settings.groundCollideMask;
-                out["groundQueryMask"] = settings.groundQueryMask;
-                out["groundIgnoreLayers"] = settings.groundIgnoreLayers;
-                out["groundIsTrigger"] = settings.groundIsTrigger;
-                out["gravity"] = JsonRttr::json::array({ settings.gravity.x, settings.gravity.y, settings.gravity.z });
-                out["fixedDt"] = settings.fixedDt;
-                out["maxSubsteps"] = settings.maxSubsteps;
-                out["filterRevision"] = settings.filterRevision;
-                
-                // layerCollideMatrix: 32x32 bool 배열
-                out["layerCollideMatrix"] = JsonRttr::json::array();
-                for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+                if (!sc.instance)
+                    return out;
+
+                rttr::instance inst = *sc.instance;
+                rttr::type type = rttr::type::get_by_name(sc.scriptName);
+                if (!type.is_valid())
+                    type = inst.get_type();
+
+                for (auto prop : type.get_properties())
                 {
-                    JsonRttr::json row = JsonRttr::json::array();
-                    for (int col = 0; col < MAX_PHYSICS_LAYERS; ++col)
+                    const std::string key = prop.get_name().to_string();
+                    rttr::variant v = prop.get_value(inst);
+                    if (!v.is_valid())
+                        continue;
+
+                    if (IsEntityRefProp(prop))
                     {
-                        row.push_back(settings.layerCollideMatrix[i][col]);
+                        EntityId ref = InvalidEntityId;
+                        if (v.can_convert<EntityId>())
+                            ref = v.get_value<EntityId>();
+
+                        if (ref == InvalidEntityId)
+                        {
+                            out[key] = nullptr;
+                        }
+                        else
+                        {
+                            if (const auto* idc = world.GetComponent<IDComponent>(ref))
+                                out[key] = std::to_string(idc->guid);
+                            else
+                                out[key] = nullptr;
+                        }
                     }
-                    out["layerCollideMatrix"].push_back(row);
-                }
-                
-                // layerQueryMatrix: 32x32 bool 배열
-                out["layerQueryMatrix"] = JsonRttr::json::array();
-                for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
-                {
-                    JsonRttr::json row = JsonRttr::json::array();
-                    for (int col = 0; col < MAX_PHYSICS_LAYERS; ++col)
+                    else
                     {
-                        row.push_back(settings.layerQueryMatrix[i][col]);
+                        out[key] = JsonRttr::ToJsonVariant(v);
                     }
-                    out["layerQueryMatrix"].push_back(row);
                 }
-                
-                // layerNames: 32개 string 배열
-                out["layerNames"] = JsonRttr::json::array();
-                for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
-                {
-                    out["layerNames"].push_back(settings.layerNames[i]);
-                }
-                
                 return out;
             }
-            
-            // Phy_SettingsComponent 수동 역직렬화
-            static bool LoadPhysicsSceneSettings(Phy_SettingsComponent& settings, const JsonRttr::json& root)
+
+            // 스크립트 props 로드 (GUID → EntityId 변환)
+            static bool ApplyScriptProps_WithEntityRefGuid(World& world,
+                                                          ScriptComponent& sc,
+                                                          JsonRttr::json props,
+                                                          const std::unordered_map<std::uint64_t, EntityId>& guidToEntity)
             {
-                if (!root.is_object()) return false;
-                
-                // 기본 프로퍼티
-                if (root.contains("enablePhysics") && root["enablePhysics"].is_boolean())
-                    settings.enablePhysics = root["enablePhysics"].get<bool>();
+                if (!sc.instance)
+                    return true;
 
-                if (root.contains("enableGroundPlane") && root["enableGroundPlane"].is_boolean())
-                    settings.enableGroundPlane = root["enableGroundPlane"].get<bool>();
+                rttr::instance inst = *sc.instance;
+                rttr::type type = rttr::type::get_by_name(sc.scriptName);
+                if (!type.is_valid())
+                    type = inst.get_type();
 
-                if (root.contains("groundStaticFriction") && root["groundStaticFriction"].is_number())
-                    settings.groundStaticFriction = root["groundStaticFriction"].get<float>();
-
-                if (root.contains("groundDynamicFriction") && root["groundDynamicFriction"].is_number())
-                    settings.groundDynamicFriction = root["groundDynamicFriction"].get<float>();
-
-                if (root.contains("groundRestitution") && root["groundRestitution"].is_number())
-                    settings.groundRestitution = root["groundRestitution"].get<float>();
-
-                if (root.contains("groundLayerBits") && root["groundLayerBits"].is_number_unsigned())
-                    settings.groundLayerBits = root["groundLayerBits"].get<uint32_t>();
-
-                if (root.contains("groundCollideMask") && root["groundCollideMask"].is_number_unsigned())
-                    settings.groundCollideMask = root["groundCollideMask"].get<uint32_t>();
-
-                if (root.contains("groundQueryMask") && root["groundQueryMask"].is_number_unsigned())
-                    settings.groundQueryMask = root["groundQueryMask"].get<uint32_t>();
-
-                if (root.contains("groundIgnoreLayers") && root["groundIgnoreLayers"].is_number_unsigned())
-                    settings.groundIgnoreLayers = root["groundIgnoreLayers"].get<uint32_t>();
-
-                if (root.contains("groundIsTrigger") && root["groundIsTrigger"].is_boolean())
-                    settings.groundIsTrigger = root["groundIsTrigger"].get<bool>();
-
-                if (root.contains("gravity") && root["gravity"].is_array() && root["gravity"].size() == 3)
+                // EntityRef 프로퍼티를 먼저 처리
+                for (auto prop : type.get_properties())
                 {
-                    settings.gravity.x = root["gravity"][0].get<float>();
-                    settings.gravity.y = root["gravity"][1].get<float>();
-                    settings.gravity.z = root["gravity"][2].get<float>();
-                }
+                    if (!IsEntityRefProp(prop))
+                        continue;
 
-                if (root.contains("fixedDt") && root["fixedDt"].is_number())
-                    settings.fixedDt = root["fixedDt"].get<float>();
+                    const std::string key = prop.get_name().to_string();
+                    auto it = props.find(key);
+                    if (it == props.end())
+                        continue;
 
-                if (root.contains("maxSubsteps") && root["maxSubsteps"].is_number_unsigned())
-                    settings.maxSubsteps = root["maxSubsteps"].get<uint32_t>();
-
-                if (root.contains("filterRevision") && root["filterRevision"].is_number_unsigned())
-                    settings.filterRevision = root["filterRevision"].get<uint32_t>();
-                
-                // layerCollideMatrix: 32x32 bool 배열
-                if (root.contains("layerCollideMatrix") && root["layerCollideMatrix"].is_array())
-                {
-                    const auto& matrix = root["layerCollideMatrix"];
-                    for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(matrix.size()); ++i)
+                    std::uint64_t guid = ParseGuidAny(*it);
+                    EntityId ref = InvalidEntityId;
+                    if (guid != 0)
                     {
-                        if (matrix[i].is_array())
-                        {
-                            const auto& row = matrix[i];
-                            for (int col = 0; col < MAX_PHYSICS_LAYERS && col < static_cast<int>(row.size()); ++col)
-                            {
-                                if (row[col].is_boolean())
-                                    settings.layerCollideMatrix[i][col] = row[col].get<bool>();
-                                else if (row[col].is_number_integer())
-                                    settings.layerCollideMatrix[i][col] = (row[col].get<int>() != 0);
-                            }
-                        }
+                        auto mit = guidToEntity.find(guid);
+                        if (mit != guidToEntity.end())
+                            ref = mit->second;
                     }
+                    prop.set_value(inst, ref);
+                    props.erase(it);
                 }
-                
-                // layerQueryMatrix: 32x32 bool 배열
-                if (root.contains("layerQueryMatrix") && root["layerQueryMatrix"].is_array())
+
+                // 나머지 props는 FromJsonObject로 처리
+                return JsonRttr::FromJsonObject(inst, props, type);
+            }
+
+            // World의 모든 엔티티의 GUID→EntityId 맵 생성
+            static std::unordered_map<std::uint64_t, EntityId> BuildGuidToEntityMap(const World& world)
+            {
+                std::unordered_map<std::uint64_t, EntityId> guidToEntity;
+                const auto& idComponents = world.GetComponents<IDComponent>();
+                for (const auto& [entityId, idComp] : idComponents)
                 {
-                    const auto& matrix = root["layerQueryMatrix"];
-                    for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(matrix.size()); ++i)
-                    {
-                        if (matrix[i].is_array())
-                        {
-                            const auto& row = matrix[i];
-                            for (int col = 0; col < MAX_PHYSICS_LAYERS && col < static_cast<int>(row.size()); ++col)
-                            {
-                                if (row[col].is_boolean())
-                                    settings.layerQueryMatrix[i][col] = row[col].get<bool>();
-                                else if (row[col].is_number_integer())
-                                    settings.layerQueryMatrix[i][col] = (row[col].get<int>() != 0);
-                            }
-                        }
-                    }
+                    guidToEntity[idComp.guid] = entityId;
                 }
-                
-                // layerNames: 32개 string 배열
-                if (root.contains("layerNames") && root["layerNames"].is_array())
-                {
-                    const auto& names = root["layerNames"];
-                    for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(names.size()); ++i)
-                    {
-                        if (names[i].is_string())
-                            settings.layerNames[i] = names[i].get<std::string>();
-                    }
-                }
-                
-                return true;
+                return guidToEntity;
             }
         }
 
@@ -289,6 +230,9 @@ namespace Alice
             }
 
             // Scripts (여러 개)
+            // 프리팹 로드 시 씬의 모든 엔티티 GUID 맵 생성 (프리팹 스크립트가 씬의 다른 엔티티 참조 가능)
+            std::unordered_map<std::uint64_t, EntityId> guidToEntity = BuildGuidToEntityMap(world);
+
             auto itS = root.find("Scripts");
             if (itS != root.end() && itS->is_array())
             {
@@ -304,9 +248,8 @@ namespace Alice
                     auto itP = s.find("props");
                     if (itP != s.end() && itP->is_object() && sc.instance)
                     {
-                        rttr::instance inst = *sc.instance;
-                        const rttr::type t = rttr::type::get_by_name(sc.scriptName);
-                        if (!JsonRttr::FromJsonObject(inst, *itP, t))
+                        JsonRttr::json propsCopy = *itP; // 복사본 생성 (EntityRef 키 제거용)
+                        if (!ApplyScriptProps_WithEntityRefGuid(world, sc, propsCopy, guidToEntity))
                             return InvalidEntityId;
                         sc.defaultsApplied = true; // 프리팹이 값 주입 완료
                     }
@@ -336,7 +279,7 @@ namespace Alice
                 {
                     SkinnedMeshComponent& sm = world.AddComponent<SkinnedMeshComponent>(entity, tmp.meshAssetPath);
                     sm.instanceAssetPath = tmp.instanceAssetPath;
-                    sm.boneMatrices = &g_IdentityBone;
+                    sm.boneMatrices = &SceneSerializationHelpers::g_IdentityBone;
                     sm.boneCount = 1;
                 }
             }
@@ -511,7 +454,7 @@ namespace Alice
             {
                 Phy_SettingsComponent& ps = world.AddComponent<Phy_SettingsComponent>(entity);
                 // 수동 역직렬화 사용 (중첩 배열 보장)
-                if (!LoadPhysicsSceneSettings(ps, *itPhysicsSettings))
+                if (!SceneSerializationHelpers::LoadPhysicsSceneSettings(ps, *itPhysicsSettings))
                     return InvalidEntityId;
             }
 
@@ -527,6 +470,8 @@ namespace Alice
             const TransformComponent* t = world.GetComponent<TransformComponent>(entity);
             if (!t)
                 return false;
+
+            WarnExternalEntityRefsInPrefab(world, entity);
 
             JsonRttr::json root = JsonRttr::json::object();
             root["version"] = 1;
@@ -553,9 +498,7 @@ namespace Alice
 
                     if (sc.instance)
                     {
-                        rttr::instance inst = *sc.instance;
-                        const rttr::type t = rttr::type::get_by_name(sc.scriptName);
-                        s["props"] = JsonRttr::ToJsonObject(inst, t);
+                        s["props"] = WriteScriptProps_WithEntityRefGuid(world, sc);
                     }
 
                     arr.push_back(s);
@@ -568,8 +511,8 @@ namespace Alice
             {
                 // 경로를 상대 경로로 변환하기 위해 복사본 생성
                 MaterialComponent matCopy = *mat;
-                matCopy.assetPath = NormalizePathToRelative(matCopy.assetPath);
-                matCopy.albedoTexturePath = NormalizePathToRelative(matCopy.albedoTexturePath);
+                matCopy.assetPath = SceneSerializationHelpers::NormalizePathToRelative(matCopy.assetPath);
+                matCopy.albedoTexturePath = SceneSerializationHelpers::NormalizePathToRelative(matCopy.albedoTexturePath);
                 
                 rttr::instance inst = matCopy;
                 root["Material"] = JsonRttr::ToJsonObject(inst);
@@ -580,8 +523,8 @@ namespace Alice
             {
                 // 경로를 상대 경로로 변환하기 위해 복사본 생성
                 SkinnedMeshComponent skinnedCopy = *skinned;
-                skinnedCopy.instanceAssetPath = NormalizePathToRelative(skinnedCopy.instanceAssetPath);
-                skinnedCopy.meshAssetPath = NormalizePathToRelative(skinnedCopy.meshAssetPath);
+                skinnedCopy.instanceAssetPath = SceneSerializationHelpers::NormalizePathToRelative(skinnedCopy.instanceAssetPath);
+                skinnedCopy.meshAssetPath = SceneSerializationHelpers::NormalizePathToRelative(skinnedCopy.meshAssetPath);
                 
                 rttr::instance inst = skinnedCopy;
                 root["SkinnedMesh"] = JsonRttr::ToJsonObject(inst);
@@ -698,7 +641,7 @@ namespace Alice
             if (const auto* physicsSettings = world.GetComponent<Phy_SettingsComponent>(entity); physicsSettings)
             {
                 // 수동 직렬화 사용 (중첩 배열 보장)
-                root["PhysicsSceneSettings"] = WritePhysicsSceneSettings(*physicsSettings);
+                root["PhysicsSceneSettings"] = SceneSerializationHelpers::WritePhysicsSceneSettings(*physicsSettings);
             }
 
             if (const auto* joint = world.GetComponent<Phy_JointComponent>(entity); joint)

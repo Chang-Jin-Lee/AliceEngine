@@ -1,6 +1,9 @@
 #include "Core/ComponentRegistry.h"
 #include "Core/World.h"
 #include "Core/EditorComponentRegistry.h"
+#include "Core/JsonRttr.h"
+#include "Core/SceneFile.h"
+#include "Core/SceneSerializationHelpers.h"
 #include "Logger.h"
 
 #include <rttr/registration>
@@ -186,6 +189,14 @@ namespace Alice
             .property("yawRad", &AdvancedAnimAim::yawRad)
             .property("weight", &AdvancedAnimAim::weight);
 
+        rttr::registration::class_<AdvancedAnimSocket>("AdvancedAnimSocket")
+            .constructor<>()
+            .property("name", &AdvancedAnimSocket::name)
+            .property("parentBone", &AdvancedAnimSocket::parentBone)
+            .property("pos", &AdvancedAnimSocket::pos)
+            .property("rotDeg", &AdvancedAnimSocket::rotDeg)
+            .property("scale", &AdvancedAnimSocket::scale);
+
         rttr::registration::class_<AdvancedAnimationComponent>("AdvancedAnimationComponent")
             .constructor<>()
             .property("enabled", &AdvancedAnimationComponent::enabled)
@@ -195,7 +206,9 @@ namespace Alice
             .property("additive", &AdvancedAnimationComponent::additive)
             .property("procedural", &AdvancedAnimationComponent::procedural)
             .property("ik", &AdvancedAnimationComponent::ik)
-            .property("aim", &AdvancedAnimationComponent::aim);
+            .property("ikChains", &AdvancedAnimationComponent::ikChains)
+            .property("aim", &AdvancedAnimationComponent::aim)
+            .property("sockets", &AdvancedAnimationComponent::sockets);
 
 
 		//  Enum 등록
@@ -775,45 +788,139 @@ namespace Alice
 
         // Transform은 필수라면 addable/removable 컨트롤
         r.Register<TransformComponent>("Transform", "Core",
-            /*addFn*/{}, /*addable*/false, /*removable*/false);
+            /*addFn*/{}, /*addable*/false, /*removable*/false,
+            /*fileKey*/"Transform");
 
+        // Material: 경로 정규화 필요
         r.Register<MaterialComponent>("Material", "Rendering",
             [](World& w, EntityId e) {
                 DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
                 w.AddComponent<MaterialComponent>(e, defaultColor);
+            },
+            /*addable*/true, /*removable*/true,
+            /*fileKey*/"Material",
+            /*serialize*/[](const World& w, EntityId e) -> JsonRttr::json {
+                auto* mat = w.GetComponent<MaterialComponent>(e);
+                if (!mat) return JsonRttr::json();
+                MaterialComponent copy = *mat;
+                // MaterialFile::Save에서 이미 정규화하지만, 여기서도 안전하게 처리
+                copy.assetPath = SceneSerializationHelpers::NormalizePathToRelative(copy.assetPath);
+                copy.albedoTexturePath = SceneSerializationHelpers::NormalizePathToRelative(copy.albedoTexturePath);
+                rttr::instance inst = copy;
+                return JsonRttr::ToJsonObject(inst);
+            },
+            /*deserialize*/[](World& w, EntityId e, const JsonRttr::json& j) -> bool {
+                auto* mat = w.GetComponent<MaterialComponent>(e);
+                if (!mat)
+                {
+                    DirectX::XMFLOAT3 defaultColor(0.7f, 0.7f, 0.7f);
+                    w.AddComponent<MaterialComponent>(e, defaultColor);
+                    mat = w.GetComponent<MaterialComponent>(e);
+                }
+                if (!mat) return false;
+                rttr::instance inst = *mat;
+                return JsonRttr::FromJsonObject(inst, j);
             });
 
+        // SkinnedMesh: 로드 시 tmp로 읽고 AddComponent(meshAssetPath) 필요
         r.Register<SkinnedMeshComponent>("Skinned Mesh", "Rendering",
             [](World& w, EntityId e) {
                 w.AddComponent<SkinnedMeshComponent>(e, ""); // 기본값
+            },
+            /*addable*/true, /*removable*/true,
+            /*fileKey*/"SkinnedMesh",
+            /*serialize*/[](const World& w, EntityId e) -> JsonRttr::json {
+                auto* skinned = w.GetComponent<SkinnedMeshComponent>(e);
+                if (!skinned) return JsonRttr::json();
+                SkinnedMeshComponent copy = *skinned;
+                copy.instanceAssetPath = SceneSerializationHelpers::NormalizePathToRelative(copy.instanceAssetPath);
+                copy.meshAssetPath = SceneSerializationHelpers::NormalizePathToRelative(copy.meshAssetPath);
+                rttr::instance inst = copy;
+                return JsonRttr::ToJsonObject(inst);
+            },
+            /*deserialize*/[](World& w, EntityId e, const JsonRttr::json& j) -> bool {
+                SkinnedMeshComponent tmp;
+                rttr::instance instTmp = tmp;
+                if (!JsonRttr::FromJsonObject(instTmp, j)) return false;
+                if (tmp.meshAssetPath.empty())
+                    return true;
+                SkinnedMeshComponent& sm = w.AddComponent<SkinnedMeshComponent>(e, tmp.meshAssetPath);
+                JsonRttr::json j2 = j;
+                j2.erase("meshAssetPath");
+                rttr::instance inst = sm;
+                if (!JsonRttr::FromJsonObject(inst, j2)) return false;
+                sm.boneMatrices = &SceneSerializationHelpers::g_IdentityBone;
+                sm.boneCount = 1;
+                return true;
             });
 
-        r.Register<SkinnedAnimationComponent>("Skinned Animation", "Rendering");
+        r.Register<SkinnedAnimationComponent>("Skinned Animation", "Rendering",
+            {}, true, true, /*fileKey*/"SkinnedAnimation");
 
-        r.Register<CameraComponent>("Camera", "Camera");
-        r.Register<CameraFollowComponent>("Camera Follow", "Camera");
-        r.Register<CameraSpringArmComponent>("Spring Arm", "Camera");
-        r.Register<CameraLookAtComponent>("Look At", "Camera");
-        r.Register<CameraShakeComponent>("Shake", "Camera");
-        r.Register<CameraBlendComponent>("Blend", "Camera");
-        r.Register<CameraInputComponent>("Input", "Camera");
+        r.Register<AdvancedAnimationComponent>("Advanced Animation", "Rendering",
+            {}, true, true, /*fileKey*/"AdvancedAnimation");
 
-        r.Register<PointLightComponent>("Point Light", "Lighting");
-        r.Register<SpotLightComponent>("Spot Light", "Lighting");
-        r.Register<RectLightComponent>("Rect Light", "Lighting");
+        r.Register<CameraComponent>("Camera", "Camera",
+            {}, true, true, /*fileKey*/"Camera");
+        r.Register<CameraFollowComponent>("Camera Follow", "Camera",
+            {}, true, true, /*fileKey*/"CameraFollow");
+        r.Register<CameraSpringArmComponent>("Spring Arm", "Camera",
+            {}, true, true, /*fileKey*/"CameraSpringArm");
+        r.Register<CameraLookAtComponent>("Look At", "Camera",
+            {}, true, true, /*fileKey*/"CameraLookAt");
+        r.Register<CameraShakeComponent>("Shake", "Camera",
+            {}, true, true, /*fileKey*/"CameraShake");
+        r.Register<CameraBlendComponent>("Blend", "Camera",
+            {}, true, true, /*fileKey*/"CameraBlend");
+        r.Register<CameraInputComponent>("Input", "Camera",
+            {}, true, true, /*fileKey*/"CameraInput");
 
-        r.Register<ComputeEffectComponent>("Compute Effect", "VFX");
-        r.Register<EffectComponent>("Effect", "VFX");
-        r.Register<TrailEffectComponent>("Trail Effect", "VFX");
+        r.Register<PointLightComponent>("Point Light", "Lighting",
+            {}, true, true, /*fileKey*/"PointLight");
+        r.Register<SpotLightComponent>("Spot Light", "Lighting",
+            {}, true, true, /*fileKey*/"SpotLight");
+        r.Register<RectLightComponent>("Rect Light", "Lighting",
+            {}, true, true, /*fileKey*/"RectLight");
 
-        r.Register<Phy_RigidBodyComponent>("RigidBody", "Physics");
-        r.Register<Phy_ColliderComponent>("Collider", "Physics");
-        r.Register<Phy_MeshColliderComponent>("MeshCollider", "Physics");
-        r.Register<Phy_CCTComponent>("CCT", "Physics");
-        r.Register<Phy_TerrainHeightFieldComponent>("TerrainHeightField", "Physics");
-        r.Register<Phy_JointComponent>("Joint", "Physics");
+        r.Register<ComputeEffectComponent>("Compute Effect", "VFX",
+            {}, true, true, /*fileKey*/"ComputeEffect");
+        r.Register<EffectComponent>("Effect", "VFX",
+            {}, true, true, /*fileKey*/"Effect");
+        r.Register<TrailEffectComponent>("Trail Effect", "VFX",
+            {}, true, true, /*fileKey*/"TrailEffect");
+
+        r.Register<Phy_RigidBodyComponent>("RigidBody", "Physics",
+            {}, true, true, /*fileKey*/"RigidBody");
+        r.Register<Phy_ColliderComponent>("Collider", "Physics",
+            {}, true, true, /*fileKey*/"Collider");
+        r.Register<Phy_MeshColliderComponent>("MeshCollider", "Physics",
+            {}, true, true, /*fileKey*/"MeshCollider");
+        r.Register<Phy_CCTComponent>("CCT", "Physics",
+            {}, true, true, /*fileKey*/"CharacterController");
+        r.Register<Phy_TerrainHeightFieldComponent>("TerrainHeightField", "Physics",
+            {}, true, true, /*fileKey*/"TerrainHeightField");
+        r.Register<Phy_JointComponent>("Joint", "Physics",
+            {}, true, true, /*fileKey*/"Joint");
+        
+        // Phy_SettingsComponent: 수동 직렬화 필요 (중첩 배열)
         r.Register<Phy_SettingsComponent>("Physics Settings", "Physics",
-            /*addFn*/{}, /*addable*/true, /*removable*/false);
+            /*addFn*/{}, /*addable*/true, /*removable*/false,
+            /*fileKey*/"PhysicsSceneSettings",
+            /*serialize*/[](const World& w, EntityId e) -> JsonRttr::json {
+                auto* settings = w.GetComponent<Phy_SettingsComponent>(e);
+                if (!settings) return JsonRttr::json();
+                return SceneSerializationHelpers::WritePhysicsSceneSettings(*settings);
+            },
+            /*deserialize*/[](World& w, EntityId e, const JsonRttr::json& j) -> bool {
+                auto* settings = w.GetComponent<Phy_SettingsComponent>(e);
+                if (!settings)
+                {
+                    w.AddComponent<Phy_SettingsComponent>(e);
+                    settings = w.GetComponent<Phy_SettingsComponent>(e);
+                }
+                if (!settings) return false;
+                return SceneSerializationHelpers::LoadPhysicsSceneSettings(*settings, j);
+            });
 
         r.SortByCategoryThenName();
     }

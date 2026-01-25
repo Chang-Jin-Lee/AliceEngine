@@ -8,6 +8,7 @@
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
 #include "Core/ThreadSafety.h"
+#include "Core/EditorComponentRegistry.h"
 #include "Components/IDComponent.h"
 #include <random>
 
@@ -33,10 +34,11 @@
 
 namespace Alice
 {
-    namespace
+    // SceneFile 내부 헬퍼 함수들 (ComponentRegistry에서도 사용)
+    namespace SceneFileInternal
     {
         // GUID 생성 함수
-        static std::uint64_t NewGuid()
+        std::uint64_t NewGuid()
         {
             static std::mt19937_64 rng{ std::random_device{}() };
             static std::uniform_int_distribution<std::uint64_t> dist;
@@ -44,7 +46,7 @@ namespace Alice
         }
 
         // GUID 파싱 (JSON string 또는 number)
-        static std::uint64_t ParseGuid(const JsonRttr::json& j)
+        std::uint64_t ParseGuid(const JsonRttr::json& j)
         {
             if (j.is_string())
             {
@@ -64,231 +66,128 @@ namespace Alice
             return NewGuid();
         }
 
-        // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
-        // 1개짜리 항등 본 팔레트입니다. (정적인 메시처럼 렌더링되도록 함)
-        static DirectX::XMFLOAT4X4 g_IdentityBone(
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1);
-
-        // 프로젝트 루트 경로를 구하는 헬퍼 함수
-        static std::filesystem::path GetProjectRoot()
+        // GUID 파싱 (EntityRef용, 실패 시 0 반환)
+        std::uint64_t ParseGuidAny(const JsonRttr::json& j)
         {
-            wchar_t exePathW[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
-            std::filesystem::path exePath = exePathW;
-            std::filesystem::path exeDir = exePath.parent_path();
-            // build/bin/Debug 또는 build/bin/Release 가 나옴. 프로젝트 루트임
-            return exeDir.parent_path().parent_path().parent_path();
-        }
-
-        // 절대 경로를 상대 경로로 변환하는 헬퍼 함수
-        // Assets/ 또는 Resource/로 시작하는 경로는 그대로 유지함
-        static std::string NormalizePathToRelative(const std::string& path)
-        {
-            if (path.empty())
-                return path;
-
-            std::filesystem::path p(path);
-            
-            // 이미 상대 경로이거나 Assets/ 또는 Resource/로 시작하면 그대로 반환
-            if (!p.is_absolute())
+            if (j.is_string())
             {
-                const std::string s = p.generic_string();
-                if (s.find("Assets/") == 0 || s.find("Resource/") == 0 || s.find("Cooked/") == 0)
-                    return s;
-            }
-
-            // 절대 경로인 경우 프로젝트 루트 기준 상대 경로로 변환
-            if (p.is_absolute())
-            {
-                const std::filesystem::path projectRoot = GetProjectRoot();
                 try
                 {
-                    std::filesystem::path relative = std::filesystem::relative(p, projectRoot);
-                    if (!relative.empty())
-                    {
-                        const std::string result = relative.generic_string();
-                        // Assets/ 또는 Resource/로 시작하는지 확인
-                        if (result.find("Assets/") == 0 || result.find("Resource/") == 0 || result.find("Cooked/") == 0)
-                            return result;
-                        // 상대 경로 변환이 실패하거나 예상과 다른 경우 원본 반환
-                    }
+                    return std::stoull(j.get<std::string>());
                 }
                 catch (...)
                 {
-                    // relative() 실패 시 원본 반환
+                    return 0;
                 }
             }
-
-            return path;
+            if (j.is_number_unsigned())
+            {
+                return j.get<std::uint64_t>();
+            }
+            return 0;
         }
 
-        // Phy_SettingsComponent 수동 직렬화
-        static JsonRttr::json WritePhysicsSceneSettings(const Phy_SettingsComponent& settings)
+        // 프로퍼티가 EntityId/EntityRef인지 확인
+        bool IsEntityRefProp(const rttr::property& prop)
+        {
+            const rttr::type pt = prop.get_type();
+            const std::string tn = pt.get_name().to_string();
+            if (pt == rttr::type::get<EntityId>())
+                return true;
+            if (tn == "EntityId" || tn == "Alice::EntityId")
+                return true;
+            if (prop.get_metadata("EntityRef").is_valid())
+                return true;
+            return false;
+        }
+
+        // 스크립트 props 저장 (EntityId → GUID 변환)
+        JsonRttr::json WriteScriptProps_WithEntityRefGuid(const World& world, const ScriptComponent& sc)
         {
             JsonRttr::json out = JsonRttr::json::object();
-            
-            // 기본 프로퍼티
-            out["enablePhysics"] = settings.enablePhysics;
-            out["enableGroundPlane"] = settings.enableGroundPlane;
-            out["groundStaticFriction"] = settings.groundStaticFriction;
-            out["groundDynamicFriction"] = settings.groundDynamicFriction;
-            out["groundRestitution"] = settings.groundRestitution;
-            out["groundLayerBits"] = settings.groundLayerBits;
-            out["groundCollideMask"] = settings.groundCollideMask;
-            out["groundQueryMask"] = settings.groundQueryMask;
-            out["groundIgnoreLayers"] = settings.groundIgnoreLayers;
-            out["groundIsTrigger"] = settings.groundIsTrigger;
-            out["gravity"] = JsonRttr::json::array({ settings.gravity.x, settings.gravity.y, settings.gravity.z });
-            out["fixedDt"] = settings.fixedDt;
-            out["maxSubsteps"] = settings.maxSubsteps;
-            out["filterRevision"] = settings.filterRevision;
-            
-            // layerCollideMatrix: 32x32 bool 배열
-            out["layerCollideMatrix"] = JsonRttr::json::array();
-            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
+            if (!sc.instance)
+                return out;
+
+            rttr::instance inst = *sc.instance;
+            rttr::type type = rttr::type::get_by_name(sc.scriptName);
+            if (!type.is_valid())
+                type = inst.get_type();
+
+            for (auto prop : type.get_properties())
             {
-                JsonRttr::json row = JsonRttr::json::array();
-                for (int col = 0; col < MAX_PHYSICS_LAYERS; ++col)
+                const std::string key = prop.get_name().to_string();
+                rttr::variant v = prop.get_value(inst);
+                if (!v.is_valid())
+                    continue;
+
+                if (IsEntityRefProp(prop))
                 {
-                    row.push_back(settings.layerCollideMatrix[i][col]);
+                    EntityId ref = InvalidEntityId;
+                    if (v.can_convert<EntityId>())
+                        ref = v.get_value<EntityId>();
+
+                    if (ref == InvalidEntityId)
+                    {
+                        out[key] = nullptr;
+                    }
+                    else
+                    {
+                        if (const auto* idc = world.GetComponent<IDComponent>(ref))
+                            out[key] = std::to_string(idc->guid);
+                        else
+                            out[key] = nullptr;
+                    }
                 }
-                out["layerCollideMatrix"].push_back(row);
-            }
-            
-            // layerQueryMatrix: 32x32 bool 배열
-            out["layerQueryMatrix"] = JsonRttr::json::array();
-            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
-            {
-                JsonRttr::json row = JsonRttr::json::array();
-                for (int col = 0; col < MAX_PHYSICS_LAYERS; ++col)
+                else
                 {
-                    row.push_back(settings.layerQueryMatrix[i][col]);
+                    out[key] = JsonRttr::ToJsonVariant(v);
                 }
-                out["layerQueryMatrix"].push_back(row);
             }
-            
-            // layerNames: 32개 string 배열
-            out["layerNames"] = JsonRttr::json::array();
-            for (int i = 0; i < MAX_PHYSICS_LAYERS; ++i)
-            {
-                out["layerNames"].push_back(settings.layerNames[i]);
-            }
-            
             return out;
         }
-        
-        // Phy_SettingsComponent 수동 역직렬화
-        static bool LoadPhysicsSceneSettings(Phy_SettingsComponent& settings, const JsonRttr::json& root)
+
+        // 스크립트 props 로드 (GUID → EntityId 변환)
+        bool ApplyScriptProps_WithEntityRefGuid(World& world,
+                                                      ScriptComponent& sc,
+                                                      JsonRttr::json props,
+                                                      const std::unordered_map<std::uint64_t, EntityId>& guidToEntity)
         {
-            if (!root.is_object()) return false;
-            
-            // 기본 프로퍼티
-            if (root.contains("enablePhysics") && root["enablePhysics"].is_boolean())
-                settings.enablePhysics = root["enablePhysics"].get<bool>();
+            if (!sc.instance)
+                return true;
 
-            if (root.contains("enableGroundPlane") && root["enableGroundPlane"].is_boolean())
-                settings.enableGroundPlane = root["enableGroundPlane"].get<bool>();
+            rttr::instance inst = *sc.instance;
+            rttr::type type = rttr::type::get_by_name(sc.scriptName);
+            if (!type.is_valid())
+                type = inst.get_type();
 
-            if (root.contains("groundStaticFriction") && root["groundStaticFriction"].is_number())
-                settings.groundStaticFriction = root["groundStaticFriction"].get<float>();
-
-            if (root.contains("groundDynamicFriction") && root["groundDynamicFriction"].is_number())
-                settings.groundDynamicFriction = root["groundDynamicFriction"].get<float>();
-
-            if (root.contains("groundRestitution") && root["groundRestitution"].is_number())
-                settings.groundRestitution = root["groundRestitution"].get<float>();
-
-            if (root.contains("groundLayerBits") && root["groundLayerBits"].is_number_unsigned())
-                settings.groundLayerBits = root["groundLayerBits"].get<uint32_t>();
-
-            if (root.contains("groundCollideMask") && root["groundCollideMask"].is_number_unsigned())
-                settings.groundCollideMask = root["groundCollideMask"].get<uint32_t>();
-
-            if (root.contains("groundQueryMask") && root["groundQueryMask"].is_number_unsigned())
-                settings.groundQueryMask = root["groundQueryMask"].get<uint32_t>();
-
-            if (root.contains("groundIgnoreLayers") && root["groundIgnoreLayers"].is_number_unsigned())
-                settings.groundIgnoreLayers = root["groundIgnoreLayers"].get<uint32_t>();
-
-            if (root.contains("groundIsTrigger") && root["groundIsTrigger"].is_boolean())
-                settings.groundIsTrigger = root["groundIsTrigger"].get<bool>();
-            
-            if (root.contains("gravity") && root["gravity"].is_array() && root["gravity"].size() == 3)
+            // EntityRef 프로퍼티를 먼저 처리
+            for (auto prop : type.get_properties())
             {
-                settings.gravity.x = root["gravity"][0].get<float>();
-                settings.gravity.y = root["gravity"][1].get<float>();
-                settings.gravity.z = root["gravity"][2].get<float>();
-            }
-            
-            if (root.contains("fixedDt") && root["fixedDt"].is_number())
-                settings.fixedDt = root["fixedDt"].get<float>();
-            
-            if (root.contains("maxSubsteps") && root["maxSubsteps"].is_number_integer())
-                settings.maxSubsteps = root["maxSubsteps"].get<int>();
-            
-            if (root.contains("filterRevision") && root["filterRevision"].is_number_unsigned())
-                settings.filterRevision = root["filterRevision"].get<uint32_t>();
-            
-            // layerCollideMatrix: 32x32 bool 배열
-            if (root.contains("layerCollideMatrix") && root["layerCollideMatrix"].is_array())
-            {
-                const auto& matrix = root["layerCollideMatrix"];
-                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(matrix.size()); ++i)
+                if (!IsEntityRefProp(prop))
+                    continue;
+
+                const std::string key = prop.get_name().to_string();
+                auto it = props.find(key);
+                if (it == props.end())
+                    continue;
+
+                std::uint64_t guid = ParseGuidAny(*it);
+                EntityId ref = InvalidEntityId;
+                if (guid != 0)
                 {
-                    if (matrix[i].is_array())
-                    {
-                        const auto& row = matrix[i];
-                        for (int col = 0; col < MAX_PHYSICS_LAYERS && col < static_cast<int>(row.size()); ++col)
-                        {
-                            // bool 또는 0/1 정수 모두 처리
-                            if (row[col].is_boolean())
-                                settings.layerCollideMatrix[i][col] = row[col].get<bool>();
-                            else if (row[col].is_number_integer())
-                                settings.layerCollideMatrix[i][col] = (row[col].get<int>() != 0);
-                        }
-                    }
+                    auto mit = guidToEntity.find(guid);
+                    if (mit != guidToEntity.end())
+                        ref = mit->second;
                 }
+                prop.set_value(inst, ref);
+                props.erase(it);
             }
-            
-            // layerQueryMatrix: 32x32 bool 배열
-            if (root.contains("layerQueryMatrix") && root["layerQueryMatrix"].is_array())
-            {
-                const auto& matrix = root["layerQueryMatrix"];
-                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(matrix.size()); ++i)
-                {
-                    if (matrix[i].is_array())
-                    {
-                        const auto& row = matrix[i];
-                        for (int col = 0; col < MAX_PHYSICS_LAYERS && col < static_cast<int>(row.size()); ++col)
-                        {
-                            // bool 또는 0/1 정수 모두 처리
-                            if (row[col].is_boolean())
-                                settings.layerQueryMatrix[i][col] = row[col].get<bool>();
-                            else if (row[col].is_number_integer())
-                                settings.layerQueryMatrix[i][col] = (row[col].get<int>() != 0);
-                        }
-                    }
-                }
-            }
-            
-            // layerNames: 32개 string 배열
-            if (root.contains("layerNames") && root["layerNames"].is_array())
-            {
-                const auto& names = root["layerNames"];
-                for (int i = 0; i < MAX_PHYSICS_LAYERS && i < static_cast<int>(names.size()); ++i)
-                {
-                    if (names[i].is_string())
-                        settings.layerNames[i] = names[i].get<std::string>();
-                }
-            }
-            
-            return true;
+
+            // 나머지 props는 FromJsonObject로 처리
+            return JsonRttr::FromJsonObject(inst, props, type);
         }
 
-        static bool WriteEntity(JsonRttr::json& outEntity, const World& world, EntityId id)
+        bool WriteEntity(JsonRttr::json& outEntity, const World& world, EntityId id)
         {
             outEntity = JsonRttr::json::object();
             // 엔티티 id는 저장하지 않음 (로드 시 재사용되지 않으므로 혼란 방지)
@@ -314,13 +213,14 @@ namespace Alice
                 }
             }
             
+            // Transform은 필수 컴포넌트이므로 특별 처리
             if (const auto* transform = world.GetComponent<TransformComponent>(id); transform)
             {
                 rttr::instance inst = const_cast<TransformComponent&>(*transform);
                 outEntity["Transform"] = JsonRttr::ToJsonObject(inst);
             }
 
-            
+            // Scripts는 특별 처리 (EntityRef GUID 변환 필요)
             if (const auto* scripts = world.GetScripts(id); scripts && !scripts->empty())
             {
                 JsonRttr::json arr = JsonRttr::json::array();
@@ -332,9 +232,7 @@ namespace Alice
 
                     if (sc.instance)
                     {
-                        rttr::instance inst = *sc.instance;
-                        const rttr::type t = rttr::type::get_by_name(sc.scriptName);
-                        s["props"] = JsonRttr::ToJsonObject(inst, t);
+                        s["props"] = SceneFileInternal::WriteScriptProps_WithEntityRefGuid(world, sc);
                     }
 
                     arr.push_back(s);
@@ -342,183 +240,32 @@ namespace Alice
                 outEntity["Scripts"] = arr;
             }
 
-            
-            if (const auto* mat = world.GetComponent<MaterialComponent>(id); mat)
+            // 등록된 컴포넌트 자동 저장 (registry loop)
+            auto& reg = EditorComponentRegistry::Get();
+            for (const auto& d : reg.All())
             {
-                // 경로를 상대 경로로 변환하기 위해 복사본 생성
-                MaterialComponent matCopy = *mat;
-                matCopy.assetPath = NormalizePathToRelative(matCopy.assetPath);
-                matCopy.albedoTexturePath = NormalizePathToRelative(matCopy.albedoTexturePath);
-                
-                rttr::instance inst = matCopy;
-                outEntity["Material"] = JsonRttr::ToJsonObject(inst);
-            }
+                // Transform과 Scripts는 이미 처리했으므로 스킵
+                if (d.fileKey == "Transform" || d.fileKey == "Scripts")
+                    continue;
 
-            
-            if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(id); skinned)
-            {
-                // 경로를 상대 경로로 변환하기 위해 복사본 생성
-                SkinnedMeshComponent skinnedCopy = *skinned;
-                skinnedCopy.instanceAssetPath = NormalizePathToRelative(skinnedCopy.instanceAssetPath);
-                // meshAssetPath는 이미 상대 경로일 가능성이 높지만 안전을 위해 변환
-                skinnedCopy.meshAssetPath = NormalizePathToRelative(skinnedCopy.meshAssetPath);
-                
-                rttr::instance inst = skinnedCopy;
-                outEntity["SkinnedMesh"] = JsonRttr::ToJsonObject(inst);
-            }
+                if (!d.has(world, id))
+                    continue;
 
-            
-            if (const auto* anim = world.GetComponent<SkinnedAnimationComponent>(id); anim)
-            {
-                rttr::instance inst = const_cast<SkinnedAnimationComponent&>(*anim);
-                outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(id); advAnim)
-            {
-                rttr::instance inst = const_cast<AdvancedAnimationComponent&>(*advAnim);
-                outEntity["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* audio = world.GetComponent<AudioSourceComponent>(id); audio)
-            {
-                AudioSourceComponent copy = *audio;
-                rttr::instance inst = copy;
-                outEntity["AudioSource"] = JsonRttr::ToJsonObject(inst);
-                copy.soundPath = NormalizePathToRelative(copy.soundPath);
-            }
-
-            if (const auto* listener = world.GetComponent<AudioListenerComponent>(id); listener)
-            {
-                rttr::instance inst = const_cast<AudioListenerComponent&>(*listener);
-                outEntity["AudioListener"] = JsonRttr::ToJsonObject(inst);
-            }
-            if (const auto* sb = world.GetComponent<SoundBoxComponent>(id); sb)
-
-            {
-                SoundBoxComponent copy = *sb;
-                rttr::instance inst = copy;
-                outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
-                copy.soundPath = NormalizePathToRelative(copy.soundPath);
-            }
-
-            if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
-            {
-                rttr::instance inst = const_cast<CameraComponent&>(*cam);
-                outEntity["Camera"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* follow = world.GetComponent<CameraFollowComponent>(id); follow)
-            {
-                rttr::instance inst = const_cast<CameraFollowComponent&>(*follow);
-                outEntity["CameraFollow"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* spring = world.GetComponent<CameraSpringArmComponent>(id); spring)
-            {
-                rttr::instance inst = const_cast<CameraSpringArmComponent&>(*spring);
-                outEntity["CameraSpringArm"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* lookAt = world.GetComponent<CameraLookAtComponent>(id); lookAt)
-            {
-                rttr::instance inst = const_cast<CameraLookAtComponent&>(*lookAt);
-                outEntity["CameraLookAt"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* shake = world.GetComponent<CameraShakeComponent>(id); shake)
-            {
-                rttr::instance inst = const_cast<CameraShakeComponent&>(*shake);
-                outEntity["CameraShake"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* blend = world.GetComponent<CameraBlendComponent>(id); blend)
-            {
-                rttr::instance inst = const_cast<CameraBlendComponent&>(*blend);
-                outEntity["CameraBlend"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* input = world.GetComponent<CameraInputComponent>(id); input)
-            {
-                rttr::instance inst = const_cast<CameraInputComponent&>(*input);
-                outEntity["CameraInput"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* point = world.GetComponent<PointLightComponent>(id); point)
-            {
-                rttr::instance inst = const_cast<PointLightComponent&>(*point);
-                outEntity["PointLight"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* spot = world.GetComponent<SpotLightComponent>(id); spot)
-            {
-                rttr::instance inst = const_cast<SpotLightComponent&>(*spot);
-                outEntity["SpotLight"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* rect = world.GetComponent<RectLightComponent>(id); rect)
-            {
-                rttr::instance inst = const_cast<RectLightComponent&>(*rect);
-                outEntity["RectLight"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* computeEffect = world.GetComponent<ComputeEffectComponent>(id); computeEffect)
-            {
-                rttr::instance inst = const_cast<ComputeEffectComponent&>(*computeEffect);
-                outEntity["ComputeEffect"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            // PhysX Components
-            if (const auto* rigidBody = world.GetComponent<Phy_RigidBodyComponent>(id); rigidBody)
-            {
-                rttr::instance inst = const_cast<Phy_RigidBodyComponent&>(*rigidBody);
-                outEntity["RigidBody"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* collider = world.GetComponent<Phy_ColliderComponent>(id); collider)
-            {
-                rttr::instance inst = const_cast<Phy_ColliderComponent&>(*collider);
-                outEntity["Collider"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* meshCollider = world.GetComponent<Phy_MeshColliderComponent>(id); meshCollider)
-            {
-                rttr::instance inst = const_cast<Phy_MeshColliderComponent&>(*meshCollider);
-                outEntity["MeshCollider"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* cct = world.GetComponent<Phy_CCTComponent>(id); cct)
-            {
-                rttr::instance inst = const_cast<Phy_CCTComponent&>(*cct);
-                outEntity["CharacterController"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* terrain = world.GetComponent<Phy_TerrainHeightFieldComponent>(id); terrain)
-            {
-                rttr::instance inst = const_cast<Phy_TerrainHeightFieldComponent&>(*terrain);
-                outEntity["TerrainHeightField"] = JsonRttr::ToJsonObject(inst);
-            }
-
-            if (const auto* physicsSettings = world.GetComponent<Phy_SettingsComponent>(id); physicsSettings)
-            {
-                // 수동 직렬화 사용 (중첩 배열 보장)
-                outEntity["PhysicsSceneSettings"] = WritePhysicsSceneSettings(*physicsSettings);
-            }
-
-            if (const auto* joint = world.GetComponent<Phy_JointComponent>(id); joint)
-            {
-                rttr::instance inst = const_cast<Phy_JointComponent&>(*joint);
-                outEntity["Joint"] = JsonRttr::ToJsonObject(inst);
+                // TODO: AudioSource/Listener/SoundBox 등도 EditorComponentRegistry에 Register해서 registry 기반 저장/로드로 통일할 것.
+                JsonRttr::json c = d.serialize ? d.serialize(world, id) : JsonRttr::json();
+                if (!c.is_null())
+                    outEntity[d.fileKey] = std::move(c);
             }
 
             return true;
         }
 
-        static bool ApplyEntity(World& world, const JsonRttr::json& e, std::unordered_map<std::uint64_t, EntityId>& guidToEntity, std::vector<std::pair<EntityId, std::uint64_t>>& pendingParents)
+        bool ApplyEntity(World& world, const JsonRttr::json& e, std::unordered_map<std::uint64_t, EntityId>& guidToEntity, std::vector<std::pair<EntityId, std::uint64_t>>& pendingParents, EntityId* outCreatedId = nullptr)
         {
             if (!e.is_object()) return false;
 
             const EntityId id = world.CreateEntity();
+            if (outCreatedId) *outCreatedId = id;
 
             const std::string name = e.value("name", std::string{});
             if (!name.empty())
@@ -534,20 +281,20 @@ namespace Alice
             
             if (auto itGuid = e.find("guid"); itGuid != e.end())
             {
-                auto parsed = ParseGuid(*itGuid);
+                auto parsed = SceneFileInternal::ParseGuid(*itGuid);
                 if (parsed != 0) idComp->guid = parsed; // 실패면 덮어쓰지 않기
-                else idComp->guid = NewGuid(); // ParseGuid 실패 시 새 GUID 생성
+                else idComp->guid = SceneFileInternal::NewGuid(); // ParseGuid 실패 시 새 GUID 생성
             }
             else
             {
-                idComp->guid = NewGuid();
+                idComp->guid = SceneFileInternal::NewGuid();
             }
             guidToEntity[idComp->guid] = id;
 
             // Parent GUID 저장 (나중에 연결)
             if (auto itParentGuid = e.find("_parentGuid"); itParentGuid != e.end())
             {
-                std::uint64_t parentGuid = ParseGuid(*itParentGuid);
+                std::uint64_t parentGuid = SceneFileInternal::ParseGuid(*itParentGuid);
                 pendingParents.push_back({ id, parentGuid });
             }
 
@@ -576,9 +323,9 @@ namespace Alice
                     auto itP = s.find("props");
                     if (itP != s.end() && itP->is_object() && sc.instance)
                     {
-                        rttr::instance inst = *sc.instance;
-                        const rttr::type t = rttr::type::get_by_name(sc.scriptName);
-                        if (!JsonRttr::FromJsonObject(inst, *itP, t)) return false;
+                        JsonRttr::json propsCopy = *itP; // 복사본 생성 (EntityRef 키 제거용)
+                        if (!SceneFileInternal::ApplyScriptProps_WithEntityRefGuid(world, sc, propsCopy, guidToEntity))
+                            return false;
                         sc.defaultsApplied = true; // 씬이 값 주입 완료
                     }
                 }
@@ -599,204 +346,36 @@ namespace Alice
                 }
             }
 
-            // Material
-            auto itM = e.find("Material");
-            if (itM != e.end() && itM->is_object())
+            // 등록된 컴포넌트 자동 로드 (registry loop)
+            auto& reg = EditorComponentRegistry::Get();
+            for (const auto& d : reg.All())
             {
-                MaterialComponent& mc = world.AddComponent<MaterialComponent>(id, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
-                rttr::instance inst = mc;
-                if (!JsonRttr::FromJsonObject(inst, *itM)) return false;
-            }
+                // Transform과 Scripts는 이미 처리했으므로 스킵
+                if (d.fileKey == "Transform" || d.fileKey == "Scripts")
+                    continue;
 
-            // SkinnedMesh
-            auto itSM = e.find("SkinnedMesh");
-            if (itSM != e.end() && itSM->is_object())
-            {
-                SkinnedMeshComponent tmp;
-                rttr::instance instTmp = tmp;
-                if (!JsonRttr::FromJsonObject(instTmp, *itSM)) return false;
+                auto it = e.find(d.fileKey);
+                if (it == e.end() || it->is_null())
+                    continue;
 
-                if (!tmp.meshAssetPath.empty())
+                if (d.deserialize)
                 {
-                    SkinnedMeshComponent& sm = world.AddComponent<SkinnedMeshComponent>(id, tmp.meshAssetPath);
-                    sm.instanceAssetPath = tmp.instanceAssetPath;
-                    sm.boneMatrices = &g_IdentityBone;
-                    sm.boneCount = 1;
+                    if (!d.deserialize(world, id, *it))
+                        return false;
                 }
-            }
-
-            // SkinnedAnimation (선택)
-            auto itSA = e.find("SkinnedAnimation");
-            if (itSA != e.end() && itSA->is_object())
-            {
-                SkinnedAnimationComponent& sa = world.AddComponent<SkinnedAnimationComponent>(id);
-                rttr::instance inst = sa;
-                if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
-            }
-
-            // AdvancedAnimation (선택)
-            auto itAA = e.find("AdvancedAnimation");
-            if (itAA != e.end() && itAA->is_object())
-            {
-                AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(id);
-                rttr::instance inst = aa;
-                if (!JsonRttr::FromJsonObject(inst, *itAA)) return false;
-            }
-
-            // Camera (선택)
-            auto itC = e.find("Camera");
-            if (itC != e.end() && itC->is_object())
-            {
-                CameraComponent& cc = world.AddComponent<CameraComponent>(id);
-                rttr::instance inst = cc;
-                if (!JsonRttr::FromJsonObject(inst, *itC)) return false;
-            }
-
-            // CameraFollow (선택)
-            auto itCF = e.find("CameraFollow");
-            if (itCF != e.end() && itCF->is_object())
-            {
-                CameraFollowComponent& cf = world.AddComponent<CameraFollowComponent>(id);
-                rttr::instance inst = cf;
-                if (!JsonRttr::FromJsonObject(inst, *itCF)) return false;
-            }
-
-            // CameraSpringArm (선택)
-            auto itSpring = e.find("CameraSpringArm");
-            if (itSpring != e.end() && itSpring->is_object())
-            {
-                CameraSpringArmComponent& sa = world.AddComponent<CameraSpringArmComponent>(id);
-                rttr::instance inst = sa;
-                if (!JsonRttr::FromJsonObject(inst, *itSpring)) return false;
-            }
-
-            // CameraLookAt (선택)
-            auto itLA = e.find("CameraLookAt");
-            if (itLA != e.end() && itLA->is_object())
-            {
-                CameraLookAtComponent& la = world.AddComponent<CameraLookAtComponent>(id);
-                rttr::instance inst = la;
-                if (!JsonRttr::FromJsonObject(inst, *itLA)) return false;
-            }
-
-            // CameraShake (선택)
-            auto itCS = e.find("CameraShake");
-            if (itCS != e.end() && itCS->is_object())
-            {
-                CameraShakeComponent& cs = world.AddComponent<CameraShakeComponent>(id);
-                rttr::instance inst = cs;
-                if (!JsonRttr::FromJsonObject(inst, *itCS)) return false;
-            }
-
-            // CameraBlend (선택)
-            auto itCB = e.find("CameraBlend");
-            if (itCB != e.end() && itCB->is_object())
-            {
-                CameraBlendComponent& cb = world.AddComponent<CameraBlendComponent>(id);
-                rttr::instance inst = cb;
-                if (!JsonRttr::FromJsonObject(inst, *itCB)) return false;
-            }
-
-            // CameraInput (선택)
-            auto itCI = e.find("CameraInput");
-            if (itCI != e.end() && itCI->is_object())
-            {
-                CameraInputComponent& ci = world.AddComponent<CameraInputComponent>(id);
-                rttr::instance inst = ci;
-                if (!JsonRttr::FromJsonObject(inst, *itCI)) return false;
-            }
-
-            // Point Light 선택
-            auto itPL = e.find("PointLight");
-            if (itPL != e.end() && itPL->is_object())
-            {
-                PointLightComponent& pl = world.AddComponent<PointLightComponent>(id);
-                rttr::instance inst = pl;
-                if (!JsonRttr::FromJsonObject(inst, *itPL)) return false;
-            }
-
-            // Spot Light 선택
-            auto itSL = e.find("SpotLight");
-            if (itSL != e.end() && itSL->is_object())
-            {
-                SpotLightComponent& sl = world.AddComponent<SpotLightComponent>(id);
-                rttr::instance inst = sl;
-                if (!JsonRttr::FromJsonObject(inst, *itSL)) return false;
-            }
-
-            // Rect Light 선택
-            auto itRL = e.find("RectLight");
-            if (itRL != e.end() && itRL->is_object())
-            {
-                RectLightComponent& rl = world.AddComponent<RectLightComponent>(id);
-                rttr::instance inst = rl;
-                if (!JsonRttr::FromJsonObject(inst, *itRL)) return false;
-            }
-
-            // ComputeEffect 선택
-            auto itCE = e.find("ComputeEffect");
-            if (itCE != e.end() && itCE->is_object())
-            {
-                ComputeEffectComponent& ce = world.AddComponent<ComputeEffectComponent>(id);
-                rttr::instance inst = ce;
-                if (!JsonRttr::FromJsonObject(inst, *itCE)) return false;
-            }
-
-            // PhysX Components
-            auto itRB = e.find("RigidBody");
-            if (itRB != e.end() && itRB->is_object())
-            {
-                Phy_RigidBodyComponent& rb = world.AddComponent<Phy_RigidBodyComponent>(id);
-                rttr::instance inst = rb;
-                if (!JsonRttr::FromJsonObject(inst, *itRB)) return false;
-            }
-
-            auto itCollider = e.find("Collider");
-            if (itCollider != e.end() && itCollider->is_object())
-            {
-                Phy_ColliderComponent& col = world.AddComponent<Phy_ColliderComponent>(id);
-                rttr::instance inst = col;
-                if (!JsonRttr::FromJsonObject(inst, *itCollider)) return false;
-            }
-
-            auto itMeshCollider = e.find("MeshCollider");
-            if (itMeshCollider != e.end() && itMeshCollider->is_object())
-            {
-                Phy_MeshColliderComponent& mc = world.AddComponent<Phy_MeshColliderComponent>(id);
-                rttr::instance inst = mc;
-                if (!JsonRttr::FromJsonObject(inst, *itMeshCollider)) return false;
-            }
-
-            auto itCCT = e.find("CharacterController");
-            if (itCCT != e.end() && itCCT->is_object())
-            {
-                Phy_CCTComponent& cct = world.AddComponent<Phy_CCTComponent>(id);
-                rttr::instance inst = cct;
-                if (!JsonRttr::FromJsonObject(inst, *itCCT)) return false;
-            }
-
-            auto itTerrain = e.find("TerrainHeightField");
-            if (itTerrain != e.end() && itTerrain->is_object())
-            {
-                Phy_TerrainHeightFieldComponent& terrain = world.AddComponent<Phy_TerrainHeightFieldComponent>(id);
-                rttr::instance inst = terrain;
-                if (!JsonRttr::FromJsonObject(inst, *itTerrain)) return false;
-            }
-
-            auto itJoint = e.find("Joint");
-            if (itJoint != e.end() && itJoint->is_object())
-            {
-                Phy_JointComponent& joint = world.AddComponent<Phy_JointComponent>(id);
-                rttr::instance inst = joint;
-                if (!JsonRttr::FromJsonObject(inst, *itJoint)) return false;
-            }
-
-            auto itPhysicsSettings = e.find("PhysicsSceneSettings");
-            if (itPhysicsSettings != e.end() && itPhysicsSettings->is_object())
-            {
-                Phy_SettingsComponent& ps = world.AddComponent<Phy_SettingsComponent>(id);
-                // 수동 역직렬화 사용 (중첩 배열 보장)
-                if (!LoadPhysicsSceneSettings(ps, *itPhysicsSettings)) return false;
+                else
+                {
+                    // fallback: add + FromJsonObject
+                    if (!d.has(world, id))
+                    {
+                        if (d.add) d.add(world, id);
+                    }
+                    rttr::instance inst = d.getInstance(world, id);
+                    if (!inst.is_valid())
+                        return false;
+                    if (!JsonRttr::FromJsonObject(inst, *it))
+                        return false;
+                }
             }
 
             // AudioSource (선택)
@@ -829,7 +408,7 @@ namespace Alice
             return true;
         }
 
-        static bool LoadFromRoot(World& world, const JsonRttr::json& root)
+        bool LoadFromRoot(World& world, const JsonRttr::json& root)
         {
             auto itEntities = root.find("entities");
             if (itEntities == root.end() || !itEntities->is_array())
@@ -844,7 +423,7 @@ namespace Alice
             // PASS 1: 엔티티 생성 + 컴포넌트 복원 + GUID 맵 생성
             for (const auto& e : *itEntities)
             {
-                if (!ApplyEntity(world, e, guidToEntity, pendingParents))
+                if (!SceneFileInternal::ApplyEntity(world, e, guidToEntity, pendingParents))
                     return false;
             }
 
@@ -861,7 +440,7 @@ namespace Alice
             return true;
         }
 
-        static bool LoadFromBytes(World& world,
+        bool LoadFromBytes(World& world,
                                   const std::uint8_t* bytes,
                                   std::size_t size,
                                   const std::string& debugName)
@@ -883,7 +462,7 @@ namespace Alice
                 return false;
             }
 
-            return LoadFromRoot(world, root);
+            return SceneFileInternal::LoadFromRoot(world, root);
         }
     }
 
@@ -905,7 +484,7 @@ namespace Alice
             {
                 (void)transform;
                 JsonRttr::json e;
-                if (!WriteEntity(e, world, id)) return false;
+                if (!SceneFileInternal::WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);
             }
 
@@ -925,7 +504,7 @@ namespace Alice
             {
                 (void)transform;
                 JsonRttr::json e;
-                if (!WriteEntity(e, world, id)) return false;
+                if (!SceneFileInternal::WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);
             }
 
@@ -947,7 +526,7 @@ namespace Alice
                 return false;
             }
             world.Clear();
-            return LoadFromRoot(world, root);
+            return SceneFileInternal::LoadFromRoot(world, root);
         }
 
         bool Load(World& world, const std::filesystem::path& path)
@@ -975,7 +554,7 @@ namespace Alice
 
             JsonRttr::json root;
             if (!JsonRttr::LoadJsonFile(path, root)) return false;
-            return LoadFromRoot(world, root);
+            return SceneFileInternal::LoadFromRoot(world, root);
         }
 
         bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath, UIWorldManager* uiWorldManager)
@@ -1001,24 +580,9 @@ namespace Alice
                                logicalPath.generic_string().c_str(),
                                sp->size(),
                                resolvedStr.c_str());
-                // .alice 파일의 경우 World는 바이트에서 로드하고, UI는 별도 파일로 저장되므로 logicalPath를 사용하여 UI 로드
-                if (!LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string())) return false;
-                
-                // UI 로드 (있는 경우)
-                if (uiWorldManager)
-                {
-                    ALICE_LOG_INFO("[SceneFile] LoadAuto: Calling LoadUI for scene: %s", logicalPath.generic_string().c_str());
-                    if (!uiWorldManager->LoadUI(logicalPath, &resources))
-                    {
-                        ALICE_LOG_ERRORF("[SceneFile] LoadAuto: LoadUI failed for: %s", logicalPath.generic_string().c_str());
-                        return false;
-                    }
-                }
-                else
-                {
-                    ALICE_LOG_WARN("[SceneFile] LoadAuto: uiWorldManager is null, skipping UI load");
-                }
-                
+                const bool ok = SceneFileInternal::LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string());
+                if (!ok) return false;
+                if (uiWorldManager) return uiWorldManager->LoadUI(logicalPath, &resources);
                 return true;
             }
 
@@ -1064,6 +628,20 @@ namespace Alice
             }
             
             return true;
+        }
+
+        bool WriteEntity(JsonRttr::json& out, const World& world, EntityId id)
+        {
+            return SceneFileInternal::WriteEntity(out, world, id);
+        }
+
+        bool ApplyEntity(World& world,
+                        const JsonRttr::json& e,
+                        std::unordered_map<std::uint64_t, EntityId>& guidToEntity,
+                        std::vector<std::pair<EntityId, std::uint64_t>>& pendingParents,
+                        EntityId* outCreatedId)
+        {
+            return SceneFileInternal::ApplyEntity(world, e, guidToEntity, pendingParents, outCreatedId);
         }
     }
 }

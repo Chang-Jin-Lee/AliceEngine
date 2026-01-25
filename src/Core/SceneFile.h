@@ -1,14 +1,20 @@
 #pragma once
 
+#include "Core/World.h"
+#include "Core/JsonRttr.h"
+
 #include <filesystem>
 #include <string>
+#include <unordered_map>
+#include <vector>
+#include <utility>
+#include <cstdint>
 
 // 전방 선언
 class UIWorldManager;
 
 namespace Alice
 {
-    class World;
     class ResourceManager;
 
     /// 씬(.scene) 파일 저장/로드 유틸리티입니다.
@@ -44,9 +50,18 @@ namespace Alice
         /// UIWorldManager가 nullptr이면 World만 로드합니다.
         bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath, UIWorldManager* uiWorldManager = nullptr);
 
-        /// .scene 파일에서 Scene 이름을 읽어옵니다.
-        /// 파일이 없거나 이름이 없으면 빈 문자열을 반환합니다.
-        std::string GetSceneName(const std::filesystem::path& path);
+        // -------------------------------------------------------------------------
+        // 단일 엔티티 codec (Undo 등에서 SceneFile과 동일한 직렬화 규칙 사용)
+        // - WriteEntity: GUID 기반 Script EntityRef, Material 경로 정규화, registry 루프 등
+        // - ApplyEntity: guidToEntity로 EntityRef 복원, pendingParents로 부모 연결
+        // -------------------------------------------------------------------------
+        bool WriteEntity(JsonRttr::json& out, const World& world, EntityId id);
+
+        bool ApplyEntity(World& world,
+                        const JsonRttr::json& e,
+                        std::unordered_map<std::uint64_t, EntityId>& guidToEntity,
+                        std::vector<std::pair<EntityId, std::uint64_t>>& pendingParents,
+                        EntityId* outCreatedId = nullptr);
     }
 }
 

@@ -91,6 +91,10 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.cpp
     ${ALICE_SRC_DIR}/Editor/EditorCore.cpp
     ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.cpp
+    ${ALICE_SRC_DIR}/Editor/Inspectors/EditorInspectors.cpp
+    ${ALICE_SRC_DIR}/Editor/Inspectors/RttrAutoInspector.cpp
+    ${ALICE_SRC_DIR}/Editor/Inspectors/PhysicsInspectors.cpp
+    ${ALICE_SRC_DIR}/Editor/Inspectors/FixedLayoutInspectors.cpp
 
     # 코어(ECS 스타일)
     ${ALICE_SRC_DIR}/Core/World.cpp
@@ -101,6 +105,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Core/ScriptHotReload.cpp
     ${ALICE_SRC_DIR}/Core/Prefab.cpp
     ${ALICE_SRC_DIR}/Core/Material.cpp
+    ${ALICE_SRC_DIR}/Core/SceneSerializationHelpers.cpp
     ${ALICE_SRC_DIR}/Core/SceneFile.cpp
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.cpp
     ${ALICE_SRC_DIR}/Core/EditorComponentRegistry.cpp
@@ -207,6 +212,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/CameraSystem.h
     ${ALICE_SRC_DIR}/Core/SceneFile.h
     ${ALICE_SRC_DIR}/Core/SceneFileHelper.h
+    ${ALICE_SRC_DIR}/Core/SceneSerializationHelpers.h
     ${ALICE_SRC_DIR}/Core/ReflectionSerializer.h
     ${ALICE_SRC_DIR}/Core/ReflectionUI.h
     ${ALICE_SRC_DIR}/Core/ComponentRegistry.h
