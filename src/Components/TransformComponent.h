@@ -50,6 +50,16 @@ namespace Alice {
             return *this;
         }
 
+        TransformComponent& SetRotation(const DirectX::XMFLOAT3& rot)
+        {
+            rotation = DirectX::XMFLOAT3(
+                DirectX::XMConvertToRadians(rot.x),
+                DirectX::XMConvertToRadians(rot.y),
+                DirectX::XMConvertToRadians(rot.z)
+            );
+            return *this;
+        }
+
         // 쿼터니언(XMFLOAT4)은 오일러에서 라디안(XMFLOAT3) 변환 후 설정
         TransformComponent& SetRotation(const DirectX::XMFLOAT4& quat)
         {

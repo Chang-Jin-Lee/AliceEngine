@@ -73,5 +73,8 @@ namespace Alice
         bool initialized{ false };
         DirectX::XMFLOAT3 smoothedPosition{};
         DirectX::XMFLOAT3 smoothedRotation{};
+        
+        // 마우스 잠금 상태 (커서 숨김 + 회전 활성화)
+        bool mouseLocked{ true };
     };
 }
