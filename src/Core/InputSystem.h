@@ -71,6 +71,9 @@ namespace Alice
         /// 마우스 커서를 윈도우 영역에 가둡니다 (true) 또는 해제합니다 (false).
         void SetCursorLocked(bool locked);
 
+        /// Raw Input 메시지 처리 (WM_INPUT 메시지에서 호출)
+        void ProcessRawInput(HRAWINPUT hRawInput);
+
     private:
         std::unique_ptr<DirectX::Keyboard> m_keyboard;
         std::unique_ptr<DirectX::Mouse>    m_mouse;
@@ -89,6 +92,13 @@ namespace Alice
         float m_mouseScrollDelta{ 0.0f };
 
         HWND  m_hWnd{ nullptr }; // 커서 가두기용 윈도우 핸들
+        bool  m_isLocked{ false }; // 마우스 잠금 상태 (중앙 고정 여부)
+        POINT m_lockedPos{ 0, 0 }; // Lock 시점의 커서 위치 (스크린 좌표)
+        bool  m_useRawInput{ false }; // Raw Input 사용 여부
+        
+        // Raw Input 델타 (누적값)
+        int   m_rawInputDeltaX{ 0 };
+        int   m_rawInputDeltaY{ 0 };
     };
 }
 
