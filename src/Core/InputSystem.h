@@ -63,6 +63,14 @@ namespace Alice
         /// - 양수: 위로 스크롤, 음수: 아래로 스크롤
         float GetMouseScrollDelta() const { return m_mouseScrollDelta; }
 
+        // ---- 커서 제어 ----
+
+        /// 마우스 커서를 표시하거나 숨깁니다.
+        void SetCursorVisible(bool visible);
+
+        /// 마우스 커서를 윈도우 영역에 가둡니다 (true) 또는 해제합니다 (false).
+        void SetCursorLocked(bool locked);
+
     private:
         std::unique_ptr<DirectX::Keyboard> m_keyboard;
         std::unique_ptr<DirectX::Mouse>    m_mouse;
@@ -79,6 +87,8 @@ namespace Alice
 
         int   m_prevScrollWheelValue{ 0 };
         float m_mouseScrollDelta{ 0.0f };
+
+        HWND  m_hWnd{ nullptr }; // 커서 가두기용 윈도우 핸들
     };
 }
 

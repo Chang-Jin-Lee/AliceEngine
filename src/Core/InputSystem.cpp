@@ -12,6 +12,7 @@ namespace Alice
         m_mouse    = std::make_unique<Mouse>();
 
         m_mouse->SetWindow(hWnd);
+        m_hWnd = hWnd; // 커서 제어를 위해 핸들 저장
 
         m_prevMousePos = POINT{ 0, 0 };
         m_mouseDelta   = POINT{ 0, 0 };
@@ -118,6 +119,43 @@ namespace Alice
     POINT InputSystem::GetMousePosition() const
     {
         return POINT{ m_mouseState.x, m_mouseState.y };
+    }
+
+    void InputSystem::SetCursorVisible(bool visible)
+    {
+        // ShowCursor는 카운터 방식이므로 강제로 상태를 맞춤
+        if (visible)
+        {
+            while (::ShowCursor(TRUE) < 0);
+        }
+        else
+        {
+            while (::ShowCursor(FALSE) >= 0);
+        }
+    }
+
+    void InputSystem::SetCursorLocked(bool locked)
+    {
+        if (locked && m_hWnd)
+        {
+            // 윈도우 영역 안으로 커서 가두기
+            RECT rect;
+            ::GetClientRect(m_hWnd, &rect);
+            
+            // 클라이언트 영역을 스크린 좌표로 변환
+            POINT pt = { rect.left, rect.top };
+            POINT pt2 = { rect.right, rect.bottom };
+            ::ClientToScreen(m_hWnd, &pt);
+            ::ClientToScreen(m_hWnd, &pt2);
+            
+            RECT clipRect = { pt.x, pt.y, pt2.x, pt2.y };
+            ::ClipCursor(&clipRect);
+        }
+        else
+        {
+            // 가두기 해제
+            ::ClipCursor(nullptr);
+        }
     }
 }
 
