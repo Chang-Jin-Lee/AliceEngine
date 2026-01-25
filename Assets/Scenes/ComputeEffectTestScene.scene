@@ -2,14 +2,37 @@
     "entities": [
         {
             "ComputeEffect": {
+                "color": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
                 "effectParams": {
                     "x": 1.0,
                     "y": 1.0,
                     "z": 1.0
                 },
                 "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": -0.6499999761581421,
+                    "z": 0.0
+                },
                 "intensity": 1.0,
-                "shaderName": "Particle"
+                "lifeMax": 2.4000000953674316,
+                "lifeMin": 0.800000011920929,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.8069999814033508,
+                "shaderName": "Particle",
+                "sizePx": 6.0,
+                "useTransform": false
             },
             "Transform": {
                 "enabled": true,
@@ -29,14 +52,15 @@
                     "z": 0.009999999776482582
                 }
             },
+            "guid": "14417498574924509526",
             "name": "ComputeEffectTest"
         },
         {
             "Camera": {
+                "FOV": 45.0,
+                "Far Plane": 1000.0,
+                "Near Plane": 0.10000000149011612,
                 "aspectOverride": 0.0,
-                "farPlane": 5000.0,
-                "fovYRad": 0.7853981852531433,
-                "nearPlane": 0.10000000149011612,
                 "primary": true,
                 "useAspectOverride": false
             },
@@ -58,6 +82,7 @@
                     "z": 1.0
                 }
             },
+            "guid": "16558830728652493968",
             "name": "MainCamera"
         },
         {
@@ -70,6 +95,13 @@
                     "z": 0.17374515533447266
                 },
                 "metalness": 0.0,
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": -1.149999976158142,
                 "roughness": 1.0,
                 "shadingMode": -1
             },
@@ -91,8 +123,10 @@
                     "z": 10.0
                 }
             },
+            "guid": "13612762175246613430",
             "name": "Ground"
         }
     ],
+    "sceneName": "ComputeEffectTestScene",
     "version": 1
 }

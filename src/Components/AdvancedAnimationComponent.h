@@ -119,7 +119,18 @@ namespace Alice
         std::vector<AdvancedAnimSocket> sockets;
 
         // CPU palette for rendering (auto-filled by AdvancedAnimSystem)
+        // 스키닝용 행렬: Global * InvBindPose
         std::vector<DirectX::XMFLOAT4X4> palette;
+
+        // --------------------------------------------------------
+        // 본 정보 캐싱 (스키닝 행렬에서 순수 Transform 복원용)
+        // --------------------------------------------------------
+        // 본 이름 -> 인덱스 맵
+        std::unordered_map<std::string, int> boneToIndex;
+        // 본 인덱스 -> 부모 인덱스 (계층 구조, -1이면 루트)
+        std::vector<int> parentIndices;
+        // 초기 포즈의 역행렬 (스키닝 행렬에서 Global 행렬을 복원하기 위해 필요)
+        std::vector<DirectX::XMFLOAT4X4> inverseBindMatrices;
 
         // --------------------------------------------------------
         // Anim Montage & Notify System (언리얼 엔진 스타일)
@@ -276,6 +287,348 @@ namespace Alice
                     ik.enabled = false;
                 }
             }
+        }
+
+        // --------------------------------------------------------
+        // 본의 Transform 정보 가져오기
+        // --------------------------------------------------------
+
+        /// 스키닝 행렬(palette)에서 순수 Model Space 행렬을 복원하는 헬퍼 함수
+        /// palette는 "InvBindPose * Global" 형식이므로, BindPose를 곱해 Global만 남김
+        bool GetBoneModelMatrix(const std::string& boneName, DirectX::XMMATRIX& outMatrix) const
+        {
+            auto it = boneToIndex.find(boneName);
+            if (it == boneToIndex.end()) return false;
+            
+            int idx = it->second;
+            if (idx < 0 || idx >= (int)palette.size() || idx >= (int)inverseBindMatrices.size()) 
+                return false;
+
+            // 1. 현재 프레임의 스키닝 행렬 (InvBind * Global)
+            DirectX::XMMATRIX skinM = DirectX::XMLoadFloat4x4(&palette[idx]);
+
+            // 2. 바인드 포즈의 역행렬 (InvBind)
+            DirectX::XMMATRIX invBindM = DirectX::XMLoadFloat4x4(&inverseBindMatrices[idx]);
+
+            // 3. InvBind를 제거하여 순수 Global(Model Space) 행렬 복원
+            //    SkinM = InvBind * Global 이므로
+            //    Global = Bind * SkinM = (InvBind)^-1 * SkinM
+            DirectX::XMVECTOR det;
+            DirectX::XMMATRIX bindM = DirectX::XMMatrixInverse(&det, invBindM); // InvBind의 역행렬 = BindPose
+            
+            // 복원된 모델 공간 행렬
+            outMatrix = bindM * skinM; 
+            return true;
+        }
+
+        /// 부모 본 기준의 상대 위치 (씬 그래프의 부모 본 기준 로컬 좌표)
+        DirectX::XMFLOAT3 GetRelativeLocationToBone(const std::string& boneName) const
+        {
+            auto it = boneToIndex.find(boneName);
+            if (it == boneToIndex.end()) return { 0,0,0 };
+            int idx = it->second;
+
+            // 내 Model 행렬
+            DirectX::XMMATRIX myModelM;
+            if (!GetBoneModelMatrix(boneName, myModelM)) return { 0,0,0 };
+
+            // 부모 Model 행렬
+            DirectX::XMMATRIX parentModelM = DirectX::XMMatrixIdentity();
+            if (idx >= 0 && idx < (int)parentIndices.size())
+            {
+                int pIdx = parentIndices[idx];
+                if (pIdx >= 0 && pIdx < (int)palette.size() && pIdx < (int)inverseBindMatrices.size())
+                {
+                    // 부모의 복원된 Model 행렬 계산
+                    DirectX::XMMATRIX pSkin = DirectX::XMLoadFloat4x4(&palette[pIdx]);
+                    DirectX::XMMATRIX pInvBind = DirectX::XMLoadFloat4x4(&inverseBindMatrices[pIdx]);
+                    DirectX::XMVECTOR pDet;
+                    DirectX::XMMATRIX pBind = DirectX::XMMatrixInverse(&pDet, pInvBind);
+                    parentModelM = pBind * pSkin;
+                }
+            }
+
+            // Local = Model * Parent_Model^(-1)
+            DirectX::XMVECTOR det;
+            DirectX::XMMATRIX parentInv = DirectX::XMMatrixInverse(&det, parentModelM);
+            DirectX::XMMATRIX localM = myModelM * parentInv;
+
+            DirectX::XMVECTOR s, r, t;
+            DirectX::XMMatrixDecompose(&s, &r, &t, localM);
+            DirectX::XMFLOAT3 pos;
+            DirectX::XMStoreFloat3(&pos, t);
+            return pos;
+        }
+
+        /// 부모 본 기준의 상대 스케일
+        DirectX::XMFLOAT3 GetRelativeScaleToBone(const std::string& boneName) const
+        {
+            auto it = boneToIndex.find(boneName);
+            if (it == boneToIndex.end()) return { 1,1,1 };
+            int idx = it->second;
+
+            DirectX::XMMATRIX myModelM;
+            if (!GetBoneModelMatrix(boneName, myModelM)) return { 1,1,1 };
+
+            DirectX::XMMATRIX parentModelM = DirectX::XMMatrixIdentity();
+            if (idx >= 0 && idx < (int)parentIndices.size())
+            {
+                int pIdx = parentIndices[idx];
+                if (pIdx >= 0 && pIdx < (int)palette.size() && pIdx < (int)inverseBindMatrices.size())
+                {
+                    DirectX::XMMATRIX pSkin = DirectX::XMLoadFloat4x4(&palette[pIdx]);
+                    DirectX::XMMATRIX pInvBind = DirectX::XMLoadFloat4x4(&inverseBindMatrices[pIdx]);
+                    DirectX::XMVECTOR pDet;
+                    DirectX::XMMATRIX pBind = DirectX::XMMatrixInverse(&pDet, pInvBind);
+                    parentModelM = pBind * pSkin;
+                }
+            }
+
+            DirectX::XMVECTOR det;
+            DirectX::XMMATRIX localM = myModelM * DirectX::XMMatrixInverse(&det, parentModelM);
+
+            DirectX::XMVECTOR s, r, t;
+            DirectX::XMMatrixDecompose(&s, &r, &t, localM);
+            DirectX::XMFLOAT3 scale;
+            DirectX::XMStoreFloat3(&scale, s);
+            return scale;
+        }
+
+        /// 부모 본 기준의 상대 회전 (오일러 각도, 도 단위)
+        DirectX::XMFLOAT3 GetRelativeRotationToBone(const std::string& boneName) const
+        {
+            auto it = boneToIndex.find(boneName);
+            if (it == boneToIndex.end()) return { 0,0,0 };
+            int idx = it->second;
+
+            DirectX::XMMATRIX myModelM;
+            if (!GetBoneModelMatrix(boneName, myModelM)) return { 0,0,0 };
+
+            DirectX::XMMATRIX parentModelM = DirectX::XMMatrixIdentity();
+            if (idx >= 0 && idx < (int)parentIndices.size())
+            {
+                int pIdx = parentIndices[idx];
+                if (pIdx >= 0 && pIdx < (int)palette.size() && pIdx < (int)inverseBindMatrices.size())
+                {
+                    DirectX::XMMATRIX pSkin = DirectX::XMLoadFloat4x4(&palette[pIdx]);
+                    DirectX::XMMATRIX pInvBind = DirectX::XMLoadFloat4x4(&inverseBindMatrices[pIdx]);
+                    DirectX::XMVECTOR pDet;
+                    DirectX::XMMATRIX pBind = DirectX::XMMatrixInverse(&pDet, pInvBind);
+                    parentModelM = pBind * pSkin;
+                }
+            }
+
+            DirectX::XMVECTOR det;
+            DirectX::XMMATRIX localM = myModelM * DirectX::XMMatrixInverse(&det, parentModelM);
+
+            DirectX::XMVECTOR s, r, t;
+            DirectX::XMMatrixDecompose(&s, &r, &t, localM);
+            
+            DirectX::XMFLOAT4 q;
+            DirectX::XMStoreFloat4(&q, r);
+            return QuaternionToEuler(q);
+        }
+
+        // --------------------------------------------------------
+        // Model Space Getters (캐릭터 원점 기준)
+        // 자식 GameObject를 부착할 때 사용합니다.
+        // --------------------------------------------------------
+
+        /// 모델 공간 위치 (캐릭터 원점 기준)
+        DirectX::XMFLOAT3 GetModelLocationToBone(const std::string& boneName) const
+        {
+            DirectX::XMMATRIX m;
+            if (GetBoneModelMatrix(boneName, m))
+            {
+                DirectX::XMVECTOR s, r, t;
+                DirectX::XMMatrixDecompose(&s, &r, &t, m);
+                DirectX::XMFLOAT3 pos;
+                DirectX::XMStoreFloat3(&pos, t);
+                return pos;
+            }
+            return { 0,0,0 };
+        }
+
+        /// 모델 공간 회전 (캐릭터 원점 기준, 오일러 각도, 도 단위)
+        DirectX::XMFLOAT3 GetModelRotationToBone(const std::string& boneName) const
+        {
+            DirectX::XMMATRIX m;
+            if (GetBoneModelMatrix(boneName, m))
+            {
+                DirectX::XMVECTOR s, r, t;
+                DirectX::XMMatrixDecompose(&s, &r, &t, m);
+                DirectX::XMFLOAT4 q;
+                DirectX::XMStoreFloat4(&q, r);
+                return QuaternionToEuler(q);
+            }
+            return { 0,0,0 };
+        }
+
+        /// 모델 공간 스케일 (캐릭터 원점 기준)
+        DirectX::XMFLOAT3 GetModelScaleToBone(const std::string& boneName) const
+        {
+            DirectX::XMMATRIX m;
+            if (GetBoneModelMatrix(boneName, m))
+            {
+                DirectX::XMVECTOR s, r, t;
+                DirectX::XMMatrixDecompose(&s, &r, &t, m);
+                DirectX::XMFLOAT3 scale;
+                DirectX::XMStoreFloat3(&scale, s);
+                return scale;
+            }
+            return { 1,1,1 };
+        }
+
+        /// 월드 공간 위치 (캐릭터의 월드 행렬 적용)
+        DirectX::XMFLOAT3 GetWorldLocationToBone(const std::string& boneName, const DirectX::XMFLOAT4X4& charWorldMatrix) const
+        {
+            DirectX::XMMATRIX modelM;
+            if (GetBoneModelMatrix(boneName, modelM))
+            {
+                DirectX::XMMATRIX worldM = DirectX::XMLoadFloat4x4(&charWorldMatrix);
+                DirectX::XMMATRIX finalM = modelM * worldM; // Model * World
+
+                DirectX::XMVECTOR s, r, t;
+                DirectX::XMMatrixDecompose(&s, &r, &t, finalM);
+                DirectX::XMFLOAT3 pos;
+                DirectX::XMStoreFloat3(&pos, t);
+                return pos;
+            }
+            // 실패 시 캐릭터 위치
+            return { charWorldMatrix._41, charWorldMatrix._42, charWorldMatrix._43 };
+        }
+
+        /// 월드 공간 스케일
+        DirectX::XMFLOAT3 GetWorldScaleToBone(const std::string& boneName, const DirectX::XMFLOAT4X4& charWorldMatrix) const
+        {
+            DirectX::XMMATRIX modelM;
+            if (GetBoneModelMatrix(boneName, modelM))
+            {
+                DirectX::XMMATRIX worldM = DirectX::XMLoadFloat4x4(&charWorldMatrix);
+                DirectX::XMMATRIX finalM = modelM * worldM;
+
+                DirectX::XMVECTOR s, r, t;
+                DirectX::XMMatrixDecompose(&s, &r, &t, finalM);
+                DirectX::XMFLOAT3 scale;
+                DirectX::XMStoreFloat3(&scale, s);
+                return scale;
+            }
+            return { 1,1,1 };
+        }
+
+        /// 월드 공간 회전 (오일러 각도, 도 단위)
+        DirectX::XMFLOAT3 GetWorldRotationToBone(const std::string& boneName, const DirectX::XMFLOAT4X4& charWorldMatrix) const
+        {
+            DirectX::XMMATRIX modelM;
+            if (GetBoneModelMatrix(boneName, modelM))
+            {
+                DirectX::XMMATRIX worldM = DirectX::XMLoadFloat4x4(&charWorldMatrix);
+                DirectX::XMMATRIX finalM = modelM * worldM;
+
+                DirectX::XMVECTOR s, r, t;
+                DirectX::XMMatrixDecompose(&s, &r, &t, finalM);
+                
+                DirectX::XMFLOAT4 q;
+                DirectX::XMStoreFloat4(&q, r);
+                return QuaternionToEuler(q);
+            }
+            return { 0,0,0 };
+        }
+
+        // --------------------------------------------------------
+        // 소켓의 Model Space Transform 가져오기
+        // 캐릭터(부모)의 원점을 기준으로 한 소켓(본 + 오프셋)의 Transform을 반환합니다.
+        // 무기가 캐릭터의 자식(Child)으로 있을 때 사용합니다.
+        // --------------------------------------------------------
+        
+        /// 소켓의 Model Space Transform (오일러 각도 버전)
+        bool GetSocketModelTransform(const std::string& socketName, 
+                                     DirectX::XMFLOAT3& outPos, 
+                                     DirectX::XMFLOAT3& outRotDeg, 
+                                     DirectX::XMFLOAT3& outScale) const
+        {
+            DirectX::XMFLOAT4 rotQuat;
+            if (!GetSocketModelTransform(socketName, outPos, rotQuat, outScale))
+                return false;
+            
+            // 쿼터니언 -> 오일러 변환
+            outRotDeg = QuaternionToEuler(rotQuat);
+            return true;
+        }
+
+        /// 소켓의 Model Space Transform (쿼터니언 버전, 권장)
+        /// 언리얼 엔진의 소켓 시스템처럼 정확하게 부착하기 위해 쿼터니언 사용
+        bool GetSocketModelTransform(const std::string& socketName, 
+                                     DirectX::XMFLOAT3& outPos, 
+                                     DirectX::XMFLOAT4& outRotQuat, 
+                                     DirectX::XMFLOAT3& outScale) const
+        {
+            // 1. 소켓 데이터 찾기
+            const AdvancedAnimSocket* targetSocket = nullptr;
+            for (const auto& s : sockets)
+            {
+                if (s.name == socketName)
+                {
+                    targetSocket = &s;
+                    break;
+                }
+            }
+            if (!targetSocket) return false;
+
+            // 2. 부모 본의 Model Space 행렬 계산 (캐릭터 원점 기준 본 위치)
+            DirectX::XMMATRIX boneM;
+            if (!GetBoneModelMatrix(targetSocket->parentBone, boneM)) return false;
+
+            // 3. 소켓의 오프셋 행렬 생성 (Local Offset)
+            // 사용자가 설정한 Pos, Rot, Scale을 행렬로 변환
+            DirectX::XMMATRIX scaleM = DirectX::XMMatrixScaling(targetSocket->scale.x, targetSocket->scale.y, targetSocket->scale.z);
+            
+            DirectX::XMMATRIX rotM = DirectX::XMMatrixRotationRollPitchYaw(
+                DirectX::XMConvertToRadians(targetSocket->rotDeg.x),
+                DirectX::XMConvertToRadians(targetSocket->rotDeg.y),
+                DirectX::XMConvertToRadians(targetSocket->rotDeg.z));
+                
+            DirectX::XMMATRIX transM = DirectX::XMMatrixTranslation(targetSocket->pos.x, targetSocket->pos.y, targetSocket->pos.z);
+
+            // 오프셋 행렬 = S * R * T
+            DirectX::XMMATRIX offsetM = scaleM * rotM * transM;
+
+            // 4. 최종 Model Space 행렬 계산
+            // Final = Offset * Bone (본 위치에 오프셋을 적용)
+            DirectX::XMMATRIX finalM = offsetM * boneM;
+
+            // 5. 행렬 분해 (Decompose) 하여 Pos, Rot, Scale 추출
+            DirectX::XMVECTOR s, r, t;
+            if (!DirectX::XMMatrixDecompose(&s, &r, &t, finalM)) return false;
+
+            DirectX::XMStoreFloat3(&outPos, t);
+            DirectX::XMStoreFloat3(&outScale, s);
+            DirectX::XMStoreFloat4(&outRotQuat, r); // 회전은 쿼터니언으로 반환 (짐벌락 방지)
+
+            return true;
+        }
+
+    private:
+        /// 쿼터니언을 오일러 각도(도 단위)로 변환
+        DirectX::XMFLOAT3 QuaternionToEuler(const DirectX::XMFLOAT4& q) const
+        {
+            float sinr_cosp = 2.0f * (q.w * q.x + q.y * q.z);
+            float cosr_cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
+            float pitch = std::atan2(sinr_cosp, cosr_cosp);
+
+            float sinp = 2.0f * (q.w * q.y - q.z * q.x);
+            float yaw = 0.0f;
+            if (std::abs(sinp) >= 1.0f)
+                yaw = std::copysign(3.14159265f / 2.0f, sinp);
+            else
+                yaw = std::asin(sinp);
+
+            float siny_cosp = 2.0f * (q.w * q.z + q.x * q.y);
+            float cosy_cosp = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+            float roll = std::atan2(siny_cosp, cosy_cosp);
+
+            constexpr float ToDeg = 180.0f / 3.14159265f;
+            return { pitch * ToDeg, yaw * ToDeg, roll * ToDeg };
         }
     };
 }

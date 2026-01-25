@@ -1,11 +1,19 @@
 {
-    "albedoTexturePath": "Cooked/Textures\\Rapi\\Rapi_Diffuse_embedded3.alice",
-    "assetPath": "D:\\Github\\AliceRenderer\\Assets\\Materials\\Rapi_3.mat",
+    "albedoTexturePath": "Resource/Textures/Rapi/Rapi_D_3.png",
+    "assetPath": "Assets/Materials/Rapi_3.mat",
     "color": {
         "x": 0.699999988079071,
         "y": 0.699999988079071,
         "z": 0.699999988079071
     },
     "metalness": 0.0,
-    "roughness": 0.5
+    "normalStrength": 1.0,
+    "outlineColor": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+    },
+    "outlineWidth": 0.009999999776482582,
+    "roughness": 0.5,
+    "shadingMode": -1
 }
