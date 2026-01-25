@@ -11,6 +11,7 @@
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
@@ -32,6 +33,7 @@
 #include "Components/WeaponTraceComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
+#include "Components/SocketComponent.h"
 
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
@@ -203,7 +205,7 @@ namespace Alice
             .constructor<>()
             .property("enabled", &AdvancedAnimationComponent::enabled)
             .property("playing", &AdvancedAnimationComponent::playing)
-            .property("base", &AdvancedAnimationComponent::base)
+            .property("base", &AdvancedAnimationComponent::base)    
             .property("upper", &AdvancedAnimationComponent::upper)
             .property("additive", &AdvancedAnimationComponent::additive)
             .property("procedural", &AdvancedAnimationComponent::procedural)
@@ -296,6 +298,21 @@ namespace Alice
 			.property("clipName", &AttackDriverComponent::clipName)
 			.property("startTimeSec", &AttackDriverComponent::startTimeSec)
 			.property("endTimeSec", &AttackDriverComponent::endTimeSec);
+
+		// SocketDef / SocketComponent 등록 (씬 저장/로드 및 인스펙터)
+		rttr::registration::class_<SocketDef>("SocketDef")
+			.constructor<>()
+			.property("name", &SocketDef::name)
+			.property("parentBone", &SocketDef::parentBone)
+			.property("position", &SocketDef::position)
+			.property("rotation", &SocketDef::rotation)
+			.property("scale", &SocketDef::scale)
+			.property("local", &SocketDef::local)
+			.property("world", &SocketDef::world);
+
+		rttr::registration::class_<SocketComponent>("SocketComponent")
+			.constructor<>()
+			.property("sockets", &SocketComponent::sockets);
 
 		//  AudioListenerComponent 등록
 		rttr::registration::class_<AudioListenerComponent>("AudioListenerComponent")
@@ -856,6 +873,8 @@ namespace Alice
             });
 
         r.Register<SkinnedAnimationComponent>("Skinned Animation", "Rendering");
+        r.Register<AdvancedAnimationComponent>("Advanced Animation", "Rendering");
+        r.Register<SocketComponent>("Socket", "Rendering");
 
         r.Register<CameraComponent>("Camera", "Camera");
         r.Register<CameraFollowComponent>("Camera Follow", "Camera");

@@ -1,8 +1,10 @@
 #include "Game/SocketAttachmentSystem.h"
 
+#include <unordered_set>
 #include <DirectXMath.h>
 
 #include "Core/World.h"
+#include "Core/Logger.h"
 #include "Components/TransformComponent.h"
 #include "Components/IDComponent.h"
 #include "Components/SocketAttachmentComponent.h"
@@ -40,11 +42,21 @@ namespace Alice
 
         bool TryGetSocketWorldMatrix(World& world, EntityId owner, const std::string& socketName, DirectX::XMMATRIX& out)
         {
+            // 1) Match by socket name (e.g. "Hurt_HandR", "Trace_Base")
             if (auto* adv = world.GetComponent<AdvancedAnimationComponent>(owner))
             {
                 for (const auto& s : adv->sockets)
                 {
                     if (s.name == socketName)
+                    {
+                        out = DirectX::XMLoadFloat4x4(&s.worldMatrix);
+                        return true;
+                    }
+                }
+                // 2) Fallback: match by parent bone name (e.g. "??.R" -> socket that has parentBone "??.R")
+                for (const auto& s : adv->sockets)
+                {
+                    if (s.parentBone == socketName)
                     {
                         out = DirectX::XMLoadFloat4x4(&s.worldMatrix);
                         return true;
@@ -62,6 +74,14 @@ namespace Alice
                         return true;
                     }
                 }
+                for (const auto& s : sc->sockets)
+                {
+                    if (s.parentBone == socketName)
+                    {
+                        out = DirectX::XMLoadFloat4x4(&s.world);
+                        return true;
+                    }
+                }
             }
 
             return false;
@@ -70,11 +90,13 @@ namespace Alice
 
     void SocketAttachmentSystem::Update(World& world)
     {
-        auto&& attachments = world.GetComponents<SocketAttachmentComponent>(); // & -> &&·Î ¹Ù²Þ
+        auto&& attachments = world.GetComponents<SocketAttachmentComponent>(); // & -> &&?? ???
         if (attachments.empty())
             return;
 
         using namespace DirectX;
+        static std::unordered_set<EntityId> s_loggedOwnerFail;
+        static std::unordered_set<EntityId> s_loggedSocketFail;
 
         for (auto&& [eid, att] : attachments)
         {
@@ -84,11 +106,34 @@ namespace Alice
 
             const EntityId owner = ResolveOwner(world, att);
             if (owner == InvalidEntityId || att.socketName.empty())
+            {
+                if (s_loggedOwnerFail.find(eid) == s_loggedOwnerFail.end())
+                {
+                    s_loggedOwnerFail.insert(eid);
+                    ALICE_LOG_WARN("[SocketAttachment] Owner resolve failed: entity=\"%s\" id=%llu ownerGuid=%llu ownerNameDebug=\"%s\" socketName=\"%s\" (ownerGuid=0 or entity not found)",
+                        world.GetEntityName(eid).c_str(),
+                        static_cast<unsigned long long>(eid),
+                        static_cast<unsigned long long>(att.ownerGuid),
+                        att.ownerNameDebug.c_str(),
+                        att.socketName.c_str());
+                }
                 continue;
+            }
 
             XMMATRIX socketWorld = XMMatrixIdentity();
             if (!TryGetSocketWorldMatrix(world, owner, att.socketName, socketWorld))
+            {
+                if (s_loggedSocketFail.find(eid) == s_loggedSocketFail.end())
+                {
+                    s_loggedSocketFail.insert(eid);
+                    ALICE_LOG_WARN("[SocketAttachment] Socket not found: entity=\"%s\" id=%llu ownerGuid=%llu socketName=\"%s\" (no matching socket in owner AdvancedAnimation.sockets or SocketComponent.sockets)",
+                        world.GetEntityName(eid).c_str(),
+                        static_cast<unsigned long long>(eid),
+                        static_cast<unsigned long long>(att.ownerGuid),
+                        att.socketName.c_str());
+                }
                 continue;
+            }
 
             const XMMATRIX extra =
                 XMMatrixScaling(att.extraScale.x, att.extraScale.y, att.extraScale.z) *

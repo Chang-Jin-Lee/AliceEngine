@@ -60,7 +60,9 @@ namespace Alice::CombatPhysicsLayers
 
         // Collide matrix (시뮬레이션/트리거 이벤트용)
         s.layerCollideMatrix[PlayerAttackQuery][EnemyHurtbox] = true;
+        s.layerCollideMatrix[EnemyHurtbox][PlayerAttackQuery] = true;
         s.layerCollideMatrix[EnemyAttackQuery][PlayerHurtbox] = true;
+        s.layerCollideMatrix[PlayerHurtbox][EnemyAttackQuery] = true;
 
         // Query matrix (레이캐스트/스윕/오버랩용)
         s.layerQueryMatrix[PlayerAttackQuery][EnemyHurtbox] = true;

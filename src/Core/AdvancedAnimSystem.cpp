@@ -13,6 +13,7 @@
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/TransformComponent.h"
+#include "Components/SocketComponent.h"
 #include "Core/World.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "3Dmodel/FbxModel.h"
@@ -403,16 +404,43 @@ namespace Alice
         skinned.boneCount = static_cast<std::uint32_t>(animComp.palette.size());
 
         // ------------------------------
-        // Socket world outputs
+        // Socket world outputs (엔진 로우 컨벤션)
         // ------------------------------
         DirectX::XMMATRIX charWorld = DirectX::XMMatrixIdentity();
         if (const auto* t = world.GetComponent<TransformComponent>(id))
             charWorld = BuildWorldMatrix(*t);
+        DirectX::XMMATRIX charWorldRow = DirectX::XMMatrixTranspose(charWorld);
 
         for (auto& s : animComp.sockets)
         {
-            DirectX::XMMATRIX socketWorld = rt.animator->GetSocketWorldMatrix(s.name, charWorld);
+            DirectX::XMMATRIX socketWorld = rt.animator->GetSocketWorldMatrix(s.name, charWorldRow);
             DirectX::XMStoreFloat4x4(&s.worldMatrix, socketWorld);
+        }
+
+        // ------------------------------
+        // SocketComponent.sockets[].world 갱신 (스크립트/에디터로 추가한 소켓, 로우 컨벤션)
+        // ------------------------------
+        if (auto* socketComp = world.GetComponent<SocketComponent>(id))
+        {
+            for (auto& s : socketComp->sockets)
+            {
+                DirectX::XMMATRIX boneGlobalRow;
+                if (!rt.animator->GetBoneGlobalMatrix(s.parentBone, boneGlobalRow))
+                    continue;
+
+                DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&s.scale);
+                DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&s.rotation);
+                DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&s.position);
+                DirectX::XMMATRIX localCol =
+                    DirectX::XMMatrixScalingFromVector(scale) *
+                    DirectX::XMMatrixRotationRollPitchYawFromVector(rotation) *
+                    DirectX::XMMatrixTranslationFromVector(translation);
+                DirectX::XMMATRIX localRow = DirectX::XMMatrixTranspose(localCol);
+
+                DirectX::XMMATRIX socketWorld = localRow * boneGlobalRow * charWorldRow;
+                DirectX::XMStoreFloat4x4(&s.local, localCol);
+                DirectX::XMStoreFloat4x4(&s.world, socketWorld);
+            }
         }
     }
 

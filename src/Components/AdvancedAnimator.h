@@ -695,16 +695,32 @@ namespace Alice
                 s->parentNodeIndex = m_NodeIndexMap->at(parentBone);
         }
 
+        /// 소켓 월드 행렬을 엔진(로우 컨벤션)으로 반환. charWorldRow는 캐릭터 루트 월드(로우).
         DirectX::XMMATRIX GetSocketWorldMatrix(const std::string& name,
-                                               DirectX::CXMMATRIX charWorld) const
+                                               DirectX::CXMMATRIX charWorldRow) const
         {
             using namespace DirectX;
             for (const auto& s : m_Sockets)
             {
                 if (s.name == name)
-                    return s.finalWorldMatrix * charWorld;
+                {
+                    const XMMATRIX socketRow = XMMatrixTranspose(s.finalWorldMatrix);
+                    return socketRow * charWorldRow;
+                }
             }
-            return charWorld;
+            return charWorldRow;
+        }
+
+        /// 본 이름으로 캐릭터 로컬 공간의 본 글로벌 행렬을 엔진(로우 컨벤션)으로 반환. (SocketComponent 갱신용)
+        bool GetBoneGlobalMatrix(const std::string& boneName, DirectX::XMMATRIX& outRow) const
+        {
+            if (!m_NodeIndexMap) return false;
+            auto it = m_NodeIndexMap->find(boneName);
+            if (it == m_NodeIndexMap->end()) return false;
+            const int nodeIdx = it->second;
+            if (nodeIdx < 0 || (size_t)nodeIdx >= m_GlobalMatrices.size()) return false;
+            outRow = DirectX::XMMatrixTranspose(m_GlobalMatrices[(size_t)nodeIdx]);
+            return true;
         }
 
         const std::vector<DirectX::XMMATRIX>& GetFinalTransforms() const { return finalTransforms; }

@@ -46,11 +46,21 @@ namespace Alice
 
         bool TryGetSocketWorldMatrix(World& world, EntityId owner, const std::string& socketName, DirectX::XMMATRIX& out)
         {
+            // 1) Match by socket name (e.g. "Trace_Base", "Trace_Tip")
             if (auto* adv = world.GetComponent<AdvancedAnimationComponent>(owner))
             {
                 for (const auto& s : adv->sockets)
                 {
                     if (s.name == socketName)
+                    {
+                        out = DirectX::XMLoadFloat4x4(&s.worldMatrix);
+                        return true;
+                    }
+                }
+                // 2) Fallback: match by parent bone name (e.g. "??.R")
+                for (const auto& s : adv->sockets)
+                {
+                    if (s.parentBone == socketName)
                     {
                         out = DirectX::XMLoadFloat4x4(&s.worldMatrix);
                         return true;
@@ -63,6 +73,14 @@ namespace Alice
                 for (const auto& s : sc->sockets)
                 {
                     if (s.name == socketName)
+                    {
+                        out = DirectX::XMLoadFloat4x4(&s.world);
+                        return true;
+                    }
+                }
+                for (const auto& s : sc->sockets)
+                {
+                    if (s.parentBone == socketName)
                     {
                         out = DirectX::XMLoadFloat4x4(&s.world);
                         return true;
@@ -168,12 +186,14 @@ namespace Alice
                 const Vec3 origin(prev.x, prev.y, prev.z);
                 const Vec3 dir(delta.x / dist, delta.y / dist, delta.z / dist);
 
+                hits.clear();
                 const uint32_t hitCount = physics->SweepSphereAllQ(origin, trace.radius, dir, dist, hits, filter);
                 if (hitCount == 0)
                     continue;
 
-                for (const auto& hit : hits)
+                for (uint32_t h = 0; h < hitCount && h < hits.size(); ++h)
                 {
+                    const auto& hit = hits[h];
                     if (!hit.userData)
                         continue;
 
