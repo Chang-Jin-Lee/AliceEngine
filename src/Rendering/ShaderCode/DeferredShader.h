@@ -239,19 +239,25 @@ VSOutput main(VSInput input)
     world[2] = input.iWorld2;
     world[3] = float4(0, 0, 0, 1);
 
-    float3 N = normalize(mul(float4(input.Normal, 0.0f), world).xyz);
+    //float3 N = normalize(mul(float4(input.Normal, 0.0f), world).xyz);
 
     // 아웃라인: 스무스 노멀 방향으로 확장
-    float3 smoothN = normalize(mul(float4(input.SmoothNormal, 0.0f), world).xyz);
+    //float3 smoothN = normalize(mul(float4(input.SmoothNormal, 0.0f), world).xyz);
+    float3 N = normalize(mul(world, float4(input.Normal, 0.0f)).xyz);
+    float3 smoothN = normalize(mul(world, float4(input.SmoothNormal, 0.0f)).xyz);
+
     float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
 
-    float4 posW = mul(float4(input.Position + posOffset, 1.0f), world);
+    //float4 posW = mul(float4(input.Position + posOffset, 1.0f), world);
+    float4 posW = mul(world, float4(input.Position + posOffset, 1.0f));
     output.Position = mul(mul(posW, gView), gProj);
     output.WorldPos = posW.xyz;
 
     output.Normal   = N;
-    output.TangentW = normalize(mul(float4(input.Tangent, 0.0f), world).xyz);
-    output.BitanW   = normalize(mul(float4(input.Binormal, 0.0f), world).xyz);
+    //output.TangentW = normalize(mul(float4(input.Tangent, 0.0f), world).xyz);
+    //output.BitanW   = normalize(mul(float4(input.Binormal, 0.0f), world).xyz);
+    output.TangentW = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
+    output.BitanW   = normalize(mul(world, float4(input.Binormal, 0.0f)).xyz);
     output.TexCoord = input.TexCoord;
 
     return output;
@@ -1012,19 +1018,34 @@ VSOutput main(VSInput input)
     world[2] = input.iWorld2;
     world[3] = float4(0, 0, 0, 1);
 
-    float3 N = normalize(mul(float4(input.Normal, 0.0f), world).xyz);
+    //float3 N = normalize(mul(float4(input.Normal, 0.0f), world).xyz);
 
     // 아웃라인: 스무스 노멀 방향으로 확장
-    float3 smoothN = normalize(mul(float4(input.SmoothNormal, 0.0f), world).xyz);
+    //float3 smoothN = normalize(mul(float4(input.SmoothNormal, 0.0f), world).xyz);
+    //float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
+    //
+    //float4 posW = mul(float4(input.Position + posOffset, 1.0f), world);
+    //output.Position = mul(mul(posW, gView), gProj);
+    //output.WorldPos = posW.xyz;
+    
+    //output.Normal   = N;
+    //output.TangentW = normalize(mul(float4(input.Tangent, 0.0f), world).xyz);
+    //output.BitanW   = normalize(mul(float4(input.Binormal, 0.0f), world).xyz);
+    //output.TexCoord = input.TexCoord;
+
+    float3 N = normalize(mul(world, float4(input.Normal, 0.0f)).xyz);
+    float3 smoothN = normalize(mul(world, float4(input.SmoothNormal, 0.0f)).xyz);
+    
     float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
 
-    float4 posW = mul(float4(input.Position + posOffset, 1.0f), world);
+    float4 posW = mul(world, float4(input.Position + posOffset, 1.0f));
+    
     output.Position = mul(mul(posW, gView), gProj);
     output.WorldPos = posW.xyz;
 
     output.Normal   = N;
-    output.TangentW = normalize(mul(float4(input.Tangent, 0.0f), world).xyz);
-    output.BitanW   = normalize(mul(float4(input.Binormal, 0.0f), world).xyz);
+    output.TangentW = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
+    output.BitanW   = normalize(mul(world, float4(input.Binormal, 0.0f)).xyz);
     output.TexCoord = input.TexCoord;
 
     return output;
@@ -1391,7 +1412,8 @@ VSOutput main(VSInput input)
     world[2] = input.iWorld2;
     world[3] = float4(0, 0, 0, 1);
 
-    float4 posW = mul(float4(input.Position, 1.0f), world);
+    //float4 posW = mul(float4(input.Position, 1.0f), world);
+    float4 posW = mul(world, float4(input.Position, 1.0f));
     o.Position = mul(mul(posW, gView), gProj);
 
     return o;
