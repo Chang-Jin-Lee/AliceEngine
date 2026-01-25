@@ -3427,6 +3427,11 @@ namespace Alice
 				if (useForwardRendering) EditBgIfOff(forward);
 				else                     EditBgIfOff(deferred);
 
+						int downsampleIdx = 0;
+						for (int i = 0; i < 7; ++i)
+						{
+							if (bloomSettings.downsample == downsampleValues[i]) { downsampleIdx = i; break; }
+						}
 
 				// === Post-Process (Exposure, Max HDR Nits) ===
 				ImGui::Separator();
@@ -3525,6 +3530,7 @@ namespace Alice
 					if (bloomChanged)
 						deferred.SetBloomSettings(bloomSettings);
 				}
+				ImGui::End();
 			}
 			ImGui::End();
 
@@ -3607,6 +3613,7 @@ namespace Alice
 
 						g_SceneDirty = true;
 					}
+					g_RequestSceneLoad = false;
 				}
 				ImGui::End();
 			}
