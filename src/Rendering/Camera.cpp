@@ -177,6 +177,30 @@ namespace Alice
         XMStoreFloat3(&outDir, dir);
         return true;
     }
+
+    BoundingFrustum Camera::GetWorldFrustum() const
+    {
+        // 투영 행렬로 기본 프러스텀 생성 (뷰 공간 기준)
+        BoundingFrustum frustum;
+
+        // 각도 조절. 실제 눈에 보이는 FOV(m_fovYRadians)보다 1.3배(30%) 더 넓게 잡습니다.
+        float cullingFov = m_fovYRadians * 1.3f;
+
+        // 179도(약 3.124 라디안)를 넘지 않도록 제한 (180도 이상은 투영 행렬 생성 불가)
+        if (cullingFov > XM_PI - 0.02f) cullingFov = XM_PI - 0.02f;
+
+        // 넓어진 각도로 임시 투영 행렬 생성
+        XMMATRIX cullProj = XMMatrixPerspectiveFovLH(cullingFov, m_aspectRatio, m_nearPlane, m_farPlane);
+
+        // 프러스텀 생성
+        BoundingFrustum::CreateFromMatrix(frustum, cullProj);
+
+        // 월드 공간으로 변환
+        XMMATRIX invView = XMMatrixInverse(nullptr, GetViewMatrix());
+        frustum.Transform(frustum, invView);
+
+        return frustum;
+    }
 }
 
 

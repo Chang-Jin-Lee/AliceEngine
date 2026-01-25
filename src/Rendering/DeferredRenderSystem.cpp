@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <DirectXMath.h>
+#include <DirectXCollision.h>
 
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
@@ -1502,6 +1503,7 @@ namespace Alice
 
     DirectX::XMMATRIX DeferredRenderSystem::RenderShadowPass(
         const World& world,
+        const Camera& camera,
         const std::vector<SkinnedDrawCommand>& skinnedCommands,
         const std::unordered_set<EntityId>& cameraEntities,
         bool editorMode,
@@ -1587,6 +1589,9 @@ namespace Alice
         // Depth-only: PS none
         m_context->PSSetShader(nullptr, nullptr, 0);
 
+        // 프러스텀 컬링을 위한 카메라 절두체 계산 (성능 확보를 위해 카메라 프러스텀 사용)
+        BoundingFrustum cameraFrustum = camera.GetWorldFrustum();
+
         // 1) Static meshes (cube)
         if (m_cubeVB && m_cubeIB && m_shadowInputLayout && m_shadowVS && m_cubeIndexCount > 0)
         {
@@ -1604,6 +1609,14 @@ namespace Alice
                 if (cameraEntities.contains(id)) continue;
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
                 if (!tr.enabled) continue;
+
+                // [프러스텀 컬링] 카메라 시야 밖 오브젝트는 건너뛰기
+                float maxScale = std::max({ tr.scale.x, tr.scale.y, tr.scale.z });
+                BoundingSphere bounds(tr.position, maxScale * 1.5f);
+                if (cameraFrustum.Contains(bounds) == DISJOINT)
+                {
+                    continue; // 화면에 보이지 않으면 렌더링하지 않음
+                }
 
                 XMMATRIX worldM = BuildWorldMatrix(world, id, tr);
 
@@ -1664,6 +1677,25 @@ namespace Alice
             for (const auto& cmd : skinnedCommands)
             {
                 if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
+
+                // [프러스텀 컬링] 월드 행렬에서 위치 추출
+                XMFLOAT4X4 worldMatrix;
+                XMStoreFloat4x4(&worldMatrix, cmd.world);
+                XMFLOAT3 position(worldMatrix._41, worldMatrix._42, worldMatrix._43);
+                
+                // 스케일 추정: 월드 행렬의 스케일 성분 추출 (간단한 근사)
+                XMVECTOR scaleVec = XMVectorSet(
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._11, worldMatrix._12, worldMatrix._13, 0.0f))),
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._21, worldMatrix._22, worldMatrix._23, 0.0f))),
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._31, worldMatrix._32, worldMatrix._33, 0.0f))),
+                    0.0f
+                );
+                float maxScale = std::max({ XMVectorGetX(scaleVec), XMVectorGetY(scaleVec), XMVectorGetZ(scaleVec) });
+                BoundingSphere bounds(position, maxScale * 1.5f);
+                if (cameraFrustum.Contains(bounds) == DISJOINT)
+                {
+                    continue; // 화면에 보이지 않으면 렌더링하지 않음
+                }
 
                 // 본 1개 + Identity인 경우만 인스턴싱 대상으로 처리
                 if (IsRigidSkinnedCommand(cmd) &&
@@ -1809,7 +1841,7 @@ namespace Alice
         m_context->RSSetViewports(1, &vp);
 
         // Shadow pass 먼저 렌더링 (lightViewProj 계산 + shadow depth 생성)
-        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities, editorMode, isPlaying);
+        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, camera, skinnedCommands, cameraEntities, editorMode, isPlaying);
 
         // ShadowPass에서 viewport가 섀도우맵 해상도로 바뀌므로, 씬 뷰포트를 다시 설정
         m_context->RSSetViewports(1, &vp);
@@ -1915,6 +1947,9 @@ namespace Alice
         XMMATRIX view = camera.GetViewMatrix();
         XMMATRIX proj = camera.GetProjectionMatrix();
 
+        // 프러스텀 컬링을 위한 카메라 절두체 계산 (루프 밖에서 미리 계산)
+        BoundingFrustum cameraFrustum = camera.GetWorldFrustum();
+
         // 1. 정적 메시 (큐브) 렌더링
         // ForwardRenderSystem::SimpleVertex와 동일한 구조체 (private이므로 로컬 정의)
         UINT stride = sizeof(SimpleVertex);
@@ -1929,6 +1964,14 @@ namespace Alice
             if (cameraEntities.contains(id)) continue;
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
             if (!transform.enabled) continue;
+
+            // [프러스텀 컬링] 카메라 시야 밖 오브젝트는 건너뛰기
+            float maxScale = std::max({ transform.scale.x, transform.scale.y, transform.scale.z });
+            BoundingSphere bounds(transform.position, maxScale * 1.5f); // 1.5f는 안전 계수
+            if (cameraFrustum.Contains(bounds) == DISJOINT)
+            {
+                continue; // 화면에 보이지 않으면 렌더링하지 않음
+            }
 
             XMMATRIX worldM = BuildWorldMatrix(world, id, transform);
             
@@ -2008,6 +2051,25 @@ namespace Alice
             for (const auto& cmd : skinnedCommands)
             {
                 if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
+
+                // [프러스텀 컬링] 월드 행렬에서 위치 추출
+                XMFLOAT4X4 worldMatrix;
+                XMStoreFloat4x4(&worldMatrix, cmd.world);
+                XMFLOAT3 position(worldMatrix._41, worldMatrix._42, worldMatrix._43);
+                
+                // 스케일 추정: 월드 행렬의 스케일 성분 추출 (간단한 근사)
+                XMVECTOR scaleVec = XMVectorSet(
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._11, worldMatrix._12, worldMatrix._13, 0.0f))),
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._21, worldMatrix._22, worldMatrix._23, 0.0f))),
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._31, worldMatrix._32, worldMatrix._33, 0.0f))),
+                    0.0f
+                );
+                float maxScale = std::max({ XMVectorGetX(scaleVec), XMVectorGetY(scaleVec), XMVectorGetZ(scaleVec) });
+                BoundingSphere bounds(position, maxScale * 1.5f);
+                if (cameraFrustum.Contains(bounds) == DISJOINT)
+                {
+                    continue; // 화면에 보이지 않으면 렌더링하지 않음
+                }
 
                 const XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
                 const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
@@ -2459,6 +2521,9 @@ namespace Alice
         ID3D11Buffer* tlCB = m_cbTransparentLight.Get();
         m_context->PSSetConstantBuffers(1, 1, &tlCB);
 
+        // 프러스텀 컬링을 위한 카메라 절두체 계산 (루프 밖에서 미리 계산)
+        BoundingFrustum cameraFrustum = camera.GetWorldFrustum();
+
         // IBL 리소스 바인딩 (t5~t7)
         ID3D11ShaderResourceView* iblDiffuse = m_iblDiffuseSRV.Get();
         ID3D11ShaderResourceView* iblSpec = m_iblSpecularSRV.Get();
@@ -2478,6 +2543,25 @@ namespace Alice
         for (const auto& cmd : skinnedCommands)
         {
             if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
+
+            // [프러스텀 컬링] 월드 행렬에서 위치 추출
+            XMFLOAT4X4 worldMatrix;
+            XMStoreFloat4x4(&worldMatrix, cmd.world);
+            XMFLOAT3 position(worldMatrix._41, worldMatrix._42, worldMatrix._43);
+            
+            // 스케일 추정: 월드 행렬의 스케일 성분 추출 (간단한 근사)
+            XMVECTOR scaleVec = XMVectorSet(
+                XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._11, worldMatrix._12, worldMatrix._13, 0.0f))),
+                XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._21, worldMatrix._22, worldMatrix._23, 0.0f))),
+                XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._31, worldMatrix._32, worldMatrix._33, 0.0f))),
+                0.0f
+            );
+            float maxScale = std::max({ XMVectorGetX(scaleVec), XMVectorGetY(scaleVec), XMVectorGetZ(scaleVec) });
+            BoundingSphere bounds(position, maxScale * 1.5f);
+            if (cameraFrustum.Contains(bounds) == DISJOINT)
+            {
+                continue; // 화면에 보이지 않으면 렌더링하지 않음
+            }
 
             const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
             const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
