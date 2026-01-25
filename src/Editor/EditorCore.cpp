@@ -73,6 +73,7 @@
 #include "UI/UIImage.h"
 #include "UI/UIScriptSystem.h"
 #include "UI/UI_ScriptComponent.h"
+#include <Core/Helper.h>
 
 using namespace DirectX;
 
@@ -3610,274 +3611,153 @@ namespace Alice
 				ImGui::End();
 			}
 
-			// === 씬 변경사항 저장 확인 모달 ===
-			if (g_RequestSceneLoad)
+		// =========================================================================================
+		// 씬 로드 요청 처리 및 저장 확인 팝업
+		// =========================================================================================
+		if (g_RequestSceneLoad)
+		{
+			// 1. 변경사항이 있고, 현재 저장된 씬 경로가 있다면 -> 저장 확인 팝업 띄움
+			if (g_HasCurrentScenePath && g_SceneDirty)
 			{
-				// 현재 씬이 존재하고 변경사항이 있을 때만 확인 모달을 띄웁니다.
-				if (g_HasCurrentScenePath && g_SceneDirty)
+				ImGui::OpenPopup("Scene Save Check");
+			}
+			else
+			{
+				// 2. 변경사항이 없거나 저장할 경로가 없으면(새 씬 등) -> 즉시 로드
+				const std::filesystem::path loadAbs = ResourceManager::Get().Resolve(g_NextScenePath);
+
+				bool loadSuccess = false;
+				if (isPlaying)
 				{
-					ImGui::OpenPopup("SaveSceneBeforeLoad");
+					// 실행 중이면 SceneManager를 통해 로드 요청 (다음 프레임 처리)
+					if (sceneManager)
+						loadSuccess = sceneManager->LoadSceneFileRequest(loadAbs);
 				}
 				else
 				{
-					// 저장할 필요가 없으면 바로 로드
-					// [Fix] 씬 로드 전 유효성 검사 강화
-					if (g_NextScenePath.empty() || !std::filesystem::exists(ResourceManager::Get().Resolve(g_NextScenePath)))
-					{
-						const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 파일이 존재하지 않습니다.";
-						ALICE_LOG_ERRORF("[Editor] Scene load failed: invalid path: %s", g_NextScenePath.string().c_str());
-						g_SceneLoadErrorMsg = errorMsg;
-						g_ShowSceneLoadError = true;
-						g_RequestSceneLoad = false;
-					}
+					// 에디터 모드면 즉시 로드
+					if (m_uiWorldManager)
+						loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
 					else
-					{
-						const std::filesystem::path loadAbs =
-							ResourceManager::Get().Resolve(g_NextScenePath);
-
-						if (isPlaying)
-					{
-						// 실행 중: 지연 처리
-						if (sceneManager)
-						{
-							if (!sceneManager->LoadSceneFileRequest(loadAbs))
-							{
-								const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-								ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
-								g_SceneLoadErrorMsg = errorMsg;
-								g_ShowSceneLoadError = true;
-							}
-							else
-							{
-								g_CurrentScenePath = g_NextScenePath;
-								g_HasCurrentScenePath = true;
-								g_SceneDirty = false;
-							}
-						}
-					}
-					else
-					{
-						// 실행 안 함: 즉시 로드
-						bool loadSuccess = false;
-						if (m_uiWorldManager)
-						{
-							loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
-						}
-						else
-						{
-							loadSuccess = SceneFile::Load(world, loadAbs);
-						}
-						if (!loadSuccess)
-						{
-							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
-							g_SceneLoadErrorMsg = errorMsg;
-							g_ShowSceneLoadError = true;
-						}
-						else
-						{
-							EnsureSkinnedMeshesRegistered(world);
-							selectedEntity = InvalidEntityId;
-							m_selectedUIEntity = 0; // UI 선택도 해제
-							g_CurrentScenePath = g_NextScenePath;
-							g_HasCurrentScenePath = true;
-							g_SceneDirty = false;
-							ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
-						}
-					}
-					}
-					g_RequestSceneLoad = false;
+						loadSuccess = SceneFile::Load(world, loadAbs);
 				}
 
-
-
-				// === 씬 로드 에러 모달 ===
-				if (g_ShowSceneLoadError)
+				if (loadSuccess)
 				{
-					ImGui::OpenPopup("SceneLoadError");
-					g_ShowSceneLoadError = false;
+					// 로드 성공 시 상태 갱신
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+					selectedEntity = InvalidEntityId;
+					m_selectedUIEntity = 0;
+
+					// [중요] 씬이 바뀌었으므로 Undo/Redo 스택 초기화 (이전 씬의 엔티티 ID 참조 방지)
+					ClearUndoStack();
+					
+					// 필요한 경우 스킨 메시 레지스트리 갱신
+					EnsureSkinnedMeshesRegistered(world);
 				}
-
-				if (ImGui::BeginPopupModal("SceneLoadError", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+				else
 				{
-					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "씬 로드 실패");
-					ImGui::Separator();
-
-					// 에러 메시지 표시 (여러 줄 지원)
-					std::istringstream iss(g_SceneLoadErrorMsg);
-					std::string line;
-					while (std::getline(iss, line))
-					{
-						ImGui::TextWrapped("%s", line.c_str());
-					}
-
-					ImGui::Separator();
-					if (ImGui::Button("확인"))
-					{
-						g_SceneLoadErrorMsg.clear();
-						ImGui::CloseCurrentPopup();
-					}
-					ImGui::EndPopup();
-				}
-
-				if (ImGui::BeginPopupModal("SaveSceneBeforeLoad", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-				{
-					Alice::ImGuiText(L"현재 씬의 변경 내용을 저장하시겠습니까?");
-					ImGui::Separator();
-
-					if (ImGui::Button("Save"))
-					{
-						SaveScene(world);
-						// 씬 로드
-						// [Fix] 씬 로드 전 유효성 검사
-						if (g_NextScenePath.empty() || !std::filesystem::exists(ResourceManager::Get().Resolve(g_NextScenePath)))
-						{
-							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 파일이 존재하지 않습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load failed: invalid path: %s", g_NextScenePath.string().c_str());
-							g_SceneLoadErrorMsg = errorMsg;
-							g_ShowSceneLoadError = true;
-							g_RequestSceneLoad = false;
-							ImGui::CloseCurrentPopup();
-							return;
-						}
-						const std::filesystem::path loadAbs =
-							ResourceManager::Get().Resolve(g_NextScenePath);
-
-						if (isPlaying)
-						{
-							// 실행 중: 지연 처리
-							if (sceneManager)
-							{
-								if (!sceneManager->LoadSceneFileRequest(loadAbs))
-								{
-									const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-									ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
-									g_SceneLoadErrorMsg = errorMsg;
-									g_ShowSceneLoadError = true;
-									g_RequestSceneLoad = false;
-									ImGui::CloseCurrentPopup();
-									return;
-								}
-								g_CurrentScenePath = g_NextScenePath;
-								g_HasCurrentScenePath = true;
-								g_SceneDirty = false;
-							}
-							else
-							{
-								ALICE_LOG_ERRORF("[Editor] SceneManager is null, cannot load scene");
-							}
-						}
-						else
-						{
-							// 실행 안 함: 즉시 로드
-							bool loadSuccess = false;
-							if (m_uiWorldManager)
-							{
-								loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
-							}
-							else
-							{
-								loadSuccess = SceneFile::Load(world, loadAbs);
-							}
-							if (!loadSuccess)
-							{
-								const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-								ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
-								g_SceneLoadErrorMsg = errorMsg;
-								g_ShowSceneLoadError = true;
-								g_RequestSceneLoad = false;
-								ImGui::CloseCurrentPopup();
-								return;
-							}
-							EnsureSkinnedMeshesRegistered(world);
-							g_CurrentScenePath = g_NextScenePath;
-							g_HasCurrentScenePath = true;
-							g_SceneDirty = false;
-							ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
-						}
-						selectedEntity = InvalidEntityId;
-						m_selectedUIEntity = 0; // UI 선택도 해제
-						g_RequestSceneLoad = false;
-						ImGui::CloseCurrentPopup();
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Don't Save"))
-					{
-						// 저장하지 않고 바로 로드
-						// [Fix] 씬 로드 전 유효성 검사
-						if (g_NextScenePath.empty() || !std::filesystem::exists(ResourceManager::Get().Resolve(g_NextScenePath)))
-						{
-							const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 파일이 존재하지 않습니다.";
-							ALICE_LOG_ERRORF("[Editor] Scene load failed: invalid path: %s", g_NextScenePath.string().c_str());
-							g_SceneLoadErrorMsg = errorMsg;
-							g_ShowSceneLoadError = true;
-							g_RequestSceneLoad = false;
-							ImGui::CloseCurrentPopup();
-							return;
-						}
-						const std::filesystem::path loadAbs = ResourceManager::Get().Resolve(g_NextScenePath);
-
-						if (isPlaying)
-						{
-							// 실행 중: 지연 처리
-							if (sceneManager)
-							{
-								if (!sceneManager->LoadSceneFileRequest(loadAbs))
-								{
-									const std::string errorMsg = "씬 로드 요청 실패: " + g_NextScenePath.string() + "\n\n경로가 잘못되었거나 SceneManager가 초기화되지 않았습니다.";
-									ALICE_LOG_ERRORF("[Editor] Scene load request failed: %s", g_NextScenePath.string().c_str());
-									g_SceneLoadErrorMsg = errorMsg;
-									g_ShowSceneLoadError = true;
-									g_RequestSceneLoad = false;
-									ImGui::CloseCurrentPopup();
-									return;
-								}
-								g_CurrentScenePath = g_NextScenePath;
-								g_HasCurrentScenePath = true;
-								g_SceneDirty = false;
-							}
-						}
-						else
-						{
-							// 실행 안 함: 즉시 로드
-							bool loadSuccess = false;
-							if (m_uiWorldManager)
-							{
-								loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
-							}
-							else
-							{
-								loadSuccess = SceneFile::Load(world, loadAbs);
-							}
-							if (!loadSuccess)
-							{
-								const std::string errorMsg = "씬 로드 실패: " + g_NextScenePath.string() + "\n\n파일을 읽거나 역직렬화하는 중 오류가 발생했습니다.";
-								ALICE_LOG_ERRORF("[Editor] Scene load failed: %s", g_NextScenePath.string().c_str());
-								g_SceneLoadErrorMsg = errorMsg;
-								g_ShowSceneLoadError = true;
-								g_RequestSceneLoad = false;
-								ImGui::CloseCurrentPopup();
-								return;
-							}
-							EnsureSkinnedMeshesRegistered(world);
-							selectedEntity = InvalidEntityId;
-							m_selectedUIEntity = 0; // UI 선택도 해제
-							g_CurrentScenePath = g_NextScenePath;
-							g_HasCurrentScenePath = true;
-							g_SceneDirty = false;
-							ClearUndoStack(); // 씬 로드 시 Undo 스택 초기화
-						}
-						g_RequestSceneLoad = false;
-						ImGui::CloseCurrentPopup();
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Cancel"))
-					{
-						g_RequestSceneLoad = false;
-						ImGui::CloseCurrentPopup();
-					}
+					// 로드 실패 시 에러 팝업용 메시지 설정
+					g_SceneLoadErrorMsg = "씬 로드 실패: " + g_NextScenePath.string();
+					g_ShowSceneLoadError = true;
 				}
 			}
+			
+			// 요청 처리 완료 (팝업이 떴으면 팝업 내부에서 후속 처리)
+			g_RequestSceneLoad = false; 
+		}
+
+		// === 저장 확인 모달 팝업 (화면 중앙) ===
+		ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+		if (ImGui::BeginPopupModal("Scene Save Check", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+		{
+			Alice::ImGuiText(L"현재 씬에 변경사항이 있습니다.");
+			Alice::ImGuiText(L"중간에 씬을 저장하고 다른 씬을 로드할까요?");
+			ImGui::Separator();
+			
+			// 버튼 간격 등을 위한 여백
+			ImGui::Dummy(ImVec2(0.0f, 5.0f));
+
+			// [예] 버튼: 저장 후 로드 진행
+			if (ImGui::Button(" 예 (저장 후 이동) ", ImVec2(160, 0)))
+			{
+				// 1. 현재 씬 저장
+				SaveScene(world);
+
+				// 2. 다음 씬 로드
+				const std::filesystem::path loadAbs = ResourceManager::Get().Resolve(g_NextScenePath);
+				bool loadSuccess = false;
+
+				if (isPlaying)
+				{
+					if (sceneManager) 
+						loadSuccess = sceneManager->LoadSceneFileRequest(loadAbs);
+				}
+				else
+				{
+					if (m_uiWorldManager)
+						loadSuccess = SceneFile::LoadAuto(world, ResourceManager::Get(), g_NextScenePath, m_uiWorldManager);
+					else
+						loadSuccess = SceneFile::Load(world, loadAbs);
+				}
+
+				if (loadSuccess)
+				{
+					g_CurrentScenePath = g_NextScenePath;
+					g_HasCurrentScenePath = true;
+					g_SceneDirty = false;
+					selectedEntity = InvalidEntityId;
+					m_selectedUIEntity = 0;
+
+					// [중요] 씬 로드 후 반드시 Undo 스택 클리어
+					ClearUndoStack();
+
+					EnsureSkinnedMeshesRegistered(world);
+				}
+				else
+				{
+					g_SceneLoadErrorMsg = "씬 로드 실패: " + g_NextScenePath.string();
+					g_ShowSceneLoadError = true;
+				}
+
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+
+			// [아니오] 버튼: 로드 취소하고 현재 씬에 머무름
+			if (ImGui::Button(" 아니오 (취소) ", ImVec2(160, 0)))
+			{
+				// 아무것도 하지 않고 팝업만 닫음 (현재 씬 유지)
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+
+		// === 씬 로드 에러 팝업 (기존 유지) ===
+		if (g_ShowSceneLoadError)
+		{
+			ImGui::OpenPopup("SceneLoadError");
+			g_ShowSceneLoadError = false;
+		}
+
+		if (ImGui::BeginPopupModal("SceneLoadError", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "오류 발생");
+			ImGui::Separator();
+			ImGui::TextWrapped("%s", g_SceneLoadErrorMsg.c_str());
+			ImGui::Separator();
+			if (ImGui::Button("확인", ImVec2(120, 0)))
+			{
+				g_SceneLoadErrorMsg.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
 		}
 	}
 
