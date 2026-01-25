@@ -649,6 +649,94 @@ void FbxAnimation::EvaluateGlobalsAt(int clipIndex, double timeSec, std::vector<
 	m_ChannelDirty = oldDirty;
 }
 
+void FbxAnimation::EvaluateGlobalsAtFull(int clipIndex, double timeSec, std::vector<DirectX::XMFLOAT4X4>& outGlobal)
+{
+	if (!m_Scene)
+	{
+		outGlobal.clear();
+		return;
+	}
+
+	int oldClip = m_Current;
+	double oldTime = m_TimeSec;
+	bool oldPlaying = m_Playing;
+	bool oldDirty = m_ChannelDirty;
+
+	m_Current = clipIndex;
+	SetTimeSec(timeSec);
+	m_Playing = false;
+	m_ChannelDirty = true;
+	if (m_ChannelDirty && !m_ChannelOfNode.empty())
+	{
+		RebuildChannelMapIfNeeded(m_Scene, m_Current, m_NodeIndexOfName, m_ChannelOfNode);
+		m_ChannelDirty = false;
+	}
+
+	outGlobal.clear();
+	outGlobal.resize(m_NodeIndexOfName.size());
+
+	std::function<void(const aiNode*, int, const XMMATRIX&)> eval = [&](const aiNode* node, int idx, const XMMATRIX& parent){
+		aiVector3D S(1,1,1), T(0,0,0);
+		aiQuaternion R;
+		aiMatrix4x4 mLocal = node->mTransformation;
+		auto itIndex = m_NodeIndexOfName.find(node->mName.C_Str());
+		if (itIndex != m_NodeIndexOfName.end())
+		{
+			int nodeIdx = itIndex->second;
+			if (nodeIdx >= 0 && (size_t)nodeIdx < m_ChannelOfNode.size())
+			{
+				const aiNodeAnim* ch = m_ChannelOfNode[(size_t)nodeIdx];
+				if (ch)
+				{
+					FbxLocalSRT bindSrt{};
+					DecomposeAiMatrix(node->mTransformation, bindSrt);
+
+					aiVector3D bindScale = aiVector3D(bindSrt.scale.x, bindSrt.scale.y, bindSrt.scale.z);
+					if (bindScale.x < 0.001f) bindScale.x = 1.0f;
+					if (bindScale.y < 0.001f) bindScale.y = 1.0f;
+					if (bindScale.z < 0.001f) bindScale.z = 1.0f;
+
+					double tTicks = m_TimeSec * ((m_Current >= 0 && (size_t)m_Current < m_TicksPerSec.size()) ? m_TicksPerSec[m_Current] : 25.0);
+					S = (ch->mNumScalingKeys   > 0) ? InterpVec(ch->mScalingKeys,   ch->mNumScalingKeys,   tTicks, bindScale) : bindScale;
+					T = (ch->mNumPositionKeys  > 0) ? InterpVec(ch->mPositionKeys,  ch->mNumPositionKeys,  tTicks, aiVector3D(bindSrt.translation.x, bindSrt.translation.y, bindSrt.translation.z)) 
+						: aiVector3D(bindSrt.translation.x, bindSrt.translation.y, bindSrt.translation.z);
+					R = (ch->mNumRotationKeys  > 0) ? InterpQuat(ch->mRotationKeys, ch->mNumRotationKeys,  tTicks) 
+						: aiQuaternion(bindSrt.rotation.w, bindSrt.rotation.x, bindSrt.rotation.y, bindSrt.rotation.z);
+					aiMatrix4x4 mS; mS.Scaling(S, mS); aiMatrix4x4 mR = aiMatrix4x4(R.GetMatrix()); aiMatrix4x4 mT; mT.Translation(T, mT);
+					mLocal = mT * mR * mS;
+				}
+			}
+		}
+		XMFLOAT4X4 lm; lm._11 = (float)mLocal.a1; lm._12 = (float)mLocal.a2; lm._13 = (float)mLocal.a3; lm._14 = (float)mLocal.a4;
+		lm._21 = (float)mLocal.b1; lm._22 = (float)mLocal.b2; lm._23 = (float)mLocal.b3; lm._24 = (float)mLocal.b4;
+		lm._31 = (float)mLocal.c1; lm._32 = (float)mLocal.c2; lm._33 = (float)mLocal.c3; lm._34 = (float)mLocal.c4;
+		lm._41 = (float)mLocal.d1; lm._42 = (float)mLocal.d2; lm._43 = (float)mLocal.d3; lm._44 = (float)mLocal.d4;
+		XMMATRIX L = XMLoadFloat4x4(&lm);
+		XMMATRIX G = XMMatrixMultiply(parent, L);
+		if ((size_t)idx < outGlobal.size()) XMStoreFloat4x4(&outGlobal[(size_t)idx], G);
+		for (unsigned ci = 0; ci < node->mNumChildren; ++ci)
+		{
+			auto it = m_NodeIndexOfName.find(node->mChildren[ci]->mName.C_Str());
+			int childIdx = (it != m_NodeIndexOfName.end()) ? it->second : -1;
+			if (childIdx >= 0) eval(node->mChildren[ci], childIdx, G);
+		}
+	};
+
+	int rootIdx = -1;
+	if (m_Scene->mRootNode)
+	{
+		auto it = m_NodeIndexOfName.find(m_Scene->mRootNode->mName.C_Str());
+		if (it != m_NodeIndexOfName.end()) rootIdx = it->second;
+	}
+	if (rootIdx >= 0)
+		eval(m_Scene->mRootNode, rootIdx, XMMatrixIdentity());
+
+	m_Current = oldClip;
+	m_TimeSec = oldTime;
+	m_Playing = oldPlaying;
+	m_ChannelDirty = oldDirty;
+}
+
 void FbxAnimation::EvaluateLocalsAt(int clipIndex, double timeSec,
 	std::vector<FbxLocalSRT>& outLocals,
 	std::vector<std::uint8_t>* outHasChannel) const

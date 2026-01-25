@@ -176,6 +176,19 @@ namespace Alice {
 		return GameObject();
 	}
 
+	EntityId World::FindEntityByGuid(std::uint64_t guid) const
+	{
+		if (guid == 0)
+			return InvalidEntityId;
+
+		for (const auto& [eid, idc] : GetComponents<IDComponent>())
+		{
+			if (idc.guid == guid)
+				return eid;
+		}
+		return InvalidEntityId;
+	}
+
 	void World::SetEntityName(EntityId id, const std::string& name)
 	{
 		if (id == InvalidEntityId)

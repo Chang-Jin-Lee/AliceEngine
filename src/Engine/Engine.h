@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -65,6 +65,7 @@ namespace Alice
         void RefreshPhysicsForCurrentWorld();
         void TickPhysics(float dt);
         void ProcessPhysicsEvents();
+        void ProcessCombatHits();
         /// 월드와 물리 시스템을 함께 정리하는 안전한 진입점
         /// World::Clear()와 PhysicsSystem 정리를 함께 처리하여 누락을 방지
         void ClearWorldAndPhysics();

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // RTTR <-> nlohmann::json 변환 유틸
 // - 목적: 컴포넌트의 프로퍼티를 RTTR로 열거해서 JSON으로 저장/로드
@@ -438,6 +438,18 @@ namespace Alice
                 return true;
             }
 
+            // 클래스 타입(예: AdvancedAnimSocket): JSON 객체로 역직렬화
+            // 새 인스턴스를 생성해 채운 뒤 set_value로 넣어야 저장된 필드가 제대로 반영됨
+            if (itemType.is_class() && jitem.is_object())
+            {
+                rttr::variant newElem = itemType.create();
+                if (!newElem.is_valid()) return false;
+                rttr::instance inst = newElem;
+                if (!FromJsonObject(inst, jitem)) return false;
+                if (!view.set_value(index, newElem)) return false;
+                return true;
+            }
+
             return false;
         }
 
@@ -450,6 +462,13 @@ namespace Alice
 
             rttr::variant_sequential_view view = var.create_sequential_view();
             if (!view.is_valid()) return false;
+
+            // 동적 컨테이너(std::vector 등): JSON 배열 크기만큼 확장 후 채움 (소켓 등 저장 복원용)
+            if (view.is_dynamic() && view.get_size() < jval.size())
+            {
+                if (!view.set_size(jval.size()))
+                    return false;
+            }
 
             // JSON 배열의 각 요소를 컨테이너에 설정
             size_t index = 0;

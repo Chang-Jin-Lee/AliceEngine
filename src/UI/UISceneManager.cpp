@@ -787,82 +787,82 @@ void UIImageSystem::UpdateRootChild(UIWorld& world, UIBase* node)
 
 void UIImageSystem::Render(UIWorld& world, UIRenderStruct* renderStruct)
 {
-	ALICE_LOG_INFO("[UIImageSystem::Render] Render called: renderStruct=%p", renderStruct);
+	// ALICE_LOG_INFO("[UIImageSystem::Render] Render called: renderStruct=%p", renderStruct);
 	if (!renderStruct) 
 	{
-		ALICE_LOG_WARN("[UIImageSystem::Render] Render skipped: renderStruct is null");
+		// ALICE_LOG_WARN("[UIImageSystem::Render] Render skipped: renderStruct is null");
 		return;
 	}
-	ALICE_LOG_INFO("[UIImageSystem::Render] Calling RenderRoot");
+	// ALICE_LOG_INFO("[UIImageSystem::Render] Calling RenderRoot");
 	RenderRoot(world, renderStruct);
-	ALICE_LOG_INFO("[UIImageSystem::Render] RenderRoot completed");
+	// ALICE_LOG_INFO("[UIImageSystem::Render] RenderRoot completed");
 }
 
 void UIImageSystem::RenderRoot(UIWorld& world, UIRenderStruct* renderStruct)
 {
 	const auto& rootIDs = world.GetRootIDs();
-	ALICE_LOG_INFO("[UIImageSystem::RenderRoot] RenderRoot called: rootIDs.size()=%zu", rootIDs.size());
+	// ALICE_LOG_INFO("[UIImageSystem::RenderRoot] RenderRoot called: rootIDs.size()=%zu", rootIDs.size());
 	
 	// 루트 UI 엔티티들 순회
 	for (size_t i = 0; i < rootIDs.size(); ++i)
 	{
 		auto rootID = rootIDs[i];
-		ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Processing rootID[%zu]=%lu", i, rootID);
+		// ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Processing rootID[%zu]=%lu", i, rootID);
 		
 		if (auto* root = world.Get(rootID))
 		{
-			ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Found root entity: rootID=%lu", rootID);
+			// ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Found root entity: rootID=%lu", rootID);
 			// ImageComponent 렌더링
 			if (auto* imageComp = root->TryGetComponent<UI_ImageComponent>())
 			{
-				ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Found UI_ImageComponent for rootID=%lu, calling Render()", rootID);
+				// ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Found UI_ImageComponent for rootID=%lu, calling Render()", rootID);
 				imageComp->Render();
-				ALICE_LOG_INFO("[UIImageSystem::RenderRoot] UI_ImageComponent::Render() completed for rootID=%lu", rootID);
+				// ALICE_LOG_INFO("[UIImageSystem::RenderRoot] UI_ImageComponent::Render() completed for rootID=%lu", rootID);
 			}
 			else
 			{
-				ALICE_LOG_WARN("[UIImageSystem::RenderRoot] No UI_ImageComponent found for rootID=%lu", rootID);
+				// ALICE_LOG_WARN("[UIImageSystem::RenderRoot] No UI_ImageComponent found for rootID=%lu", rootID);
 			}
 			// 자식들도 재귀적으로 렌더링
-			ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Calling RenderRootChild for rootID=%lu", rootID);
+			// ALICE_LOG_INFO("[UIImageSystem::RenderRoot] Calling RenderRootChild for rootID=%lu", rootID);
 			RenderRootChild(world, root, renderStruct);
 		}
 		else
 		{
-			ALICE_LOG_WARN("[UIImageSystem::RenderRoot] Root entity not found: rootID=%lu", rootID);
+			// ALICE_LOG_WARN("[UIImageSystem::RenderRoot] Root entity not found: rootID=%lu", rootID);
 		}
 	}
-	ALICE_LOG_INFO("[UIImageSystem::RenderRoot] RenderRoot completed");
+	// ALICE_LOG_INFO("[UIImageSystem::RenderRoot] RenderRoot completed");
 }
 
 void UIImageSystem::RenderRootChild(UIWorld& world, UIBase* node, UIRenderStruct* /*renderStruct*/)
 {
-	ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] RenderRootChild called: node=%p, childCount=%zu", 
-	               node, node ? node->childIDStorage.size() : 0);
+	// ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] RenderRootChild called: node=%p, childCount=%zu", 
+	//                node, node ? node->childIDStorage.size() : 0);
 	
 	for (auto childID : node->childIDStorage)
 	{
-		ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Processing childID=%lu", childID);
+		// ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Processing childID=%lu", childID);
 		if (auto* child = world.Get(childID))
 		{
-			ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Found child entity: childID=%lu", childID);
+			// ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Found child entity: childID=%lu", childID);
 			// ImageComponent 렌더링
 			if (auto* imageComp = child->TryGetComponent<UI_ImageComponent>())
 			{
-				ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Found UI_ImageComponent for childID=%lu, calling Render()", childID);
+				// ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] Found UI_ImageComponent for childID=%lu, calling Render()", childID);
 				imageComp->Render();
-				ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] UI_ImageComponent::Render() completed for childID=%lu", childID);
+				// ALICE_LOG_INFO("[UIImageSystem::RenderRootChild] UI_ImageComponent::Render() completed for childID=%lu", childID);
 			}
 			else
 			{
-				ALICE_LOG_WARN("[UIImageSystem::RenderRootChild] No UI_ImageComponent found for childID=%lu", childID);
+				// ALICE_LOG_WARN("[UIImageSystem::RenderRootChild] No UI_ImageComponent found for childID=%lu", childID);
 			}
 			// 재귀적으로 자식들도 렌더링
 			RenderRootChild(world, child, nullptr);
 		}
 		else
 		{
-			ALICE_LOG_WARN("[UIImageSystem::RenderRootChild] Child entity not found: childID=%lu", childID);
+			// ALICE_LOG_WARN("[UIImageSystem::RenderRootChild] Child entity not found: childID=%lu", childID);
 		}
 	}
 }
