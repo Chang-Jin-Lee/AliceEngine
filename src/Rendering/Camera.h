@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <DirectXMath.h>
+#include <DirectXCollision.h>
 
 namespace Alice
 {
@@ -45,6 +46,10 @@ namespace Alice
 
         /// 프러스텀 평면을 추출합니다. (좌,우,하,상,근,원)
         void GetFrustumPlanes(DirectX::XMFLOAT4 outPlanes[6]) const;
+
+        /// 렌더링 최적화를 위해 월드 공간의 절두체(Frustum)를 반환합니다.
+        /// 프러스텀 컬링에 사용됩니다.
+        DirectX::BoundingFrustum GetWorldFrustum() const;
 
         /// 월드 좌표를 스크린 좌표로 변환합니다. (픽셀 기준)
         DirectX::XMFLOAT2 WorldToScreen(const DirectX::XMFLOAT3& worldPos,float viewportWidth, float viewportHeight) const;

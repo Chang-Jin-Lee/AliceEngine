@@ -165,6 +165,7 @@ namespace Alice
         
         // 렌더링 패스
         DirectX::XMMATRIX RenderShadowPass(const World& world,
+                                           const Camera& camera,
                                            const std::vector<SkinnedDrawCommand>& skinnedCommands,
                                            const std::unordered_set<EntityId>& cameraEntities,
                                            bool editorMode = false,
