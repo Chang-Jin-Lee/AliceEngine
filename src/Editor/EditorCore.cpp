@@ -3117,6 +3117,15 @@ namespace Alice
 
 				// 3-3. Compute Effect
 				DrawInspectorComputeEffect(world, selectedEntity);
+				
+				// 3-4. Camera 컴포넌트들
+				DrawInspectorCameraSpringArm(world, selectedEntity);
+				DrawInspectorCameraLookAt(world, selectedEntity);
+				DrawInspectorCameraFollow(world, selectedEntity);
+				DrawInspectorCameraShake(world, selectedEntity);
+				DrawInspectorCameraInput(world, selectedEntity);
+				DrawInspectorCameraBlend(world, selectedEntity);
+				
 				// 4. Skinned Mesh / 소켓 프리뷰 (간단 뷰)
 				if (auto* skinned =
 					world.GetComponent<SkinnedMeshComponent>(selectedEntity)) {
@@ -4757,8 +4766,23 @@ namespace Alice
 
 				// ---- Rotation
 				{
-					auto r = ReflectionUI::RenderProperty(*transform, "rotation", "Rotation");
-					changed |= r.changed;
+					// 라디안(Radian) -> 디그리(Degree) 변환하여 표시
+					DirectX::XMFLOAT3 rotDeg;
+					rotDeg.x = DirectX::XMConvertToDegrees(transform->rotation.x);
+					rotDeg.y = DirectX::XMConvertToDegrees(transform->rotation.y);
+					rotDeg.z = DirectX::XMConvertToDegrees(transform->rotation.z);
+
+					// ImGui로 직접 그림 (ReflectionUI 대신 사용)
+					if (ImGui::DragFloat3("Rotation", &rotDeg.x, 0.1f))
+					{
+						// 변경된 디그리 값을 다시 라디안으로 변환하여 저장
+						transform->rotation.x = DirectX::XMConvertToRadians(rotDeg.x);
+						transform->rotation.y = DirectX::XMConvertToRadians(rotDeg.y);
+						transform->rotation.z = DirectX::XMConvertToRadians(rotDeg.z);
+						changed = true;
+					}
+
+					// Undo/Redo 로직 유지를 위한 상태 플래그 갱신
 					anyTransformItemActive |= ImGui::IsItemActive();
 					anyTransformItemActivated |= ImGui::IsItemActivated();
 				}
@@ -6937,6 +6961,116 @@ namespace Alice
 				}
 				}
 
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	// =========================================================================================
+	// Camera 컴포넌트 인스펙터 함수들
+	// =========================================================================================
+
+	void EditorCore::DrawInspectorCameraSpringArm(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraSpringArmComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Spring Arm", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderProperty(*comp, "enabled", "Enabled", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "enableCollision", "Enable Collision", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "enableZoom", "Enable Zoom", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "distance", "Distance", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "minDistance", "Min Distance", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "maxDistance", "Max Distance", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "zoomSpeed", "Zoom Speed", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "distanceDamping", "Distance Damping", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "probeRadius", "Probe Radius", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "probePadding", "Probe Padding", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "minHeight", "Min Height", &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraLookAt(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraLookAtComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Look At", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderProperty(*comp, "enabled", "Enabled", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "targetName", "Target Name", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "rotationDamping", "Rotation Damping", &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraFollow(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraFollowComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Follow", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderInspector(*comp, nullptr, &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraShake(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraShakeComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Shake", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderProperty(*comp, "enabled", "Enabled", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "amplitude", "Amplitude", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "frequency", "Frequency", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "duration", "Duration", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "decay", "Decay", &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraInput(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraInputComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Input", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderInspector(*comp, nullptr, &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraBlend(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraBlendComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Blend", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderProperty(*comp, "active", "Active", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "targetName", "Target Name", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "duration", "Duration", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "useSmoothStep", "Use Smooth Step", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "slowTriggerT", "Slow Trigger T", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "slowDuration", "Slow Duration", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "slowTimeScale", "Slow Time Scale", &world).changed;
+				
 				if (changed) g_SceneDirty = true;
 			}
 		}
