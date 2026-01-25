@@ -1838,11 +1838,6 @@ namespace Alice
 		pImpl->m_renderDevice->TrimVideoMemory();
 	}
 
-	void Engine::TrimVideoMemory()
-	{
-		pImpl->m_renderDevice->TrimVideoMemory();
-	}
-
 	void Engine::SetUseForwardRendering(bool useForward)
 	{
 		// 즉시 전환하지 않고, 다음 프레임 시작 시 전환하도록 플래그만 설정
