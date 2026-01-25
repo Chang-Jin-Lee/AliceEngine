@@ -1798,6 +1798,11 @@ namespace Alice
 			pImpl->m_isRunning = false;
 			PostQuitMessage(0);
 			return 0;
+
+		case WM_INPUT:
+			// Raw Input 처리
+			pImpl->m_inputSystem.ProcessRawInput(reinterpret_cast<HRAWINPUT>(lParam));
+			return 0;
 		}
 
 		return DefWindowProcW(hWnd, message, wParam, lParam);
@@ -1819,7 +1824,13 @@ namespace Alice
 			DirectX::Mouse::ProcessMessage(message, wParam, lParam);
 			break;
 
-		case WM_INPUT: case WM_MOUSEMOVE: case WM_LBUTTONDOWN: case WM_LBUTTONUP:
+		case WM_INPUT:
+			// Raw Input은 InputSystem에서 처리 (HandleMessage에서 처리됨)
+			// DirectXTK에도 전달 (버튼 상태 등은 DirectXTK에서 관리)
+			DirectX::Mouse::ProcessMessage(message, wParam, lParam);
+			break;
+
+		case WM_MOUSEMOVE: case WM_LBUTTONDOWN: case WM_LBUTTONUP:
 		case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_MBUTTONDOWN: case WM_MBUTTONUP:
 		case WM_MOUSEWHEEL: case WM_XBUTTONDOWN: case WM_XBUTTONUP: case WM_MOUSEHOVER:
 			DirectX::Mouse::ProcessMessage(message, wParam, lParam);
