@@ -26,5 +26,5 @@
         "Assets/Materials/Alice_23.mat"
     ],
     "mesh": "Alice",
-    "source_fbx": "Resource/fbx/Alice3DGame/Alice.fbx"
+    "source_fbx": "Resource/Test/fbx/Alice3DGame/Alice.fbx"
 }

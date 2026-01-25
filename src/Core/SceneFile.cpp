@@ -20,6 +20,8 @@
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
 #include "Components/ComputeEffectComponent.h"
+#include "Components/HealthComponent.h"
+#include "Components/AttackDriverComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
@@ -62,6 +64,25 @@ namespace Alice
                 return j.get<std::uint64_t>();
             }
             return NewGuid();
+        }
+
+        // GUID 파싱 (잘못된 값은 0)
+        static std::uint64_t ParseGuidOrZero(const JsonRttr::json& j)
+        {
+            if (j.is_string())
+            {
+                try
+                {
+                    return std::stoull(j.get<std::string>());
+                }
+                catch (...)
+                {
+                    return 0;
+                }
+            }
+            if (j.is_number_unsigned() || j.is_number_integer())
+                return j.get<std::uint64_t>();
+            return 0;
         }
 
         // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
@@ -400,6 +421,42 @@ namespace Alice
                 rttr::instance inst = copy;
                 outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
                 copy.soundPath = NormalizePathToRelative(copy.soundPath);
+            }
+
+            if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(id); socketAttach)
+            {
+                rttr::instance inst = const_cast<SocketAttachmentComponent&>(*socketAttach);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["ownerGuid"] = std::to_string(socketAttach->ownerGuid);
+                outEntity["SocketAttachment"] = obj;
+            }
+
+            if (const auto* hurtbox = world.GetComponent<HurtboxComponent>(id); hurtbox)
+            {
+                rttr::instance inst = const_cast<HurtboxComponent&>(*hurtbox);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["ownerGuid"] = std::to_string(hurtbox->ownerGuid);
+                outEntity["Hurtbox"] = obj;
+            }
+
+            if (const auto* weaponTrace = world.GetComponent<WeaponTraceComponent>(id); weaponTrace)
+            {
+                rttr::instance inst = const_cast<WeaponTraceComponent&>(*weaponTrace);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["ownerGuid"] = std::to_string(weaponTrace->ownerGuid);
+                outEntity["WeaponTrace"] = obj;
+            }
+
+            if (const auto* health = world.GetComponent<HealthComponent>(id); health)
+            {
+                rttr::instance inst = const_cast<HealthComponent&>(*health);
+                outEntity["Health"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* attackDriver = world.GetComponent<AttackDriverComponent>(id); attackDriver)
+            {
+                rttr::instance inst = const_cast<AttackDriverComponent&>(*attackDriver);
+                outEntity["AttackDriver"] = JsonRttr::ToJsonObject(inst);
             }
 
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
@@ -824,6 +881,66 @@ namespace Alice
                 SoundBoxComponent& sb = world.AddComponent<SoundBoxComponent>(id);
                 rttr::instance inst = sb;
                 if (!JsonRttr::FromJsonObject(inst, *itSB)) return false;
+            }
+
+            // SocketAttachment (선택)
+            auto itSocketAttach = e.find("SocketAttachment");
+            if (itSocketAttach != e.end() && itSocketAttach->is_object())
+            {
+                SocketAttachmentComponent& sa = world.AddComponent<SocketAttachmentComponent>(id);
+                if (auto itGuid = itSocketAttach->find("ownerGuid"); itGuid != itSocketAttach->end())
+                    sa.ownerGuid = ParseGuidOrZero(*itGuid);
+
+                JsonRttr::json copy = *itSocketAttach;
+                copy.erase("ownerGuid");
+                rttr::instance inst = sa;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
+            }
+
+            // Hurtbox (선택)
+            auto itHurtbox = e.find("Hurtbox");
+            if (itHurtbox != e.end() && itHurtbox->is_object())
+            {
+                HurtboxComponent& hb = world.AddComponent<HurtboxComponent>(id);
+                if (auto itGuid = itHurtbox->find("ownerGuid"); itGuid != itHurtbox->end())
+                    hb.ownerGuid = ParseGuidOrZero(*itGuid);
+
+                JsonRttr::json copy = *itHurtbox;
+                copy.erase("ownerGuid");
+                rttr::instance inst = hb;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
+            }
+
+            // WeaponTrace (선택)
+            auto itWeaponTrace = e.find("WeaponTrace");
+            if (itWeaponTrace != e.end() && itWeaponTrace->is_object())
+            {
+                WeaponTraceComponent& wt = world.AddComponent<WeaponTraceComponent>(id);
+                if (auto itGuid = itWeaponTrace->find("ownerGuid"); itGuid != itWeaponTrace->end())
+                    wt.ownerGuid = ParseGuidOrZero(*itGuid);
+
+                JsonRttr::json copy = *itWeaponTrace;
+                copy.erase("ownerGuid");
+                rttr::instance inst = wt;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
+            }
+
+            // Health (선택)
+            auto itHealth = e.find("Health");
+            if (itHealth != e.end() && itHealth->is_object())
+            {
+                HealthComponent& hc = world.AddComponent<HealthComponent>(id);
+                rttr::instance inst = hc;
+                if (!JsonRttr::FromJsonObject(inst, *itHealth)) return false;
+            }
+
+            // AttackDriver (선택)
+            auto itAttackDriver = e.find("AttackDriver");
+            if (itAttackDriver != e.end() && itAttackDriver->is_object())
+            {
+                AttackDriverComponent& ad = world.AddComponent<AttackDriverComponent>(id);
+                rttr::instance inst = ad;
+                if (!JsonRttr::FromJsonObject(inst, *itAttackDriver)) return false;
             }
 
             return true;

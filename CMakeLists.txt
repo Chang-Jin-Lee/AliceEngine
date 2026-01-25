@@ -129,6 +129,11 @@ set(ENGINE_SOURCES
 
     # AnimBlueprint
     ${ALICE_SRC_DIR}/Game/AnimBlueprintAsset.cpp
+    ${ALICE_SRC_DIR}/Game/SocketAttachmentSystem.cpp
+    ${ALICE_SRC_DIR}/Game/HurtboxFactory.cpp
+    ${ALICE_SRC_DIR}/Game/WeaponTraceSystem.cpp
+    ${ALICE_SRC_DIR}/Game/CombatSystem.cpp
+    ${ALICE_SRC_DIR}/Game/AttackDriverSystem.cpp
 
     # 렌더링 계층
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
@@ -258,6 +263,11 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
     ${ALICE_SRC_DIR}/Components/TrailEffectComponent.h
     ${ALICE_SRC_DIR}/Components/EffectComponent.h
+    ${ALICE_SRC_DIR}/Components/SocketAttachmentComponent.h
+    ${ALICE_SRC_DIR}/Components/HurtboxComponent.h
+    ${ALICE_SRC_DIR}/Components/WeaponTraceComponent.h
+    ${ALICE_SRC_DIR}/Components/HealthComponent.h
+    ${ALICE_SRC_DIR}/Components/AttackDriverComponent.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
@@ -286,6 +296,13 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
 	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
     ${ALICE_SRC_DIR}/Game/AdvancedAnimSystem.h
+    ${ALICE_SRC_DIR}/Game/SocketAttachmentSystem.h
+    ${ALICE_SRC_DIR}/Game/HurtboxFactory.h
+    ${ALICE_SRC_DIR}/Game/WeaponTraceSystem.h
+    ${ALICE_SRC_DIR}/Game/CombatPhysicsLayers.h
+    ${ALICE_SRC_DIR}/Game/CombatHitEvent.h
+    ${ALICE_SRC_DIR}/Game/CombatSystem.h
+    ${ALICE_SRC_DIR}/Game/AttackDriverSystem.h
     #PhysX 물리
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h

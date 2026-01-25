@@ -24,6 +24,10 @@
 #include "Components/AdvancedAnimationComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include "Components/WeaponTraceComponent.h"
+#include "Components/IDComponent.h"
+#include "Components/SocketComponent.h"
+#include <cstdio>
 #include <set>
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
@@ -33,6 +37,7 @@
 #include "Components/CameraBlendComponent.h"
 #include "Components/CameraInputComponent.h"
 #include "Editor/Blueprint/AnimBlueprintEditor.h"
+#include "Game/CombatPhysicsLayers.h"
 
 // ImGui
 #include "imgui.h"
@@ -5025,6 +5030,11 @@ namespace Alice
 				DrawInspectorJoint(world, _selectedEntity);
 				continue;
 			}
+			else if (typeName == "WeaponTraceComponent")
+			{
+				DrawInspectorWeaponTrace(world, _selectedEntity);
+				continue;
+			}
 
 			// 일반 컴포넌트: 레지스트리 기반 렌더링
 			if (!d.has(world, _selectedEntity)) continue;
@@ -6256,6 +6266,14 @@ namespace Alice
 					world.RemoveComponent<Phy_SettingsComponent>(_selectedEntity);
 					g_SceneDirty = true;
 					return;
+				}
+
+				if (ImGui::Button("Apply Combat Defaults"))
+				{
+					CombatPhysicsLayers::ApplyDefaultCombatLayerMatrix(*settings);
+					settings->filterRevision++;
+					changed = true;
+					g_SceneDirty = true;
 				}
 
 				// 기본 프로퍼티는 ReflectionUI로
@@ -8134,6 +8152,150 @@ namespace Alice
 				{
 					i++;
 				}
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorWeaponTrace(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* trace = world.GetComponent<WeaponTraceComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Weapon Trace", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				if (ImGui::Button("Remove##WeaponTraceRemove"))
+				{
+					world.RemoveComponent<WeaponTraceComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
+
+				std::uint64_t ownerGuid = trace->ownerGuid;
+				if (ImGui::InputScalar("Owner GUID", ImGuiDataType_U64, &ownerGuid))
+				{
+					trace->ownerGuid = ownerGuid;
+					trace->ownerCached = InvalidEntityId;
+					changed = true;
+				}
+
+				if (ImGui::Button("Pick from selected entity"))
+				{
+					if (const auto* idc = world.GetComponent<IDComponent>(_selectedEntity))
+					{
+						trace->ownerGuid = idc->guid;
+						trace->ownerCached = _selectedEntity;
+						trace->ownerNameDebug = world.GetEntityName(_selectedEntity);
+						changed = true;
+					}
+				}
+
+				static EntityId lastOwnerNameEntity = InvalidEntityId;
+				static char ownerNameBuf[128]{};
+				if (lastOwnerNameEntity != _selectedEntity)
+				{
+					std::snprintf(ownerNameBuf, sizeof(ownerNameBuf), "%s", trace->ownerNameDebug.c_str());
+					lastOwnerNameEntity = _selectedEntity;
+				}
+
+				if (ImGui::InputText("Owner Name Debug", ownerNameBuf, IM_ARRAYSIZE(ownerNameBuf)))
+				{
+					trace->ownerNameDebug = ownerNameBuf;
+					changed = true;
+				}
+
+				changed |= ImGui::Checkbox("Active", &trace->active);
+				changed |= ImGui::Checkbox("Debug Draw", &trace->debugDraw);
+				changed |= ImGui::DragFloat("Radius", &trace->radius, 0.01f, 0.0f, 10.0f);
+
+				uint32_t teamId = trace->teamId;
+				if (ImGui::InputScalar("Team Id", ImGuiDataType_U32, &teamId))
+				{
+					trace->teamId = teamId;
+					changed = true;
+				}
+
+				uint32_t attackId = trace->attackInstanceId;
+				if (ImGui::InputScalar("Attack Instance Id", ImGuiDataType_U32, &attackId))
+				{
+					trace->attackInstanceId = attackId;
+					changed = true;
+				}
+
+				uint32_t targetBits = trace->targetLayerBits;
+				if (ImGui::InputScalar("Target Layer Bits", ImGuiDataType_U32, &targetBits))
+				{
+					trace->targetLayerBits = targetBits;
+					changed = true;
+				}
+
+				uint32_t queryBits = trace->queryLayerBits;
+				if (ImGui::InputScalar("Query Layer Bits", ImGuiDataType_U32, &queryBits))
+				{
+					trace->queryLayerBits = queryBits;
+					changed = true;
+				}
+
+				ImGui::Separator();
+				ImGui::Text("Trace Socket Names");
+
+				for (size_t i = 0; i < trace->traceSocketNames.size();)
+				{
+					ImGui::PushID(static_cast<int>(i));
+					ImGui::TextUnformatted(trace->traceSocketNames[i].c_str());
+					ImGui::SameLine();
+					if (ImGui::Button("Remove"))
+					{
+						trace->traceSocketNames.erase(trace->traceSocketNames.begin() + static_cast<long long>(i));
+						changed = true;
+						ImGui::PopID();
+						continue;
+					}
+					ImGui::PopID();
+					++i;
+				}
+
+				static char newSocketBuf[128]{};
+				ImGui::InputText("New Socket", newSocketBuf, IM_ARRAYSIZE(newSocketBuf));
+				ImGui::SameLine();
+				if (ImGui::Button("Add##TraceSocket"))
+				{
+					if (newSocketBuf[0] != '\0')
+					{
+						trace->traceSocketNames.push_back(newSocketBuf);
+						newSocketBuf[0] = '\0';
+						changed = true;
+					}
+				}
+
+				if (ImGui::Button("Auto-fill Trace/WT sockets"))
+				{
+					EntityId ownerId = (trace->ownerGuid != 0) ? world.FindEntityByGuid(trace->ownerGuid) : trace->ownerCached;
+					if (ownerId != InvalidEntityId)
+					{
+						auto addIfMatch = [&](const std::string& name) {
+							if (name.rfind("Trace_", 0) != 0 && name.rfind("WT_", 0) != 0)
+								return;
+							for (const auto& s : trace->traceSocketNames)
+								if (s == name) return;
+							trace->traceSocketNames.push_back(name);
+							changed = true;
+						};
+
+						if (const auto* adv = world.GetComponent<AdvancedAnimationComponent>(ownerId))
+						{
+							for (const auto& s : adv->sockets)
+								addIfMatch(s.name);
+						}
+						if (const auto* sc = world.GetComponent<SocketComponent>(ownerId))
+						{
+							for (const auto& s : sc->sockets)
+								addIfMatch(s.name);
+						}
+					}
+				}
+
+				if (changed) g_SceneDirty = true;
 			}
 		}
 	}
