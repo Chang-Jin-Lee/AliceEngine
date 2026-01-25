@@ -7,7 +7,7 @@
 //   Alice::ImGuiSliderFloat(TEXT("Key Intensity (주광)"), &value, 0.0f, 3.0f);
 //   Alice::ImGuiSliderFloat3(TEXT("Key Direction (주광)"), &vec.x, -1.0f, 1.0f);
 //
-// [최적화] 매 프레임 메모리 할당을 방지하기 위해 thread_local 버퍼를 재사용합니다.
+// 매 프레임 메모리 할당을 방지하기 위해 thread_local 버퍼를 재사용합니다.
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -18,7 +18,7 @@
 
 namespace Alice
 {
-    // [최적화] 매 프레임 할당을 방지하기 위한 변환 헬퍼
+    // 매 프레임 할당을 방지하기 위한 변환 헬퍼
     // thread_local을 사용하여 스레드별로 버퍼를 하나만 만들고 계속 재사용합니다.
     inline const char* WideToUtf8Reuse(const wchar_t* wstr)
     {
