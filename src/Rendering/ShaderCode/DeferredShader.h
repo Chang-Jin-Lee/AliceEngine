@@ -173,6 +173,91 @@ VSOutput main(VSInput input)
 }
 )";
 
+        // G-Buffer Skinned Instanced Vertex Shader (본 없는 FBX 인스턴싱용)
+        inline static const char* GBufferSkinnedInstancedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+    int      gShadingMode;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+    float2 TexCoord     : TEXCOORD0;
+    float3 SmoothNormal : SMOOTHNORMAL;
+
+    // 인스턴스 월드 행렬 (행 3개)
+    float4 iWorld0      : INSTANCE_WORLD0;
+    float4 iWorld1      : INSTANCE_WORLD1;
+    float4 iWorld2      : INSTANCE_WORLD2;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+
+    // 인스턴스 월드 행렬 복원 (마지막 행은 (0,0,0,1))
+    float4x4 world;
+    world[0] = input.iWorld0;
+    world[1] = input.iWorld1;
+    world[2] = input.iWorld2;
+    world[3] = float4(0, 0, 0, 1);
+
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), world).xyz);
+
+    // 아웃라인: 스무스 노멀 방향으로 확장
+    float3 smoothN = normalize(mul(float4(input.SmoothNormal, 0.0f), world).xyz);
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
+
+    float4 posW = mul(float4(input.Position + posOffset, 1.0f), world);
+    output.Position = mul(mul(posW, gView), gProj);
+    output.WorldPos = posW.xyz;
+
+    output.Normal   = N;
+    output.TangentW = normalize(mul(float4(input.Tangent, 0.0f), world).xyz);
+    output.BitanW   = normalize(mul(float4(input.Binormal, 0.0f), world).xyz);
+    output.TexCoord = input.TexCoord;
+
+    return output;
+}
+)";
+
         // G-Buffer Pixel Shader
         inline static const char* GBufferPS = R"(
 cbuffer CBPerObject : register(b0)
@@ -861,6 +946,91 @@ VSOutput main(VSInput input)
 }
 )";
 
+        // Transparent Forward-Style Skinned Instanced VS (본 없는 FBX 인스턴싱용)
+        inline static const char* TransparentSkinnedInstancedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+    int      gShadingMode;
+    int      gPad0;
+    
+    // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+    float2 TexCoord     : TEXCOORD0;
+    float3 SmoothNormal : SMOOTHNORMAL;
+
+    // 인스턴스 월드 행렬 (행 3개)
+    float4 iWorld0      : INSTANCE_WORLD0;
+    float4 iWorld1      : INSTANCE_WORLD1;
+    float4 iWorld2      : INSTANCE_WORLD2;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+
+    // 인스턴스 월드 행렬 복원
+    float4x4 world;
+    world[0] = input.iWorld0;
+    world[1] = input.iWorld1;
+    world[2] = input.iWorld2;
+    world[3] = float4(0, 0, 0, 1);
+
+    float3 N = normalize(mul(float4(input.Normal, 0.0f), world).xyz);
+
+    // 아웃라인: 스무스 노멀 방향으로 확장
+    float3 smoothN = normalize(mul(float4(input.SmoothNormal, 0.0f), world).xyz);
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (smoothN * gOutlineWidth) : float3(0, 0, 0);
+
+    float4 posW = mul(float4(input.Position + posOffset, 1.0f), world);
+    output.Position = mul(mul(posW, gView), gProj);
+    output.WorldPos = posW.xyz;
+
+    output.Normal   = N;
+    output.TangentW = normalize(mul(float4(input.Tangent, 0.0f), world).xyz);
+    output.BitanW   = normalize(mul(float4(input.Binormal, 0.0f), world).xyz);
+    output.TexCoord = input.TexCoord;
+
+    return output;
+}
+)";
+
         // Transparent Forward-Style PS
         inline static const char* TransparentPS = R"(
 static const float PI = 3.14159265f;
@@ -1156,6 +1326,74 @@ VSOutput main(VSInput input)
     
     o.Position = mul(mul(posW, gView), gProj);
     
+    return o;
+}
+)";
+
+        // Shadow Skinned Instanced VS (본 없는 FBX 인스턴싱용)
+        inline static const char* ShadowSkinnedInstancedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+    int      gShadingMode;
+    int      gPad0;
+    
+    // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
+};
+
+struct VSInput
+{
+    float3 Position     : POSITION;
+    float3 Normal       : NORMAL;
+    float3 Tangent      : TANGENT;
+    float3 Binormal     : BINORMAL;
+    float4 Color        : COLOR;
+    uint4  BoneIndices  : BLENDINDICES;
+    float4 BoneWeights  : BLENDWEIGHT;
+    float2 TexCoord     : TEXCOORD0;
+    float3 SmoothNormal : SMOOTHNORMAL;
+
+    // 인스턴스 월드 행렬 (행 3개)
+    float4 iWorld0      : INSTANCE_WORLD0;
+    float4 iWorld1      : INSTANCE_WORLD1;
+    float4 iWorld2      : INSTANCE_WORLD2;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput o;
+
+    // 인스턴스 월드 행렬 복원
+    float4x4 world;
+    world[0] = input.iWorld0;
+    world[1] = input.iWorld1;
+    world[2] = input.iWorld2;
+    world[3] = float4(0, 0, 0, 1);
+
+    float4 posW = mul(float4(input.Position, 1.0f), world);
+    o.Position = mul(mul(posW, gView), gProj);
+
     return o;
 }
 )";
