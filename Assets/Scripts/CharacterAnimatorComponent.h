@@ -48,14 +48,18 @@ namespace Alice
 
         // --- Attack clips ---
         ALICE_PROPERTY(std::string, m_attackClip, "Attack01");
+        ALICE_PROPERTY(float, m_attackPlaySpeed, 1.0f);
         ALICE_PROPERTY(float, m_attackDuration, 1.5f);
         ALICE_PROPERTY(float, m_attackHitTime, 0.7f);
+
+        // [추가] 상태 전환 블렌딩 시간 (기본 0.2초)
+        ALICE_PROPERTY(float, m_transitionDuration, 0.2f);
 
         // --- Upper layer clips ---
         ALICE_PROPERTY(bool, m_enableUpperLayer, false);
         ALICE_PROPERTY(std::string, m_upperClip, "Aim");
 
-        // --- Additive clips (필요 시 유지, 현재 로직에선 사용 안 함) ---
+        // --- Additive clips ---
         ALICE_PROPERTY(bool, m_enableAdditive, false);
         ALICE_PROPERTY(std::string, m_additiveClip, "Recoil");
         ALICE_PROPERTY(std::string, m_additiveRefClip, "Idle");
@@ -101,7 +105,15 @@ namespace Alice
         float m_currentCrouchTime = 0.0f;
 
         bool m_notifyRegistered = false;
+
+        // 공격 관련 변수
         float m_currentAttackTime = 0.0f;
+        bool m_isAttackReversing = false;
+
+        // [추가] 블렌딩 제어 변수
+        float m_blendTimer = 0.0f;      // 블렌딩 진행 시간 누적
+        bool m_isBlendingOut = false;   // 공격 종료 후 Standing으로 돌아가는 블렌딩 중인지 여부
+
         float m_currentLeftFootHeight = 0.0f;
         float m_animSpeed = 1.0f;
         bool m_isStretchedMode = false;

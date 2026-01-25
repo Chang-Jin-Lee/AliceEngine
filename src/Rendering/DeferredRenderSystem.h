@@ -154,6 +154,8 @@ namespace Alice
         bool CreateBlendStates();
         bool CreateRasterizerStates();
         bool CreateDepthStencilStates();
+        bool CreateInstanceBuffer(std::uint32_t initialCapacity);
+        bool EnsureInstanceBufferCapacity(std::size_t requiredCount);
         bool CreateIblResources(const std::string& iblDir = "Bridge", const std::string& iblName = "bridge");
         bool CreateShadowMapResources();
         bool CreateToneMappingResources(const std::uint32_t& width, const std::uint32_t& height);
@@ -163,6 +165,7 @@ namespace Alice
         
         // 렌더링 패스
         DirectX::XMMATRIX RenderShadowPass(const World& world,
+                                           const Camera& camera,
                                            const std::vector<SkinnedDrawCommand>& skinnedCommands,
                                            const std::unordered_set<EntityId>& cameraEntities,
                                            bool editorMode = false,
@@ -238,6 +241,8 @@ namespace Alice
         // ==== 스키닝용 G-Buffer 셰이더 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_gBufferSkinnedVS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_gBufferSkinnedInputLayout;
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_gBufferSkinnedInstancedVS;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_gBufferSkinnedInstancedInputLayout;
 
         // ==== Deferred Light 패스 셰이더 ====
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_deferredLightPS;
@@ -245,9 +250,11 @@ namespace Alice
         // ==== Transparent Forward-Style 패스 셰이더 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_transparentVS;
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_transparentSkinnedVS;
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_transparentSkinnedInstancedVS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_transparentPS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_transparentInputLayout;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_transparentSkinnedInputLayout;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_transparentSkinnedInstancedInputLayout;
 
         // ==== Tone Mapping 셰이더 ====
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_toneMappingPS;
@@ -276,6 +283,8 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowVS;
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowSkinnedVS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_shadowInputLayout; // POSITION only
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowSkinnedInstancedVS;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_shadowSkinnedInstancedInputLayout;
 
         // ==== Quad (FullScreen) 리소스 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_quadVS;
@@ -303,6 +312,10 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbTransparentLight;
         // Shadow 전용 CB (정확한 패킹/행렬 전달용)
         Microsoft::WRL::ComPtr<ID3D11Buffer>           m_cbShadow;
+
+        // ==== GPU 인스턴싱 버퍼 ====
+        Microsoft::WRL::ComPtr<ID3D11Buffer>           m_instanceBuffer;
+        std::uint32_t                                   m_instanceCapacity = 0;
 
         // ==== 씬 렌더 타겟 (최종 결과) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneColorTex;
