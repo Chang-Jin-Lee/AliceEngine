@@ -11,6 +11,8 @@
 #include "3Dmodel/FbxAnimation.h"
 #include "Core/Logger.h"
 #include "Components/AdvancedAnimationComponent.h"
+#include "Components/SocketComponent.h"
+#include "Components/TransformComponent.h"
 
 namespace Alice
 {
@@ -106,6 +108,55 @@ namespace Alice
 					DirectX::XMStoreFloat4x4(&mat, m);
 				}
 
+                // SocketComponent.sockets[].world 갱신 (SkinnedAnimation 사용 엔티티)
+                if (auto* sockets = world.GetComponent<SocketComponent>(entityId))
+                {
+                    if (!sockets->sockets.empty())
+                    {
+                        auto* tr = world.GetComponent<TransformComponent>(entityId);
+                        DirectX::XMMATRIX worldM = DirectX::XMMatrixIdentity();
+                        if (tr)
+                        {
+                            DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&tr->scale);
+                            DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&tr->rotation);
+                            DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&tr->position);
+                            worldM = DirectX::XMMatrixScalingFromVector(scale)
+                                * DirectX::XMMatrixRotationRollPitchYawFromVector(rotation)
+                                * DirectX::XMMatrixTranslationFromVector(translation);
+                        }
+
+                        rt.anim.EvaluateGlobalsAtFull(animComp->clipIndex, animComp->timeSec, rt.globals);
+                        if (!rt.globals.empty())
+                        {
+                            const auto& nodeIndexOfName = mesh->sourceModel->GetNodeIndexOfName();
+                            for (auto& s : sockets->sockets)
+                            {
+                                auto it = nodeIndexOfName.find(s.parentBone);
+                                if (it == nodeIndexOfName.end())
+                                    continue;
+
+                                const int nodeIdx = it->second;
+                                if (nodeIdx < 0 || (size_t)nodeIdx >= rt.globals.size())
+                                    continue;
+
+                                DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&s.scale);
+                                DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&s.rotation);
+                                DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&s.position);
+                                DirectX::XMMATRIX local =
+                                    DirectX::XMMatrixScalingFromVector(scale) *
+                                    DirectX::XMMatrixRotationRollPitchYawFromVector(rotation) *
+                                    DirectX::XMMatrixTranslationFromVector(translation);
+
+                                DirectX::XMMATRIX boneG = DirectX::XMLoadFloat4x4(&rt.globals[(size_t)nodeIdx]);
+                                DirectX::XMMATRIX socketWorld = local * boneG * worldM;
+
+                                DirectX::XMStoreFloat4x4(&s.local, local);
+                                DirectX::XMStoreFloat4x4(&s.world, socketWorld);
+                            }
+                        }
+                    }
+                }
+
                 // 렌더 시스템이 읽을 포인터 연결
                 auto* skinnedWrite = world.GetComponent<SkinnedMeshComponent>(entityId);
                 if (!skinnedWrite)
@@ -120,6 +171,7 @@ namespace Alice
         {
             std::string meshKey;
             FbxAnimation anim;
+            std::vector<DirectX::XMFLOAT4X4> globals;
         };
 
         SkinnedMeshRegistry& m_registry;

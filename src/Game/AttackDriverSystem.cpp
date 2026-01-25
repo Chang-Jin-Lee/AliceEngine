@@ -66,6 +66,11 @@ namespace Alice
 
             if (driver.registered && driver.registeredClipName != driver.clipName)
             {
+                if (!driver.registeredClipName.empty())
+                {
+                    // Remove previously registered notifies to avoid duplicate firing.
+                    anim->notifies.erase(driver.registeredClipName);
+                }
                 driver.registered = false;
             }
 

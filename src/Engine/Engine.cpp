@@ -97,11 +97,8 @@ namespace Alice
 
 		bool m_isRunning = false;            // 엔진 자체가 실행중인지 판단
 		bool m_isPlaying = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
-		bool m_wasPlaying = false;           // 직전 프레임 재생 여부 (Play/Stop 스냅샷·복원용)
 		bool m_editorMode = true;             // true: 에디터, false: 게임 전용
 		EntityId m_selectedEntity{ InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
-
-		std::string m_playSnapshot;          // Play 진입 시 월드 JSON 스냅샷 (Stop 시 복원용)
 
 		World          m_world;
 		UIWorldManager m_uiWorld;
@@ -672,38 +669,6 @@ namespace Alice
 		pImpl->m_animUpdatedThisFrame = false;
 
 		using namespace DirectX;
-
-		// 1.5 Play/Stop 씬 스냅샷·복원 (에디터 전용)
-		if (pImpl->m_editorMode)
-		{
-			const bool wasPlaying = pImpl->m_wasPlaying;
-			const bool isPlaying = pImpl->m_isPlaying;
-
-			if (!wasPlaying && isPlaying)
-			{
-				// Play 진입: 현재 월드 스냅샷 저장 (런타임은 이 월드에서 실행, Stop 시 복원용)
-				if (SceneFile::SaveToJsonString(pImpl->m_world, pImpl->m_playSnapshot))
-					ALICE_LOG_INFO("[Engine] Play: scene snapshot saved.");
-				else
-					ALICE_LOG_WARN("[Engine] Play: snapshot save failed. Stop restore may be incomplete.");
-			}
-			else if (wasPlaying && !isPlaying)
-			{
-				// Stop: 편집본 복원
-				ClearWorldAndPhysics();
-				if (!pImpl->m_playSnapshot.empty() && SceneFile::LoadFromJsonString(pImpl->m_world, pImpl->m_playSnapshot))
-				{
-					RefreshPhysicsForCurrentWorld();
-					EnsureSkinnedMeshesRegisteredForWorld();
-					pImpl->m_selectedEntity = InvalidEntityId; // 복원 후 ID 매핑 없음
-					ALICE_LOG_INFO("[Engine] Stop: scene restored from snapshot.");
-				}
-				else
-					ALICE_LOG_WARN("[Engine] Stop: restore from snapshot failed or empty.");
-			}
-
-			pImpl->m_wasPlaying = isPlaying;
-		}
 
 		// 2. 카메라 데이터 갱신 (위치/회전)
 		bool updateFromScene = (!pImpl->m_editorMode || pImpl->m_isPlaying);

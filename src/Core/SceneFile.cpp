@@ -11,6 +11,7 @@
 #include "Components/IDComponent.h"
 #include <random>
 
+#include <cmath>
 #include <fstream>
 #include <string>
 
@@ -22,6 +23,7 @@
 #include "Components/ComputeEffectComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
+#include "Components/SocketComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
@@ -401,6 +403,12 @@ namespace Alice
                 outEntity["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* socketComp = world.GetComponent<SocketComponent>(id); socketComp)
+            {
+                rttr::instance inst = const_cast<SocketComponent&>(*socketComp);
+                outEntity["Socket"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* audio = world.GetComponent<AudioSourceComponent>(id); audio)
             {
                 AudioSourceComponent copy = *audio;
@@ -456,7 +464,9 @@ namespace Alice
             if (const auto* attackDriver = world.GetComponent<AttackDriverComponent>(id); attackDriver)
             {
                 rttr::instance inst = const_cast<AttackDriverComponent&>(*attackDriver);
-                outEntity["AttackDriver"] = JsonRttr::ToJsonObject(inst);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["traceGuid"] = std::to_string(attackDriver->traceGuid);
+                outEntity["AttackDriver"] = obj;
             }
 
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
@@ -615,6 +625,18 @@ namespace Alice
             {
                 rttr::instance inst = t;
                 if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
+                // scale (0,0,0) 방지: 물리/렌더에서 0 나누기 등 오류 방지
+                const float eps = 1e-6f;
+                if (t.scale.x == 0.f && t.scale.y == 0.f && t.scale.z == 0.f)
+                {
+                    t.scale.x = t.scale.y = t.scale.z = 1.f;
+                }
+                else
+                {
+                    if (std::abs(t.scale.x) < eps) t.scale.x = (t.scale.x >= 0.f) ? eps : -eps;
+                    if (std::abs(t.scale.y) < eps) t.scale.y = (t.scale.y >= 0.f) ? eps : -eps;
+                    if (std::abs(t.scale.z) < eps) t.scale.z = (t.scale.z >= 0.f) ? eps : -eps;
+                }
             }
 
             // Scripts (여러 개)
@@ -698,6 +720,15 @@ namespace Alice
                 AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(id);
                 rttr::instance inst = aa;
                 if (!JsonRttr::FromJsonObject(inst, *itAA)) return false;
+            }
+
+            // Socket (선택)
+            auto itSocket = e.find("Socket");
+            if (itSocket != e.end() && itSocket->is_object())
+            {
+                SocketComponent& sc = world.AddComponent<SocketComponent>(id);
+                rttr::instance inst = sc;
+                if (!JsonRttr::FromJsonObject(inst, *itSocket)) return false;
             }
 
             // Camera (선택)
@@ -939,8 +970,12 @@ namespace Alice
             if (itAttackDriver != e.end() && itAttackDriver->is_object())
             {
                 AttackDriverComponent& ad = world.AddComponent<AttackDriverComponent>(id);
+                if (auto itGuid = itAttackDriver->find("traceGuid"); itGuid != itAttackDriver->end())
+                    ad.traceGuid = ParseGuidOrZero(*itGuid);
+                JsonRttr::json copy = *itAttackDriver;
+                copy.erase("traceGuid");
                 rttr::instance inst = ad;
-                if (!JsonRttr::FromJsonObject(inst, *itAttackDriver)) return false;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
             }
 
             return true;
@@ -959,10 +994,16 @@ namespace Alice
             std::vector<std::pair<EntityId, std::uint64_t>> pendingParents;
 
             // PASS 1: 엔티티 생성 + 컴포넌트 복원 + GUID 맵 생성
+            size_t entityIndex = 0;
             for (const auto& e : *itEntities)
             {
                 if (!ApplyEntity(world, e, guidToEntity, pendingParents))
+                {
+                    const std::string name = e.value("name", std::string{});
+                    ALICE_LOG_ERRORF("[SceneFile] ApplyEntity FAILED at entity index %zu name=\"%s\"", entityIndex, name.c_str());
                     return false;
+                }
+                ++entityIndex;
             }
 
             // PASS 2: parent 연결 (keepWorld=false, 로드이므로)

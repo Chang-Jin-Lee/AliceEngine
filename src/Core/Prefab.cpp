@@ -25,6 +25,8 @@
 #include "Components/WeaponTraceComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
+#include "Components/SocketComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
 
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
@@ -374,6 +376,16 @@ namespace Alice
                     return InvalidEntityId;
             }
 
+            // AdvancedAnimation
+            auto itAA = root.find("AdvancedAnimation");
+            if (itAA != root.end() && itAA->is_object())
+            {
+                AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(entity);
+                rttr::instance inst = aa;
+                if (!JsonRttr::FromJsonObject(inst, *itAA))
+                    return InvalidEntityId;
+            }
+
             // Camera
             auto itC = root.find("Camera");
             if (itC != root.end() && itC->is_object())
@@ -444,6 +456,16 @@ namespace Alice
                     return InvalidEntityId;
             }
 
+            // Socket (소켓 정의 목록)
+            auto itSocket = root.find("Socket");
+            if (itSocket != root.end() && itSocket->is_object())
+            {
+                SocketComponent& sc = world.AddComponent<SocketComponent>(entity);
+                rttr::instance inst = sc;
+                if (!JsonRttr::FromJsonObject(inst, *itSocket))
+                    return InvalidEntityId;
+            }
+
             // SocketAttachment
             auto itSAc = root.find("SocketAttachment");
             if (itSAc != root.end() && itSAc->is_object())
@@ -504,8 +526,12 @@ namespace Alice
             if (itAttackDriver != root.end() && itAttackDriver->is_object())
             {
                 AttackDriverComponent& ad = world.AddComponent<AttackDriverComponent>(entity);
+                if (auto itGuid = itAttackDriver->find("traceGuid"); itGuid != itAttackDriver->end())
+                    ad.traceGuid = ParseGuidOrZero(*itGuid);
+                JsonRttr::json copy = *itAttackDriver;
+                copy.erase("traceGuid");
                 rttr::instance inst = ad;
-                if (!JsonRttr::FromJsonObject(inst, *itAttackDriver))
+                if (!JsonRttr::FromJsonObject(inst, copy))
                     return InvalidEntityId;
             }
 
@@ -682,6 +708,13 @@ namespace Alice
                 root["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            // AdvancedAnimation
+            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(entity); advAnim)
+            {
+                rttr::instance inst = const_cast<AdvancedAnimationComponent&>(*advAnim);
+                root["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
+            }
+
             // Camera
             if (const auto* cam = world.GetComponent<CameraComponent>(entity); cam)
             {
@@ -731,6 +764,13 @@ namespace Alice
                 root["CameraInput"] = JsonRttr::ToJsonObject(inst);
             }
 
+            // Socket
+            if (const auto* socketComp = world.GetComponent<SocketComponent>(entity); socketComp)
+            {
+                rttr::instance inst = const_cast<SocketComponent&>(*socketComp);
+                root["Socket"] = JsonRttr::ToJsonObject(inst);
+            }
+
             // SocketAttachment
             if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(entity); socketAttach)
             {
@@ -769,7 +809,9 @@ namespace Alice
             if (const auto* attackDriver = world.GetComponent<AttackDriverComponent>(entity); attackDriver)
             {
                 rttr::instance inst = const_cast<AttackDriverComponent&>(*attackDriver);
-                root["AttackDriver"] = JsonRttr::ToJsonObject(inst);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["traceGuid"] = std::to_string(attackDriver->traceGuid);
+                root["AttackDriver"] = obj;
             }
 
             // Point Light
