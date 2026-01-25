@@ -356,6 +356,7 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
 	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
+    ${ALICE_SRC_DIR}/Core/SocketSerialization.h
 
 
 	${ALICE_SRC_DIR}/UI/UI_ImageComponent.h

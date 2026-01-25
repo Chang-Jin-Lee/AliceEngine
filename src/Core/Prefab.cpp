@@ -27,6 +27,7 @@
 #include "Components/AttackDriverComponent.h"
 #include "Components/SocketComponent.h"
 #include "Components/AdvancedAnimationComponent.h"
+#include "Core/SocketSerialization.h"
 
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
@@ -461,8 +462,7 @@ namespace Alice
             if (itSocket != root.end() && itSocket->is_object())
             {
                 SocketComponent& sc = world.AddComponent<SocketComponent>(entity);
-                rttr::instance inst = sc;
-                if (!JsonRttr::FromJsonObject(inst, *itSocket))
+                if (!SocketSerialization::JsonToSocketComponent(*itSocket, sc))
                     return InvalidEntityId;
             }
 
@@ -767,8 +767,7 @@ namespace Alice
             // Socket
             if (const auto* socketComp = world.GetComponent<SocketComponent>(entity); socketComp)
             {
-                rttr::instance inst = const_cast<SocketComponent&>(*socketComp);
-                root["Socket"] = JsonRttr::ToJsonObject(inst);
+                root["Socket"] = SocketSerialization::SocketComponentToJson(*socketComp);
             }
 
             // SocketAttachment

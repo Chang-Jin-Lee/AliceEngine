@@ -409,7 +409,7 @@ namespace Alice
         DirectX::XMMATRIX charWorld = DirectX::XMMatrixIdentity();
         if (const auto* t = world.GetComponent<TransformComponent>(id))
             charWorld = BuildWorldMatrix(*t);
-        DirectX::XMMATRIX charWorldRow = DirectX::XMMatrixTranspose(charWorld);
+        DirectX::XMMATRIX charWorldRow = charWorld;
 
         for (auto& s : animComp.sockets)
         {
@@ -431,14 +431,13 @@ namespace Alice
                 DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&s.scale);
                 DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&s.rotation);
                 DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&s.position);
-                DirectX::XMMATRIX localCol =
+                DirectX::XMMATRIX localRow =
                     DirectX::XMMatrixScalingFromVector(scale) *
                     DirectX::XMMatrixRotationRollPitchYawFromVector(rotation) *
                     DirectX::XMMatrixTranslationFromVector(translation);
-                DirectX::XMMATRIX localRow = DirectX::XMMatrixTranspose(localCol);
 
                 DirectX::XMMATRIX socketWorld = localRow * boneGlobalRow * charWorldRow;
-                DirectX::XMStoreFloat4x4(&s.local, localCol);
+                DirectX::XMStoreFloat4x4(&s.local, localRow);
                 DirectX::XMStoreFloat4x4(&s.world, socketWorld);
             }
         }

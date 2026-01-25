@@ -24,6 +24,7 @@
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
 #include "Components/SocketComponent.h"
+#include "Core/SocketSerialization.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
@@ -405,8 +406,7 @@ namespace Alice
 
             if (const auto* socketComp = world.GetComponent<SocketComponent>(id); socketComp)
             {
-                rttr::instance inst = const_cast<SocketComponent&>(*socketComp);
-                outEntity["Socket"] = JsonRttr::ToJsonObject(inst);
+                outEntity["Socket"] = SocketSerialization::SocketComponentToJson(*socketComp);
             }
 
             if (const auto* audio = world.GetComponent<AudioSourceComponent>(id); audio)
@@ -727,8 +727,7 @@ namespace Alice
             if (itSocket != e.end() && itSocket->is_object())
             {
                 SocketComponent& sc = world.AddComponent<SocketComponent>(id);
-                rttr::instance inst = sc;
-                if (!JsonRttr::FromJsonObject(inst, *itSocket)) return false;
+                if (!SocketSerialization::JsonToSocketComponent(*itSocket, sc)) return false;
             }
 
             // Camera (선택)

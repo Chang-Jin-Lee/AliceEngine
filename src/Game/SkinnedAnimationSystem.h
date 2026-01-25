@@ -124,6 +124,7 @@ namespace Alice
                                 * DirectX::XMMatrixRotationRollPitchYawFromVector(rotation)
                                 * DirectX::XMMatrixTranslationFromVector(translation);
                         }
+                        DirectX::XMMATRIX worldRow = worldM;
 
                         rt.anim.EvaluateGlobalsAtFull(animComp->clipIndex, animComp->timeSec, rt.globals);
                         if (!rt.globals.empty())
@@ -142,15 +143,15 @@ namespace Alice
                                 DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&s.scale);
                                 DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&s.rotation);
                                 DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&s.position);
-                                DirectX::XMMATRIX local =
+                                DirectX::XMMATRIX localRow =
                                     DirectX::XMMatrixScalingFromVector(scale) *
                                     DirectX::XMMatrixRotationRollPitchYawFromVector(rotation) *
                                     DirectX::XMMatrixTranslationFromVector(translation);
 
-                                DirectX::XMMATRIX boneG = DirectX::XMLoadFloat4x4(&rt.globals[(size_t)nodeIdx]);
-                                DirectX::XMMATRIX socketWorld = local * boneG * worldM;
+                                DirectX::XMMATRIX boneGRow = DirectX::XMLoadFloat4x4(&rt.globals[(size_t)nodeIdx]);
+                                DirectX::XMMATRIX socketWorld = localRow * boneGRow * worldRow;
 
-                                DirectX::XMStoreFloat4x4(&s.local, local);
+                                DirectX::XMStoreFloat4x4(&s.local, localRow);
                                 DirectX::XMStoreFloat4x4(&s.world, socketWorld);
                             }
                         }
