@@ -306,9 +306,7 @@ namespace Alice
 			.property("parentBone", &SocketDef::parentBone)
 			.property("position", &SocketDef::position)
 			.property("rotation", &SocketDef::rotation)
-			.property("scale", &SocketDef::scale)
-			.property("local", &SocketDef::local)
-			.property("world", &SocketDef::world);
+			.property("scale", &SocketDef::scale);
 
 		rttr::registration::class_<SocketComponent>("SocketComponent")
 			.constructor<>()
@@ -873,7 +871,6 @@ namespace Alice
             });
 
         r.Register<SkinnedAnimationComponent>("Skinned Animation", "Rendering");
-        r.Register<AdvancedAnimationComponent>("Advanced Animation", "Rendering");
         r.Register<SocketComponent>("Socket", "Rendering");
 
         r.Register<CameraComponent>("Camera", "Camera");
