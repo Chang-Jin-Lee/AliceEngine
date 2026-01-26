@@ -1945,6 +1945,7 @@ namespace Alice
         {
             if (errorBlob)
             {
+                std::string errorMsg = (char*)errorBlob->GetBufferPointer();
                 ALICE_LOG_ERRORF("Tone Mapping PS (%s) compile error: %s", shaderName, (char*)errorBlob->GetBufferPointer());
             }
             return false;
@@ -2110,9 +2111,10 @@ namespace Alice
 
         PostProcessCB cbData = {};
         GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
-        cbData.saturation = m_postProcessParams.saturation;
-        cbData.contrast = m_postProcessParams.contrast;
-        cbData.gamma = m_postProcessParams.gamma;
+        cbData.colorGradingSaturation = m_postProcessParams.colorGradingSaturation;
+        cbData.colorGradingContrast = m_postProcessParams.colorGradingContrast;
+        cbData.colorGradingGamma = m_postProcessParams.colorGradingGamma;
+        cbData.colorGradingGain = m_postProcessParams.colorGradingGain;
 
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
@@ -2163,9 +2165,10 @@ namespace Alice
     void ForwardRenderSystem::GetPostProcessParams(float& outExposure, float& outMaxHDRNits, float& outSaturation, float& outContrast, float& outGamma) const
     {
         GetPostProcessParams(outExposure, outMaxHDRNits);
-        outSaturation = m_postProcessParams.saturation;
-        outContrast = m_postProcessParams.contrast;
-        outGamma = m_postProcessParams.gamma;
+        // Vector4의 첫 번째 채널(R)을 반환 (하위 호환성)
+        outSaturation = m_postProcessParams.colorGradingSaturation.x;
+        outContrast = m_postProcessParams.colorGradingContrast.x;
+        outGamma = m_postProcessParams.colorGradingGamma.x;
     }
 
     void ForwardRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits)
@@ -2179,10 +2182,68 @@ namespace Alice
     {
         m_postProcessParams.exposure = exposure;
         m_postProcessParams.maxHDRNits = maxHDRNits;
-        // Color Grading 파라미터 클램프 및 설정
-        m_postProcessParams.saturation = std::clamp(saturation, 0.0f, 3.0f);
-        m_postProcessParams.contrast = std::clamp(contrast, 0.0f, 2.0f);
-        m_postProcessParams.gamma = std::clamp(gamma, 0.1f, 3.0f);
+        // Color Grading 파라미터 클램프 및 설정 (float을 Vector4로 확장)
+        float satClamped = std::clamp(saturation, ColorGradingLimits::SaturationMin, ColorGradingLimits::SaturationMax);
+        float contClamped = std::clamp(contrast, ColorGradingLimits::ContrastMin, ColorGradingLimits::ContrastMax);
+        float gamClamped = std::clamp(gamma, ColorGradingLimits::GammaMin, ColorGradingLimits::GammaMax);
+        m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(satClamped, satClamped, satClamped, 1.0f);
+        m_postProcessParams.colorGradingContrast = DirectX::XMFLOAT4(contClamped, contClamped, contClamped, 1.0f);
+        m_postProcessParams.colorGradingGamma = DirectX::XMFLOAT4(gamClamped, gamClamped, gamClamped, 1.0f);
+        // Gain은 기본값 유지 (하위 호환성)
+        m_postProcessParams.colorGradingGain = DirectX::XMFLOAT4(
+            ColorGradingLimits::GainDefault, 
+            ColorGradingLimits::GainDefault, 
+            ColorGradingLimits::GainDefault, 
+            1.0f
+        );
+    }
+
+    void ForwardRenderSystem::ApplyColorGrading(const DirectX::XMFLOAT4& saturation, const DirectX::XMFLOAT4& contrast, const DirectX::XMFLOAT4& gamma, const DirectX::XMFLOAT4& gain)
+    {
+        // Color Grading 파라미터만 설정 (Exposure와 MaxHDRNits는 유지)
+        // 각 채널별로 클램프 적용
+        m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(
+            std::clamp(saturation.x, ColorGradingLimits::SaturationMin, ColorGradingLimits::SaturationMax),
+            std::clamp(saturation.y, ColorGradingLimits::SaturationMin, ColorGradingLimits::SaturationMax),
+            std::clamp(saturation.z, ColorGradingLimits::SaturationMin, ColorGradingLimits::SaturationMax),
+            1.0f
+        );
+        m_postProcessParams.colorGradingContrast = DirectX::XMFLOAT4(
+            std::clamp(contrast.x, ColorGradingLimits::ContrastMin, ColorGradingLimits::ContrastMax),
+            std::clamp(contrast.y, ColorGradingLimits::ContrastMin, ColorGradingLimits::ContrastMax),
+            std::clamp(contrast.z, ColorGradingLimits::ContrastMin, ColorGradingLimits::ContrastMax),
+            1.0f
+        );
+        m_postProcessParams.colorGradingGamma = DirectX::XMFLOAT4(
+            std::clamp(gamma.x, ColorGradingLimits::GammaMin, ColorGradingLimits::GammaMax),
+            std::clamp(gamma.y, ColorGradingLimits::GammaMin, ColorGradingLimits::GammaMax),
+            std::clamp(gamma.z, ColorGradingLimits::GammaMin, ColorGradingLimits::GammaMax),
+            1.0f
+        );
+        m_postProcessParams.colorGradingGain = DirectX::XMFLOAT4(
+            std::clamp(gain.x, ColorGradingLimits::GainMin, ColorGradingLimits::GainMax),
+            std::clamp(gain.y, ColorGradingLimits::GainMin, ColorGradingLimits::GainMax),
+            std::clamp(gain.z, ColorGradingLimits::GainMin, ColorGradingLimits::GainMax),
+            1.0f
+        );
+    }
+
+    void ForwardRenderSystem::ApplyColorGrading(float saturation, float contrast, float gamma, float gain)
+    {
+        // 편의 함수: float을 Vector4로 확장
+        DirectX::XMFLOAT4 satVec(saturation, saturation, saturation, 1.0f);
+        DirectX::XMFLOAT4 contVec(contrast, contrast, contrast, 1.0f);
+        DirectX::XMFLOAT4 gamVec(gamma, gamma, gamma, 1.0f);
+        DirectX::XMFLOAT4 gainVec(gain, gain, gain, 1.0f);
+        ApplyColorGrading(satVec, contVec, gamVec, gainVec);
+    }
+
+    void ForwardRenderSystem::GetColorGrading(DirectX::XMFLOAT4& outSaturation, DirectX::XMFLOAT4& outContrast, DirectX::XMFLOAT4& outGamma, DirectX::XMFLOAT4& outGain) const
+    {
+        outSaturation = m_postProcessParams.colorGradingSaturation;
+        outContrast = m_postProcessParams.colorGradingContrast;
+        outGamma = m_postProcessParams.colorGradingGamma;
+        outGain = m_postProcessParams.colorGradingGain;
     }
 
     void ForwardRenderSystem::RenderParticleOverlay(ID3D11ShaderResourceView* particleSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)

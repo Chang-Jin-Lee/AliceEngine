@@ -4212,13 +4212,17 @@ namespace Alice
 
 			float exposure = 0.0f;
 			float maxHDRNits = 1000.0f;
-			float saturation = 1.0f;
-			float contrast = 1.0f;
-			float gamma = 1.0f;
+			DirectX::XMFLOAT4 saturation = { 1.0f, 1.0f, 1.0f, 1.0f };
+			DirectX::XMFLOAT4 contrast = { 1.0f, 1.0f, 1.0f, 1.0f };
+			DirectX::XMFLOAT4 gamma = { 1.0f, 1.0f, 1.0f, 1.0f };
+			DirectX::XMFLOAT4 gain = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 			auto DrawPostProcess = [&](auto& renderer)
 			{
-				renderer.GetPostProcessParams(exposure, maxHDRNits, saturation, contrast, gamma);
+				// Exposure와 MaxHDRNits는 기존 함수로 가져오기
+				renderer.GetPostProcessParams(exposure, maxHDRNits);
+				// Color Grading은 Vector4로 가져오기
+				renderer.GetColorGrading(saturation, contrast, gamma, gain);
 
 				bool changed = false;
 
@@ -4231,22 +4235,50 @@ namespace Alice
 					ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
 
 				ImGui::Separator();
-				ImGui::TextUnformatted("Color Grading");
+				ImGui::TextUnformatted("Color Grading (RGB 채널별 제어)");
 				
-				changed |= ImGui::SliderFloat("Saturation", &saturation, 0.0f, 3.0f, "%.2f");
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("채도: 0.0 = 흑백, 1.0 = 원본, 2.0+ = 과포화");
+				// ImGui::ColorEdit4는 float[4] 배열을 받지만, XMFLOAT4는 구조체이므로 배열로 변환 필요
+				// ImGuiFlags 설정: Alpha 슬라이더 숨김, Inputs 표시
+				ImGui::PushItemWidth(-1);
 
-				changed |= ImGui::SliderFloat("Contrast", &contrast, 0.0f, 2.0f, "%.2f");
+				ImGui::Text("Saturation (RGB)");
+				changed |= ImGui::ColorEdit4("Saturation (RGB)", reinterpret_cast<float*>(&saturation),
+					ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("대비: 0.0 = 회색, 1.0 = 원본, 2.0 = 고대비");
+					ImGui::SetTooltip("채도 (R,G,B 채널별): 0.0 = 흑백, 1.0 = 원본, 2.0+ = 과포화\nW 채널은 항상 1.0으로 유지됩니다.");
 
-				changed |= ImGui::SliderFloat("Gamma", &gamma, 0.1f, 3.0f, "%.2f");
+				ImGui::Text("Contrast (RGB)");
+				changed |= ImGui::ColorEdit4("Contrast (RGB)", reinterpret_cast<float*>(&contrast),
+					ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("감마 보정: 1.0 = 원본, <1.0 = 밝게, >1.0 = 어둡게");
+					ImGui::SetTooltip("대비 (R,G,B 채널별): 0.0 = 회색, 1.0 = 원본, 2.0 = 고대비\nW 채널은 항상 1.0으로 유지됩니다.");
+				
+				ImGui::Text("Gamma (RGB)");
+				changed |= ImGui::ColorEdit4("Gamma (RGB)", reinterpret_cast<float*>(&gamma),
+					ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("감마 보정 (R,G,B 채널별): 1.0 = 원본, <1.0 = 밝게, >1.0 = 어둡게\nW 채널은 항상 1.0으로 유지됩니다.");
+
+				ImGui::Text("Gain (RGB)");
+				changed |= ImGui::ColorEdit4("Gain (RGB)", reinterpret_cast<float*>(&gain),
+					ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Gain Multiply 스케일 (R,G,B 채널별): 0.0 = 검정, 1.0 = 원본, >1.0 = 밝게\nW 채널은 항상 1.0으로 유지됩니다.");
+				ImGui::PopItemWidth();
+
+				// W 채널은 항상 1.0으로 유지
+				saturation.w = 1.0f;
+				contrast.w = 1.0f;
+				gamma.w = 1.0f;
+				gain.w = 1.0f;
 
 				if (changed)
-					renderer.SetPostProcessParams(exposure, maxHDRNits, saturation, contrast, gamma);
+				{
+					// Exposure와 MaxHDRNits는 기존 함수로 설정
+					renderer.SetPostProcessParams(exposure, maxHDRNits);
+					// Color Grading은 Vector4로 설정
+					renderer.ApplyColorGrading(saturation, contrast, gamma, gain);
+				}
 			};
 
 			if (useForwardRendering) DrawPostProcess(forward);

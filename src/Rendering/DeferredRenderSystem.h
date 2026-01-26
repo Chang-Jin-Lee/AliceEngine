@@ -129,6 +129,28 @@ namespace Alice
         /// 포스트 프로세스 파라미터 설정하기 (Color Grading 포함)
         void SetPostProcessParams(float exposure, float maxHDRNits, float saturation, float contrast, float gamma);
 
+        /// Color Grading 파라미터만 설정하기 (Unreal Engine 스타일 - RGB 채널별 제어)
+        /// @param saturation 채도 (R,G,B 채널별, 0.0 = 흑백, 1.0 = 원본, 2.0+ = 과포화, W=1.0)
+        /// @param contrast 대비 (R,G,B 채널별, 0.0 = 회색, 1.0 = 원본, 2.0 = 고대비, W=1.0)
+        /// @param gamma 감마 보정 (R,G,B 채널별, 0.1~3.0, 1.0 = 원본, <1 = 밝게, >1 = 어둡게, W=1.0)
+        /// @param gain Multiply 스케일 (R,G,B 채널별, 0.0 = 검정, 1.0 = 원본, >1.0 = 밝게, W=1.0)
+        /// 값은 자동으로 안전 범위로 클램프됩니다.
+        void ApplyColorGrading(const DirectX::XMFLOAT4& saturation, const DirectX::XMFLOAT4& contrast, const DirectX::XMFLOAT4& gamma, const DirectX::XMFLOAT4& gain);
+        
+        /// Color Grading 파라미터만 설정하기 (편의 함수 - float을 Vector4로 확장)
+        /// @param saturation 채도 (모든 채널에 동일 적용)
+        /// @param contrast 대비 (모든 채널에 동일 적용)
+        /// @param gamma 감마 보정 (모든 채널에 동일 적용)
+        /// @param gain Multiply 스케일 (모든 채널에 동일 적용)
+        void ApplyColorGrading(float saturation, float contrast, float gamma, float gain);
+        
+        /// Color Grading 파라미터 가져오기
+        /// @param outSaturation 채도 출력 (Vector4)
+        /// @param outContrast 대비 출력 (Vector4)
+        /// @param outGamma 감마 출력 (Vector4)
+        /// @param outGain Gain 출력 (Vector4)
+        void GetColorGrading(DirectX::XMFLOAT4& outSaturation, DirectX::XMFLOAT4& outContrast, DirectX::XMFLOAT4& outGamma, DirectX::XMFLOAT4& outGain) const;
+
         /// Bloom 설정 가져오기
         const BloomSettings& GetBloomSettings() const { return m_bloomSettings; }
         
