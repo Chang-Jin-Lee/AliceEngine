@@ -8,8 +8,11 @@
 #include "Core/GameObject.h"
 #include "Core/InputTypes.h"
 #include "Core/Logger.h"
+#include "Core/World.h"
 #include "Components/AdvancedAnimationComponent.h"
 #include "Components/TransformComponent.h"
+// [추가] ComputeEffectComponent 헤더 포함
+#include "Components/ComputeEffectComponent.h"
 
 namespace Alice
 {
@@ -34,6 +37,42 @@ namespace Alice
         ALICE_LOG_INFO("Body is half-crouched! (Time: 0.5s)");
     }
 
+    // [수정] ComputeEffect 생성 함수
+    void CharacterAnimatorComponent::SpawnComputeEffect(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& color, float size, float duration)
+    {
+        // 1. 새로운 게임 오브젝트 생성
+        GameObject particleObj = GetWorld()->CreateGameObject();
+        if (!particleObj.IsValid()) return;
+
+        // 2. Transform 컴포넌트 추가 및 위치 설정
+        auto& pt = particleObj.AddComponent<TransformComponent>();
+        pt.SetPosition(position);
+        pt.enabled = false;
+
+        // 3. ComputeEffect 컴포넌트 추가 및 설정
+        auto& ce = particleObj.AddComponent<ComputeEffectComponent>();
+        ce.enabled = true;
+        ce.shaderName = "Particle"; // 기본 파티클 셰이더
+        ce.color = color;           // 색상 설정
+        ce.sizePx = size;           // 크기 설정 (픽셀 단위)
+        ce.useTransform = true;     // Transform 위치 사용
+        ce.localOffset = { 0.0f, 0.0f, 0.0f };
+
+        // 추가적인 파티클 물리 설정 (필요시 조정)
+        ce.radius = 0.5f;           // 생성 반경
+        ce.lifeMin = 0.5f;          // 파티클 최소 수명
+        ce.lifeMax = 1.0f;          // 파티클 최대 수명
+        ce.gravity = { 0.0f, 1.0f, 0.0f }; // 위로 살짝 떠오르게 (선택사항)
+
+        // 4. 관리 리스트에 추가 (시간 지나면 삭제하기 위함)
+        m_activeComputeEffects.push_back({ particleObj, duration });
+    }
+
+    void CharacterAnimatorComponent::Start()
+    {
+        //ALICE_LOG_INFO("%s", Get_m_socketParentBone());
+    }
+
     void CharacterAnimatorComponent::Update(float DeltaTime)
     {
         auto* input = Input();
@@ -46,7 +85,25 @@ namespace Alice
         auto* anim = go.GetComponent<AdvancedAnimationComponent>();
         if (!anim) anim = &go.AddComponent<AdvancedAnimationComponent>();
 
-        // [초기화] 노티파이 바인딩
+        // ------------------------------------------------------------
+        // [추가] 파티클 수명 관리 (시간 지나면 삭제)
+        // ------------------------------------------------------------
+        for (auto it = m_activeComputeEffects.begin(); it != m_activeComputeEffects.end(); )
+        {
+            it->remainingTime -= DeltaTime;
+            if (it->remainingTime <= 0.0f)
+            {
+                // 시간이 다 된 파티클 오브젝트 삭제
+                GetWorld()->DestroyGameObject(it->go);
+                it = m_activeComputeEffects.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        // ... (노티파이 바인딩 등 기존 로직 유지) ...
         if (!m_notifyRegistered)
         {
             anim->AddNotify(Get_m_attackClip(), Get_m_attackHitTime(),
@@ -66,7 +123,7 @@ namespace Alice
         // ------------------------------------------------------------
         // 1. 상태 변경 입력 (Z키 공격)
         // ------------------------------------------------------------
-        if (input->GetKeyDown(KeyCode::Z) && m_state == CharState::Standing)
+        if (input->GetKeyDown(KeyCode::Z) && m_state == CharState::Standing && !m_isBlendingOut)
         {
             m_state = CharState::Attacking;
 
@@ -77,14 +134,25 @@ namespace Alice
             // [블렌딩] Idle -> Attack 전환을 위한 타이머 리셋
             m_blendTimer = 0.0f;
 
-            // 실제 애니메이션 시간 리셋 (Attack 클립)
-            // 시스템상 clipB가 바뀔 때 timeB를 리셋해주는 게 안전하므로 
-            // 아래 Attacking 로직에서 clipB가 할당될 때 0부터 시작하도록 유도합니다.
-            if (anim)
-            {
-                anim->base.timeB = 0.0f; // B슬롯(Attack) 시간 0으로
-                // A슬롯(Idle) 시간은 유지 (자연스러운 블렌딩을 위해)
-            }
+            if (anim) anim->base.timeB = 0.0f;
+
+            // [추가] 공격 파티클 생성 (3초 뒤 사라짐)
+            DirectX::XMFLOAT3 spawnPos = t->position;
+
+            // 회전 적용하여 오프셋 계산
+            float yawRad = DirectX::XMConvertToRadians(t->rotation.y);
+            float c = cos(yawRad);
+            float s = sin(yawRad);
+
+            float offX = Get_m_attackComputeOffset().x;
+            float offZ = Get_m_attackComputeOffset().z;
+
+            spawnPos.x += (offX * c + offZ * s);
+            spawnPos.z += (offX * -s + offZ * c);
+            spawnPos.y += Get_m_attackComputeOffset().y;
+
+            SpawnComputeEffect(spawnPos, Get_m_attackComputeColor(), Get_m_attackComputeSize(), Get_m_attackComputeDuration());
+            ALICE_LOG_INFO("Attack ComputeEffect Spawned!");
         }
 
         // ------------------------------------------------------------
@@ -98,21 +166,15 @@ namespace Alice
         else if (input->GetKeyDown(KeyCode::Alpha6)) { toggleCrouch = true; useStretch = true; }
         else if (input->GetKeyDown(KeyCode::Alpha8)) { cancelCrouch = true; }
 
-        if (cancelCrouch && m_state == CharState::Crouching)
-        {
-            m_state = CharState::StandingUp;
-            ALICE_LOG_INFO("Crouch Cancelled! Reversing...");
-        }
+        if (cancelCrouch && m_state == CharState::Crouching) { m_state = CharState::StandingUp; }
         else if (toggleCrouch)
         {
-            if (m_state == CharState::Standing)
-            {
+            if (m_state == CharState::Standing) {
                 m_state = CharState::Crouching; m_currentCrouchTime = 0.0f; m_isStretchedMode = useStretch;
                 anim->notifies.clear();
                 anim->AddNotify(Get_m_crouchClip(), 0.5f, std::bind(&CharacterAnimatorComponent::OnCrouchHalfway, this));
             }
-            else if (m_state == CharState::Crouched)
-            {
+            else if (m_state == CharState::Crouched) {
                 m_state = CharState::StandingUp; m_currentCrouchTime = Get_m_crouchDuration(); m_isStretchedMode = useStretch;
             }
         }
@@ -121,7 +183,7 @@ namespace Alice
         // 3. 이동 및 회전 로직 (Standing일 때만 가능)
         // ------------------------------------------------------------
         bool isMoving = false;
-        if (m_state == CharState::Standing)
+        if (m_state == CharState::Standing && !m_isBlendingOut)
         {
             float inputX = 0.0f, inputZ = 0.0f;
             if (input->GetKey(KeyCode::W)) inputZ += 1.0f;
@@ -131,7 +193,7 @@ namespace Alice
 
             isMoving = (inputX != 0.0f || inputZ != 0.0f);
 
-            auto mainCamObj = GetWorld()->FindGameObject("MainCamera");
+            auto mainCamObj = GetWorld()->FindGameObject("Camera1");
             float moveX = inputX, moveZ = inputZ;
 
             if (isMoving && mainCamObj.IsValid())
@@ -156,6 +218,25 @@ namespace Alice
                 t->position.x += moveX * speed * DeltaTime;
                 t->position.z += moveZ * speed * DeltaTime;
                 t->SetRotation(0.0f, std::atan2(moveX, moveZ) * 57.2958f + 180.0f, 0.0f);
+
+                // [추가] 걷기 파티클 생성 로직 (1초 뒤 사라짐)
+                m_walkTimer += DeltaTime;
+                if (m_walkTimer >= Get_m_walkSpawnInterval())
+                {
+                    m_walkTimer = 0.0f; // 타이머 리셋
+
+                    // 발 위치 계산 (단순히 캐릭터 위치 + 오프셋 사용)
+                    DirectX::XMFLOAT3 spawnPos = t->position;
+                    spawnPos.x += Get_m_walkComputeOffset().x;
+                    spawnPos.y += Get_m_walkComputeOffset().y;
+                    spawnPos.z += Get_m_walkComputeOffset().z;
+
+                    SpawnComputeEffect(spawnPos, Get_m_walkComputeColor(), Get_m_walkComputeSize(), Get_m_walkComputeDuration());
+                }
+            }
+            else
+            {
+                m_walkTimer = Get_m_walkSpawnInterval(); // 멈추면 다음 이동 시 바로 나오게 준비
             }
 
             if (t->position.y <= 0.0f) { t->position.y = 0.0f; if (m_velY < 0.0f) m_velY = 0.0f; if (input->GetKeyDown(KeyCode::Space)) m_velY = Get_m_jumpSpeed(); }
@@ -330,18 +411,20 @@ namespace Alice
             }
         }
 
-        if (m_isWeaponAttached && m_weaponGo.IsValid())
-        {
-            auto* weaponT = m_weaponGo.GetComponent<TransformComponent>();
-            if (weaponT)
-            {
-                DirectX::XMFLOAT3 sPos, sRot;
-                if (anim->GetSocketWorldTransform(Get_m_socketName(), sPos, sRot))
-                {
-                    weaponT->position = sPos;
-                    weaponT->SetRotation(sRot.x, sRot.y, sRot.z);
-                }
-            }
-        }
+        //if (m_isWeaponAttached && m_weaponGo.IsValid())
+        //{
+        //    auto* weaponT = m_weaponGo.GetComponent<TransformComponent>();
+        //    if (weaponT)
+        //    {
+        //        DirectX::XMFLOAT3 sPos, sRot;
+        //        if (anim->GetSocketWorldTransform(Get_m_socketName(), sPos, sRot))
+        //        {
+        //            //auto pos = anim->GetModelLocationToBone("手首.R");
+        //            //auto rot = anim->GetModelRotationToBone("手首.R");
+        //            //weaponT->SetPosition(sPos);
+        //            //weaponT->SetRotation(sRot);
+        //        }
+        //    }
+        //}
     }
 }

@@ -233,6 +233,67 @@ namespace Alice
         if (!EnsureRuntime(rt, skinned, mesh))
             return;
 
+        // ------------------------------------------------------
+        // 본 정보 캐싱 (최초 1회 혹은 변경 시)
+        // ------------------------------------------------------
+        if (mesh->sourceModel)
+        {
+            // 1. 이름 -> 인덱스 맵
+            if (animComp.boneToIndex.empty())
+            {
+                animComp.boneToIndex = mesh->sourceModel->GetNodeIndexOfName();
+            }
+
+            // 2. 역 바인드 행렬 (Inverse Bind Matrices)
+            if (animComp.inverseBindMatrices.empty())
+            {
+                const auto& offsets = mesh->sourceModel->GetBoneOffsets();
+                animComp.inverseBindMatrices = offsets;
+            }
+
+            // 3. 부모 인덱스 (Hierarchy)
+            if (animComp.parentIndices.empty())
+            {
+                const auto& skeleton = mesh->sourceModel->GetSkeleton();
+                const auto& boneNames = mesh->sourceModel->GetBoneNames();
+                
+                // 본 이름 -> 인덱스 맵 생성 (본만 필터링)
+                std::unordered_map<std::string, int> boneNameToIndex;
+                for (size_t i = 0; i < boneNames.size(); ++i)
+                {
+                    boneNameToIndex[boneNames[i]] = static_cast<int>(i);
+                }
+
+                // 스켈레톤 노드에서 본의 부모 인덱스 찾기
+                animComp.parentIndices.resize(boneNames.size(), -1);
+                for (size_t i = 0; i < skeleton.size(); ++i)
+                {
+                    const auto& node = skeleton[i];
+                    if (!node.isBone) continue;
+
+                    // 본 이름으로 본 인덱스 찾기
+                    auto it = boneNameToIndex.find(node.name);
+                    if (it == boneNameToIndex.end()) continue;
+
+                    int boneIdx = it->second;
+                    
+                    // 부모가 본인 경우에만 부모 인덱스 설정
+                    if (node.parent >= 0 && node.parent < (int)skeleton.size())
+                    {
+                        const auto& parentNode = skeleton[node.parent];
+                        if (parentNode.isBone)
+                        {
+                            auto parentIt = boneNameToIndex.find(parentNode.name);
+                            if (parentIt != boneNameToIndex.end())
+                            {
+                                animComp.parentIndices[boneIdx] = parentIt->second;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         const aiAnimation* baseA = ResolveClip(rt, animComp.base.clipA);
         const aiAnimation* baseB = ResolveClip(rt, animComp.base.clipB);
         const aiAnimation* upperA = ResolveClip(rt, animComp.upper.clipA);
