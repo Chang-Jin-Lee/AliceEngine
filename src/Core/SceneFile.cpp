@@ -91,6 +91,42 @@ namespace Alice
             return 0;
         }
 
+        static void ReadStringArray(const JsonRttr::json& j, std::vector<std::string>& out)
+        {
+            out.clear();
+
+            if (j.is_string())
+            {
+                out.push_back(j.get<std::string>());
+                return;
+            }
+
+            if (!j.is_array())
+                return;
+
+            for (const auto& item : j)
+            {
+                if (item.is_string())
+                {
+                    out.push_back(item.get<std::string>());
+                    continue;
+                }
+
+                if (item.is_number() || item.is_boolean())
+                {
+                    out.push_back(item.dump());
+                    continue;
+                }
+
+                if (item.is_object())
+                {
+                    auto itName = item.find("name");
+                    if (itName != item.end() && itName->is_string())
+                        out.push_back(itName->get<std::string>());
+                }
+            }
+        }
+
         // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
         // 1개짜리 항등 본 팔레트입니다. (정적인 메시처럼 렌더링되도록 함)
         static DirectX::XMFLOAT4X4 g_IdentityBone(
@@ -463,6 +499,12 @@ namespace Alice
                 rttr::instance inst = const_cast<WeaponTraceComponent&>(*weaponTrace);
                 JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
                 obj["ownerGuid"] = std::to_string(weaponTrace->ownerGuid);
+                {
+                    JsonRttr::json names = JsonRttr::json::array();
+                    for (const auto& name : weaponTrace->traceSocketNames)
+                        names.push_back(name);
+                    obj["traceSocketNames"] = std::move(names);
+                }
                 outEntity["WeaponTrace"] = obj;
             }
 
@@ -1001,6 +1043,11 @@ namespace Alice
 
                 JsonRttr::json copy = *itWeaponTrace;
                 copy.erase("ownerGuid");
+                if (auto itNames = copy.find("traceSocketNames"); itNames != copy.end())
+                {
+                    ReadStringArray(*itNames, wt.traceSocketNames);
+                    copy.erase("traceSocketNames");
+                }
                 rttr::instance inst = wt;
                 if (!JsonRttr::FromJsonObject(inst, copy)) return false;
             }

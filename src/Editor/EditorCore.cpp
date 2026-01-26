@@ -8725,17 +8725,50 @@ namespace Alice
 					}
 				}
 
+				// Add new socket name input
 				static char newSocketBuf[128]{};
-				ImGui::InputText("New Socket", newSocketBuf, IM_ARRAYSIZE(newSocketBuf));
-				ImGui::SameLine();
-				if (ImGui::Button("Add##TraceSocket"))
+				ImGui::SetNextItemWidth(200.0f);
+				bool addSocket = ImGui::InputText("##NewSocketName", newSocketBuf, IM_ARRAYSIZE(newSocketBuf), ImGuiInputTextFlags_EnterReturnsTrue);
+				if (addSocket || (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Enter)))
 				{
-					if (newSocketBuf[0] != '\0')
+					addSocket = true;
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Add##TraceSocket") || addSocket)
+				{
+					std::string newName = newSocketBuf;
+					// Trim whitespace
+					if (!newName.empty())
 					{
-						trace->traceSocketNames.push_back(newSocketBuf);
-						newSocketBuf[0] = '\0';
-						changed = true;
+						// Remove leading/trailing whitespace
+						size_t start = newName.find_first_not_of(" \t\n\r");
+						if (start != std::string::npos)
+						{
+							size_t end = newName.find_last_not_of(" \t\n\r");
+							newName = newName.substr(start, end - start + 1);
+						}
+						else
+						{
+							newName.clear();
+						}
 					}
+					
+					if (!newName.empty())
+					{
+						// Check for duplicates
+						bool isDuplicate = std::find(trace->traceSocketNames.begin(), trace->traceSocketNames.end(), newName) != trace->traceSocketNames.end();
+						if (!isDuplicate)
+						{
+							trace->traceSocketNames.push_back(newName);
+							changed = true;
+						}
+						// Clear input regardless of whether it was added
+						newSocketBuf[0] = '\0';
+					}
+				}
+				if (ImGui::IsItemHovered() && !std::string(newSocketBuf).empty())
+				{
+					ImGui::SetTooltip("Press Enter or click Add to add socket name");
 				}
 
 				if (ImGui::Button("Auto-fill Trace/WT sockets"))
