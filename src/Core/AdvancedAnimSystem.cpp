@@ -22,15 +22,6 @@ namespace Alice
 {
     namespace
     {
-        DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& t)
-        {
-            using namespace DirectX;
-            XMMATRIX S = XMMatrixScaling(t.scale.x, t.scale.y, t.scale.z);
-            XMMATRIX R = XMMatrixRotationRollPitchYaw(t.rotation.x, t.rotation.y, t.rotation.z);
-            XMMATRIX T = XMMatrixTranslation(t.position.x, t.position.y, t.position.z);
-            return S * R * T;
-        }
-
         bool TryParseIndex(const std::string& key, int& outIdx)
         {
             if (key.empty()) return false;
@@ -407,8 +398,8 @@ namespace Alice
         // Socket world outputs (엔진 로우 컨벤션)
         // ------------------------------
         DirectX::XMMATRIX charWorld = DirectX::XMMatrixIdentity();
-        if (const auto* t = world.GetComponent<TransformComponent>(id))
-            charWorld = BuildWorldMatrix(*t);
+        if (world.GetComponent<TransformComponent>(id))
+            charWorld = world.ComputeWorldMatrix(id);
         DirectX::XMMATRIX charWorldRow = charWorld;
 
         for (auto& s : animComp.sockets)

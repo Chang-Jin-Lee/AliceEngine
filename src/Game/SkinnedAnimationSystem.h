@@ -113,18 +113,9 @@ namespace Alice
                 {
                     if (!sockets->sockets.empty())
                     {
-                        auto* tr = world.GetComponent<TransformComponent>(entityId);
-                        DirectX::XMMATRIX worldM = DirectX::XMMatrixIdentity();
-                        if (tr)
-                        {
-                            DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&tr->scale);
-                            DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&tr->rotation);
-                            DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&tr->position);
-                            worldM = DirectX::XMMatrixScalingFromVector(scale)
-                                * DirectX::XMMatrixRotationRollPitchYawFromVector(rotation)
-                                * DirectX::XMMatrixTranslationFromVector(translation);
-                        }
-                        DirectX::XMMATRIX worldRow = worldM;
+                        DirectX::XMMATRIX worldRow = DirectX::XMMatrixIdentity();
+                        if (world.GetComponent<TransformComponent>(entityId))
+                            worldRow = world.ComputeWorldMatrix(entityId);
 
                         rt.anim.EvaluateGlobalsAtFull(animComp->clipIndex, animComp->timeSec, rt.globals);
                         if (!rt.globals.empty())

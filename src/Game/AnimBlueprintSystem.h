@@ -425,17 +425,9 @@ namespace Alice
             if (!sockets || sockets->sockets.empty())
                 return;
 
-            auto* tr = world.GetComponent<TransformComponent>(id);
             DirectX::XMMATRIX worldM = DirectX::XMMatrixIdentity();
-            if (tr)
-            {
-                DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&tr->scale);
-                DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&tr->rotation);
-                DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&tr->position);
-                worldM = DirectX::XMMatrixScalingFromVector(scale)
-                    * DirectX::XMMatrixRotationRollPitchYawFromVector(rotation)
-                    * DirectX::XMMatrixTranslationFromVector(translation);
-            }
+            if (world.GetComponent<TransformComponent>(id))
+                worldM = world.ComputeWorldMatrix(id);
 
             if (rt.currentState < 0) return;
 

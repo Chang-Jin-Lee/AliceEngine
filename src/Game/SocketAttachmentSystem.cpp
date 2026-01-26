@@ -10,6 +10,7 @@
 #include "Components/SocketAttachmentComponent.h"
 #include "Components/AdvancedAnimationComponent.h"
 #include "Components/SocketComponent.h"
+#include "Components/SocketPoseOutputComponent.h"
 
 namespace Alice
 {
@@ -42,6 +43,18 @@ namespace Alice
 
         bool TryGetSocketWorldMatrix(World& world, EntityId owner, const std::string& socketName, DirectX::XMMATRIX& out)
         {
+            if (auto* poses = world.GetComponent<SocketPoseOutputComponent>(owner))
+            {
+                for (const auto& p : poses->poses)
+                {
+                    if (p.name == socketName)
+                    {
+                        out = DirectX::XMLoadFloat4x4(&p.world);
+                        return true;
+                    }
+                }
+            }
+
             // 1) Match by socket name (e.g. "Hurt_HandR", "Trace_Base")
             if (auto* adv = world.GetComponent<AdvancedAnimationComponent>(owner))
             {
