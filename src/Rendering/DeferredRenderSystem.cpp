@@ -695,7 +695,7 @@ namespace Alice
             return false;
 
         // PostProcess CB
-        cbDesc.ByteWidth = sizeof(float) * 4; // exposure, maxHDRNits, padding
+        cbDesc.ByteWidth = sizeof(PostProcessCB) * 4; // exposure, maxHDRNits, padding
         if (FAILED(m_device->CreateBuffer(&cbDesc, nullptr, m_cbPostProcess.ReleaseAndGetAddressOf())))
             return false;
 
@@ -1401,16 +1401,8 @@ namespace Alice
             viewport.Height = static_cast<float>(m_sceneHeight);
             viewport.MaxDepth = 1.0f;
             
-            // Bloom 패스 (enabled일 때만)
-            if (m_bloomSettings.enabled)
-            {
-                RenderBloomPass(m_sceneColorSRV.Get(), m_viewportRTV.Get(), viewport);
-            }
-            else
-            {
-                // Bloom이 꺼져있으면 씬 컬러를 바로 톤매핑
-                RenderToneMapping(m_sceneColorSRV.Get(), m_viewportRTV.Get(), viewport);
-            }
+            // 포스트 프로세스 패스 (Bloom ON/OFF에 따라 자동 분기)
+            RenderPostProcess(m_viewportRTV.Get(), viewport);
 
             // UI 렌더링 (Post-processing 이후, 최상단에 렌더링)
             uiWorld.Render();  // D2D → UI 텍스처 렌더링
@@ -2381,11 +2373,30 @@ namespace Alice
         // 사용자가 설정한 값이 있으면 사용, 없으면 모니터 최대 밝기 사용
         outMaxHDRNits = (m_postProcessParams.maxHDRNits > 0.0f) ? m_postProcessParams.maxHDRNits : maxNits;
     }
+    
+    void DeferredRenderSystem::GetPostProcessParams(float& outExposure, float& outMaxHDRNits, float& outSaturation, float& outContrast, float& outGamma) const
+    {
+        GetPostProcessParams(outExposure, outMaxHDRNits);
+        outSaturation = m_postProcessParams.saturation;
+        outContrast = m_postProcessParams.contrast;
+        outGamma = m_postProcessParams.gamma;
+    }
 
     void DeferredRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits)
     {
         m_postProcessParams.exposure = exposure;
         m_postProcessParams.maxHDRNits = maxHDRNits;
+        // Color Grading은 기본값 유지 (하위 호환성)
+    }
+    
+    void DeferredRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits, float saturation, float contrast, float gamma)
+    {
+        m_postProcessParams.exposure = exposure;
+        m_postProcessParams.maxHDRNits = maxHDRNits;
+        // Color Grading 파라미터 클램프 및 설정
+        m_postProcessParams.saturation = std::clamp(saturation, 0.0f, 3.0f);
+        m_postProcessParams.contrast = std::clamp(contrast, 0.0f, 2.0f);
+        m_postProcessParams.gamma = std::clamp(gamma, 0.1f, 3.0f);
     }
 
     void DeferredRenderSystem::SetBloomSettings(const BloomSettings& settings)
@@ -2442,6 +2453,9 @@ namespace Alice
         // 상수 버퍼 업데이트 (실제 노출값 적용)
         PostProcessCB cbData = {};
         GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
+        cbData.saturation = m_postProcessParams.saturation;
+        cbData.contrast = m_postProcessParams.contrast;
+        cbData.gamma = m_postProcessParams.gamma;
 
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
@@ -2548,9 +2562,9 @@ namespace Alice
         RestoreBackBuffer();
     }
 
-	void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
+	void DeferredRenderSystem::RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* hdrCompositeRTV, const D3D11_VIEWPORT& viewport)
 	{
-		if (!m_bloomSettings.enabled || !sourceSRV || !targetRTV) return;
+		if (!m_bloomSettings.enabled || !sourceSRV || !hdrCompositeRTV) return;
 		if (!m_bloomBrightPassPS || !m_bloomDownsamplePS || !m_bloomBlurPassPS_H || !m_bloomBlurPassPS_V || !m_bloomUpsamplePS || !m_bloomCompositePS) return;
 
 		// 상태 설정
@@ -2585,7 +2599,8 @@ namespace Alice
 			BloomCB bloomCB = {};
 			bloomCB.threshold = m_bloomSettings.threshold;
 			bloomCB.knee = m_bloomSettings.knee;
-			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.bloomIntensity = m_bloomSettings.intensity;
+			bloomCB.gaussianIntensity = m_bloomSettings.gaussianIntensity;
 			bloomCB.radius = m_bloomSettings.radius;
 			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
 			bloomCB.downsample = m_bloomSettings.downsample;
@@ -2597,6 +2612,9 @@ namespace Alice
 				m_context->Unmap(m_cbBloom.Get(), 0);
 			}
 
+			// [중요] RTV로 사용할 리소스의 SRV 언바인드 (충돌 방지)
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+			
 			m_context->RSSetViewports(1, &level0Viewport);
 			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[0][0].GetAddressOf(), nullptr); // level0 A
 			m_context->PSSetShaderResources(0, 1, &sourceSRV);
@@ -2623,7 +2641,8 @@ namespace Alice
 			BloomCB bloomCB = {};
 			bloomCB.threshold = m_bloomSettings.threshold;
 			bloomCB.knee = m_bloomSettings.knee;
-			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.bloomIntensity = m_bloomSettings.intensity;
+			bloomCB.gaussianIntensity = m_bloomSettings.gaussianIntensity;
 			bloomCB.radius = m_bloomSettings.radius;
 			bloomCB.texelSize = DirectX::XMFLOAT2(inputTexelSizeX, inputTexelSizeY);
 			bloomCB.downsample = m_bloomSettings.downsample;
@@ -2637,7 +2656,10 @@ namespace Alice
 
 			D3D11_VIEWPORT currViewport = { 0.0f, 0.0f, (float)currWidth, (float)currHeight, 0.0f, 1.0f };
 			m_context->RSSetViewports(1, &currViewport);
-
+			
+			// [중요] RTV로 사용할 리소스의 SRV 언바인드 (충돌 방지)
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+			
 			// level(i-1) A → level(i) A
 			ID3D11ShaderResourceView* inputSRV = m_bloomLevelSRV[level - 1][0].Get(); // 이전 레벨 A
 			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][0].GetAddressOf(), nullptr); // 현재 레벨 A
@@ -2662,7 +2684,8 @@ namespace Alice
 			BloomCB bloomCB = {};
 			bloomCB.threshold = m_bloomSettings.threshold;
 			bloomCB.knee = m_bloomSettings.knee;
-			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.bloomIntensity = m_bloomSettings.intensity;
+			bloomCB.gaussianIntensity = m_bloomSettings.gaussianIntensity;
 			bloomCB.radius = m_bloomSettings.radius;
 			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
 			bloomCB.downsample = m_bloomSettings.downsample;
@@ -2684,28 +2707,34 @@ namespace Alice
 				// Horizontal Blur: A → B
 				ID3D11ShaderResourceView* inputSRV = m_bloomLevelSRV[level][pingPongIndex].Get();
 				int outputPingPong = 1 - pingPongIndex;
-
+				
+				// [중요] RTV로 사용할 리소스의 SRV 언바인드 (충돌 방지)
+				m_context->PSSetShaderResources(0, 8, nullSRVs);
 				m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][outputPingPong].GetAddressOf(), nullptr);
+				
 				m_context->PSSetShaderResources(0, 1, &inputSRV);
 				m_context->PSSetConstantBuffers(3, 1, &cbBloom);
 				m_context->PSSetShader(m_bloomBlurPassPS_H.Get(), nullptr, 0);
 				m_context->DrawIndexed(m_quadIndexCount, 0, 0);
-
+				
 				m_context->PSSetShaderResources(0, 8, nullSRVs);
-
+				
 				// Vertical Blur: B → A
 				pingPongIndex = outputPingPong;
 				inputSRV = m_bloomLevelSRV[level][pingPongIndex].Get();
 				outputPingPong = 1 - pingPongIndex;
-
+				
+				// [중요] RTV로 사용할 리소스의 SRV 언바인드 (충돌 방지)
+				m_context->PSSetShaderResources(0, 8, nullSRVs);
 				m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level][outputPingPong].GetAddressOf(), nullptr);
+				
 				m_context->PSSetShaderResources(0, 1, &inputSRV);
 				m_context->PSSetConstantBuffers(3, 1, &cbBloom);
 				m_context->PSSetShader(m_bloomBlurPassPS_V.Get(), nullptr, 0);
 				m_context->DrawIndexed(m_quadIndexCount, 0, 0);
-
+				
 				m_context->PSSetShaderResources(0, 8, nullSRVs);
-
+				
 				pingPongIndex = outputPingPong;
 			}
 		}
@@ -2733,7 +2762,8 @@ namespace Alice
 			BloomCB bloomCB = {};
 			bloomCB.threshold = m_bloomSettings.threshold;
 			bloomCB.knee = m_bloomSettings.knee;
-			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.bloomIntensity = m_bloomSettings.intensity;
+			bloomCB.gaussianIntensity = m_bloomSettings.gaussianIntensity;
 			bloomCB.radius = m_bloomSettings.radius;
 			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
 			bloomCB.downsample = m_bloomSettings.downsample;
@@ -2750,12 +2780,13 @@ namespace Alice
 
 			// Additive Blending 활성화 (고해상도 텍스처에 저해상도를 더하기)
 			m_context->OMSetBlendState(m_blendStateAdditive.Get(), blendFactor, 0xFFFFFFFF);
-
+			
+			// [중요] RTV로 사용할 리소스의 SRV 언바인드 (충돌 방지)
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+			
 			// 저해상도 텍스처만 바인딩 (업샘플링할 소스)
 			// 고해상도 텍스처는 이미 RTV에 바인딩되어 있으므로 Additive Blending으로 자동 합성됨
 			ID3D11ShaderResourceView* lowResSRV = m_bloomLevelSRV[level][0].Get(); // 현재 레벨의 블러 결과 (A)
-			//ID3D11RenderTargetView* renderpassRTV = 
-
 
 			// 이전 레벨의 RTV에 업샘플링 결과를 렌더링 (Additive Blending으로 기존 값에 더하기)
 			m_context->OMSetRenderTargets(1, m_bloomLevelRTV[level - 1][0].GetAddressOf(), nullptr);
@@ -2770,15 +2801,18 @@ namespace Alice
 		// Additive Blending 비활성화
 		m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
 
-		// ========== 5. Composite: Scene + Bloom → PostBloomTex (HDR) ==========
+		// ========== 5. Composite: Scene + Bloom → HDR Composite RT (HDR) ==========
 		// 톤매핑과 합성을 분리합니다. 여기서는 HDR 상태로 합치기만 합니다.
 		{
 			// 뷰포트를 전체 씬 크기로 설정
 			D3D11_VIEWPORT sceneViewport = { 0.0f, 0.0f, (float)m_sceneWidth, (float)m_sceneHeight, 0.0f, 1.0f };
 			m_context->RSSetViewports(1, &sceneViewport);
 			
-			// 타겟을 Viewport가 아닌 중간 HDR 버퍼(m_postBloomRTV)로 변경
-			m_context->OMSetRenderTargets(1, m_postBloomRTV.GetAddressOf(), nullptr);
+			// [중요] 이전 패스의 SRV 언바인드 (RTV로 사용할 리소스와 충돌 방지)
+			m_context->PSSetShaderResources(0, 8, nullSRVs);
+			
+			// 타겟을 HDR 합성 버퍼로 설정
+			m_context->OMSetRenderTargets(1, &hdrCompositeRTV, nullptr);
 
 			ID3D11ShaderResourceView* sceneSRV = sourceSRV;
 			ID3D11ShaderResourceView* bloomSRV = m_bloomLevelSRV[0][0].Get(); // level0의 최종 bloom 결과
@@ -2792,6 +2826,9 @@ namespace Alice
 			float tempExposure;
 			GetPostProcessParams(tempExposure, postProcessCB.maxHDRNits);
 			postProcessCB.exposure = 1.0f; // 합성 단계에서는 노출 적용 안 함 (중립값)
+			postProcessCB.saturation = m_postProcessParams.saturation;
+			postProcessCB.contrast = m_postProcessParams.contrast;
+			postProcessCB.gamma = m_postProcessParams.gamma;
 
 			D3D11_MAPPED_SUBRESOURCE mapped;
 			if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
@@ -2809,7 +2846,8 @@ namespace Alice
 			BloomCB bloomCB = {};
 			bloomCB.threshold = m_bloomSettings.threshold;
 			bloomCB.knee = m_bloomSettings.knee;
-			bloomCB.intensity = m_bloomSettings.intensity;
+			bloomCB.bloomIntensity = m_bloomSettings.intensity;
+			bloomCB.gaussianIntensity = m_bloomSettings.gaussianIntensity;
 			bloomCB.radius = m_bloomSettings.radius;
 			bloomCB.texelSize = DirectX::XMFLOAT2(texelSizeX, texelSizeY);
 			bloomCB.downsample = m_bloomSettings.downsample;
@@ -2828,16 +2866,40 @@ namespace Alice
 			m_context->PSSetShader(m_bloomCompositePS.Get(), nullptr, 0);
 			m_context->DrawIndexed(m_quadIndexCount, 0, 0);
 
-			// SRV 해제 (ToneMapping에서 입력으로 쓰기 위해 필수)
+			// [중요] SRV 언바인드 (다음 패스에서 RTV로 사용할 수 있도록)
 			ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
 			m_context->PSSetShaderResources(0, 2, nullSRVs2);
 		}
-
-		// ========== 6. Final Tone Mapping: PostBloomTex(HDR) → TargetRTV(LDR) ==========
-		// 합성된 HDR 텍스처를 입력으로 받아 실제 Exposure를 적용하고 LDR로 변환
-		RenderToneMapping(m_postBloomSRV.Get(), targetRTV, viewport);
+		
+		// RenderBloomPass는 여기서 종료. ToneMapping은 RenderPostProcess에서 호출됨.
 	}
 
+    void DeferredRenderSystem::RenderPostProcess(ID3D11RenderTargetView* backBufferRTV, const D3D11_VIEWPORT& viewport)
+    {
+        if (!backBufferRTV) return;
+
+        // [중요] 이전 패스의 SRV 언바인드 (RTV로 사용할 리소스와 충돌 방지)
+        ID3D11ShaderResourceView* nullSRVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->PSSetShaderResources(0, 8, nullSRVs);
+
+        // ToneMapping 입력 SRV 결정
+        ID3D11ShaderResourceView* toneMapInputSRV = m_sceneColorSRV.Get(); // 기본값: 씬 컬러
+
+        // Bloom ON/OFF에 따른 흐름 분기
+        if (m_bloomSettings.enabled)
+        {
+            // Bloom ON: Bloom 패스 실행 → HDR 합성 RT에 저장 → ToneMapping 입력으로 사용
+            RenderBloomPass(m_sceneColorSRV.Get(), m_postBloomRTV.Get(), viewport);
+            toneMapInputSRV = m_postBloomSRV.Get(); // HDR 합성 결과를 ToneMapping 입력으로
+        }
+        // Bloom OFF: 바로 ToneMapping으로 (toneMapInputSRV는 이미 m_sceneColorSRV)
+
+        // [중요] ToneMapping 전에 SRV 언바인드 (backBufferRTV와 충돌 방지)
+        m_context->PSSetShaderResources(0, 8, nullSRVs);
+
+        // ToneMapping 패스: 항상 backBufferRTV로 렌더링
+        RenderToneMapping(toneMapInputSRV, backBufferRTV, viewport);
+    }
 
     bool DeferredRenderSystem::CreateUIResources()
     {

@@ -301,8 +301,14 @@ namespace Alice
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
         
+        /// 포스트 프로세스 파라미터 가져오기 (Color Grading 포함)
+        void GetPostProcessParams(float& outExposure, float& outMaxHDRNits, float& outSaturation, float& outContrast, float& outGamma) const;
+        
         /// 포스트 프로세스 파라미터 설정하기
         void SetPostProcessParams(float exposure, float maxHDRNits);
+        
+        /// 포스트 프로세스 파라미터 설정하기 (Color Grading 포함)
+        void SetPostProcessParams(float exposure, float maxHDRNits, float saturation, float contrast, float gamma);
 
         /// UI 텍스처를 최종 렌더 타겟에 합성합니다.
         /// @param uiWorld UIWorldManager 참조 (UI SRV 획득용)

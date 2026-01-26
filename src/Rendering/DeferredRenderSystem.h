@@ -104,9 +104,15 @@ namespace Alice
 
         /// Bloom 패스를 렌더링합니다.
         /// @param sourceSRV 입력 씬 텍스처 SRV
+        /// @param hdrCompositeRTV HDR 합성 결과를 저장할 RTV (m_hdrAfterBloomRTV)
         /// @param viewport 뷰포트 영역
-        /// @note 결과는 m_postBloomSRV에 저장됩니다.
-        void RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
+        /// @note 결과는 m_hdrAfterBloomSRV에 저장됩니다. ToneMapping은 별도로 호출해야 합니다.
+        void RenderBloomPass(ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* hdrCompositeRTV, const D3D11_VIEWPORT& viewport);
+        
+        /// 포스트 프로세스 패스를 렌더링합니다 (Bloom + ToneMapping).
+        /// @param backBufferRTV 최종 출력 백버퍼 RTV
+        /// @param viewport 뷰포트 영역
+        void RenderPostProcess(ID3D11RenderTargetView* backBufferRTV, const D3D11_VIEWPORT& viewport);
                 
         /// 뷰포트 렌더 타겟에 파티클 오버레이 합성 (에디터 모드용)
         void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
@@ -114,8 +120,14 @@ namespace Alice
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
         
+        /// 포스트 프로세스 파라미터 가져오기 (Color Grading 포함)
+        void GetPostProcessParams(float& outExposure, float& outMaxHDRNits, float& outSaturation, float& outContrast, float& outGamma) const;
+        
         /// 포스트 프로세스 파라미터 설정하기
         void SetPostProcessParams(float exposure, float maxHDRNits);
+        
+        /// 포스트 프로세스 파라미터 설정하기 (Color Grading 포함)
+        void SetPostProcessParams(float exposure, float maxHDRNits, float saturation, float contrast, float gamma);
 
         /// Bloom 설정 가져오기
         const BloomSettings& GetBloomSettings() const { return m_bloomSettings; }
@@ -261,9 +273,10 @@ namespace Alice
         std::uint32_t m_bloomLevelWidth[BLOOM_LEVEL_COUNT];
         std::uint32_t m_bloomLevelHeight[BLOOM_LEVEL_COUNT];
 
+		// HDR 합성 결과 텍스처 (Bloom ON일 때 Scene + Bloom 합성 결과 저장)
 		Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_postBloomTex;
-		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_postBloomRTV;
-		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_postBloomSRV;
+		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_postBloomRTV;      // 별칭: m_hdrAfterBloomRTV
+		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_postBloomSRV;   // 별칭: m_hdrAfterBloomSRV
        
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomBrightPassPS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_bloomDownsamplePS;

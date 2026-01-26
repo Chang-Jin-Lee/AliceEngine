@@ -4203,10 +4203,13 @@ namespace Alice
 
 			float exposure = 0.0f;
 			float maxHDRNits = 1000.0f;
+			float saturation = 1.0f;
+			float contrast = 1.0f;
+			float gamma = 1.0f;
 
 			auto DrawPostProcess = [&](auto& renderer)
 			{
-				renderer.GetPostProcessParams(exposure, maxHDRNits);
+				renderer.GetPostProcessParams(exposure, maxHDRNits, saturation, contrast, gamma);
 
 				bool changed = false;
 
@@ -4218,8 +4221,23 @@ namespace Alice
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
 
+				ImGui::Separator();
+				ImGui::TextUnformatted("Color Grading");
+				
+				changed |= ImGui::SliderFloat("Saturation", &saturation, 0.0f, 3.0f, "%.2f");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("채도: 0.0 = 흑백, 1.0 = 원본, 2.0+ = 과포화");
+
+				changed |= ImGui::SliderFloat("Contrast", &contrast, 0.0f, 2.0f, "%.2f");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("대비: 0.0 = 회색, 1.0 = 원본, 2.0 = 고대비");
+
+				changed |= ImGui::SliderFloat("Gamma", &gamma, 0.1f, 3.0f, "%.2f");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("감마 보정: 1.0 = 원본, <1.0 = 밝게, >1.0 = 어둡게");
+
 				if (changed)
-					renderer.SetPostProcessParams(exposure, maxHDRNits);
+					renderer.SetPostProcessParams(exposure, maxHDRNits, saturation, contrast, gamma);
 			};
 
 			if (useForwardRendering) DrawPostProcess(forward);
@@ -4244,10 +4262,15 @@ namespace Alice
 
 				if (bloomSettings.enabled)
 				{
-					if (ImGui::SliderFloat("Intensity", &bloomSettings.intensity, 0.0f, 5.0f, "%.2f"))
+					if (ImGui::SliderFloat("Bloom Intensity", &bloomSettings.intensity, 0.0f, 5.0f, "%.2f"))
 						bloomChanged = true;
 					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("Bloom 합성 강도 (0.0 ~ 5.0)\n값이 클수록 더 밝게 합성됩니다");
+						ImGui::SetTooltip("Bloom 합성 강도 (0.0 ~ 5.0)\n최종 합성 단계에서 적용되는 강도\n값이 클수록 더 밝게 합성됩니다");
+
+					if (ImGui::SliderFloat("Gaussian Intensity", &bloomSettings.gaussianIntensity, 0.0f, 5.0f, "%.2f"))
+						bloomChanged = true;
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("Gaussian 블러 강도 (0.0 ~ 5.0)\n블러 단계에서 적용되는 강도\n값이 클수록 블러 결과가 더 밝아집니다");
 
 					if (ImGui::SliderFloat("Threshold", &bloomSettings.threshold, 0.0f, 5.0f, "%.2f"))
 						bloomChanged = true;
