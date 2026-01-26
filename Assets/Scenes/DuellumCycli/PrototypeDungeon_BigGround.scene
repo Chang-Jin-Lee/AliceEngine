@@ -72,6 +72,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/door_low.fbxasset",
@@ -117,6 +123,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -164,6 +176,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/door_low.fbxasset",
@@ -209,6 +227,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": 5
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -321,6 +345,78 @@
             "name": "Point Light"
         },
         {
+            "AdvancedAnimation": {
+                "additive": {
+                    "alpha": 1.0,
+                    "autoAdvance": true,
+                    "clip": "",
+                    "enabled": false,
+                    "loop": false,
+                    "refClip": "",
+                    "speed": 1.0,
+                    "time": 0.0
+                },
+                "aim": {
+                    "enabled": false,
+                    "weight": 1.0,
+                    "yawRad": 0.0
+                },
+                "base": {
+                    "autoAdvance": true,
+                    "blend01": 0.13724973797798157,
+                    "clipA": "alice-Apose_arm|Idle",
+                    "clipB": "alice-Apose_arm|Walk",
+                    "enabled": true,
+                    "layerAlpha": 1.0,
+                    "loopA": false,
+                    "loopB": true,
+                    "speedA": 1.0,
+                    "speedB": 1.0,
+                    "timeA": 3.7333333492279053,
+                    "timeB": 1.4564061164855957
+                },
+                "enabled": true,
+                "ik": {
+                    "chainLength": 2,
+                    "enabled": true,
+                    "targetMS": {
+                        "x": -0.20000000298023224,
+                        "y": 0.0,
+                        "z": 0.10000000149011612
+                    },
+                    "tipBone": "Ball_L",
+                    "weight": 1.0
+                },
+                "playing": true,
+                "procedural": {
+                    "seed": 0,
+                    "strength": 0.0,
+                    "timeSec": 0.0
+                },
+                "sockets": [
+                    {}
+                ],
+                "upper": {
+                    "autoAdvance": true,
+                    "blend01": 0.0,
+                    "clipA": "Aim",
+                    "clipB": "",
+                    "enabled": false,
+                    "layerAlpha": 1.0,
+                    "loopA": true,
+                    "loopB": true,
+                    "speedA": 1.0,
+                    "speedB": 1.0,
+                    "timeA": 0.0,
+                    "timeB": 0.0
+                }
+            },
+            "AttackDriver": {
+                "clipName": "alice-Apose_arm|Swing",
+                "endTimeSec": 0.20000000298023224,
+                "startTimeSec": 0.10000000149011612,
+                "traceGuid": "0"
+            },
             "Material": {
                 "albedoTexturePath": "",
                 "assetPath": "Assets/Materials/Alice_0.mat",
@@ -421,19 +517,37 @@
             },
             "Socket": {
                 "sockets": [
-                    {}
+                    {
+                        "name": "RightHand",
+                        "parentBone": "手首.R",
+                        "position": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "rotation": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "scale": {
+                            "x": 1.0,
+                            "y": 1.0,
+                            "z": 1.0
+                        }
+                    }
                 ]
             },
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.15223200619220734,
-                    "y": 0.13677500188350677,
-                    "z": -21.462499618530273
+                    "x": 6.082688808441162,
+                    "y": 0.0,
+                    "z": -15.286641120910645
                 },
                 "rotation": {
                     "x": 0.0,
-                    "y": 3.141590118408203,
+                    "y": 6.283186435699463,
                     "z": 0.0
                 },
                 "scale": {
@@ -447,12 +561,102 @@
         },
         {
             "Camera": {
-                "FOV": 45.0,
+                "FOV": 60.0,
                 "Far Plane": 1000.0,
                 "Near Plane": 0.10000000149011612,
                 "aspectOverride": 0.0,
                 "primary": true,
                 "useAspectOverride": false
+            },
+            "CameraBlend": {
+                "duration": 0.5,
+                "slowDuration": 0.0,
+                "slowTimeScale": 0.20000000298023224,
+                "slowTriggerT": 0.5,
+                "targetName": "",
+                "useSmoothStep": true
+            },
+            "CameraFollow": {
+                "aimDistance": 18.0,
+                "aimFovDeg": 45.0,
+                "allowManualOrbitInLockOn": false,
+                "baseDistance": 35.0,
+                "bossIntroDistance": 45.0,
+                "bossIntroFovDeg": 75.0,
+                "cameraTimeScale": 1.0,
+                "combatDistance": 28.0,
+                "combatFovDeg": 65.0,
+                "deathDistance": 55.0,
+                "deathFovDeg": 50.0,
+                "enableInput": true,
+                "enableLockOn": true,
+                "enabled": true,
+                "exploreDistance": 35.0,
+                "exploreFovDeg": 60.0,
+                "fastTurnMultiplier": 2.5,
+                "fastTurnYawThresholdDeg": 90.0,
+                "fovDamping": 6.0,
+                "heightOffset": 1.5,
+                "lockOnAngleWeight": 1.5,
+                "lockOnDistance": 24.0,
+                "lockOnFovDeg": 55.0,
+                "lockOnMaxAngleDeg": 50.0,
+                "lockOnMaxDistance": 35.0,
+                "lockOnRotationDamping": 10.0,
+                "lockOnSwitchAngleDeg": 45.0,
+                "maxDistance": 60.0,
+                "minDistance": 8.0,
+                "mode": 0,
+                "pitchDeg": -12.566725730895996,
+                "pitchMaxDeg": 80.0,
+                "pitchMinDeg": -45.0,
+                "positionDamping": 8.0,
+                "rotationDamping": 12.0,
+                "sensitivity": 0.20000000298023224,
+                "shoulderOffset": 0.30000001192092896,
+                "shoulderSide": 1.0,
+                "targetName": "Player",
+                "yawDeg": -176.8325653076172
+            },
+            "CameraInput": {
+                "blendTimeKey3": 0.6000000238418579,
+                "blendTimeKey4": 0.6000000238418579,
+                "blendTimeKey5": 0.800000011920929,
+                "cameraListCsv": "Camera1,Camera2,Camera3,Camera4,Camera5",
+                "enabled": true,
+                "lookAtTargetName": "Enemy",
+                "shakeAmplitudeKey4": 0.30000001192092896,
+                "shakeDecayKey4": 2.0,
+                "shakeDurationKey4": 0.4000000059604645,
+                "shakeFrequencyKey4": 10.0,
+                "slowDurationKey5": 0.30000001192092896,
+                "slowTimeScaleKey5": 0.20000000298023224,
+                "slowTriggerTKey5": 0.5
+            },
+            "CameraLookAt": {
+                "enabled": false,
+                "rotationDamping": 8.0,
+                "targetName": "Enemy"
+            },
+            "CameraShake": {
+                "amplitude": 0.0,
+                "decay": 1.0,
+                "duration": 0.0,
+                "enabled": true,
+                "frequency": 20.0
+            },
+            "CameraSpringArm": {
+                "distance": 2.999997138977051,
+                "distanceDamping": 6.0,
+                "enableCollision": true,
+                "enableZoom": true,
+                "enabled": true,
+                "maxDistance": 3.0,
+                "minDistance": 1.0,
+                "minHeight": -1000.0,
+                "probePadding": 0.20000000298023224,
+                "probeRadius": 0.3499999940395355,
+                "zoomSpeed": 0.009999999776482582
             },
             "Scripts": [
                 {
@@ -483,14 +687,14 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.0,
-                    "y": 2.0,
-                    "z": -23.79775047302246
+                    "x": 5.957846641540527,
+                    "y": 0.8472718596458435,
+                    "z": -12.319565773010254
                 },
                 "rotation": {
-                    "x": 0.47936999797821045,
-                    "y": 0.0,
-                    "z": 0.0
+                    "x": -0.21933075785636902,
+                    "y": -3.086310625076294,
+                    "z": 9.313224635931761e-10
                 },
                 "scale": {
                     "x": 1.0,
@@ -520,6 +724,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -567,6 +777,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -612,6 +828,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -659,6 +881,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -704,6 +932,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -751,6 +985,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -796,6 +1036,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -843,6 +1089,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -888,6 +1140,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -935,6 +1193,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -980,6 +1244,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -1027,6 +1297,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -1072,6 +1348,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -1119,6 +1401,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -1164,6 +1452,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -1211,6 +1505,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -1256,6 +1556,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -1303,6 +1609,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -1348,6 +1660,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -1395,6 +1713,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -1440,6 +1764,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -1487,6 +1817,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -1532,6 +1868,12 @@
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
                 "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
@@ -1579,6 +1921,12 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
@@ -1604,6 +1952,153 @@
             },
             "guid": "1000000000024",
             "name": "Pillar_Back_L_3"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/AmazingWonderland_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
+            "SkinnedMesh": {
+                "boneCount": 1,
+                "instanceAssetPath": "Assets/Fbx/AmazingWonderland.fbxasset",
+                "meshAssetPath": "AmazingWonderland"
+            },
+            "SocketAttachment": {
+                "extraPos": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "extraRotRad": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "extraScale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "followScale": true,
+                "ownerGuid": "7962531513969683154",
+                "ownerNameDebug": "Player",
+                "socketName": "RightHand"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 5.767805576324463,
+                    "y": 0.8462709784507751,
+                    "z": -15.310741424560547
+                },
+                "rotation": {
+                    "x": 0.6916244029998779,
+                    "y": 1.6389045715332031,
+                    "z": -2.9220526218414307
+                },
+                "scale": {
+                    "x": 1.0000004768371582,
+                    "y": 1.000000238418579,
+                    "z": 1.000000238418579
+                }
+            },
+            "WeaponTrace": {
+                "active": true,
+                "attackInstanceId": 0,
+                "baseDamage": 10.0,
+                "debugDraw": true,
+                "ownerGuid": "7962531513969683154",
+                "ownerNameDebug": "Player",
+                "queryLayerBits": 0,
+                "radius": 0.05000000074505806,
+                "targetLayerBits": 0,
+                "teamId": 0,
+                "traceSocketNames": [
+                    {}
+                ]
+            },
+            "guid": "989196907984473169",
+            "name": "Weapon"
+        },
+        {
+            "Hurtbox": {
+                "damageScale": 1.0,
+                "ownerGuid": "675183927268610293",
+                "ownerNameDebug": "Enemy",
+                "part": 0,
+                "teamId": 0
+            },
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/Alice_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 85.68142588576302
+            },
+            "SkinnedMesh": {
+                "boneCount": 248,
+                "instanceAssetPath": "Assets/Fbx/Alice.fbxasset",
+                "meshAssetPath": "Alice"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "675183927268610293",
+            "name": "Enemy"
         }
     ],
     "sceneName": "PrototypeDungeon_BigGround",
