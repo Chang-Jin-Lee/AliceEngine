@@ -22,6 +22,16 @@ namespace Alice
 {
     namespace
     {
+
+		DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& t)
+		{
+			using namespace DirectX;
+			XMMATRIX S = XMMatrixScaling(t.scale.x, t.scale.y, t.scale.z);
+			XMMATRIX R = XMMatrixRotationRollPitchYaw(t.rotation.x, t.rotation.y, t.rotation.z);
+			XMMATRIX T = XMMatrixTranslation(t.position.x, t.position.y, t.position.z);
+			return S * R * T;
+		}
+
         bool TryParseIndex(const std::string& key, int& outIdx)
         {
             if (key.empty()) return false;
@@ -398,13 +408,30 @@ namespace Alice
         // Socket world outputs (엔진 로우 컨벤션)
         // ------------------------------
         DirectX::XMMATRIX charWorld = DirectX::XMMatrixIdentity();
-        if (world.GetComponent<TransformComponent>(id))
-            charWorld = world.ComputeWorldMatrix(id);
+		if (const auto* t = world.GetComponent<TransformComponent>(id))
+			charWorld = BuildWorldMatrix(*t);
         DirectX::XMMATRIX charWorldRow = charWorld;
 
         for (auto& s : animComp.sockets)
         {
-            DirectX::XMMATRIX socketWorld = rt.animator->GetSocketWorldMatrix(s.name, charWorldRow);
+            DirectX::XMMATRIX localRow =
+                DirectX::XMMatrixScaling(s.scale.x, s.scale.y, s.scale.z) *
+                DirectX::XMMatrixRotationRollPitchYaw(
+                    DirectX::XMConvertToRadians(s.rotDeg.x),
+                    DirectX::XMConvertToRadians(s.rotDeg.y),
+                    DirectX::XMConvertToRadians(s.rotDeg.z)) *
+                DirectX::XMMatrixTranslation(s.pos.x, s.pos.y, s.pos.z);
+
+            DirectX::XMMATRIX socketWorld = localRow * charWorldRow;
+            if (!s.parentBone.empty())
+            {
+                DirectX::XMMATRIX boneGlobalRow;
+                if (rt.animator->GetBoneGlobalMatrix(s.parentBone, boneGlobalRow))
+                {
+                    socketWorld = localRow * boneGlobalRow * charWorldRow;
+                }
+            }
+
             DirectX::XMStoreFloat4x4(&s.worldMatrix, socketWorld);
         }
 

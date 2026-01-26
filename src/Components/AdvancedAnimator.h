@@ -742,13 +742,15 @@ namespace Alice
             void UpdateOffset()
             {
                 using namespace DirectX;
-                XMMATRIX mS = XMMatrixScaling(offsetScale.x, offsetScale.y, offsetScale.z);
-                XMMATRIX mR = XMMatrixRotationRollPitchYaw(
-                    XMConvertToRadians(offsetRot.x),
-                    XMConvertToRadians(offsetRot.y),
-                    XMConvertToRadians(offsetRot.z));
-                XMMATRIX mT = XMMatrixTranslation(offsetPos.x, offsetPos.y, offsetPos.z);
-                offsetMatrix = mT * mR * mS;
+                // Store as column-major to match animator internal convention.
+                XMMATRIX mRow =
+                    XMMatrixScaling(offsetScale.x, offsetScale.y, offsetScale.z) *
+                    XMMatrixRotationRollPitchYaw(
+                        XMConvertToRadians(offsetRot.x),
+                        XMConvertToRadians(offsetRot.y),
+                        XMConvertToRadians(offsetRot.z)) *
+                    XMMatrixTranslation(offsetPos.x, offsetPos.y, offsetPos.z);
+                offsetMatrix = XMMatrixTranspose(mRow);
             }
         };
 
