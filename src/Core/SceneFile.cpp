@@ -25,6 +25,7 @@
 #include "Components/TrailEffectComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
+#include "Components/AnimBlueprintComponent.h"
 #include "Components/SocketComponent.h"
 #include "Core/SocketSerialization.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
@@ -406,6 +407,14 @@ namespace Alice
                 outEntity["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* animBp = world.GetComponent<AnimBlueprintComponent>(id); animBp)
+            {
+                AnimBlueprintComponent copy = *animBp;
+                copy.blueprintPath = NormalizePathToRelative(copy.blueprintPath);
+                rttr::instance inst = copy;
+                outEntity["AnimBlueprint"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* socketComp = world.GetComponent<SocketComponent>(id); socketComp)
             {
                 outEntity["Socket"] = SocketSerialization::SocketComponentToJson(*socketComp);
@@ -734,6 +743,15 @@ namespace Alice
                 AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(id);
                 rttr::instance inst = aa;
                 if (!JsonRttr::FromJsonObject(inst, *itAA)) return false;
+            }
+
+            // AnimBlueprint (선택)
+            auto itAnimBp = e.find("AnimBlueprint");
+            if (itAnimBp != e.end() && itAnimBp->is_object())
+            {
+                AnimBlueprintComponent& ab = world.AddComponent<AnimBlueprintComponent>(id);
+                rttr::instance inst = ab;
+                if (!JsonRttr::FromJsonObject(inst, *itAnimBp)) return false;
             }
 
             // Socket (선택)
