@@ -2104,6 +2104,9 @@ namespace Alice
 						{"Monkey",    "../Assets/Fbx/Monkey.fbxasset"},
 						//{"Box",       "../Assets/Fbx/Box.fbxasset"},
 						{"Cube(FBX)", "../Assets/Fbx/Cube.fbxasset"},
+						{"Sphere(FBX)", "../Assets/Fbx/Sphere.fbxasset"},
+						{"Quad(FBX)", "../Assets/Fbx/Quad.fbxasset"},
+						{"Corn(FBX)", "../Assets/Fbx/Corn.fbxasset"}
 					};
 
 					// 고정 목록 표시
@@ -3916,7 +3919,6 @@ namespace Alice
 
 				// 엔티티 선택 (Gizmo 위에 있지 않을 때만)
 				// 최종 빌드(Release)에서는 뷰포트 피커가 작동하지 않도록 함
-#ifdef _DEBUG
 				if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 				{
 					// Gizmo 위에 있지 않고 사용 중이 아닐 때만 선택 처리
@@ -3946,7 +3948,6 @@ namespace Alice
 							}
 						}
 					}
-#endif // _DEBUG
 			}
 			else
 			{
@@ -7401,9 +7402,15 @@ namespace Alice
 					// 기본 씬: 큐브(Transform 1개) + 기본 Material 1개
 					// ForwardRenderSystem은 Transform만 있어도 기본 큐브를 그립니다.
 					World temp;
-					const EntityId e = temp.CreateEntity();
-					temp.AddComponent<TransformComponent>(e);
-					temp.AddComponent<MaterialComponent>(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
+					std::string cubeAssetPath = "Assets/Fbx/Cube.fbxasset";
+					EntityId e = InstantiateFbxAssetToWorld(temp, cubeAssetPath, "Cube");
+					if (e == InvalidEntityId)
+					{
+						e = temp.CreateEntity();
+						temp.AddComponent<TransformComponent>(e);
+						temp.AddComponent<MaterialComponent>(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
+					}
+
 					SceneFile::Save(temp, newPath);
 				}
 

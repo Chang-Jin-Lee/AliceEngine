@@ -27,7 +27,7 @@ namespace Alice
     /// Bloom 파라미터 구조체
     struct BloomSettings
     {
-        bool enabled = true;          // Bloom 활성화
+        bool enabled = false;          // Bloom 활성화
         float intensity = 0.5f;      // 합성 강도
         float threshold = 1.0f;      // 밝기 추출 기준
         float knee = 0.5f;            // Soft threshold (0~1)
