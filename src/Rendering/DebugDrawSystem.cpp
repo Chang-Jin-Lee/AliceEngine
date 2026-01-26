@@ -1,6 +1,7 @@
 ﻿#include "Rendering/DebugDrawSystem.h"
 
 #include <d3dcompiler.h>
+#include <Core/Logger.h>
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
@@ -59,16 +60,35 @@ float4 main(PSInput input) : SV_TARGET
         m_context = m_renderDevice.GetImmediateContext();
     }
 
-    bool DebugDrawSystem::Initialize()
-    {
-        if (!m_device || !m_context || !CreateShadersAndInputLayout()) return false;
+	bool DebugDrawSystem::Initialize()
+	{
+		ALICE_LOG_INFO("[DDS] init begin. dev=%p ctx=%p", m_device.Get(), m_context.Get());
 
-        // ViewProj 상수 버퍼 생성
-        D3D11_BUFFER_DESC desc = { sizeof(CBViewProj), D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 };
-        if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbViewProj.ReleaseAndGetAddressOf()))) return false;
+		if (!m_device) { ALICE_LOG_ERRORF("[DDS] device null"); return false; }
+		if (!m_context) { ALICE_LOG_ERRORF("[DDS] context null"); return false; }
 
-        return true;
-    }
+		if (!CreateShadersAndInputLayout())
+		{
+			ALICE_LOG_ERRORF("[DDS] CreateShadersAndInputLayout failed");
+			return false;
+		}
+
+		D3D11_BUFFER_DESC desc = {};
+		desc.ByteWidth = sizeof(CBViewProj);
+		desc.Usage = D3D11_USAGE_DEFAULT;
+		desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+		HRESULT hr = m_device->CreateBuffer(&desc, nullptr, m_cbViewProj.ReleaseAndGetAddressOf());
+		if (FAILED(hr))
+		{
+			ALICE_LOG_ERRORF("[DDS] CreateBuffer(CBViewProj) failed hr=0x%08X size=%u", (unsigned)hr, (unsigned)sizeof(CBViewProj));
+			return false;
+		}
+
+		ALICE_LOG_INFO("[DDS] init success");
+		return true;
+	}
+
 
     void DebugDrawSystem::Clear()
     {
