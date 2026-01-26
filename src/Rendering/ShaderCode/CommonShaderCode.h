@@ -83,7 +83,9 @@ cbuffer PostProcessConstantBuffer : register(b2)
 {
     float g_Exposure;
     float g_MaxHDRNits;
-    float2 g_Padding;
+    float g_Saturation;      // Color Grading: 채도 (0.0 = 흑백, 1.0 = 원본, 2.0 = 과포화)
+    float g_Contrast;         // Color Grading: 대비 (0.0 = 회색, 1.0 = 원본, 2.0 = 고대비)
+    float g_Gamma;            // Color Grading: 감마 (0.1~3.0, 1.0 = 원본)
 };
 
 struct PS_INPUT_QUAD
@@ -109,12 +111,44 @@ float3 LinearToSRGB(float3 linearColor)
     return pow(max(linearColor, 0.0f), 1.0f / 2.2f);
 }
 
+// Color Grading 함수들
+float3 ApplySaturation(float3 color, float saturation)
+{
+    // Luminance 계산 (Rec.709 가중치)
+    float luminance = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    // Saturation 적용: 0.0 = 흑백, 1.0 = 원본, >1.0 = 과포화
+    return lerp(float3(luminance, luminance, luminance), color, saturation);
+}
+
+float3 ApplyContrast(float3 color, float contrast)
+{
+    // Contrast 적용: 0.0 = 회색(0.5), 1.0 = 원본, >1.0 = 고대비
+    return saturate((color - 0.5f) * contrast + 0.5f);
+}
+
+float3 ApplyGamma(float3 color, float gamma)
+{
+    // Gamma 보정: 1.0 = 원본, <1.0 = 밝게, >1.0 = 어둡게
+    return pow(max(color, 0.0f), 1.0f / max(gamma, 0.1f));
+}
+
 float4 main(PS_INPUT_QUAD input) : SV_Target
 {
     float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
+    
+    // 1. Exposure 적용
     float exposureFactor = pow(2.0f, g_Exposure);
     C_linear709 *= exposureFactor;
+    
+    // 2. Tone Mapping
     float3 C_tonemapped = ACESFilm(C_linear709);
+    
+    // 3. Color Grading (Tone Mapping 이후 적용)
+    C_tonemapped = ApplySaturation(C_tonemapped, g_Saturation);
+    C_tonemapped = ApplyContrast(C_tonemapped, g_Contrast);
+    C_tonemapped = ApplyGamma(C_tonemapped, g_Gamma);
+    
+    // 4. sRGB 변환 (Gamma Correction)
     float3 C_final = LinearToSRGB(C_tonemapped);
     return float4(C_final, 1.0f);
 }
@@ -129,7 +163,9 @@ cbuffer PostProcessConstantBuffer : register(b2)
 {
     float g_Exposure;
     float g_MaxHDRNits;
-    float2 g_Padding;
+    float g_Saturation;      // Color Grading: 채도 (0.0 = 흑백, 1.0 = 원본, 2.0 = 과포화)
+    float g_Contrast;         // Color Grading: 대비 (0.0 = 회색, 1.0 = 원본, 2.0 = 고대비)
+    float g_Gamma;            // Color Grading: 감마 (0.1~3.0, 1.0 = 원본)
 };
 
 struct PS_INPUT_QUAD
@@ -147,6 +183,27 @@ float3 ACESFilm(float3 x)
     float d = 0.59f;
     float e = 0.14f;
     return saturate(x * (a * x + b) / (x * (c * x + d) + e));
+}
+
+// Color Grading 함수들
+float3 ApplySaturation(float3 color, float saturation)
+{
+    // Luminance 계산 (Rec.709 가중치)
+    float luminance = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    // Saturation 적용: 0.0 = 흑백, 1.0 = 원본, >1.0 = 과포화
+    return lerp(float3(luminance, luminance, luminance), color, saturation);
+}
+
+float3 ApplyContrast(float3 color, float contrast)
+{
+    // Contrast 적용: 0.0 = 회색(0.5), 1.0 = 원본, >1.0 = 고대비
+    return saturate((color - 0.5f) * contrast + 0.5f);
+}
+
+float3 ApplyGamma(float3 color, float gamma)
+{
+    // Gamma 보정: 1.0 = 원본, <1.0 = 밝게, >1.0 = 어둡게
+    return pow(max(color, 0.0f), 1.0f / max(gamma, 0.1f));
 }
 
 // Rec709 to Rec2020 색공간 변환
@@ -182,10 +239,19 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
 {
     // 예제 프로젝트 36_ToneMappingPS_HDR.hlsl와 동일한 로직
     float3 C_linear709 = g_SceneHDR.Sample(g_SamplerLinear, input.uv).rgb;
+    
+    // 1. Exposure 적용
     float3 C_exposure = C_linear709 * pow(2.0f, g_Exposure);
+    
+    // 2. Tone Mapping
     float3 C_tonemapped = ACESFilm(C_exposure);
     
-    // Rec709 → Rec2020 색공간 변환 (LinearToST2084 내부에서 g_MaxHDRNits 처리)
+    // 3. Color Grading (Tone Mapping 이후, 색공간 변환 전 적용)
+    C_tonemapped = ApplySaturation(C_tonemapped, g_Saturation);
+    C_tonemapped = ApplyContrast(C_tonemapped, g_Contrast);
+    C_tonemapped = ApplyGamma(C_tonemapped, g_Gamma);
+    
+    // 4. Rec709 → Rec2020 색공간 변환 (LinearToST2084 내부에서 g_MaxHDRNits 처리)
     float3 C_Rec2020 = Rec709ToRec2020(C_tonemapped);
     float3 C_ST2084 = LinearToST2084(C_Rec2020);
     
@@ -203,7 +269,8 @@ cbuffer BloomConstantBuffer : register(b3)
 {
     float g_Threshold;
     float g_Knee;
-    float g_Intensity;
+    float g_BloomIntensity;      // Bloom 합성 강도 (Composite 패스에서 사용)
+    float g_GaussianIntensity;   // Gaussian 블러 강도 (Blur 패스에서 사용)
     float g_Radius;
     float2 g_TexelSize;
     int g_Downsample;
@@ -242,7 +309,8 @@ cbuffer BloomConstantBuffer : register(b3)
 {
     float g_Threshold;
     float g_Knee;
-    float g_Intensity;
+    float g_BloomIntensity;      // Bloom 합성 강도 (Composite 패스에서 사용)
+    float g_GaussianIntensity;   // Gaussian 블러 강도 (Blur 패스에서 사용)
     float g_Radius;
     float2 g_TexelSize;
     int g_Downsample;
@@ -273,7 +341,9 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         weightSum += weights[i];
     }
     
-    return float4(color / weightSum, 1.0f);
+    // Unreal Engine 스타일: Gaussian 블러 결과에 Gaussian Intensity 적용
+    float3 blurredColor = (color / weightSum) * g_GaussianIntensity;
+    return float4(blurredColor, 1.0f);
 }
 )";
 
@@ -286,7 +356,8 @@ cbuffer BloomConstantBuffer : register(b3)
 {
     float g_Threshold;
     float g_Knee;
-    float g_Intensity;
+    float g_BloomIntensity;      // Bloom 합성 강도 (Composite 패스에서 사용)
+    float g_GaussianIntensity;   // Gaussian 블러 강도 (Blur 패스에서 사용)
     float g_Radius;
     float2 g_TexelSize;
     int g_Downsample;
@@ -317,7 +388,9 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
         weightSum += weights[i];
     }
     
-    return float4(color / weightSum, 1.0f);
+    // Unreal Engine 스타일: Gaussian 블러 결과에 Gaussian Intensity 적용
+    float3 blurredColor = (color / weightSum) * g_GaussianIntensity;
+    return float4(blurredColor, 1.0f);
 }
 )";
 
@@ -330,7 +403,8 @@ cbuffer BloomConstantBuffer : register(b3)
 {
     float g_Threshold;
     float g_Knee;
-    float g_Intensity;
+    float g_BloomIntensity;      // Bloom 합성 강도 (Composite 패스에서 사용)
+    float g_GaussianIntensity;   // Gaussian 블러 강도 (Blur 패스에서 사용)
     float g_Radius;
     float2 g_TexelSize;
     int g_Downsample;
@@ -374,7 +448,8 @@ cbuffer BloomConstantBuffer : register(b3)
 {
     float g_Threshold;
     float g_Knee;
-    float g_Intensity;
+    float g_BloomIntensity;      // Bloom 합성 강도 (Composite 패스에서 사용)
+    float g_GaussianIntensity;   // Gaussian 블러 강도 (Blur 패스에서 사용)
     float g_Radius;
     float2 g_TexelSize;
     int g_Downsample;
@@ -407,7 +482,8 @@ cbuffer BloomConstantBuffer : register(b3)
 {
     float g_Threshold;
     float g_Knee;
-    float g_Intensity;
+    float g_BloomIntensity;      // Bloom 합성 강도 (Composite 패스에서 사용)
+    float g_GaussianIntensity;   // Gaussian 블러 강도 (Blur 패스에서 사용)
     float g_Radius;
     float2 g_TexelSize;
     int g_Downsample;
@@ -428,7 +504,8 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     float3 bloomColor = g_Bloom.Sample(g_SamplerLinear, input.uv).rgb;
     
     // HDR 합성만 수행 (ToneMapping은 별도 패스에서 수행)
-    float3 combined = sceneColor + bloomColor * g_Intensity;
+    // Bloom Intensity는 최종 합성 단계에서 적용
+    float3 combined = sceneColor + bloomColor * g_BloomIntensity;
     
     return float4(combined, 1.0f);
 }

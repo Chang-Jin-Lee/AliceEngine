@@ -1572,6 +1572,9 @@ namespace Alice
 
         PostProcessCB cbData = {};
         GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
+        cbData.saturation = m_postProcessParams.saturation;
+        cbData.contrast = m_postProcessParams.contrast;
+        cbData.gamma = m_postProcessParams.gamma;
 
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
@@ -1618,11 +1621,30 @@ namespace Alice
         // 사용자가 설정한 값이 있으면 사용, 없으면 모니터 최대 밝기 사용
         outMaxHDRNits = (m_postProcessParams.maxHDRNits > 0.0f) ? m_postProcessParams.maxHDRNits : maxNits;
     }
+    
+    void ForwardRenderSystem::GetPostProcessParams(float& outExposure, float& outMaxHDRNits, float& outSaturation, float& outContrast, float& outGamma) const
+    {
+        GetPostProcessParams(outExposure, outMaxHDRNits);
+        outSaturation = m_postProcessParams.saturation;
+        outContrast = m_postProcessParams.contrast;
+        outGamma = m_postProcessParams.gamma;
+    }
 
     void ForwardRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits)
     {
         m_postProcessParams.exposure = exposure;
         m_postProcessParams.maxHDRNits = maxHDRNits;
+        // Color Grading은 기본값 유지 (하위 호환성)
+    }
+    
+    void ForwardRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits, float saturation, float contrast, float gamma)
+    {
+        m_postProcessParams.exposure = exposure;
+        m_postProcessParams.maxHDRNits = maxHDRNits;
+        // Color Grading 파라미터 클램프 및 설정
+        m_postProcessParams.saturation = std::clamp(saturation, 0.0f, 3.0f);
+        m_postProcessParams.contrast = std::clamp(contrast, 0.0f, 2.0f);
+        m_postProcessParams.gamma = std::clamp(gamma, 0.1f, 3.0f);
     }
 
     void ForwardRenderSystem::RenderParticleOverlay(ID3D11ShaderResourceView* particleSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
