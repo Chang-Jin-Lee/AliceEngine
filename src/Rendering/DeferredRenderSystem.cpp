@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <DirectXMath.h>
+#include <DirectXCollision.h>
 
 #include "Core/ResourceManager.h"
 #include "Core/Logger.h"
@@ -29,6 +30,123 @@ using Microsoft::WRL::ComPtr;
 
 namespace Alice
 {
+    namespace
+    {
+        // 인스턴싱 배치 키 (재질/메시 기준)
+        struct InstancedDrawKey
+        {
+            ID3D11Buffer* vertexBuffer = nullptr;
+            ID3D11Buffer* indexBuffer = nullptr;
+            UINT stride = 0;
+            UINT startIndex = 0;
+            UINT indexCount = 0;
+            INT baseVertex = 0;
+            ID3D11ShaderResourceView* diffuseSRV = nullptr;
+            ID3D11ShaderResourceView* normalSRV = nullptr;
+            DirectX::XMFLOAT4 color { 1.0f, 1.0f, 1.0f, 1.0f };
+            float roughness = 0.5f;
+            float metalness = 0.0f;
+            float normalStrength = 1.0f;
+            int shadingMode = 0;
+            int useTexture = 0;
+            int enableNormalMap = 0;
+
+            bool operator<(const InstancedDrawKey& rhs) const
+            {
+                if (vertexBuffer != rhs.vertexBuffer) return vertexBuffer < rhs.vertexBuffer;
+                if (indexBuffer != rhs.indexBuffer) return indexBuffer < rhs.indexBuffer;
+                if (stride != rhs.stride) return stride < rhs.stride;
+                if (startIndex != rhs.startIndex) return startIndex < rhs.startIndex;
+                if (indexCount != rhs.indexCount) return indexCount < rhs.indexCount;
+                if (baseVertex != rhs.baseVertex) return baseVertex < rhs.baseVertex;
+                if (diffuseSRV != rhs.diffuseSRV) return diffuseSRV < rhs.diffuseSRV;
+                if (normalSRV != rhs.normalSRV) return normalSRV < rhs.normalSRV;
+
+                if (color.x != rhs.color.x) return color.x < rhs.color.x;
+                if (color.y != rhs.color.y) return color.y < rhs.color.y;
+                if (color.z != rhs.color.z) return color.z < rhs.color.z;
+                if (color.w != rhs.color.w) return color.w < rhs.color.w;
+
+                if (roughness != rhs.roughness) return roughness < rhs.roughness;
+                if (metalness != rhs.metalness) return metalness < rhs.metalness;
+                if (normalStrength != rhs.normalStrength) return normalStrength < rhs.normalStrength;
+                if (shadingMode != rhs.shadingMode) return shadingMode < rhs.shadingMode;
+                if (useTexture != rhs.useTexture) return useTexture < rhs.useTexture;
+                if (enableNormalMap != rhs.enableNormalMap) return enableNormalMap < rhs.enableNormalMap;
+
+                return false;
+            }
+        };
+
+        bool IsSameInstancedKey(const InstancedDrawKey& a, const InstancedDrawKey& b)
+        {
+            if (a.vertexBuffer != b.vertexBuffer) return false;
+            if (a.indexBuffer != b.indexBuffer) return false;
+            if (a.stride != b.stride) return false;
+            if (a.startIndex != b.startIndex) return false;
+            if (a.indexCount != b.indexCount) return false;
+            if (a.baseVertex != b.baseVertex) return false;
+            if (a.diffuseSRV != b.diffuseSRV) return false;
+            if (a.normalSRV != b.normalSRV) return false;
+            if (a.color.x != b.color.x) return false;
+            if (a.color.y != b.color.y) return false;
+            if (a.color.z != b.color.z) return false;
+            if (a.color.w != b.color.w) return false;
+            if (a.roughness != b.roughness) return false;
+            if (a.metalness != b.metalness) return false;
+            if (a.normalStrength != b.normalStrength) return false;
+            if (a.shadingMode != b.shadingMode) return false;
+            if (a.useTexture != b.useTexture) return false;
+            if (a.enableNormalMap != b.enableNormalMap) return false;
+            return true;
+        }
+
+        // 인스턴스 월드 행렬(3x4) 생성용 헬퍼
+        InstanceData BuildInstanceData(const DirectX::XMMATRIX& world)
+        {
+            InstanceData data{};
+            DirectX::XMMATRIX worldT = DirectX::XMMatrixTranspose(world);
+            DirectX::XMStoreFloat4(&data.worldRow0, worldT.r[0]);
+            DirectX::XMStoreFloat4(&data.worldRow1, worldT.r[1]);
+            DirectX::XMStoreFloat4(&data.worldRow2, worldT.r[2]);
+            return data;
+        }
+
+        // 단일 본(Identity)인지 확인하는 함수
+        bool IsIdentityBoneMatrix(const DirectX::XMFLOAT4X4& m)
+        {
+            const float eps = 1e-4f;
+            if (std::fabs(m._11 - 1.0f) > eps) return false;
+            if (std::fabs(m._22 - 1.0f) > eps) return false;
+            if (std::fabs(m._33 - 1.0f) > eps) return false;
+            if (std::fabs(m._44 - 1.0f) > eps) return false;
+
+            if (std::fabs(m._12) > eps) return false;
+            if (std::fabs(m._13) > eps) return false;
+            if (std::fabs(m._14) > eps) return false;
+            if (std::fabs(m._21) > eps) return false;
+            if (std::fabs(m._23) > eps) return false;
+            if (std::fabs(m._24) > eps) return false;
+            if (std::fabs(m._31) > eps) return false;
+            if (std::fabs(m._32) > eps) return false;
+            if (std::fabs(m._34) > eps) return false;
+            if (std::fabs(m._41) > eps) return false;
+            if (std::fabs(m._42) > eps) return false;
+            if (std::fabs(m._43) > eps) return false;
+
+            return true;
+        }
+
+        // 본 없는(Identity 1개) FBX 여부 판단
+        bool IsRigidSkinnedCommand(const SkinnedDrawCommand& cmd)
+        {
+            if (!cmd.bones || cmd.boneCount != 1)
+                return false;
+
+            return IsIdentityBoneMatrix(cmd.bones[0]);
+        }
+    }
+
 
     DeferredRenderSystem::DeferredRenderSystem(ID3D11RenderDevice& renderDevice)
         : m_renderDevice(renderDevice)
@@ -105,6 +223,13 @@ namespace Alice
         if (!CreateDepthStencilStates())
         {
             ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateDepthStencilStates failed.");
+            return false;
+        }
+
+        // GPU 인스턴싱 버퍼 생성 (초기 용량)
+        if (!CreateInstanceBuffer(2048))
+        {
+            ALICE_LOG_ERRORF("DeferredRenderSystem::Initialize: CreateInstanceBuffer failed.");
             return false;
         }
 
@@ -315,6 +440,39 @@ namespace Alice
         if (FAILED(m_device->CreateInputLayout(skinnedLayout, ARRAYSIZE(skinnedLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_gBufferSkinnedInputLayout.ReleaseAndGetAddressOf())))
             return false;
 
+        // G-Buffer Skinned Instanced Vertex Shader
+        vsBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(DeferredShader::GBufferSkinnedInstancedVS, strlen(DeferredShader::GBufferSkinnedInstancedVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+            {
+                ALICE_LOG_ERRORF("GBuffer Skinned Instanced VS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            }
+            return false;
+        }
+
+        if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_gBufferSkinnedInstancedVS.ReleaseAndGetAddressOf())))
+            return false;
+
+        // G-Buffer Skinned Instanced Input Layout
+        D3D11_INPUT_ELEMENT_DESC skinnedInstancedLayout[] = {
+            {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"SMOOTHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 96, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"INSTANCE_WORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"INSTANCE_WORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"INSTANCE_WORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        };
+        if (FAILED(m_device->CreateInputLayout(skinnedInstancedLayout, ARRAYSIZE(skinnedInstancedLayout), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), m_gBufferSkinnedInstancedInputLayout.ReleaseAndGetAddressOf())))
+            return false;
+
         // Quad Vertex Shader
         vsBlob.Reset();
         if (FAILED(D3DCompile(CommonShaderCode::QuadVS, strlen(CommonShaderCode::QuadVS), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf())))
@@ -414,6 +572,57 @@ namespace Alice
                                                    m_transparentSkinnedInputLayout.ReleaseAndGetAddressOf())))
             {
                 ALICE_LOG_ERRORF("Failed to create Transparent Skinned InputLayout");
+                return false;
+            }
+        }
+
+        // Transparent Skinned Instanced VS
+        vsBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(DeferredShader::TransparentSkinnedInstancedVS,
+                              strlen(DeferredShader::TransparentSkinnedInstancedVS),
+                              nullptr, nullptr, nullptr,
+                              "main", "vs_5_0",
+                              0, 0,
+                              vsBlob.GetAddressOf(),
+                              errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+                ALICE_LOG_ERRORF("Transparent Skinned Instanced VS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            return false;
+        }
+        if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(),
+                                                vsBlob->GetBufferSize(),
+                                                nullptr,
+                                                m_transparentSkinnedInstancedVS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Transparent Skinned Instanced VS");
+            return false;
+        }
+
+        // Transparent Skinned Instanced Input Layout
+        {
+            D3D11_INPUT_ELEMENT_DESC skinnedInstancedLayoutT[] = {
+                {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"SMOOTHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 96, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"INSTANCE_WORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, 1},
+                {"INSTANCE_WORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+                {"INSTANCE_WORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            };
+            if (FAILED(m_device->CreateInputLayout(skinnedInstancedLayoutT,
+                                                   ARRAYSIZE(skinnedInstancedLayoutT),
+                                                   vsBlob->GetBufferPointer(),
+                                                   vsBlob->GetBufferSize(),
+                                                   m_transparentSkinnedInstancedInputLayout.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Transparent Skinned Instanced InputLayout");
                 return false;
             }
         }
@@ -616,6 +825,55 @@ namespace Alice
         {
             ALICE_LOG_ERRORF("Failed to create Shadow Skinned VS");
             return false;
+        }
+
+        // Skinned shadow instanced VS + input layout
+        vsBlob.Reset();
+        errorBlob.Reset();
+        if (FAILED(D3DCompile(DeferredShader::ShadowSkinnedInstancedVS,
+                              strlen(DeferredShader::ShadowSkinnedInstancedVS),
+                              nullptr, nullptr, nullptr,
+                              "main", "vs_5_0",
+                              0, 0,
+                              vsBlob.GetAddressOf(),
+                              errorBlob.GetAddressOf())))
+        {
+            if (errorBlob)
+                ALICE_LOG_ERRORF("Shadow Skinned Instanced VS compile error: %s", (char*)errorBlob->GetBufferPointer());
+            return false;
+        }
+        if (FAILED(m_device->CreateVertexShader(vsBlob->GetBufferPointer(),
+                                                vsBlob->GetBufferSize(),
+                                                nullptr,
+                                                m_shadowSkinnedInstancedVS.ReleaseAndGetAddressOf())))
+        {
+            ALICE_LOG_ERRORF("Failed to create Shadow Skinned Instanced VS");
+            return false;
+        }
+        {
+            D3D11_INPUT_ELEMENT_DESC skinnedInstancedLayoutShadow[] = {
+                {"POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BINORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"COLOR",        0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,          0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT,     0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,    0, 80, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"SMOOTHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,       0, 96, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"INSTANCE_WORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, 1},
+                {"INSTANCE_WORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+                {"INSTANCE_WORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            };
+            if (FAILED(m_device->CreateInputLayout(skinnedInstancedLayoutShadow,
+                                                   ARRAYSIZE(skinnedInstancedLayoutShadow),
+                                                   vsBlob->GetBufferPointer(),
+                                                   vsBlob->GetBufferSize(),
+                                                   m_shadowSkinnedInstancedInputLayout.ReleaseAndGetAddressOf())))
+            {
+                ALICE_LOG_ERRORF("Failed to create Shadow Skinned Instanced InputLayout");
+                return false;
+            }
         }
 
         return true;
@@ -889,6 +1147,50 @@ namespace Alice
             return false;
 
         return true;
+    }
+
+    bool DeferredRenderSystem::CreateInstanceBuffer(std::uint32_t initialCapacity)
+    {
+        if (!m_device) return false;
+
+        m_instanceBuffer.Reset();
+        m_instanceCapacity = 0;
+
+        if (initialCapacity == 0)
+            initialCapacity = 1;
+
+        D3D11_BUFFER_DESC desc = {};
+        desc.Usage = D3D11_USAGE_DYNAMIC;
+        desc.ByteWidth = static_cast<UINT>(sizeof(InstanceData) * initialCapacity);
+        desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+        HRESULT hr = m_device->CreateBuffer(&desc, nullptr, m_instanceBuffer.ReleaseAndGetAddressOf());
+        if (FAILED(hr))
+        {
+            ALICE_LOG_ERRORF("DeferredRenderSystem::CreateInstanceBuffer: CreateBuffer failed. hr=0x%08X", (unsigned)hr);
+            return false;
+        }
+
+        m_instanceCapacity = initialCapacity;
+        return true;
+    }
+
+    bool DeferredRenderSystem::EnsureInstanceBufferCapacity(std::size_t requiredCount)
+    {
+        if (requiredCount == 0)
+            return true;
+
+        if (m_instanceBuffer && requiredCount <= m_instanceCapacity)
+            return true;
+
+        std::uint32_t newCapacity = (m_instanceCapacity == 0) ? 1u : m_instanceCapacity;
+        while (newCapacity < requiredCount)
+        {
+            newCapacity *= 2u;
+        }
+
+        return CreateInstanceBuffer(newCapacity);
     }
 
     bool DeferredRenderSystem::CreateShadowMapResources()
@@ -1201,6 +1503,7 @@ namespace Alice
 
     DirectX::XMMATRIX DeferredRenderSystem::RenderShadowPass(
         const World& world,
+        const Camera& camera,
         const std::vector<SkinnedDrawCommand>& skinnedCommands,
         const std::unordered_set<EntityId>& cameraEntities,
         bool editorMode,
@@ -1286,6 +1589,9 @@ namespace Alice
         // Depth-only: PS none
         m_context->PSSetShader(nullptr, nullptr, 0);
 
+        // 프러스텀 컬링을 위한 카메라 절두체 계산 (성능 확보를 위해 카메라 프러스텀 사용)
+        BoundingFrustum cameraFrustum = camera.GetWorldFrustum();
+
         // 1) Static meshes (cube)
         if (m_cubeVB && m_cubeIB && m_shadowInputLayout && m_shadowVS && m_cubeIndexCount > 0)
         {
@@ -1304,6 +1610,14 @@ namespace Alice
                 if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
                 if (!tr.enabled) continue;
 
+                // [프러스텀 컬링] 카메라 시야 밖 오브젝트는 건너뛰기
+                float maxScale = std::max({ tr.scale.x, tr.scale.y, tr.scale.z });
+                BoundingSphere bounds(tr.position, maxScale * 1.5f);
+                if (cameraFrustum.Contains(bounds) == DISJOINT)
+                {
+                    continue; // 화면에 보이지 않으면 렌더링하지 않음
+                }
+
                 XMMATRIX worldM = BuildWorldMatrix(world, id, tr);
 
                 const bool flipped = XMVectorGetX(XMMatrixDeterminant(worldM)) < 0.0f;
@@ -1318,15 +1632,92 @@ namespace Alice
         // 2) Skinned meshes
         if (!skinnedCommands.empty() && m_gBufferSkinnedInputLayout && m_shadowSkinnedVS)
         {
+            // Shadow 전용 인스턴싱 배치 키
+            struct ShadowInstancedKey
+            {
+                ID3D11Buffer* vertexBuffer = nullptr;
+                ID3D11Buffer* indexBuffer = nullptr;
+                UINT stride = 0;
+                UINT startIndex = 0;
+                UINT indexCount = 0;
+                INT baseVertex = 0;
+                bool flipped = false;
+
+                bool operator<(const ShadowInstancedKey& rhs) const
+                {
+                    if (vertexBuffer != rhs.vertexBuffer) return vertexBuffer < rhs.vertexBuffer;
+                    if (indexBuffer != rhs.indexBuffer) return indexBuffer < rhs.indexBuffer;
+                    if (stride != rhs.stride) return stride < rhs.stride;
+                    if (startIndex != rhs.startIndex) return startIndex < rhs.startIndex;
+                    if (indexCount != rhs.indexCount) return indexCount < rhs.indexCount;
+                    if (baseVertex != rhs.baseVertex) return baseVertex < rhs.baseVertex;
+                    return flipped < rhs.flipped;
+                }
+            };
+
+            struct ShadowInstancedItem
+            {
+                ShadowInstancedKey key;
+                InstanceData instance;
+                bool operator<(const ShadowInstancedItem& rhs) const
+                {
+                    return key < rhs.key; // 내부의 key끼리 비교
+                }
+            };
+
+            std::vector<ShadowInstancedItem> instancedItems;
+            instancedItems.reserve(skinnedCommands.size());
+
             UINT offset = 0;
             m_context->IASetInputLayout(m_gBufferSkinnedInputLayout.Get());
             m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             m_context->VSSetShader(m_shadowSkinnedVS.Get(), nullptr, 0);
 
+            // 2-1) 인스턴싱 대상 수집 + 일반 렌더링
             for (const auto& cmd : skinnedCommands)
             {
                 if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
 
+                // [프러스텀 컬링] 월드 행렬에서 위치 추출
+                XMFLOAT4X4 worldMatrix;
+                XMStoreFloat4x4(&worldMatrix, cmd.world);
+                XMFLOAT3 position(worldMatrix._41, worldMatrix._42, worldMatrix._43);
+                
+                // 스케일 추정: 월드 행렬의 스케일 성분 추출 (간단한 근사)
+                XMVECTOR scaleVec = XMVectorSet(
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._11, worldMatrix._12, worldMatrix._13, 0.0f))),
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._21, worldMatrix._22, worldMatrix._23, 0.0f))),
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._31, worldMatrix._32, worldMatrix._33, 0.0f))),
+                    0.0f
+                );
+                float maxScale = std::max({ XMVectorGetX(scaleVec), XMVectorGetY(scaleVec), XMVectorGetZ(scaleVec) });
+                BoundingSphere bounds(position, maxScale * 1.5f);
+                if (cameraFrustum.Contains(bounds) == DISJOINT)
+                {
+                    continue; // 화면에 보이지 않으면 렌더링하지 않음
+                }
+
+                // 본 1개 + Identity인 경우만 인스턴싱 대상으로 처리
+                if (IsRigidSkinnedCommand(cmd) &&
+                    m_shadowSkinnedInstancedVS &&
+                    m_shadowSkinnedInstancedInputLayout &&
+                    m_instanceBuffer)
+                {
+                    ShadowInstancedItem item{};
+                    item.key.vertexBuffer = cmd.vertexBuffer;
+                    item.key.indexBuffer = cmd.indexBuffer;
+                    item.key.stride = cmd.stride;
+                    item.key.startIndex = cmd.startIndex;
+                    item.key.indexCount = cmd.indexCount;
+                    item.key.baseVertex = cmd.baseVertex;
+                    item.key.flipped = XMVectorGetX(XMMatrixDeterminant(cmd.world)) < 0.0f;
+                    item.instance = BuildInstanceData(cmd.world);
+
+                    instancedItems.push_back(item);
+                    continue;
+                }
+
+                // 일반 스키닝 렌더링
                 UINT sStride = cmd.stride;
                 m_context->IASetVertexBuffers(0, 1, &cmd.vertexBuffer, &sStride, &offset);
                 m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
@@ -1338,6 +1729,89 @@ namespace Alice
                 UpdateBonesCB(cmd.bones, cmd.boneCount);
                 UpdatePerObjectCB(cmd.world, lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0, 1.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
+            }
+
+            // 2-2) 인스턴싱 배치 렌더링
+            if (!instancedItems.empty() && m_shadowSkinnedInstancedVS && m_shadowSkinnedInstancedInputLayout)
+            {
+                std::sort(instancedItems.begin(), instancedItems.end());
+
+                if (EnsureInstanceBufferCapacity(instancedItems.size()))
+                {
+                    m_context->IASetInputLayout(m_shadowSkinnedInstancedInputLayout.Get());
+                    m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                    m_context->VSSetShader(m_shadowSkinnedInstancedVS.Get(), nullptr, 0);
+
+                    std::vector<InstanceData> batchInstances;
+                    batchInstances.reserve(instancedItems.size());
+
+                    ShadowInstancedKey currentKey = instancedItems.front().key;
+                    batchInstances.clear();
+
+                    for (const auto& item : instancedItems)
+                    {
+                        const bool sameKey = !(currentKey < item.key) && !(item.key < currentKey);
+
+                        if (!sameKey || batchInstances.size() >= m_instanceCapacity)
+                        {
+                            if (!batchInstances.empty())
+                            {
+                                // RS 설정 (뒤집힘 여부)
+                                if (currentKey.flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
+                                else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
+
+                                // 인스턴스 버퍼 업데이트
+                                D3D11_MAPPED_SUBRESOURCE mapped{};
+                                if (SUCCEEDED(m_context->Map(m_instanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                                {
+                                    std::memcpy(mapped.pData, batchInstances.data(), sizeof(InstanceData) * batchInstances.size());
+                                    m_context->Unmap(m_instanceBuffer.Get(), 0);
+                                }
+
+                                // 버퍼 바인딩 (Slot0: VB, Slot1: Instance)
+                                UINT strides[2] = { currentKey.stride, sizeof(InstanceData) };
+                                UINT offsets[2] = { 0, 0 };
+                                ID3D11Buffer* bufs[2] = { currentKey.vertexBuffer, m_instanceBuffer.Get() };
+                                m_context->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+                                m_context->IASetIndexBuffer(currentKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                                // CB는 배치 단위로 1회만 갱신
+                                UpdatePerObjectCB(DirectX::XMMatrixIdentity(), lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0, 1.0f);
+
+                                m_context->DrawIndexedInstanced(currentKey.indexCount, (UINT)batchInstances.size(), currentKey.startIndex, currentKey.baseVertex, 0);
+                            }
+
+                            currentKey = item.key;
+                            batchInstances.clear();
+                        }
+
+                        batchInstances.push_back(item.instance);
+                    }
+
+                    // 마지막 배치 플러시
+                    if (!batchInstances.empty())
+                    {
+                        if (currentKey.flipped && m_shadowRasterizerStateReversed) m_context->RSSetState(m_shadowRasterizerStateReversed.Get());
+                        else if (m_shadowRasterizerState) m_context->RSSetState(m_shadowRasterizerState.Get());
+
+                        D3D11_MAPPED_SUBRESOURCE mapped{};
+                        if (SUCCEEDED(m_context->Map(m_instanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                        {
+                            std::memcpy(mapped.pData, batchInstances.data(), sizeof(InstanceData) * batchInstances.size());
+                            m_context->Unmap(m_instanceBuffer.Get(), 0);
+                        }
+
+                        UINT strides[2] = { currentKey.stride, sizeof(InstanceData) };
+                        UINT offsets[2] = { 0, 0 };
+                        ID3D11Buffer* bufs[2] = { currentKey.vertexBuffer, m_instanceBuffer.Get() };
+                        m_context->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+                        m_context->IASetIndexBuffer(currentKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                        UpdatePerObjectCB(DirectX::XMMatrixIdentity(), lightView, lightProj, XMFLOAT4(1, 1, 1, 1), 1.0f, 0.0f, false, false, 0, 1.0f);
+
+                        m_context->DrawIndexedInstanced(currentKey.indexCount, (UINT)batchInstances.size(), currentKey.startIndex, currentKey.baseVertex, 0);
+                    }
+                }
             }
         }
 
@@ -1367,7 +1841,7 @@ namespace Alice
         m_context->RSSetViewports(1, &vp);
 
         // Shadow pass 먼저 렌더링 (lightViewProj 계산 + shadow depth 생성)
-        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, skinnedCommands, cameraEntities, editorMode, isPlaying);
+        const DirectX::XMMATRIX lightViewProj = RenderShadowPass(world, camera, skinnedCommands, cameraEntities, editorMode, isPlaying);
 
         // ShadowPass에서 viewport가 섀도우맵 해상도로 바뀌므로, 씬 뷰포트를 다시 설정
         m_context->RSSetViewports(1, &vp);
@@ -1465,6 +1939,9 @@ namespace Alice
         XMMATRIX view = camera.GetViewMatrix();
         XMMATRIX proj = camera.GetProjectionMatrix();
 
+        // 프러스텀 컬링을 위한 카메라 절두체 계산 (루프 밖에서 미리 계산)
+        BoundingFrustum cameraFrustum = camera.GetWorldFrustum();
+
         // 1. 정적 메시 (큐브) 렌더링
         // ForwardRenderSystem::SimpleVertex와 동일한 구조체 (private이므로 로컬 정의)
         UINT stride = sizeof(SimpleVertex);
@@ -1479,6 +1956,14 @@ namespace Alice
             if (cameraEntities.contains(id)) continue;
             if (world.GetComponent<SkinnedMeshComponent>(id)) continue;
             if (!transform.enabled) continue;
+
+            // [프러스텀 컬링] 카메라 시야 밖 오브젝트는 건너뛰기
+            float maxScale = std::max({ transform.scale.x, transform.scale.y, transform.scale.z });
+            BoundingSphere bounds(transform.position, maxScale * 1.5f); // 1.5f는 안전 계수
+            if (cameraFrustum.Contains(bounds) == DISJOINT)
+            {
+                continue; // 화면에 보이지 않으면 렌더링하지 않음
+            }
 
             XMMATRIX worldM = BuildWorldMatrix(world, id, transform);
             
@@ -1537,6 +2022,21 @@ namespace Alice
         // - (cmd.albedoTexturePath는 에디터에서 오버라이드한 경우에만 사용)
         if (!skinnedCommands.empty() && m_gBufferSkinnedVS && m_gBufferPS)
         {
+            // 인스턴싱 배치 아이템
+            struct InstancedDrawItem
+            {
+                InstancedDrawKey key;
+                InstanceData instance;
+
+                bool operator<(const InstancedDrawItem& rhs) const
+                {
+                    return key < rhs.key;
+                }
+            };
+
+            std::vector<InstancedDrawItem> instancedItems;
+            instancedItems.reserve(skinnedCommands.size());
+
             m_context->VSSetShader(m_gBufferSkinnedVS.Get(), nullptr, 0);
             m_context->IASetInputLayout(m_gBufferSkinnedInputLayout.Get());
 
@@ -1544,16 +2044,107 @@ namespace Alice
             {
                 if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
 
+                // [프러스텀 컬링] 월드 행렬에서 위치 추출
+                XMFLOAT4X4 worldMatrix;
+                XMStoreFloat4x4(&worldMatrix, cmd.world);
+                XMFLOAT3 position(worldMatrix._41, worldMatrix._42, worldMatrix._43);
+                
+                // 스케일 추정: 월드 행렬의 스케일 성분 추출 (간단한 근사)
+                XMVECTOR scaleVec = XMVectorSet(
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._11, worldMatrix._12, worldMatrix._13, 0.0f))),
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._21, worldMatrix._22, worldMatrix._23, 0.0f))),
+                    XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._31, worldMatrix._32, worldMatrix._33, 0.0f))),
+                    0.0f
+                );
+                float maxScale = std::max({ XMVectorGetX(scaleVec), XMVectorGetY(scaleVec), XMVectorGetZ(scaleVec) });
+                BoundingSphere bounds(position, maxScale * 1.5f);
+                if (cameraFrustum.Contains(bounds) == DISJOINT)
+                {
+                    continue; // 화면에 보이지 않으면 렌더링하지 않음
+                }
+
+                const XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
+                const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+
+                std::shared_ptr<SkinnedMeshGPU> mesh =
+                    (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
+
+                const bool canInstance = IsRigidSkinnedCommand(cmd) &&
+                                         (cmd.outlineWidth <= 0.0f) &&
+                                         m_gBufferSkinnedInstancedVS &&
+                                         m_gBufferSkinnedInstancedInputLayout &&
+                                         m_instanceBuffer;
+
+                if (canInstance)
+                {
+                    // 인스턴싱 대상은 "배치 수집"만 하고, 여기서는 그리지 않습니다.
+                    if (mesh && !mesh->subsets.empty())
+                    {
+                        for (const auto& sub : mesh->subsets)
+                        {
+                            if (sub.indexCount == 0) continue;
+
+                            ID3D11ShaderResourceView* diff =
+                                (sub.materialIndex < mesh->materialSRVs.size()) ? mesh->materialSRVs[sub.materialIndex].Get() : nullptr;
+                            ID3D11ShaderResourceView* norm =
+                                (sub.materialIndex < mesh->normalSRVs.size()) ? mesh->normalSRVs[sub.materialIndex].Get() : nullptr;
+
+                            InstancedDrawItem item{};
+                            item.key.vertexBuffer = cmd.vertexBuffer;
+                            item.key.indexBuffer = cmd.indexBuffer;
+                            item.key.stride = cmd.stride;
+                            item.key.startIndex = sub.startIndex;
+                            item.key.indexCount = sub.indexCount;
+                            item.key.baseVertex = cmd.baseVertex;
+                            item.key.diffuseSRV = diff;
+                            item.key.normalSRV = norm;
+                            item.key.color = color;
+                            item.key.roughness = cmd.roughness;
+                            item.key.metalness = cmd.metalness;
+                            item.key.normalStrength = cmd.normalStrength;
+                            item.key.shadingMode = objectShadingMode;
+                            item.key.useTexture = (diff != nullptr) ? 1 : 0;
+                            item.key.enableNormalMap = (norm != nullptr) ? 1 : 0;
+                            item.instance = BuildInstanceData(cmd.world);
+
+                            instancedItems.push_back(item);
+                        }
+                    }
+                    else
+                    {
+                        // 오버라이드 텍스처(또는 단일 텍스처)만 있는 경우
+                        ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
+
+                        InstancedDrawItem item{};
+                        item.key.vertexBuffer = cmd.vertexBuffer;
+                        item.key.indexBuffer = cmd.indexBuffer;
+                        item.key.stride = cmd.stride;
+                        item.key.startIndex = cmd.startIndex;
+                        item.key.indexCount = cmd.indexCount;
+                        item.key.baseVertex = cmd.baseVertex;
+                        item.key.diffuseSRV = diff;
+                        item.key.normalSRV = nullptr;
+                        item.key.color = color;
+                        item.key.roughness = cmd.roughness;
+                        item.key.metalness = cmd.metalness;
+                        item.key.normalStrength = cmd.normalStrength;
+                        item.key.shadingMode = objectShadingMode;
+                        item.key.useTexture = (diff != nullptr) ? 1 : 0;
+                        item.key.enableNormalMap = 0;
+                        item.instance = BuildInstanceData(cmd.world);
+
+                        instancedItems.push_back(item);
+                    }
+
+                    continue;
+                }
+
+                // 일반 스키닝 렌더링
                 UINT sStride = cmd.stride;
                 m_context->IASetVertexBuffers(0, 1, &cmd.vertexBuffer, &sStride, &offset);
                 m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
                 UpdateBonesCB(cmd.bones, cmd.boneCount);
-
-                const XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
-
-				std::shared_ptr<SkinnedMeshGPU> mesh =
-					(m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
 
                 if (mesh && !mesh->subsets.empty())
                 {
@@ -1568,8 +2159,6 @@ namespace Alice
 
                         ID3D11ShaderResourceView* srvs[] = { diff, norm };
                         m_context->PSSetShaderResources(0, 2, srvs);
-
-                        const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
                         
                         // Pass 1. 원본
                         UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
@@ -1595,8 +2184,6 @@ namespace Alice
                     ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
                     ID3D11ShaderResourceView* srvs[] = { diff, nullptr };
                     m_context->PSSetShaderResources(0, 2, srvs);
-
-                    const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
                     
                     // Pass 1. 원본
                     UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
@@ -1613,6 +2200,91 @@ namespace Alice
                                           cmd.normalStrength, cmd.outlineColor, cmd.outlineWidth);
                         m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                         m_context->RSSetState(m_rasterizerState.Get());
+                    }
+                }
+            }
+
+            // 인스턴싱 배치 렌더링 (Opaque이므로 정렬 가능)
+            if (!instancedItems.empty() && m_gBufferSkinnedInstancedVS && m_gBufferSkinnedInstancedInputLayout)
+            {
+                std::sort(instancedItems.begin(), instancedItems.end());
+
+                if (EnsureInstanceBufferCapacity(instancedItems.size()))
+                {
+                    m_context->VSSetShader(m_gBufferSkinnedInstancedVS.Get(), nullptr, 0);
+                    m_context->IASetInputLayout(m_gBufferSkinnedInstancedInputLayout.Get());
+
+                    std::vector<InstanceData> batchInstances;
+                    batchInstances.reserve(instancedItems.size());
+
+                    InstancedDrawKey currentKey = instancedItems.front().key;
+                    batchInstances.clear();
+
+                    for (const auto& item : instancedItems)
+                    {
+                        if (!IsSameInstancedKey(currentKey, item.key) || batchInstances.size() >= m_instanceCapacity)
+                        {
+                            if (!batchInstances.empty())
+                            {
+                                D3D11_MAPPED_SUBRESOURCE mapped{};
+                                if (SUCCEEDED(m_context->Map(m_instanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                                {
+                                    std::memcpy(mapped.pData, batchInstances.data(), sizeof(InstanceData) * batchInstances.size());
+                                    m_context->Unmap(m_instanceBuffer.Get(), 0);
+                                }
+
+                                UINT strides[2] = { currentKey.stride, sizeof(InstanceData) };
+                                UINT offsets[2] = { 0, 0 };
+                                ID3D11Buffer* bufs[2] = { currentKey.vertexBuffer, m_instanceBuffer.Get() };
+                                m_context->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+                                m_context->IASetIndexBuffer(currentKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                                ID3D11ShaderResourceView* srvs[] = { currentKey.diffuseSRV, currentKey.normalSRV };
+                                m_context->PSSetShaderResources(0, 2, srvs);
+
+                                UpdatePerObjectCB(DirectX::XMMatrixIdentity(), view, proj, currentKey.color,
+                                                  currentKey.roughness, currentKey.metalness,
+                                                  (currentKey.useTexture != 0), (currentKey.enableNormalMap != 0),
+                                                  currentKey.shadingMode, currentKey.normalStrength,
+                                                  DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+
+                                m_context->DrawIndexedInstanced(currentKey.indexCount, (UINT)batchInstances.size(),
+                                                                currentKey.startIndex, currentKey.baseVertex, 0);
+                            }
+
+                            currentKey = item.key;
+                            batchInstances.clear();
+                        }
+
+                        batchInstances.push_back(item.instance);
+                    }
+
+                    if (!batchInstances.empty())
+                    {
+                        D3D11_MAPPED_SUBRESOURCE mapped{};
+                        if (SUCCEEDED(m_context->Map(m_instanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                        {
+                            std::memcpy(mapped.pData, batchInstances.data(), sizeof(InstanceData) * batchInstances.size());
+                            m_context->Unmap(m_instanceBuffer.Get(), 0);
+                        }
+
+                        UINT strides[2] = { currentKey.stride, sizeof(InstanceData) };
+                        UINT offsets[2] = { 0, 0 };
+                        ID3D11Buffer* bufs[2] = { currentKey.vertexBuffer, m_instanceBuffer.Get() };
+                        m_context->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+                        m_context->IASetIndexBuffer(currentKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                        ID3D11ShaderResourceView* srvs[] = { currentKey.diffuseSRV, currentKey.normalSRV };
+                        m_context->PSSetShaderResources(0, 2, srvs);
+
+                        UpdatePerObjectCB(DirectX::XMMatrixIdentity(), view, proj, currentKey.color,
+                                          currentKey.roughness, currentKey.metalness,
+                                          (currentKey.useTexture != 0), (currentKey.enableNormalMap != 0),
+                                          currentKey.shadingMode, currentKey.normalStrength,
+                                          DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+
+                        m_context->DrawIndexedInstanced(currentKey.indexCount, (UINT)batchInstances.size(),
+                                                        currentKey.startIndex, currentKey.baseVertex, 0);
                     }
                 }
             }
@@ -1841,6 +2513,9 @@ namespace Alice
         ID3D11Buffer* tlCB = m_cbTransparentLight.Get();
         m_context->PSSetConstantBuffers(1, 1, &tlCB);
 
+        // 프러스텀 컬링을 위한 카메라 절두체 계산 (루프 밖에서 미리 계산)
+        BoundingFrustum cameraFrustum = camera.GetWorldFrustum();
+
         // IBL 리소스 바인딩 (t5~t7)
         ID3D11ShaderResourceView* iblDiffuse = m_iblDiffuseSRV.Get();
         ID3D11ShaderResourceView* iblSpec = m_iblSpecularSRV.Get();
@@ -1852,28 +2527,194 @@ namespace Alice
         DirectX::XMMATRIX view = camera.GetViewMatrix();
         DirectX::XMMATRIX proj = camera.GetProjectionMatrix();
 
+        // 투명 패스는 순서가 중요하므로, "연속 구간"만 인스턴싱 처리합니다.
+        InstancedDrawKey batchKey{};
+        std::vector<InstanceData> batchInstances;
+        bool hasBatch = false;
+
         for (const auto& cmd : skinnedCommands)
         {
             if (!cmd.vertexBuffer || !cmd.indexBuffer || cmd.indexCount == 0) continue;
 
+            // [프러스텀 컬링] 월드 행렬에서 위치 추출
+            XMFLOAT4X4 worldMatrix;
+            XMStoreFloat4x4(&worldMatrix, cmd.world);
+            XMFLOAT3 position(worldMatrix._41, worldMatrix._42, worldMatrix._43);
+            
+            // 스케일 추정: 월드 행렬의 스케일 성분 추출 (간단한 근사)
+            XMVECTOR scaleVec = XMVectorSet(
+                XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._11, worldMatrix._12, worldMatrix._13, 0.0f))),
+                XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._21, worldMatrix._22, worldMatrix._23, 0.0f))),
+                XMVectorGetX(XMVector3Length(XMVectorSet(worldMatrix._31, worldMatrix._32, worldMatrix._33, 0.0f))),
+                0.0f
+            );
+            float maxScale = std::max({ XMVectorGetX(scaleVec), XMVectorGetY(scaleVec), XMVectorGetZ(scaleVec) });
+            BoundingSphere bounds(position, maxScale * 1.5f);
+            if (cameraFrustum.Contains(bounds) == DISJOINT)
+            {
+                continue; // 화면에 보이지 않으면 렌더링하지 않음
+            }
+
+            const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
+            const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
+            const float outlineWidth = cmd.outlineWidth;
+
+            // FBX 서브셋 머티리얼이 있으면 그걸 우선 사용 (Forward와 동일)
+            std::shared_ptr<SkinnedMeshGPU> mesh =
+                (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
+
+            // 인스턴싱 조건: 본 1개(Identity) + 아웃라인 없음 + 단일 서브셋
+            const bool canInstance = IsRigidSkinnedCommand(cmd) &&
+                                     (outlineWidth <= 0.0f) &&
+                                     (!mesh || mesh->subsets.size() <= 1) &&
+                                     m_transparentSkinnedInstancedVS &&
+                                     m_transparentSkinnedInstancedInputLayout &&
+                                     m_instanceBuffer;
+
+            if (canInstance)
+            {
+                ID3D11ShaderResourceView* diff = nullptr;
+                ID3D11ShaderResourceView* norm = nullptr;
+                UINT startIndex = cmd.startIndex;
+                UINT indexCount = cmd.indexCount;
+
+                if (mesh && !mesh->subsets.empty())
+                {
+                    const auto& sub = mesh->subsets.front();
+                    if (sub.indexCount == 0)
+                    {
+                        continue;
+                    }
+                    startIndex = sub.startIndex;
+                    indexCount = sub.indexCount;
+                    diff = (sub.materialIndex < mesh->materialSRVs.size()) ? mesh->materialSRVs[sub.materialIndex].Get() : nullptr;
+                    norm = (sub.materialIndex < mesh->normalSRVs.size()) ? mesh->normalSRVs[sub.materialIndex].Get() : nullptr;
+                }
+                else
+                {
+                    diff = GetOrCreateTexture(cmd.albedoTexturePath);
+                }
+
+                InstancedDrawKey key{};
+                key.vertexBuffer = cmd.vertexBuffer;
+                key.indexBuffer = cmd.indexBuffer;
+                key.stride = cmd.stride;
+                key.startIndex = startIndex;
+                key.indexCount = indexCount;
+                key.baseVertex = cmd.baseVertex;
+                key.diffuseSRV = diff;
+                key.normalSRV = norm;
+                key.color = color;
+                key.roughness = cmd.roughness;
+                key.metalness = cmd.metalness;
+                key.normalStrength = cmd.normalStrength;
+                key.shadingMode = objectShadingMode;
+                key.useTexture = (diff != nullptr) ? 1 : 0;
+                key.enableNormalMap = (norm != nullptr) ? 1 : 0;
+
+                // 배치 키가 바뀌면 이전 배치 플러시
+                if (hasBatch && (!IsSameInstancedKey(batchKey, key) || batchInstances.size() >= m_instanceCapacity))
+                {
+                    if (EnsureInstanceBufferCapacity(batchInstances.size()))
+                    {
+                        m_context->VSSetShader(m_transparentSkinnedInstancedVS.Get(), nullptr, 0);
+                        m_context->IASetInputLayout(m_transparentSkinnedInstancedInputLayout.Get());
+
+                        D3D11_MAPPED_SUBRESOURCE mapped{};
+                        if (SUCCEEDED(m_context->Map(m_instanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                        {
+                            std::memcpy(mapped.pData, batchInstances.data(), sizeof(InstanceData) * batchInstances.size());
+                            m_context->Unmap(m_instanceBuffer.Get(), 0);
+                        }
+
+                        UINT strides[2] = { batchKey.stride, sizeof(InstanceData) };
+                        UINT offsets[2] = { 0, 0 };
+                        ID3D11Buffer* bufs[2] = { batchKey.vertexBuffer, m_instanceBuffer.Get() };
+                        m_context->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+                        m_context->IASetIndexBuffer(batchKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                        ID3D11ShaderResourceView* srvs01[2] = { batchKey.diffuseSRV, batchKey.normalSRV };
+                        m_context->PSSetShaderResources(0, 2, srvs01);
+
+                        UpdatePerObjectCB(DirectX::XMMatrixIdentity(), view, proj, batchKey.color,
+                                          batchKey.roughness, batchKey.metalness,
+                                          (batchKey.useTexture != 0), (batchKey.enableNormalMap != 0),
+                                          batchKey.shadingMode, batchKey.normalStrength,
+                                          DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+
+                        m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
+                                                        batchKey.startIndex, batchKey.baseVertex, 0);
+                    }
+
+                    batchInstances.clear();
+                    hasBatch = false;
+
+                    // 일반 스키닝 렌더링을 위해 파이프라인 복구
+                    m_context->VSSetShader(m_transparentSkinnedVS.Get(), nullptr, 0);
+                    m_context->IASetInputLayout(m_transparentSkinnedInputLayout.Get());
+                }
+
+                if (!hasBatch)
+                {
+                    batchKey = key;
+                    hasBatch = true;
+                }
+
+                batchInstances.push_back(BuildInstanceData(cmd.world));
+                continue;
+            }
+
+            // 인스턴싱 배치가 있다면 먼저 플러시
+            if (hasBatch && !batchInstances.empty())
+            {
+                if (EnsureInstanceBufferCapacity(batchInstances.size()))
+                {
+                    m_context->VSSetShader(m_transparentSkinnedInstancedVS.Get(), nullptr, 0);
+                    m_context->IASetInputLayout(m_transparentSkinnedInstancedInputLayout.Get());
+
+                    D3D11_MAPPED_SUBRESOURCE mapped{};
+                    if (SUCCEEDED(m_context->Map(m_instanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                    {
+                        std::memcpy(mapped.pData, batchInstances.data(), sizeof(InstanceData) * batchInstances.size());
+                        m_context->Unmap(m_instanceBuffer.Get(), 0);
+                    }
+
+                    UINT strides[2] = { batchKey.stride, sizeof(InstanceData) };
+                    UINT offsets[2] = { 0, 0 };
+                    ID3D11Buffer* bufs[2] = { batchKey.vertexBuffer, m_instanceBuffer.Get() };
+                    m_context->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+                    m_context->IASetIndexBuffer(batchKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                    ID3D11ShaderResourceView* srvs01[2] = { batchKey.diffuseSRV, batchKey.normalSRV };
+                    m_context->PSSetShaderResources(0, 2, srvs01);
+
+                    UpdatePerObjectCB(DirectX::XMMatrixIdentity(), view, proj, batchKey.color,
+                                      batchKey.roughness, batchKey.metalness,
+                                      (batchKey.useTexture != 0), (batchKey.enableNormalMap != 0),
+                                      batchKey.shadingMode, batchKey.normalStrength,
+                                      DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+
+                    m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
+                                                    batchKey.startIndex, batchKey.baseVertex, 0);
+                }
+
+                batchInstances.clear();
+                hasBatch = false;
+
+                m_context->VSSetShader(m_transparentSkinnedVS.Get(), nullptr, 0);
+                m_context->IASetInputLayout(m_transparentSkinnedInputLayout.Get());
+            }
+
+            // 일반 스키닝 렌더링
             UINT stride = cmd.stride;
             UINT offset = 0;
             ID3D11Buffer* vb = cmd.vertexBuffer;
             m_context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
             m_context->IASetIndexBuffer(cmd.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
-            // Bones
             UpdateBonesCB(cmd.bones, cmd.boneCount);
 
-            // PerObject CB
-            const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
-            const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
             XMFLOAT3 outlineColor = cmd.outlineColor;
-            float outlineWidth = cmd.outlineWidth;
-
-            // FBX 서브셋 머티리얼이 있으면 그걸 우선 사용 (Forward와 동일)
-            std::shared_ptr<SkinnedMeshGPU> mesh =
-                (m_skinnedRegistry && !cmd.meshKey.empty()) ? m_skinnedRegistry->Find(cmd.meshKey) : nullptr;
 
             if (mesh && !mesh->subsets.empty())
             {
@@ -1886,22 +2727,20 @@ namespace Alice
                     ID3D11ShaderResourceView* norm =
                         (sub.materialIndex < mesh->normalSRVs.size()) ? mesh->normalSRVs[sub.materialIndex].Get() : nullptr;
 
-                    // t0: diffuse, t1: normal
                     ID3D11ShaderResourceView* srvs01[2] = { diff, norm };
                     m_context->PSSetShaderResources(0, 2, srvs01);
 
-                    // enableNormalMap은 "노말 SRV가 존재할 때만" 켜는게 안정적입니다.
-                    const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
-                    
                     // Pass 1. 원본
-                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr), objectShadingMode, cmd.normalStrength, outlineColor, 0.0f);
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                      (diff != nullptr), (norm != nullptr), objectShadingMode, cmd.normalStrength, outlineColor, 0.0f);
                     m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
                     
                     // Pass 2. 아웃라인
                     if (outlineWidth > 0.0f)
                     {
                         m_context->RSSetState(m_rsCullFront.Get());
-                        UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), (norm != nullptr), objectShadingMode, cmd.normalStrength, outlineColor, outlineWidth);
+                        UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                          (diff != nullptr), (norm != nullptr), objectShadingMode, cmd.normalStrength, outlineColor, outlineWidth);
                         m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
                         m_context->RSSetState(m_rasterizerState.Get());
                     }
@@ -1909,25 +2748,66 @@ namespace Alice
             }
             else
             {
-                // 머티리얼 오버라이드(에디터) 경로가 있으면 그걸 사용
                 ID3D11ShaderResourceView* diff = GetOrCreateTexture(cmd.albedoTexturePath);
                 ID3D11ShaderResourceView* srvs01[2] = { diff, nullptr };
                 m_context->PSSetShaderResources(0, 2, srvs01);
-                const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
                 
                 // [Pass 1] 원본
-                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false, objectShadingMode, cmd.normalStrength, outlineColor, 0.0f);
+                UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                  (diff != nullptr), false, objectShadingMode, cmd.normalStrength, outlineColor, 0.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 
                 // [Pass 2] 아웃라인
                 if (outlineWidth > 0.0f)
                 {
                     m_context->RSSetState(m_rsCullFront.Get());
-                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness, (diff != nullptr), false, objectShadingMode, cmd.normalStrength, outlineColor, outlineWidth);
+                    UpdatePerObjectCB(cmd.world, view, proj, color, cmd.roughness, cmd.metalness,
+                                      (diff != nullptr), false, objectShadingMode, cmd.normalStrength, outlineColor, outlineWidth);
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                     m_context->RSSetState(m_rasterizerState.Get());
                 }
             }
+        }
+
+        // 마지막 배치 플러시
+        if (hasBatch && !batchInstances.empty())
+        {
+            if (EnsureInstanceBufferCapacity(batchInstances.size()))
+            {
+                m_context->VSSetShader(m_transparentSkinnedInstancedVS.Get(), nullptr, 0);
+                m_context->IASetInputLayout(m_transparentSkinnedInstancedInputLayout.Get());
+
+                D3D11_MAPPED_SUBRESOURCE mapped{};
+                if (SUCCEEDED(m_context->Map(m_instanceBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                {
+                    std::memcpy(mapped.pData, batchInstances.data(), sizeof(InstanceData) * batchInstances.size());
+                    m_context->Unmap(m_instanceBuffer.Get(), 0);
+                }
+
+                UINT strides[2] = { batchKey.stride, sizeof(InstanceData) };
+                UINT offsets[2] = { 0, 0 };
+                ID3D11Buffer* bufs[2] = { batchKey.vertexBuffer, m_instanceBuffer.Get() };
+                m_context->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+                m_context->IASetIndexBuffer(batchKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                ID3D11ShaderResourceView* srvs01[2] = { batchKey.diffuseSRV, batchKey.normalSRV };
+                m_context->PSSetShaderResources(0, 2, srvs01);
+
+                UpdatePerObjectCB(DirectX::XMMatrixIdentity(), view, proj, batchKey.color,
+                                  batchKey.roughness, batchKey.metalness,
+                                  (batchKey.useTexture != 0), (batchKey.enableNormalMap != 0),
+                                  batchKey.shadingMode, batchKey.normalStrength,
+                                  DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+
+                m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
+                                                batchKey.startIndex, batchKey.baseVertex, 0);
+            }
+
+            batchInstances.clear();
+            hasBatch = false;
+
+            m_context->VSSetShader(m_transparentSkinnedVS.Get(), nullptr, 0);
+            m_context->IASetInputLayout(m_transparentSkinnedInputLayout.Get());
         }
 
         // SRV 정리 (D3D11 hazard 방지)

@@ -73,6 +73,8 @@ namespace Alice
         bool CreateSamplerState();
 		bool CreateBlendStates();
         bool CreateRasterizerStates();
+        bool CreateInstanceBuffer(std::uint32_t initialCapacity);
+        bool EnsureInstanceBufferCapacity(std::size_t requiredCount);
 
         bool CreateSkyboxResources();
         bool CreateIblResources(const std::string& iblDir = "Bridge",  const std::string& iblName = "bridge");
@@ -224,8 +226,14 @@ namespace Alice
 
         // ==== 스키닝 전용 리소스 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_skinnedVertexShader;
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_skinnedInstancedVertexShader;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>       m_inputLayoutSkinned;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>       m_inputLayoutSkinnedInstanced;
         Microsoft::WRL::ComPtr<ID3D11Buffer>            m_cbBones;
+
+        // ==== GPU 인스턴싱 버퍼 ====
+        Microsoft::WRL::ComPtr<ID3D11Buffer>            m_instanceBuffer;
+        std::uint32_t                                   m_instanceCapacity = 0;
 
         // ==== 톤매핑 리소스 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_quadVS;
