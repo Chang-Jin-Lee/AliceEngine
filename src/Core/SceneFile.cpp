@@ -21,6 +21,8 @@
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
 #include "Components/ComputeEffectComponent.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
 #include "Components/SocketComponent.h"
@@ -412,9 +414,9 @@ namespace Alice
             if (const auto* audio = world.GetComponent<AudioSourceComponent>(id); audio)
             {
                 AudioSourceComponent copy = *audio;
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
                 rttr::instance inst = copy;
                 outEntity["AudioSource"] = JsonRttr::ToJsonObject(inst);
-                copy.soundPath = NormalizePathToRelative(copy.soundPath);
             }
 
             if (const auto* listener = world.GetComponent<AudioListenerComponent>(id); listener)
@@ -426,9 +428,9 @@ namespace Alice
 
             {
                 SoundBoxComponent copy = *sb;
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
                 rttr::instance inst = copy;
                 outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
-                copy.soundPath = NormalizePathToRelative(copy.soundPath);
             }
 
             if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(id); socketAttach)
@@ -533,6 +535,18 @@ namespace Alice
             {
                 rttr::instance inst = const_cast<ComputeEffectComponent&>(*computeEffect);
                 outEntity["ComputeEffect"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* effect = world.GetComponent<EffectComponent>(id); effect)
+            {
+                rttr::instance inst = const_cast<EffectComponent&>(*effect);
+                outEntity["Effect"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* trail = world.GetComponent<TrailEffectComponent>(id); trail)
+            {
+                rttr::instance inst = const_cast<TrailEffectComponent&>(*trail);
+                outEntity["TrailEffect"] = JsonRttr::ToJsonObject(inst);
             }
 
             // PhysX Components
@@ -827,6 +841,24 @@ namespace Alice
                 ComputeEffectComponent& ce = world.AddComponent<ComputeEffectComponent>(id);
                 rttr::instance inst = ce;
                 if (!JsonRttr::FromJsonObject(inst, *itCE)) return false;
+            }
+
+            // Effect 선택
+            auto itEffect = e.find("Effect");
+            if (itEffect != e.end() && itEffect->is_object())
+            {
+                EffectComponent& ec = world.AddComponent<EffectComponent>(id);
+                rttr::instance inst = ec;
+                if (!JsonRttr::FromJsonObject(inst, *itEffect)) return false;
+            }
+
+            // TrailEffect 선택
+            auto itTrail = e.find("TrailEffect");
+            if (itTrail != e.end() && itTrail->is_object())
+            {
+                TrailEffectComponent& te = world.AddComponent<TrailEffectComponent>(id);
+                rttr::instance inst = te;
+                if (!JsonRttr::FromJsonObject(inst, *itTrail)) return false;
             }
 
             // PhysX Components
