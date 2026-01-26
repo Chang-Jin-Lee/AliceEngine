@@ -7,6 +7,26 @@
 
 namespace Alice
 {
+    // Color Grading 파라미터 범위 상수
+    namespace ColorGradingLimits
+    {
+        constexpr float SaturationMin = 0.0f;      // 최소 채도 (흑백)
+        constexpr float SaturationMax = 3.0f;      // 최대 채도 (과포화)
+        constexpr float SaturationDefault = 1.0f;   // 기본 채도 (원본)
+        
+        constexpr float ContrastMin = 0.0f;        // 최소 대비 (회색)
+        constexpr float ContrastMax = 2.0f;        // 최대 대비 (고대비)
+        constexpr float ContrastDefault = 1.0f;     // 기본 대비 (원본)
+        
+        constexpr float GammaMin = 0.1f;           // 최소 감마 (0 방지)
+        constexpr float GammaMax = 3.0f;           // 최대 감마
+        constexpr float GammaDefault = 1.0f;        // 기본 감마 (원본)
+        
+        constexpr float GainMin = 0.0f;             // 최소 Gain (0 = 검정)
+        constexpr float GainMax = 4.0f;             // 최대 Gain (과도한 밝기)
+        constexpr float GainDefault = 1.0f;         // 기본 Gain (원본, 변화 없음)
+    }
+
     /// GPU 인스턴싱용 월드 행렬 데이터 (행 3개만 사용)
     /// - HLSL에서 마지막 행을 (0,0,0,1)로 복원합니다.
     struct InstanceData
@@ -23,10 +43,36 @@ namespace Alice
         float exposure = 0.0f;        // Exposure 값 (기본값: 0 = 1.0배)
         float maxHDRNits = 1000.0f;   // HDR 모니터 최대 밝기 (nits)
         
-        // Color Grading 파라미터 (Unreal Engine 스타일)
-        float saturation = 1.0f;      // 채도 (0.0 = 흑백, 1.0 = 원본, 2.0 = 과포화)
-        float contrast = 1.0f;        // 대비 (0.0 = 회색, 1.0 = 원본, 2.0 = 고대비)
-        float gamma = 1.0f;           // 감마 보정 (0.1~3.0, 1.0 = 원본, <1 = 밝게, >1 = 어둡게)
+        // Color Grading 파라미터 (Unreal Engine 스타일 - RGB 채널별 제어)
+        // 기본값 (1,1,1,1) = 변화 없음
+        DirectX::XMFLOAT4 colorGradingSaturation = { 
+            ColorGradingLimits::SaturationDefault, 
+            ColorGradingLimits::SaturationDefault, 
+            ColorGradingLimits::SaturationDefault, 
+            1.0f 
+        };  // 채도 (R,G,B 채널별, 0.0 = 흑백, 1.0 = 원본, 2.0 = 과포화, W=1.0)
+        
+        DirectX::XMFLOAT4 colorGradingContrast = { 
+            ColorGradingLimits::ContrastDefault, 
+            ColorGradingLimits::ContrastDefault, 
+            ColorGradingLimits::ContrastDefault, 
+            1.0f 
+        };  // 대비 (R,G,B 채널별, Pivot=0.5 기반, 0.0 = 저대비, 1.0 = 원본, 2.0 = 고대비, W=1.0)
+        
+        DirectX::XMFLOAT4 colorGradingGamma = { 
+            ColorGradingLimits::GammaDefault, 
+            ColorGradingLimits::GammaDefault, 
+            ColorGradingLimits::GammaDefault, 
+            1.0f 
+        };  // 감마 보정 (R,G,B 채널별, 0.1~3.0, 1.0 = 원본, <1 = 밝게, >1 = 어둡게, W=1.0)
+        
+        DirectX::XMFLOAT4 colorGradingGain = { 
+            ColorGradingLimits::GainDefault, 
+            ColorGradingLimits::GainDefault, 
+            ColorGradingLimits::GainDefault, 
+            1.0f 
+        };  // Gain: Multiply 스케일 (R,G,B 채널별, 0.0 = 검정, 1.0 = 원본, >1.0 = 밝게, W=1.0)
+            // 주의: 이것은 "출력 감마 보정"이 아니라 Color Grading 단계에서 색상을 곱하는 룩 조절 파라미터입니다.
     };
 
     /// Bloom 파라미터 구조체
@@ -160,11 +206,12 @@ namespace Alice
 	{
 		float exposure;
 		float maxHDRNits;
-		float saturation;      // Color Grading: 채도
-		float contrast;         // Color Grading: 대비
+		DirectX::XMFLOAT2 padding0;  // HLSL cbuffer 16-byte alignment (float2로 패딩)
 
-		float gamma;            // Color Grading: 감마
-		DirectX::XMFLOAT3 padding;          // 16-byte alignment
+		DirectX::XMFLOAT4 colorGradingSaturation;  // Color Grading: 채도 (R,G,B 채널별, W=1.0)
+		DirectX::XMFLOAT4 colorGradingContrast;    // Color Grading Contrast: 룩 조절 (R,G,B 채널별, Pivot=0.5 기반, W=1.0)
+		DirectX::XMFLOAT4 colorGradingGamma;       // Color Grading Gamma: 룩/중간톤 조절 (R,G,B 채널별, W=1.0)
+		DirectX::XMFLOAT4 colorGradingGain;       // Color Grading Gain: Multiply 스케일 (R,G,B 채널별, W=1.0)
 	};
 
 	struct BloomCB

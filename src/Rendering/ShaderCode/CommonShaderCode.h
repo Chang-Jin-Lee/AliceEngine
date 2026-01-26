@@ -83,9 +83,15 @@ cbuffer PostProcessConstantBuffer : register(b2)
 {
     float g_Exposure;
     float g_MaxHDRNits;
-    float g_Saturation;      // Color Grading: 채도 (0.0 = 흑백, 1.0 = 원본, 2.0 = 과포화)
-    float g_Contrast;         // Color Grading: 대비 (0.0 = 회색, 1.0 = 원본, 2.0 = 고대비)
-    float g_Gamma;            // Color Grading: 감마 (0.1~3.0, 1.0 = 원본)
+    float2 padding;
+
+    float4 g_ColorGradingSaturation;  // Color Grading: 채도 (R,G,B 채널별, 0.0 = 흑백, 1.0 = 원본, 2.0 = 과포화, W=1.0)
+    float4 g_ColorGradingContrast;   // Color Grading Contrast: 룩 조절 (R,G,B 채널별, 0.0 = 저대비, 1.0 = 원본, 2.0 = 고대비, W=1.0)
+                                      // Pivot 기반 대비 적용 (Pivot = 0.5). 출력 감마 보정과 분리된 룩 조절 파라미터입니다.
+    float4 g_ColorGradingGamma;      // Color Grading Gamma: 룩/중간톤 조절 (R,G,B 채널별, 0.1~3.0, 1.0 = 원본, W=1.0)
+                                      // 주의: 이것은 "출력 감마 보정"이 아니라 luminance에 영향을 주는 color grading 파라미터입니다.
+    float4 g_ColorGradingGain;      // Color Grading Gain: Multiply 스케일 (R,G,B 채널별, 0.0 = 검정, 1.0 = 원본, >1.0 = 밝게, W=1.0)
+                                      // 주의: 이것은 "출력 감마 보정"이 아니라 Color Grading 단계에서 색상을 곱하는 룩 조절 파라미터입니다.
 };
 
 struct PS_INPUT_QUAD
@@ -105,32 +111,52 @@ float3 ACESFilm(float3 x)
     return saturate(x * (a * x + b) / (x * (c * x + d) + e));
 }
 
-// Linear to sRGB (Gamma Correction)
+// Linear to sRGB (Output Gamma Correction - 디스플레이 변환)
+// 주의: 이것은 고정된 출력 감마 보정이며, Color Grading과 분리되어 있습니다.
 float3 LinearToSRGB(float3 linearColor)
 {
     return pow(max(linearColor, 0.0f), 1.0f / 2.2f);
 }
 
-// Color Grading 함수들
-float3 ApplySaturation(float3 color, float saturation)
+// Color Grading 함수들 (룩 조절용)
+float3 ApplySaturation(float3 color, float3 saturation)
 {
     // Luminance 계산 (Rec.709 가중치)
-    float luminance = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    float3 luminance = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
     // Saturation 적용: 0.0 = 흑백, 1.0 = 원본, >1.0 = 과포화
-    return lerp(float3(luminance, luminance, luminance), color, saturation);
+    return lerp(float3(luminance.x, luminance.y, luminance.z), color, saturation);
 }
 
-float3 ApplyContrast(float3 color, float contrast)
+// Color Grading Contrast: 룩 조절 (출력 감마 보정이 아님)
+// Pivot 기반 대비 적용 (Unreal Engine 스타일)
+// 1.0 = 원본, <1.0 = 저대비, >1.0 = 고대비
+float3 ApplyContrast(float3 color, float3 contrastColor)
 {
-    // Contrast 적용: 0.0 = 회색(0.5), 1.0 = 원본, >1.0 = 고대비
-    return saturate((color - 0.5f) * contrast + 0.5f);
+    // Pivot (중간 기준점): 0.5 (Unreal Engine 기본값)
+    float3 pivot = float3(0.5f, 0.5f, 0.5f);
+    
+    // 채널별 대비 적용: (color - pivot) * contrast + pivot
+    float3 result = (color - pivot) * contrastColor + pivot;
+    
+    // Tone Mapping 이후 단계이므로 [0,1] 범위로 클램프
+    return saturate(result);
 }
 
-float3 ApplyGamma(float3 color, float gamma)
+// Color Grading Gamma: 룩/중간톤 조절 (출력 감마 보정이 아님)
+// luminance에 영향을 주는 color grading 파라미터로 사용됩니다.
+// 1.0 = 원본, <1.0 = 중간톤 밝게 (lift), >1.0 = 중간톤 어둡게 (lower)
+float3 ApplyColorGradingGamma(float3 color, float3 gammaColor)
 {
-    // Gamma 보정: 1.0 = 원본, <1.0 = 밝게, >1.0 = 어둡게
-    return pow(max(color, 0.0f), 1.0f / max(gamma, 0.1f));
+    // 각 채널별로 gamma curve 적용 (luminance에 영향을 주는 룩 조절)
+    // pow(color, 1/gamma) 형태로 중간톤 휘도 커브를 조절
+    float3 invGamma = float3(1.0f / max(gammaColor.x, 0.1f), 1.0f / max(gammaColor.y, 0.1f), 1.0f / max(gammaColor.z, 0.1f));
+    return pow(max(color, 0.0f), invGamma);
 }
+
+  float3 ApplyColorGradingGain(float3 color, float3 gainColor)
+  {
+      return color * gainColor;
+  }
 
 float4 main(PS_INPUT_QUAD input) : SV_Target
 {
@@ -143,12 +169,17 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     // 2. Tone Mapping
     float3 C_tonemapped = ACESFilm(C_linear709);
     
-    // 3. Color Grading (Tone Mapping 이후 적용)
-    C_tonemapped = ApplySaturation(C_tonemapped, g_Saturation);
-    C_tonemapped = ApplyContrast(C_tonemapped, g_Contrast);
-    C_tonemapped = ApplyGamma(C_tonemapped, g_Gamma);
+    // 3. Color Grading (Tone Mapping 이후 적용, RGB 채널별 제어)
+    //    주의: 이것은 "룩 조절"이며, 최종 출력 감마 보정과 분리되어 있습니다.
+    //    적용 순서: Saturation → Contrast → Gamma → Gain (multiply 스케일)
+    C_tonemapped = ApplySaturation(C_tonemapped, g_ColorGradingSaturation.rgb);
+    C_tonemapped = ApplyContrast(C_tonemapped, g_ColorGradingContrast.rgb);
+    C_tonemapped = ApplyColorGradingGamma(C_tonemapped, g_ColorGradingGamma.rgb);
+    C_tonemapped = ApplyColorGradingGain(C_tonemapped, g_ColorGradingGain.rgb);
     
-    // 4. sRGB 변환 (Gamma Correction)
+    // 4. Output Gamma Correction (디스플레이 변환 - 고정된 경로)
+    //    sRGB 변환: Linear → sRGB (고정된 1/2.2 gamma)
+    //    주의: 이것은 Color Grading과 분리된 최종 출력 변환입니다.
     float3 C_final = LinearToSRGB(C_tonemapped);
     return float4(C_final, 1.0f);
 }
@@ -163,9 +194,15 @@ cbuffer PostProcessConstantBuffer : register(b2)
 {
     float g_Exposure;
     float g_MaxHDRNits;
-    float g_Saturation;      // Color Grading: 채도 (0.0 = 흑백, 1.0 = 원본, 2.0 = 과포화)
-    float g_Contrast;         // Color Grading: 대비 (0.0 = 회색, 1.0 = 원본, 2.0 = 고대비)
-    float g_Gamma;            // Color Grading: 감마 (0.1~3.0, 1.0 = 원본)
+    float2 padding;
+
+    float4 g_ColorGradingSaturation;  // Color Grading: 채도 (R,G,B 채널별, 0.0 = 흑백, 1.0 = 원본, 2.0 = 과포화, W=1.0)
+    float4 g_ColorGradingContrast;   // Color Grading Contrast: 룩 조절 (R,G,B 채널별, 0.0 = 저대비, 1.0 = 원본, 2.0 = 고대비, W=1.0)
+                                      // Pivot 기반 대비 적용 (Pivot = 0.5). 출력 감마 보정과 분리된 룩 조절 파라미터입니다.
+    float4 g_ColorGradingGamma;      // Color Grading Gamma: 룩/중간톤 조절 (R,G,B 채널별, 0.1~3.0, 1.0 = 원본, W=1.0)
+                                      // 주의: 이것은 "출력 감마 보정"이 아니라 luminance에 영향을 주는 color grading 파라미터입니다.
+    float4 g_ColorGradingGain;      // Color Grading Gain: Multiply 스케일 (R,G,B 채널별, 0.0 = 검정, 1.0 = 원본, >1.0 = 밝게, W=1.0)
+                                      // 주의: 이것은 "출력 감마 보정"이 아니라 Color Grading 단계에서 색상을 곱하는 룩 조절 파라미터입니다.
 };
 
 struct PS_INPUT_QUAD
@@ -185,25 +222,48 @@ float3 ACESFilm(float3 x)
     return saturate(x * (a * x + b) / (x * (c * x + d) + e));
 }
 
-// Color Grading 함수들
-float3 ApplySaturation(float3 color, float saturation)
+// Color Grading 함수들 (RGB 채널별 제어 - 룩 조절용)
+float3 ApplySaturation(float3 color, float3 saturation)
 {
     // Luminance 계산 (Rec.709 가중치)
-    float luminance = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
-    // Saturation 적용: 0.0 = 흑백, 1.0 = 원본, >1.0 = 과포화
+    float3 luminance = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    // Saturation 적용: 각 채널별로 적용 (0.0 = 흑백, 1.0 = 원본, >1.0 = 과포화)
     return lerp(float3(luminance, luminance, luminance), color, saturation);
 }
 
-float3 ApplyContrast(float3 color, float contrast)
+// Color Grading Contrast: 룩 조절 (출력 감마 보정이 아님)
+// Pivot 기반 대비 적용 (Unreal Engine 스타일)
+// 1.0 = 원본, <1.0 = 저대비, >1.0 = 고대비
+float3 ApplyContrast(float3 color, float3 contrastColor)
 {
-    // Contrast 적용: 0.0 = 회색(0.5), 1.0 = 원본, >1.0 = 고대비
-    return saturate((color - 0.5f) * contrast + 0.5f);
+    // Pivot (중간 기준점): 0.5 (Unreal Engine 기본값)
+    float3 pivot = float3(0.5f, 0.5f, 0.5f);
+    
+    // 채널별 대비 적용: (color - pivot) * contrast + pivot
+    float3 result = (color - pivot) * contrastColor + pivot;
+    
+    // Tone Mapping 이후 단계이므로 [0,1] 범위로 클램프
+    return saturate(result);
 }
 
-float3 ApplyGamma(float3 color, float gamma)
+// Color Grading Gamma: 룩/중간톤 조절 (출력 감마 보정이 아님)
+// luminance에 영향을 주는 color grading 파라미터로 사용됩니다.
+// 1.0 = 원본, <1.0 = 중간톤 밝게 (lift), >1.0 = 중간톤 어둡게 (lower)
+float3 ApplyColorGradingGamma(float3 color, float3 gammaColor)
 {
-    // Gamma 보정: 1.0 = 원본, <1.0 = 밝게, >1.0 = 어둡게
-    return pow(max(color, 0.0f), 1.0f / max(gamma, 0.1f));
+    // 각 채널별로 gamma curve 적용 (luminance에 영향을 주는 룩 조절)
+    // pow(color, 1/gamma) 형태로 중간톤 휘도 커브를 조절
+    float3 invGamma = float3(1.0f / max(gammaColor.x, 0.1f), 1.0f / max(gammaColor.y, 0.1f), 1.0f / max(gammaColor.z, 0.1f));
+    return pow(max(color, 0.0f), invGamma);
+}
+
+// Color Grading Gain: Multiply 스케일 (출력 감마 보정이 아님)
+// Color Grading 단계에서 색상을 곱하는 룩 조절 파라미터입니다.
+// 1.0 = 원본, <1.0 = 어둡게, >1.0 = 밝게
+float3 ApplyColorGradingGain(float3 color, float3 gainColor)
+{
+    // 각 채널별로 multiply 적용 (색상 스케일링)
+    return color * gainColor;
 }
 
 // Rec709 to Rec2020 색공간 변환
@@ -246,12 +306,17 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     // 2. Tone Mapping
     float3 C_tonemapped = ACESFilm(C_exposure);
     
-    // 3. Color Grading (Tone Mapping 이후, 색공간 변환 전 적용)
-    C_tonemapped = ApplySaturation(C_tonemapped, g_Saturation);
-    C_tonemapped = ApplyContrast(C_tonemapped, g_Contrast);
-    C_tonemapped = ApplyGamma(C_tonemapped, g_Gamma);
+    // 3. Color Grading (Tone Mapping 이후, 색공간 변환 전 적용, RGB 채널별 제어)
+    //    주의: 이것은 "룩 조절"이며, 최종 출력 감마 보정과 분리되어 있습니다.
+    //    적용 순서: Saturation → Contrast → Gamma → Gain (multiply 스케일)
+    C_tonemapped = ApplySaturation(C_tonemapped, g_ColorGradingSaturation.rgb);
+    C_tonemapped = ApplyContrast(C_tonemapped, g_ColorGradingContrast.rgb);
+    C_tonemapped = ApplyColorGradingGamma(C_tonemapped, g_ColorGradingGamma.rgb);
+    C_tonemapped = ApplyColorGradingGain(C_tonemapped, g_ColorGradingGain.rgb);
     
-    // 4. Rec709 → Rec2020 색공간 변환 (LinearToST2084 내부에서 g_MaxHDRNits 처리)
+    // 4. Output Transform (디스플레이 변환 - 고정된 경로)
+    //    Rec709 → Rec2020 색공간 변환 후 ST2084 (PQ) 인코딩
+    //    주의: 이것은 Color Grading과 분리된 최종 출력 변환입니다.
     float3 C_Rec2020 = Rec709ToRec2020(C_tonemapped);
     float3 C_ST2084 = LinearToST2084(C_Rec2020);
     
@@ -335,14 +400,14 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     
     for (int i = 0; i < 9; ++i)
     {
-        float2 uvOffset = float2(offsets[i] * g_TexelSize.x * g_Radius, 0.0f);
+        float2 uvOffset = float2(offsets[i] * g_TexelSize.x * g_GaussianIntensity, 0.0f);
         float3 sampleColor = g_BloomInput.Sample(g_SamplerLinear, input.uv + uvOffset).rgb;
         color += sampleColor * weights[i];
         weightSum += weights[i];
     }
     
     // Unreal Engine 스타일: Gaussian 블러 결과에 Gaussian Intensity 적용
-    float3 blurredColor = (color / weightSum) * g_GaussianIntensity;
+    float3 blurredColor = (color / weightSum);
     return float4(blurredColor, 1.0f);
 }
 )";
@@ -382,14 +447,14 @@ float4 main(PS_INPUT_QUAD input) : SV_Target
     
     for (int i = 0; i < 9; ++i)
     {
-        float2 uvOffset = float2(0.0f, offsets[i] * g_TexelSize.y * g_Radius);
+        float2 uvOffset = float2(0.0f, offsets[i] * g_TexelSize.y * g_GaussianIntensity);
         float3 sampleColor = g_BloomInput.Sample(g_SamplerLinear, input.uv + uvOffset).rgb;
         color += sampleColor * weights[i];
         weightSum += weights[i];
     }
     
     // Unreal Engine 스타일: Gaussian 블러 결과에 Gaussian Intensity 적용
-    float3 blurredColor = (color / weightSum) * g_GaussianIntensity;
+    float3 blurredColor = (color / weightSum) ;
     return float4(blurredColor, 1.0f);
 }
 )";
