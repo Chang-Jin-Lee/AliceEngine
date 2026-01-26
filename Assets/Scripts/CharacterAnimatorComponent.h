@@ -1,11 +1,15 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <DirectXMath.h>
 
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
 #include "Core/GameObject.h"
+
+// [수정] ComputeEffectComponent 헤더 포함 (필요 시) 혹은 전방 선언
+// 여기서는 cpp에서 포함하고, 구조체는 GameObject를 들고 있으므로 그대로 둡니다.
 
 namespace Alice
 {
@@ -19,16 +23,27 @@ namespace Alice
         Attacking    // 공격 중 (이동 불가, 다른 동작 불가)
     };
 
+    // [수정] 활성화된 ComputeEffect 정보를 관리하기 위한 구조체
+    struct TimedComputeEffect
+    {
+        GameObject go;
+        float remainingTime;
+    };
+
     class CharacterAnimatorComponent : public IScript
     {
         ALICE_BODY(CharacterAnimatorComponent);
 
     public:
         void Update(float DeltaTime) override;
+        void Start() override;
 
         // 노티파이용 함수
         void OnAttackHit();
         void OnCrouchHalfway();
+
+        // [수정] ComputeEffect 생성 헬퍼 함수
+        void SpawnComputeEffect(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& color, float size, float duration);
 
         // --- Movement settings ---
         ALICE_PROPERTY(float, m_moveSpeed, 10.0f);
@@ -48,14 +63,31 @@ namespace Alice
 
         // --- Attack clips ---
         ALICE_PROPERTY(std::string, m_attackClip, "Attack01");
+        ALICE_PROPERTY(float, m_attackPlaySpeed, 1.0f);
         ALICE_PROPERTY(float, m_attackDuration, 1.5f);
         ALICE_PROPERTY(float, m_attackHitTime, 0.7f);
+        ALICE_PROPERTY(float, m_transitionDuration, 0.2f);
+
+        // --- [수정] Attack ComputeEffect Settings ---
+        // 공격 시 생성되는 파티클 설정 (3초 뒤 사라짐)
+        ALICE_PROPERTY(DirectX::XMFLOAT3, m_attackComputeColor, DirectX::XMFLOAT3(1.0f, 0.2f, 0.2f)); // 붉은색
+        ALICE_PROPERTY(float, m_attackComputeSize, 6.0f); // 픽셀 단위 크기
+        ALICE_PROPERTY(float, m_attackComputeDuration, 3.0f); // 3초 뒤 사라짐
+        ALICE_PROPERTY(DirectX::XMFLOAT3, m_attackComputeOffset, DirectX::XMFLOAT3(0.0f, 1.0f, 1.0f)); // 캐릭터 앞쪽
+
+        // --- [수정] Walk ComputeEffect Settings ---
+        // 걷을 때 생성되는 파티클 설정 (1초 뒤 사라짐)
+        ALICE_PROPERTY(DirectX::XMFLOAT3, m_walkComputeColor, DirectX::XMFLOAT3(0.8f, 0.8f, 0.8f)); // 흰색 먼지
+        ALICE_PROPERTY(float, m_walkComputeSize, 3.0f); // 픽셀 단위 크기
+        ALICE_PROPERTY(float, m_walkComputeDuration, 1.0f); // 1초 뒤 사라짐
+        ALICE_PROPERTY(float, m_walkSpawnInterval, 0.3f);    // 0.3초마다 생성
+        ALICE_PROPERTY(DirectX::XMFLOAT3, m_walkComputeOffset, DirectX::XMFLOAT3(0.0f, 0.1f, 0.0f)); // 발 밑
 
         // --- Upper layer clips ---
         ALICE_PROPERTY(bool, m_enableUpperLayer, false);
         ALICE_PROPERTY(std::string, m_upperClip, "Aim");
 
-        // --- Additive clips (필요 시 유지, 현재 로직에선 사용 안 함) ---
+        // --- Additive clips ---
         ALICE_PROPERTY(bool, m_enableAdditive, false);
         ALICE_PROPERTY(std::string, m_additiveClip, "Recoil");
         ALICE_PROPERTY(std::string, m_additiveRefClip, "Idle");
@@ -101,12 +133,24 @@ namespace Alice
         float m_currentCrouchTime = 0.0f;
 
         bool m_notifyRegistered = false;
+
         float m_currentAttackTime = 0.0f;
+        bool m_isAttackReversing = false;
+
+        float m_blendTimer = 0.0f;
+        bool m_isBlendingOut = false;
+
+        // [수정] ComputeEffect 관리용 변수
+        float m_walkTimer = 0.0f;
+        std::vector<TimedComputeEffect> m_activeComputeEffects;
+
         float m_currentLeftFootHeight = 0.0f;
         float m_animSpeed = 1.0f;
         bool m_isStretchedMode = false;
 
         bool m_isWeaponAttached = false;
         GameObject m_weaponGo;
+        TransformComponent* Tr = nullptr;
+        bool m_isSetupFinished = false;
     };
 }

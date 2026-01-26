@@ -180,14 +180,14 @@ void UIWorldManager::Render()
 {
     if (sceneStorages.size() == 0 || m_nowSceneName.empty()) 
     { 
-        ALICE_LOG_WARN("[UIWorldManager] Render skipped: no scenes or empty scene name");
+        //Alice_LOG_WARN("[UIWorldManager] Render skipped: no scenes or empty scene name");
         return; 
     }
     
     auto it = sceneStorages.find(m_nowSceneName);
     if (it == sceneStorages.end()) 
     { 
-        ALICE_LOG_WARN("[UIWorldManager] Render skipped: scene '%s' not found", m_nowSceneName.c_str());
+        //Alice_LOG_WARN("[UIWorldManager] Render skipped: scene '%s' not found", m_nowSceneName.c_str());
         return; 
     }
     m_nowManager = it->second.get();
@@ -273,8 +273,8 @@ void UIWorldManager::ChangeScene(const char* sceneName) {
     {
         rootEntityCount = m_nowManager->GetWorld().GetRootIDs().size();
     }
-    ALICE_LOG_INFO("[UIWorldManager] ChangeScene: %s -> rootCount=%zu", 
-                   m_nowSceneName.c_str(), rootEntityCount);
+    //Alice_LOG_INFO("[UIWorldManager] ChangeScene: %s -> rootCount=%zu", 
+         //          m_nowSceneName.c_str(), rootEntityCount);
 }
 
 // ============================================================================
@@ -649,7 +649,7 @@ bool UIWorldManager::SaveUI(const std::filesystem::path& worldScenePath)
 
     if (!Alice::JsonRttr::SaveJsonFile(uiPath, root, 4)) return false;
 
-    ALICE_LOG_INFO("[UIWorldManager] UI saved to: %s", uiPath.string().c_str());
+    //Alice_LOG_INFO("[UIWorldManager] UI saved to: %s", uiPath.string().c_str());
     return true;
 }
 
@@ -679,8 +679,8 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
         }
     }
     
-    ALICE_LOG_INFO("[UIWorldManager] LoadUI: scene=%s, path=%s", 
-                   sceneName.c_str(), uiLogicalPath.string().c_str());
+    //Alice_LOG_INFO("[UIWorldManager] LoadUI: scene=%s, path=%s", 
+         //          sceneName.c_str(), uiLogicalPath.string().c_str());
     
     // 씬 변경 (없으면 생성됨)
     ChangeScene(sceneName.c_str());
@@ -718,7 +718,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
                 }
                 catch (...)
                 {
-                    ALICE_LOG_ERRORF("[UIWorldManager] LoadUI: Failed to parse JSON from .alice package");
+                    //Alice_LOG_ERRORF("[UIWorldManager] LoadUI: Failed to parse JSON from .alice package");
                     return false;
                 }
             }
@@ -731,7 +731,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
             }
             else
             {
-                ALICE_LOG_ERRORF("[UIWorldManager] LoadUI: Failed to load JSON file: %s", resolved.string().c_str());
+                //Alice_LOG_ERRORF("[UIWorldManager] LoadUI: Failed to load JSON file: %s", resolved.string().c_str());
                 return false;
             }
         }
@@ -747,7 +747,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
             }
             else
             {
-                ALICE_LOG_ERRORF("[UIWorldManager] LoadUI: Failed to load JSON file: %s", uiPath.string().c_str());
+                //Alice_LOG_ERRORF("[UIWorldManager] LoadUI: Failed to load JSON file: %s", uiPath.string().c_str());
                 return false;
             }
         }
@@ -756,7 +756,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
     // UI 파일이 없으면 "Default" 씬으로 폴백
     if (!uiFileFound)
     {
-        ALICE_LOG_WARN("[UIWorldManager] LoadUI: UI file not found for '%s', trying Default", sceneName.c_str());
+        //Alice_LOG_WARN("[UIWorldManager] LoadUI: UI file not found for '%s', trying Default", sceneName.c_str());
         
         // "Default" 씬으로 전환 (없으면 생성됨)
         // ChangeScene은 Clear를 하지 않으므로, LoadUI 내부에서 명시적으로 Clear 수행
@@ -823,7 +823,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
         
         if (!uiFileFound)
         {
-            ALICE_LOG_WARN("[UIWorldManager] LoadUI: Default UI also not found, using empty scene");
+            //Alice_LOG_WARN("[UIWorldManager] LoadUI: Default UI also not found, using empty scene");
             return true;
         }
     }
@@ -831,7 +831,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
     auto itEntities = root.find("uiEntities");
     if (itEntities == root.end() || !itEntities->is_array())
     {
-        ALICE_LOG_WARN("[UIWorldManager] LoadUI: No uiEntities in JSON");
+        //Alice_LOG_WARN("[UIWorldManager] LoadUI: No uiEntities in JSON");
         return true;
     }
     
@@ -932,7 +932,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
             rootCount++;
             if (!loadEntityRecursive(jsonID, 0))
             {
-                //ALICE_LOG_ERROR("[UIWorldManager] Failed to load root entity with JSON ID: %lu", jsonID);
+                ////Alice_LOG_ERROR("[UIWorldManager] Failed to load root entity with JSON ID: %lu", jsonID);
                 return false;
             }
         }
@@ -940,8 +940,8 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
 
     // 핵심 로그: UI 엔티티 생성 결과
     size_t finalRootCount = uiWorld.GetRootIDs().size();
-    ALICE_LOG_INFO("[UIWorldManager] LoadUI: loaded %zu root entities (total: %zu)", 
-                   finalRootCount, entityMap.size());
+    //Alice_LOG_INFO("[UIWorldManager] LoadUI: loaded %zu root entities (total: %zu)", 
+            //       finalRootCount, entityMap.size());
     
     // ============================================================================
     // Post-Load Fixup: Load(데이터 생성) -> Initialize(포인터 전파) -> Recovery(GPU 텍스처) -> Layout(좌표 계산)
@@ -950,7 +950,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
     bool canPerformFixup = true;
     if (!m_nowManager)
     {
-        ALICE_LOG_WARN("[UIWorldManager] Cannot perform post-load fixup: m_nowManager is null for scene: %s", sceneName.c_str());
+        //Alice_LOG_WARN("[UIWorldManager] Cannot perform post-load fixup: m_nowManager is null for scene: %s", sceneName.c_str());
         canPerformFixup = false;
     }
     
@@ -962,7 +962,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
     
     if (!renderStructValid)
     {
-        ALICE_LOG_WARN("[UIWorldManager] LoadUI: Post-load fixup deferred (renderer not ready)");
+        //Alice_LOG_WARN("[UIWorldManager] LoadUI: Post-load fixup deferred (renderer not ready)");
         canPerformFixup = false;
     }
     
@@ -1039,8 +1039,8 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
                     else
                     {
                         failedCount++;
-                        ALICE_LOG_WARN("[UIWorldManager] Failed to recover UI Image: Scene=%s, ID=%lu, path=%S", 
-                                      sceneName.c_str(), id, imagePath.c_str());
+                        //Alice_LOG_WARN("[UIWorldManager] Failed to recover UI Image: Scene=%s, ID=%lu, path=%S", 
+                                 //     sceneName.c_str(), id, imagePath.c_str());
                     }
                 }
             }
@@ -1067,7 +1067,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
     }
     else
     {
-        ALICE_LOG_WARN("[UIWorldManager] LoadUI: Post-load fixup skipped (renderer not ready)");
+        //Alice_LOG_WARN("[UIWorldManager] LoadUI: Post-load fixup skipped (renderer not ready)");
     }
     
     // 안전 로그: LoadUI 완료 직후 root entity count 검증
@@ -1076,8 +1076,7 @@ bool UIWorldManager::LoadUI(const std::filesystem::path& worldScenePath, const A
     {
         rootEntityCount = m_nowManager->GetWorld().GetRootIDs().size();
     }
-    ALICE_LOG_INFO("[UIWorldManager] UI file load completed successfully for scene: %s, rootEntityCount=%zu", 
-                   sceneName.c_str(), rootEntityCount);
+    //Alice_LOG_INFO("[UIWorldManager] UI file load completed successfully for scene: %s, rootEntityCount=%zu", sceneName.c_str(), rootEntityCount);
     
     return true;
 }
@@ -1092,17 +1091,17 @@ void UIWorldManager::ReinitializeAllUIComponents(UIRenderStruct* renderStruct)
     
     if (!pRenderStruct)
     {
-        ALICE_LOG_WARN("[UIWorldManager] ReinitializeAllUIComponents: renderStruct is null");
+        //Alice_LOG_WARN("[UIWorldManager] ReinitializeAllUIComponents: renderStruct is null");
         return;
     }
     
     // ============================================================================
     // 1) m_nowManager 상태 정합성 보장 및 디버그 로그
     // ============================================================================
-    ALICE_LOG_INFO("[UIWorldManager] Reinitializing all UI components with render struct...");
-    ALICE_LOG_INFO("[UIWorldManager] Current m_nowManager scene: %s", 
-                   m_nowManager ? m_nowSceneName.c_str() : "null");
-    ALICE_LOG_INFO("[UIWorldManager] Total UI scenes in storage: %zu", sceneStorages.size());
+    //Alice_LOG_INFO("[UIWorldManager] Reinitializing all UI components with render struct...");
+    //Alice_LOG_INFO("[UIWorldManager] Current m_nowManager scene: %s", 
+             //      m_nowManager ? m_nowSceneName.c_str() : "null");
+    //Alice_LOG_INFO("[UIWorldManager] Total UI scenes in storage: %zu", sceneStorages.size());
     
     // sceneStorages에 있는 모든 씬 이름 출력
     if (!sceneStorages.empty())
@@ -1112,7 +1111,7 @@ void UIWorldManager::ReinitializeAllUIComponents(UIRenderStruct* renderStruct)
         {
             sceneList += pair.first + " ";
         }
-        ALICE_LOG_INFO("[UIWorldManager] %s", sceneList.c_str());
+        //Alice_LOG_INFO("[UIWorldManager] %s", sceneList.c_str());
     }
     
     // m_nowManager가 null이거나 유효하지 않은 경우, 첫 번째 유효한 UI 씬을 찾아 설정
@@ -1124,12 +1123,12 @@ void UIWorldManager::ReinitializeAllUIComponents(UIRenderStruct* renderStruct)
             auto firstScene = sceneStorages.begin();
             m_nowSceneName = firstScene->first;
             m_nowManager = firstScene->second.get();
-            ALICE_LOG_WARN("[UIWorldManager] m_nowManager was invalid, switching to first available scene: %s", 
-                          m_nowSceneName.c_str());
+            //Alice_LOG_WARN("[UIWorldManager] m_nowManager was invalid, switching to first available scene: %s", 
+                 //         m_nowSceneName.c_str());
         }
         else
         {
-            ALICE_LOG_WARN("[UIWorldManager] No UI scenes available in storage, cannot reinitialize");
+            //Alice_LOG_WARN("[UIWorldManager] No UI scenes available in storage, cannot reinitialize");
             return;
         }
     }
@@ -1148,22 +1147,22 @@ void UIWorldManager::ReinitializeAllUIComponents(UIRenderStruct* renderStruct)
         
         if (!manager)
         {
-            ALICE_LOG_WARN("[UIWorldManager] Scene '%s' has null manager, skipping", sceneName.c_str());
+            //Alice_LOG_WARN("[UIWorldManager] Scene '%s' has null manager, skipping", sceneName.c_str());
             continue;
         }
         
-        ALICE_LOG_INFO("[UIWorldManager] Processing UI scene: %s", sceneName.c_str());
+        //Alice_LOG_INFO("[UIWorldManager] Processing UI scene: %s", sceneName.c_str());
         
         UIWorld& uiWorld = manager->GetWorld();
         const auto& rootIDs = uiWorld.GetRootIDs();
         
         if (rootIDs.empty())
         {
-            ALICE_LOG_INFO("[UIWorldManager] Scene '%s' has no UI entities, skipping", sceneName.c_str());
+            //Alice_LOG_INFO("[UIWorldManager] Scene '%s' has no UI entities, skipping", sceneName.c_str());
             continue;
         }
         
-        ALICE_LOG_INFO("[UIWorldManager] Scene '%s' has %zu root entities", sceneName.c_str(), rootIDs.size());
+        //Alice_LOG_INFO("[UIWorldManager] Scene '%s' has %zu root entities", sceneName.c_str(), rootIDs.size());
         
         // 모든 UI 엔티티를 순회하여 컴포넌트 재초기화
         size_t sceneReinitializedCount = 0;
@@ -1188,8 +1187,7 @@ void UIWorldManager::ReinitializeAllUIComponents(UIRenderStruct* renderStruct)
                 const std::wstring& imagePath = img->GetImagePath();
                 if (!imagePath.empty())
                 {
-                    ALICE_LOG_INFO("[UIWorldManager] Reinitializing UI Image: Scene=%s, ID=%lu, path=%S", 
-                                  sceneName.c_str(), id, imagePath.c_str());
+                    //Alice_LOG_INFO("[UIWorldManager] Reinitializing UI Image: Scene=%s, ID=%lu, path=%S",  sceneName.c_str(), id, imagePath.c_str());
                     img->SetImagePath(imagePath);
                 }
             }
@@ -1209,29 +1207,29 @@ void UIWorldManager::ReinitializeAllUIComponents(UIRenderStruct* renderStruct)
         }
         
         totalReinitializedCount += sceneReinitializedCount;
-        ALICE_LOG_INFO("[UIWorldManager] Scene '%s': Reinitialized %zu UI components", 
-                      sceneName.c_str(), sceneReinitializedCount);
+        //Alice_LOG_INFO("[UIWorldManager] Scene '%s': Reinitialized %zu UI components", 
+          //            sceneName.c_str(), sceneReinitializedCount);
         
         // ============================================================================
         // 4) 레이아웃 강제 갱신 (즉시 가시화)
         // ============================================================================
-        ALICE_LOG_INFO("[UIWorldManager] Updating UI transforms and layout for scene '%s'...", sceneName.c_str());
+        //Alice_LOG_INFO("[UIWorldManager] Updating UI transforms and layout for scene '%s'...", sceneName.c_str());
         UILayoutSystem::UpdateTransforms(uiWorld);
         UILayoutSystem::UpdateUI(uiWorld);
-        ALICE_LOG_INFO("[UIWorldManager] UI transforms and layout updated for scene '%s'", sceneName.c_str());
+        //Alice_LOG_INFO("[UIWorldManager] UI transforms and layout updated for scene '%s'", sceneName.c_str());
     }
     
-    ALICE_LOG_INFO("[UIWorldManager] Total reinitialized UI components across all scenes: %zu", totalReinitializedCount);
+    //Alice_LOG_INFO("[UIWorldManager] Total reinitialized UI components across all scenes: %zu", totalReinitializedCount);
     
     if (totalReinitializedCount == 0)
     {
-        ALICE_LOG_WARN("[UIWorldManager] No UI components were reinitialized. Possible reasons:");
-        ALICE_LOG_WARN("[UIWorldManager]   - No UI entities exist in any scene");
-        ALICE_LOG_WARN("[UIWorldManager]   - All UI entities lack UI_ImageComponent");
-        ALICE_LOG_WARN("[UIWorldManager]   - UI entities were not loaded properly");
+        //Alice_LOG_WARN("[UIWorldManager] No UI components were reinitialized. Possible reasons:");
+        //Alice_LOG_WARN("[UIWorldManager]   - No UI entities exist in any scene");
+        //Alice_LOG_WARN("[UIWorldManager]   - All UI entities lack UI_ImageComponent");
+        //Alice_LOG_WARN("[UIWorldManager]   - UI entities were not loaded properly");
     }
     
-    ALICE_LOG_INFO("[UIWorldManager] All UI components reinitialized");
+    //Alice_LOG_INFO("[UIWorldManager] All UI components reinitialized");
 }
 
 // ============================================================================
@@ -1239,10 +1237,10 @@ void UIWorldManager::ReinitializeAllUIComponents(UIRenderStruct* renderStruct)
 // ============================================================================
 void UIWorldManager::EnsureAllUIResources()
 {
-    ALICE_LOG_INFO("[UIWorldManager] Ensuring all UI resources...");
-    ALICE_LOG_INFO("[UIWorldManager] Current m_nowManager scene: %s", 
-                   m_nowManager ? m_nowSceneName.c_str() : "null");
-    ALICE_LOG_INFO("[UIWorldManager] Total UI scenes in storage: %zu", sceneStorages.size());
+    //Alice_LOG_INFO("[UIWorldManager] Ensuring all UI resources...");
+    //Alice_LOG_INFO("[UIWorldManager] Current m_nowManager scene: %s", 
+     //              m_nowManager ? m_nowSceneName.c_str() : "null");
+    //Alice_LOG_INFO("[UIWorldManager] Total UI scenes in storage: %zu", sceneStorages.size());
     
     // m_nowManager가 null이거나 유효하지 않은 경우, 첫 번째 유효한 UI 씬을 찾아 설정
     if (!m_nowManager || sceneStorages.find(m_nowSceneName) == sceneStorages.end())
@@ -1253,12 +1251,12 @@ void UIWorldManager::EnsureAllUIResources()
             auto firstScene = sceneStorages.begin();
             m_nowSceneName = firstScene->first;
             m_nowManager = firstScene->second.get();
-            ALICE_LOG_WARN("[UIWorldManager] m_nowManager was invalid, switching to first available scene: %s", 
-                          m_nowSceneName.c_str());
+            //Alice_LOG_WARN("[UIWorldManager] m_nowManager was invalid, switching to first available scene: %s", 
+                  //        m_nowSceneName.c_str());
         }
         else
         {
-            ALICE_LOG_WARN("[UIWorldManager] No UI scenes available in storage, cannot ensure resources");
+            //Alice_LOG_WARN("[UIWorldManager] No UI scenes available in storage, cannot ensure resources");
             return;
         }
     }
@@ -1276,18 +1274,18 @@ void UIWorldManager::EnsureAllUIResources()
         
         if (!manager)
         {
-            ALICE_LOG_WARN("[UIWorldManager] Scene '%s' has null manager, skipping", sceneName.c_str());
+            //Alice_LOG_WARN("[UIWorldManager] Scene '%s' has null manager, skipping", sceneName.c_str());
             continue;
         }
         
-        ALICE_LOG_INFO("[UIWorldManager] Processing UI scene for resource recovery: %s", sceneName.c_str());
+        //Alice_LOG_INFO("[UIWorldManager] Processing UI scene for resource recovery: %s", sceneName.c_str());
         
         UIWorld& uiWorld = manager->GetWorld();
         const auto& rootIDs = uiWorld.GetRootIDs();
         
         if (rootIDs.empty())
         {
-            ALICE_LOG_INFO("[UIWorldManager] Scene '%s' has no UI entities, skipping", sceneName.c_str());
+            //Alice_LOG_INFO("[UIWorldManager] Scene '%s' has no UI entities, skipping", sceneName.c_str());
             continue;
         }
         
@@ -1314,18 +1312,18 @@ void UIWorldManager::EnsureAllUIResources()
                     // 4) 리소스 복구 타이밍 보장
                     // ============================================================================
                     // EnsureResource()를 호출하여 리소스 복구 시도
-                    ALICE_LOG_INFO("[UIWorldManager] Ensuring UI Image resource: Scene=%s, ID=%lu, path=%S", 
-                                  sceneName.c_str(), id, imagePath.c_str());
+                    //Alice_LOG_INFO("[UIWorldManager] Ensuring UI Image resource: Scene=%s, ID=%lu, path=%S", 
+                     //             sceneName.c_str(), id, imagePath.c_str());
                     if (img->EnsureResource())
                     {
                         sceneRecoveredCount++;
-                        ALICE_LOG_INFO("[UIWorldManager] Successfully recovered UI Image: Scene=%s, ID=%lu", 
-                                      sceneName.c_str(), id);
+                        //Alice_LOG_INFO("[UIWorldManager] Successfully recovered UI Image: Scene=%s, ID=%lu", 
+                     //                 sceneName.c_str(), id);
                     }
                     else
                     {
-                        ALICE_LOG_WARN("[UIWorldManager] Failed to recover UI Image: Scene=%s, ID=%lu, path=%S", 
-                                      sceneName.c_str(), id, imagePath.c_str());
+                        //Alice_LOG_WARN("[UIWorldManager] Failed to recover UI Image: Scene=%s, ID=%lu, path=%S", 
+                            //          sceneName.c_str(), id, imagePath.c_str());
                     }
                 }
             }
@@ -1345,29 +1343,27 @@ void UIWorldManager::EnsureAllUIResources()
         }
         
         totalRecoveredCount += sceneRecoveredCount;
-        ALICE_LOG_INFO("[UIWorldManager] Scene '%s': Recovered %zu UI image resources", 
-                      sceneName.c_str(), sceneRecoveredCount);
+        //Alice_LOG_INFO("[UIWorldManager] Scene '%s': Recovered %zu UI image resources", sceneName.c_str(), sceneRecoveredCount);
         
         if (sceneRecoveredCount > 0)
         {
             // ============================================================================
             // 4) 레이아웃 강제 갱신 (즉시 가시화)
             // ============================================================================
-            ALICE_LOG_INFO("[UIWorldManager] Updating UI transforms and layout for scene '%s' after resource recovery...", 
-                          sceneName.c_str());
+            //Alice_LOG_INFO("[UIWorldManager] Updating UI transforms and layout for scene '%s' after resource recovery...", sceneName.c_str());
             UILayoutSystem::UpdateTransforms(uiWorld);
             UILayoutSystem::UpdateUI(uiWorld);
-            ALICE_LOG_INFO("[UIWorldManager] UI transforms and layout updated for scene '%s'", sceneName.c_str());
+            //Alice_LOG_INFO("[UIWorldManager] UI transforms and layout updated for scene '%s'", sceneName.c_str());
         }
     }
     
     if (totalRecoveredCount > 0)
     {
-        ALICE_LOG_INFO("[UIWorldManager] Total UI resources ensured across all scenes: %zu images recovered", 
-                      totalRecoveredCount);
+        //Alice_LOG_INFO("[UIWorldManager] Total UI resources ensured across all scenes: %zu images recovered", 
+          //           totalRecoveredCount);
     }
     else
     {
-        ALICE_LOG_INFO("[UIWorldManager] No UI resources needed recovery across all scenes");
+        //Alice_LOG_INFO("[UIWorldManager] No UI resources needed recovery across all scenes");
     }
 }
