@@ -10,5 +10,5 @@
         "Assets/Materials/Rapi_7.mat"
     ],
     "mesh": "Rapi",
-    "source_fbx": "Resource/fbx/Rapi/Rapi.fbx"
+    "source_fbx": "Resource/Test/fbx/Rapi/Rapi.fbx"
 }

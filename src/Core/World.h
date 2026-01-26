@@ -69,6 +69,9 @@ namespace Alice
         EntityId CreateEntity();
         void DestroyEntity(EntityId id);
 
+        GameObject CreateGameObject();
+        void DestroyGameObject(GameObject gameObject);
+
         // ==== 유틸리티 ====
         GameObject FindGameObject(const std::string& name);
         EntityId FindEntityByGuid(std::uint64_t guid) const;

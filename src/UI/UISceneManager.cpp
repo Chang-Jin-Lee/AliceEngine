@@ -322,7 +322,7 @@ UIScriptEntry& UIWorld::AddUIScript(unsigned long ownerID, const std::string& sc
 	{
 		entry.instance->Owner = owner;
 		entry.instance->OwnerID = ownerID;
-		ALICE_LOG_INFO("[UIWorld] AddUIScript: Created script '%s' for UI ID=%lu", scriptName.c_str(), ownerID);
+		//ALICE_LOG_INFO("[UIWorld] AddUIScript: Created script '%s' for UI ID=%lu", scriptName.c_str(), ownerID);
 	}
 	else
 	{
@@ -732,7 +732,7 @@ void UISceneManager::Render()
 			hr = m_UIRenderStruct->m_d2DdevCon->EndDraw();
 			if (SUCCEEDED(hr))
 			{
-				ALICE_LOG_INFO("[UISceneManager] EndDraw retry succeeded");
+				//ALICE_LOG_INFO("[UISceneManager] EndDraw retry succeeded");
 			}
 			else
 			{
