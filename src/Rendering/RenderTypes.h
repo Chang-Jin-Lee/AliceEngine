@@ -7,6 +7,15 @@
 
 namespace Alice
 {
+    /// GPU 인스턴싱용 월드 행렬 데이터 (행 3개만 사용)
+    /// - HLSL에서 마지막 행을 (0,0,0,1)로 복원합니다.
+    struct InstanceData
+    {
+        DirectX::XMFLOAT4 worldRow0;
+        DirectX::XMFLOAT4 worldRow1;
+        DirectX::XMFLOAT4 worldRow2;
+    };
+
     /// 포스트 프로세스 파라미터 구조체
     /// Forward/Deferred 렌더링 시스템에서 공통으로 사용됩니다.
     struct PostProcessParams
