@@ -248,6 +248,14 @@ namespace Alice
         void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
+		
+		// Camera 컴포넌트 인스펙터
+		void DrawInspectorCameraSpringArm(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraLookAt(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraFollow(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraShake(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraInput(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraBlend(World& world, const EntityId& _selectedEntity);
 
 		// 물리
 		bool DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames);
