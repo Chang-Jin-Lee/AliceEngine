@@ -11,10 +11,10 @@
 
 namespace Alice
 {
-    /// World ??SkinnedMeshComponent ?ㅼ쓣 ?묒뼱??
-    /// ForwardRenderSystem ???댄빐?????덈뒗 SkinnedDrawCommand 由ъ뒪?몃? 留뚮뱶???쒖뒪?쒖엯?덈떎.
-    /// - 寃뚯엫 濡쒖쭅/?좊땲硫붿씠??履쎌뿉??boneMatrices 瑜?梨꾩썙 ?ｌ쑝硫?
-    ///   ???쒖뒪?쒖씠 洹멸쾬???뚮뜑 紐낅졊?쇰줈 蹂?섑빀?덈떎.
+    /// World의 SkinnedMeshComponent를 순회하여
+    /// ForwardRenderSystem에서 사용할 SkinnedDrawCommand 리스트를 생성합니다.
+    /// - 애니메이션/스켈레탈 메시의 boneMatrices를 전달하면
+    ///   스킨드 메시가 해당 본에 따라 렌더링되도록 변환됩니다.
     class SkinnedMeshSystem
     {
     public:
@@ -23,7 +23,7 @@ namespace Alice
         {
         }
 
-        /// World + Registry 瑜?湲곕컲?쇰줈 ?ㅽ궎???쒕줈??紐낅졊 由ъ뒪?몃? 援ъ꽦?⑸땲??
+        /// World + Registry를 순회하여 렌더링 드로우 커맨드 리스트를 구성합니다.
         void BuildDrawList(const World& world,
             std::vector<SkinnedDrawCommand>& outCommands) const
         {
@@ -32,7 +32,7 @@ namespace Alice
             const auto& skinnedMap = world.GetComponents<SkinnedMeshComponent>();
             if (skinnedMap.empty())
             {
-                // ?뷀뤃???곹깭(?ㅽ궎??而댄룷?뚰듃媛 ?섎굹???놁쓣 ????濡쒓렇瑜?李띿? ?딆뒿?덈떎.
+                // 빈 상태(렌더링 드로우 커맨드가 하나도 없을 때) 조기 반환을 수행합니다.
                 return;
             }
 
@@ -99,7 +99,7 @@ namespace Alice
                 
                 // 행벡터 컨벤션: child * parent * ... * root 형태로 곱하기 (정순)
                 XMMATRIX worldM = XMMatrixIdentity();
-                for (const auto& m : matrixStack)  // child -> parent -> root 순서
+                for (const auto& m : matrixStack)  // child -> parent -> root 순서로
                 {
                     worldM = worldM * m;  // I * child * parent * ... * root
                 }
@@ -146,7 +146,7 @@ namespace Alice
 
             //if (!outCommands.empty())
             //{
-            //    // ?ㅼ젣濡??쒕줈??而ㅻ㎤?쒓? ?앷꼈???뚮쭔 1??濡쒓렇瑜??④퉩?덈떎.
+            //    // 실제로 렌더링될 스킨드 메시가 하나라도 있을 때만 로그를 출력합니다.
             //    ALICE_LOG_INFO("[SkinnedMeshSystem] BuildDrawList: commands=%zu",
             //                   outCommands.size());
             //}
