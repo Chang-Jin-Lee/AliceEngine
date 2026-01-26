@@ -127,6 +127,43 @@ namespace Alice
             }
         }
 
+        template<typename T>
+        static bool ReadRttrArray(const JsonRttr::json& j, std::vector<T>& out)
+        {
+            out.clear();
+
+            if (j.is_null())
+                return true;
+
+            if (j.is_object())
+            {
+                T value{};
+                rttr::instance inst = value;
+                if (!JsonRttr::FromJsonObject(inst, j)) return false;
+                out.push_back(std::move(value));
+                return true;
+            }
+
+            if (!j.is_array())
+                return false;
+
+            for (const auto& item : j)
+            {
+                if (!item.is_object())
+                {
+                    // 잘못된 항목은 스킵 (이전 데이터 호환용)
+                    continue;
+                }
+
+                T value{};
+                rttr::instance inst = value;
+                if (!JsonRttr::FromJsonObject(inst, item)) return false;
+                out.push_back(std::move(value));
+            }
+
+            return true;
+        }
+
         // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
         // 1개짜리 항등 본 팔레트입니다. (정적인 메시처럼 렌더링되도록 함)
         static DirectX::XMFLOAT4X4 g_IdentityBone(
@@ -783,8 +820,22 @@ namespace Alice
             if (itAA != e.end() && itAA->is_object())
             {
                 AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(id);
+                JsonRttr::json copy = *itAA;
+
+                if (auto itChains = copy.find("ikChains"); itChains != copy.end())
+                {
+                    if (!ReadRttrArray(*itChains, aa.ikChains)) return false;
+                    copy.erase("ikChains");
+                }
+
+                if (auto itSockets = copy.find("sockets"); itSockets != copy.end())
+                {
+                    if (!ReadRttrArray(*itSockets, aa.sockets)) return false;
+                    copy.erase("sockets");
+                }
+
                 rttr::instance inst = aa;
-                if (!JsonRttr::FromJsonObject(inst, *itAA)) return false;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
             }
 
             // AnimBlueprint (선택)
