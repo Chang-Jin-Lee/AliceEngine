@@ -508,64 +508,105 @@ namespace Alice
 		pImpl->m_forwardRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		pImpl->m_forwardRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 
-		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
+		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height))
+		{
+			ALICE_LOG_ERRORF("pImpl->m_forwardRenderSystem->Initialize: fail...");
+			return false;
+		}
 
 		// Deferred 렌더러 설정
 		pImpl->m_deferredRenderSystem = std::make_unique<DeferredRenderSystem>(*pImpl->m_renderDevice);
 		pImpl->m_deferredRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		pImpl->m_deferredRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 
-		if (!pImpl->m_deferredRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
+		if (!pImpl->m_deferredRenderSystem->Initialize(pImpl->m_width, pImpl->m_height))
+		{
+			ALICE_LOG_ERRORF("pImpl->m_deferredRenderSystem->Initialize: fail...");
+			return false;
+		}
+
+		ALICE_LOG_ERRORF("pImpl->m_deferredRenderSystem->Initialize: next...");
 
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
-		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
+		if (!pImpl->m_debugDrawSystem->Initialize())
+		{
+			ALICE_LOG_ERRORF("pImpl->m_debugDrawSystem->Initialize(): fail...");
+			return false;
+		}
 
 		pImpl->m_effectSystem = std::make_unique<EffectSystem>(*pImpl->m_renderDevice);
-		if (!pImpl->m_effectSystem->Initialize()) return false;
+		if (!pImpl->m_effectSystem->Initialize())
+		{
+			ALICE_LOG_ERRORF("pImpl->m_effectSystem->Initialize(): fail...");
+			return false;
+		}
 
 		pImpl->m_trailRenderSystem = std::make_unique<TrailEffectRenderSystem>(*pImpl->m_renderDevice);
 		pImpl->m_trailRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		if (!pImpl->m_trailRenderSystem->Initialize()) return false;
-
+		
 		// DeferredRenderSystem에 TrailEffectRenderSystem 주입
 		if (pImpl->m_deferredRenderSystem && pImpl->m_trailRenderSystem)
 		{
 			pImpl->m_deferredRenderSystem->SetSwordRenderSystem(pImpl->m_trailRenderSystem.get());
 		}
 
-	// ============================================= UI 시스템 초기화 (씬 로드 전에 초기화 필요) =============================================
-	// UIWorldManager 초기화를 씬 로드 전으로 이동
-	// 씬 로드 시 LoadUI가 호출되는데, 이때 UIWorldManager가 이미 초기화되어 있어야 Post-load fixup이 정상 작동함
-	{
-		auto* device = pImpl->m_renderDevice->GetDevice();
-		auto* context = pImpl->m_renderDevice->GetImmediateContext();
-		if (device && context)
-		{
-			pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
-			ALICE_LOG_INFO("Engine::Initialize: UIWorldManager initialized (before scene load).");
-		}
-	}
+		ALICE_LOG_INFO("[Debug] EffectSystem Init Success. Next: UIWorldManager...");
 
-		// Compute Effect System 설정
+		// ============================================= UI 시스템 초기화 =============================================
+		{
+			auto* device = pImpl->m_renderDevice->GetDevice();
+			auto* context = pImpl->m_renderDevice->GetImmediateContext();
+			if (device && context)
+			{
+				// UI 초기화 시작 로그
+				ALICE_LOG_INFO("[Debug] Calling UIWorldManager::Initalize...");
+
+				pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
+
+				// UI 초기화 완료 로그
+				ALICE_LOG_INFO("[Debug] UIWorldManager initialized (before scene load).");
+			}
+			else
+			{
+				ALICE_LOG_ERRORF("[Debug] Device or Context is NULL inside UI Block!");
+			}
+		}
+
+		ALICE_LOG_INFO("[Debug] Next: ComputeEffectSystem...");
+
+		// ============================================= Compute Effect System =============================================
 		pImpl->m_computeEffectSystem = std::make_unique<ComputeEffectSystem>(*pImpl->m_renderDevice);
-		if (!pImpl->m_computeEffectSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
+
+		// ComputeEffectSystem 초기화 시작 로그
+		ALICE_LOG_INFO("[Debug] Calling ComputeEffectSystem::Initialize...");
+
+		if (!pImpl->m_computeEffectSystem->Initialize(pImpl->m_width, pImpl->m_height))
+		{
+			ALICE_LOG_ERRORF("[Debug] ComputeEffectSystem Init Failed!");
+			return false;
+		}
+
+		ALICE_LOG_INFO("[Debug] ComputeEffectSystem Init Success. Next: Scene Loading...");
 
 		// ============================================= 카메라 & 스크립트 =============================================
-		// 기본 카메라 위치 설정 및 핫리로드 로드
 		pImpl->m_cameraPosition = { 0.0f, 2.0f, -5.0f };
 		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
 		pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, static_cast<float>(pImpl->m_width) / pImpl->m_height, 0.1f, 5000.0f);
 
+		ALICE_LOG_INFO("[Debug] Calling ScriptHotReload_Load...");
 		ScriptHotReload_Load();
 
 		// ============================================= 씬 관리 =============================================
-		// 씬 매니저 생성 및 초기 씬 로드
 		pImpl->m_resourceManager.Clear();
 		pImpl->m_sceneManager = std::make_unique<SceneManager>(pImpl->m_world, pImpl->m_resourceManager);
 
 		bool isSceneLoaded = false;
-		if (!pImpl->m_editorMode) // 게임 모드: 빌드 설정에서 씬 로드 시도
+		ALICE_LOG_INFO("[Debug] Loading Scene...");
+
+		if (!pImpl->m_editorMode)
 		{
+			// 여기서 죽을 수도 있음 (리소스 로딩)
 			isSceneLoaded = LoadStartupSceneFromBuildSettings(pImpl->m_world, pImpl->m_resourceManager, exeDir, &pImpl->m_uiWorld);
 		}
 
@@ -574,6 +615,7 @@ namespace Alice
 			pImpl->m_sceneManager->SwitchToImmediate("SampleScene");
 			ALICE_LOG_INFO("Engine::Initialize: Loaded SampleScene (Fallback or Editor).");
 		}
+		ALICE_LOG_INFO("[Debug] Scene Loaded. Next: PhysicsSystem...");
 
 		// ============================================= 물리 시스템 생성 =============================================
 		// PhysicsSystem 생성 (ECS 브릿지) - 씬 로드 이후, RefreshPhysicsForCurrentWorld 호출 전
@@ -1231,7 +1273,10 @@ namespace Alice
 				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort,
 				&pImpl->m_uiWorld
 			);
-			pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
+			if (static_cast<Impl::ShadingMode>(shadingMode) != pImpl->m_shadingMode)
+			{
+				pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
+			}
 
 			// 디버그 축(XYZ) 그리기
 			if (auto* dbg = pImpl->m_debugDrawSystem.get())
