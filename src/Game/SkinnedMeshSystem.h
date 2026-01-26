@@ -123,6 +123,7 @@ namespace Alice
                     cmd.metalness = mat->metalness;
                     cmd.normalStrength = mat->normalStrength;
                     cmd.shadingMode = mat->shadingMode;
+                    cmd.transparent = mat->transparent;
                     cmd.outlineColor = mat->outlineColor;
                     cmd.outlineWidth = mat->outlineWidth;
                     cmd.albedoTexturePath = mat->albedoTexturePath;
@@ -134,6 +135,10 @@ namespace Alice
                         //               comp.meshAssetPath.c_str(),
                         //               mat->albedoTexturePath.c_str());
                     }
+                }
+                else
+                {
+                    cmd.transparent = false;
                 }
 
                 outCommands.push_back(cmd);

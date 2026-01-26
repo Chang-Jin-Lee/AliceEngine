@@ -124,6 +124,7 @@ namespace Alice
             .property("shadingMode", &MaterialComponent::shadingMode)
             .property("assetPath", &MaterialComponent::assetPath)
             .property("albedoTexturePath", &MaterialComponent::albedoTexturePath)
+            .property("transparent", &MaterialComponent::transparent)
             .property("normalStrength", &MaterialComponent::normalStrength)
             .property("outlineColor", &MaterialComponent::outlineColor)
             .property("outlineWidth", &MaterialComponent::outlineWidth);
