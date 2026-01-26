@@ -24,6 +24,8 @@
 #include "Core/SocketSerialization.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include "Components/AttackDriverComponent.h"
+#include "Components/HurtboxComponent.h"
 #include "Components/WeaponTraceComponent.h"
 #include "Components/SocketAttachmentComponent.h"
 #include "Components/IDComponent.h"
@@ -5092,6 +5094,16 @@ namespace Alice
 				DrawInspectorJoint(world, _selectedEntity);
 				continue;
 			}
+			else if (typeName == "AttackDriverComponent")
+			{
+				DrawInspectorAttackDriver(world, _selectedEntity);
+				continue;
+			}
+			else if (typeName == "HurtboxComponent")
+			{
+				DrawInspectorHurtbox(world, _selectedEntity);
+				continue;
+			}
 			else if (typeName == "WeaponTraceComponent")
 			{
 				DrawInspectorWeaponTrace(world, _selectedEntity);
@@ -8329,6 +8341,226 @@ namespace Alice
 		}
 	}
 
+	void EditorCore::DrawInspectorAttackDriver(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* driver = world.GetComponent<AttackDriverComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Attack Driver", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				if (ImGui::Button("Remove##AttackDriverRemove"))
+				{
+					world.RemoveComponent<AttackDriverComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
+
+				std::uint64_t traceGuid = driver->traceGuid;
+				if (ImGui::InputScalar("Trace GUID", ImGuiDataType_U64, &traceGuid))
+				{
+					driver->traceGuid = traceGuid;
+					driver->traceCached = InvalidEntityId;
+					changed = true;
+				}
+
+				// Trace entity picker (WeaponTrace 보유 엔티티 위주)
+				{
+					EntityId resolved = (driver->traceGuid != 0) ? world.FindEntityByGuid(driver->traceGuid) : InvalidEntityId;
+					std::string preview = "(self)";
+					if (driver->traceGuid != 0)
+					{
+						if (resolved != InvalidEntityId)
+						{
+							std::string name = world.GetEntityName(resolved);
+							if (name.empty()) name = "Entity " + std::to_string(resolved);
+							preview = name + " (" + std::to_string(driver->traceGuid) + ")";
+						}
+						else
+						{
+							preview = std::to_string(driver->traceGuid);
+						}
+					}
+
+					if (ImGui::BeginCombo("Trace (pick entity)", preview.c_str()))
+					{
+						const bool selSelf = (driver->traceGuid == 0);
+						if (ImGui::Selectable("(self)", selSelf))
+						{
+							driver->traceGuid = 0;
+							driver->traceCached = InvalidEntityId;
+							changed = true;
+						}
+						if (selSelf)
+							ImGui::SetItemDefaultFocus();
+
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							if (!world.GetComponent<WeaponTraceComponent>(eid))
+								continue;
+
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == driver->traceGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								driver->traceGuid = idc.guid;
+								driver->traceCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+
+				// Clip picker (SkinnedMesh animation list)
+				{
+					std::vector<std::string> clipNames;
+					if (m_skinnedRegistry)
+					{
+						if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(_selectedEntity))
+						{
+							if (!skinned->meshAssetPath.empty())
+							{
+								std::shared_ptr<SkinnedMeshGPU> mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+								if (mesh && mesh->sourceModel)
+									clipNames = mesh->sourceModel->GetAnimationNames();
+							}
+						}
+					}
+
+					if (!clipNames.empty())
+					{
+						const char* preview = driver->clipName.empty() ? "(none)" : driver->clipName.c_str();
+						if (ImGui::BeginCombo("Clip", preview))
+						{
+							const bool selNone = driver->clipName.empty();
+							if (ImGui::Selectable("(none)", selNone))
+							{
+								driver->clipName.clear();
+								changed = true;
+							}
+							if (selNone)
+								ImGui::SetItemDefaultFocus();
+
+							for (const auto& name : clipNames)
+							{
+								const bool sel = (driver->clipName == name);
+								if (ImGui::Selectable(name.c_str(), sel))
+								{
+									driver->clipName = name;
+									changed = true;
+								}
+								if (sel)
+									ImGui::SetItemDefaultFocus();
+							}
+							ImGui::EndCombo();
+						}
+					}
+					else
+					{
+						ImGui::TextDisabled("No animation clips available (SkinnedMesh/FBX not ready).");
+					}
+				}
+
+				changed |= ImGui::DragFloat("Start Time (sec)", &driver->startTimeSec, 0.01f, 0.0f, 60.0f);
+				changed |= ImGui::DragFloat("End Time (sec)", &driver->endTimeSec, 0.01f, 0.0f, 60.0f);
+
+				if (driver->endTimeSec < driver->startTimeSec)
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "Warning: End < Start");
+
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorHurtbox(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* hb = world.GetComponent<HurtboxComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Hurtbox", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				if (ImGui::Button("Remove##HurtboxRemove"))
+				{
+					world.RemoveComponent<HurtboxComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
+
+				std::uint64_t ownerGuid = hb->ownerGuid;
+				if (ImGui::InputScalar("Owner GUID", ImGuiDataType_U64, &ownerGuid))
+				{
+					hb->ownerGuid = ownerGuid;
+					hb->ownerCached = InvalidEntityId;
+
+					EntityId resolved = (ownerGuid != 0) ? world.FindEntityByGuid(ownerGuid) : InvalidEntityId;
+					if (resolved != InvalidEntityId)
+						hb->ownerNameDebug = world.GetEntityName(resolved);
+					changed = true;
+				}
+
+				if (hb->ownerGuid == 0)
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Owner GUID is 0 -> hurtbox will not resolve");
+
+				// Owner picker
+				{
+					std::string preview = hb->ownerNameDebug.empty()
+						? (hb->ownerGuid != 0 ? std::to_string(hb->ownerGuid) : "(none)")
+						: hb->ownerNameDebug;
+					if (ImGui::BeginCombo("Owner (pick entity)", preview.c_str()))
+					{
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == hb->ownerGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								hb->ownerGuid = idc.guid;
+								hb->ownerNameDebug = world.GetEntityName(eid);
+								hb->ownerCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+
+				ImGui::Text("Owner Name: %s", hb->ownerNameDebug.empty() ? "(none)" : hb->ownerNameDebug.c_str());
+
+				uint32_t teamId = hb->teamId;
+				if (ImGui::InputScalar("Team Id", ImGuiDataType_U32, &teamId))
+				{
+					hb->teamId = teamId;
+					changed = true;
+				}
+
+				uint32_t part = hb->part;
+				if (ImGui::InputScalar("Part", ImGuiDataType_U32, &part))
+				{
+					hb->part = part;
+					changed = true;
+				}
+
+				changed |= ImGui::DragFloat("Damage Scale", &hb->damageScale, 0.01f, 0.0f, 100.0f);
+
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
 	void EditorCore::DrawInspectorWeaponTrace(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* trace = world.GetComponent<WeaponTraceComponent>(_selectedEntity))
@@ -8349,8 +8581,14 @@ namespace Alice
 				{
 					trace->ownerGuid = ownerGuid;
 					trace->ownerCached = InvalidEntityId;
+					EntityId resolved = (ownerGuid != 0) ? world.FindEntityByGuid(ownerGuid) : InvalidEntityId;
+					if (resolved != InvalidEntityId)
+						trace->ownerNameDebug = world.GetEntityName(resolved);
 					changed = true;
 				}
+
+				if (trace->ownerGuid == 0)
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Owner GUID is 0 -> trace will not run");
 
 				if (ImGui::Button("Pick from selected entity"))
 				{
@@ -8363,19 +8601,36 @@ namespace Alice
 					}
 				}
 
-				static EntityId lastOwnerNameEntity = InvalidEntityId;
-				static char ownerNameBuf[128]{};
-				if (lastOwnerNameEntity != _selectedEntity)
+				// Owner picker
 				{
-					std::snprintf(ownerNameBuf, sizeof(ownerNameBuf), "%s", trace->ownerNameDebug.c_str());
-					lastOwnerNameEntity = _selectedEntity;
+					std::string preview = trace->ownerNameDebug.empty()
+						? (trace->ownerGuid != 0 ? std::to_string(trace->ownerGuid) : "(none)")
+						: trace->ownerNameDebug;
+					if (ImGui::BeginCombo("Owner (pick entity)", preview.c_str()))
+					{
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == trace->ownerGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								trace->ownerGuid = idc.guid;
+								trace->ownerNameDebug = world.GetEntityName(eid);
+								trace->ownerCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
 				}
 
-				if (ImGui::InputText("Owner Name Debug", ownerNameBuf, IM_ARRAYSIZE(ownerNameBuf)))
-				{
-					trace->ownerNameDebug = ownerNameBuf;
-					changed = true;
-				}
+				ImGui::Text("Owner Name: %s", trace->ownerNameDebug.empty() ? "(none)" : trace->ownerNameDebug.c_str());
 
 				changed |= ImGui::Checkbox("Active", &trace->active);
 				changed |= ImGui::Checkbox("Debug Draw", &trace->debugDraw);
