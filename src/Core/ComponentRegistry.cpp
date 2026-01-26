@@ -211,6 +211,7 @@ namespace Alice
             .property("additive", &AdvancedAnimationComponent::additive)
             .property("procedural", &AdvancedAnimationComponent::procedural)
             .property("ik", &AdvancedAnimationComponent::ik)
+            .property("ikChains", &AdvancedAnimationComponent::ikChains)
             .property("aim", &AdvancedAnimationComponent::aim)
             .property("sockets", &AdvancedAnimationComponent::sockets);
 
