@@ -10,9 +10,18 @@
                     "z": 0.13899612426757813
                 },
                 "metalness": 0.0,
-                "roughness": 1.0
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": -0.23000000417232513,
+                "roughness": 1.0,
+                "shadingMode": -1
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": 0.0,
                     "y": -3.166192054748535,
@@ -29,7 +38,7 @@
                     "z": 18.419097900390625
                 }
             },
-            "id": 1
+            "guid": "9963355373704964345"
         },
         {
             "Material": {
@@ -41,13 +50,28 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": -0.3499999940395355,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
-            "Script": {
-                "enabled": true,
-                "name": "SceneSwitchExample"
-            },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SceneSwitchExample",
+                    "props": {
+                        "targetSceneA": "",
+                        "targetSceneB": ""
+                    }
+                }
+            ],
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": -3.0585641860961914,
                     "y": 0.0,
@@ -64,7 +88,7 @@
                     "z": 1.0
                 }
             },
-            "id": 2
+            "guid": "722782481428877651"
         },
         {
             "Material": {
@@ -76,9 +100,18 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 1.0,
-                "roughness": 0.0
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": -0.3199999928474426,
+                "roughness": 0.0,
+                "shadingMode": -1
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": 3.2148566246032715,
                     "y": 0.0,
@@ -95,7 +128,7 @@
                     "z": 1.0
                 }
             },
-            "id": 3
+            "guid": "15263362850727644387"
         },
         {
             "Material": {
@@ -107,9 +140,27 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": -1.0399999618530273,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "CreateFbxTest",
+                    "props": {
+                        "m_exampleValue": 1.0
+                    }
+                }
+            ],
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": 1.9052592515945435,
                     "y": 0.0,
@@ -126,8 +177,9 @@
                     "z": 1.0
                 }
             },
-            "id": 4
+            "guid": "13647334732916143679"
         }
     ],
+    "sceneName": "MaterialTestScene",
     "version": 1
 }

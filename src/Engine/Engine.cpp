@@ -43,6 +43,11 @@
 #include "Game/SkinnedMeshSystem.h"
 #include "Core/AdvancedAnimSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
+#include "Game/SocketAttachmentSystem.h"
+#include "Game/WeaponTraceSystem.h"
+#include "Game/CombatHitEvent.h"
+#include "Game/CombatSystem.h"
+#include "Game/AttackDriverSystem.h"
 #include "Audio/AudioSystem.h"
 #include "Audio/SoundManager.h"
 
@@ -92,11 +97,8 @@ namespace Alice
 
 		bool m_isRunning = false;            // 엔진 자체가 실행중인지 판단
 		bool m_isPlaying = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
-		bool m_wasPlaying = false;           // 직전 프레임 재생 여부 (Play/Stop 스냅샷·복원용)
 		bool m_editorMode = true;             // true: 에디터, false: 게임 전용
 		EntityId m_selectedEntity{ InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
-
-		std::string m_playSnapshot;          // Play 진입 시 월드 JSON 스냅샷 (Stop 시 복원용)
 
 		World          m_world;
 		UIWorldManager m_uiWorld;
@@ -116,6 +118,7 @@ namespace Alice
 
 		// 물리 이벤트 큐 (한 프레임 안전하게 처리하기 위함)
 		std::vector<PhysicsEvent> m_physicsEventQueue;
+		std::vector<CombatHitEvent> m_combatHitQueue;
 
 		// PVD (PhysX Visual Debugger) 설정
 		bool m_pvdEnabled = false;
@@ -161,8 +164,14 @@ namespace Alice
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		AdvancedAnimSystem  m_advancedAnimSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		SocketAttachmentSystem m_socketAttachmentSystem;
+		WeaponTraceSystem m_weaponTraceSystem;
+		CombatSystem m_combatSystem;
+		AttackDriverSystem m_attackDriverSystem;
 		AudioSystem m_audioSystem;
 		std::vector<SkinnedDrawCommand> m_skinnedDrawCommands;
+
+		bool m_animUpdatedThisFrame = false;
 	};
 	namespace
 	{
@@ -657,40 +666,9 @@ namespace Alice
 		pImpl->m_timer.Tick();
 		const float dt = pImpl->m_timer.DeltaTime();
 		pImpl->m_inputSystem.Update(dt);
+		pImpl->m_animUpdatedThisFrame = false;
 
 		using namespace DirectX;
-
-		// 1.5 Play/Stop 씬 스냅샷·복원 (에디터 전용)
-		if (pImpl->m_editorMode)
-		{
-			const bool wasPlaying = pImpl->m_wasPlaying;
-			const bool isPlaying = pImpl->m_isPlaying;
-
-			if (!wasPlaying && isPlaying)
-			{
-				// Play 진입: 현재 월드 스냅샷 저장 (런타임은 이 월드에서 실행, Stop 시 복원용)
-				if (SceneFile::SaveToJsonString(pImpl->m_world, pImpl->m_playSnapshot))
-					ALICE_LOG_INFO("[Engine] Play: scene snapshot saved.");
-				else
-					ALICE_LOG_WARN("[Engine] Play: snapshot save failed. Stop restore may be incomplete.");
-			}
-			else if (wasPlaying && !isPlaying)
-			{
-				// Stop: 편집본 복원
-				ClearWorldAndPhysics();
-				if (!pImpl->m_playSnapshot.empty() && SceneFile::LoadFromJsonString(pImpl->m_world, pImpl->m_playSnapshot))
-				{
-					RefreshPhysicsForCurrentWorld();
-					EnsureSkinnedMeshesRegisteredForWorld();
-					pImpl->m_selectedEntity = InvalidEntityId; // 복원 후 ID 매핑 없음
-					ALICE_LOG_INFO("[Engine] Stop: scene restored from snapshot.");
-				}
-				else
-					ALICE_LOG_WARN("[Engine] Stop: restore from snapshot failed or empty.");
-			}
-
-			pImpl->m_wasPlaying = isPlaying;
-		}
 
 		// 2. 카메라 데이터 갱신 (위치/회전)
 		bool updateFromScene = (!pImpl->m_editorMode || pImpl->m_isPlaying);
@@ -745,7 +723,10 @@ namespace Alice
 				// 씬 바뀐 프레임이면 물리/카메라(월드 접근)를 스킵하고, 아래 "카메라 최종 적용"만 수행
 			if (!sceneChangedThisFrame)
 			{
-				// 2-2. 물리 업데이트
+			// 2-2. 공격 드라이버(노티 등록)
+			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+
+			// 2-3. 물리 업데이트
 				// ===================================================================
 				// Phy_SettingsComponent가 있는데 물리 월드가 없으면 생성 시도
 				if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
@@ -767,16 +748,27 @@ namespace Alice
 					pImpl->m_physicsSystem->Update(dt);
 				}
 
-				TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
+			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
+
+			// 2-4. 애니메이션/소켓 업데이트 (물리 이후: 최신 Transform 반영)
+			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
+			pImpl->m_animUpdatedThisFrame = true;
+
+			// 소켓 기반 무기 스윕 판정
+			pImpl->m_weaponTraceSystem.Update(pImpl->m_world, dt, &pImpl->m_combatHitQueue);
 
 				// 물리 이벤트 처리
 				ProcessPhysicsEvents();
+				ProcessCombatHits();
+				pImpl->m_combatSystem.Update(pImpl->m_world, dt);
 				// ===================================================================
 
-				// 2-3. 카메라 시스템 (컴포넌트 기반)
+			// 2-5. 카메라 시스템 (컴포넌트 기반)
 				pImpl->m_cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
 
-				// 2-4. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
+			// 2-6. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
 				// CameraSystem에서 이미 Camera 객체가 업데이트되었으므로, primary 카메라의 Camera 객체를 가져옴
 				EntityId camId = InvalidEntityId;
 				for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
@@ -1155,6 +1147,15 @@ namespace Alice
 		pImpl->m_physicsEventQueue.clear();
 	}
 
+	void Engine::ProcessCombatHits()
+	{
+		if (pImpl->m_combatHitQueue.empty())
+			return;
+
+		pImpl->m_combatSystem.ProcessHits(pImpl->m_world, pImpl->m_combatHitQueue);
+		pImpl->m_combatHitQueue.clear();
+	}
+
 	//=========================================================
 
 
@@ -1406,8 +1407,20 @@ namespace Alice
 
 		// ============================================= 애니메이션 =============================================
 		// 스키닝 업데이트 및 드로우 커맨드 빌드
-		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+
+		if (!pImpl->m_animUpdatedThisFrame)
+		{
+			const double dtSec = static_cast<double>(pImpl->m_timer.DeltaTime());
+			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, dtSec);
+			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, dtSec);
+			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
+			pImpl->m_animUpdatedThisFrame = true;
+		}
+
+		//pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
 		//pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
+
 		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
 
 		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
@@ -1798,6 +1811,11 @@ namespace Alice
 			pImpl->m_isRunning = false;
 			PostQuitMessage(0);
 			return 0;
+
+		case WM_INPUT:
+			// Raw Input 처리
+			pImpl->m_inputSystem.ProcessRawInput(reinterpret_cast<HRAWINPUT>(lParam));
+			return 0;
 		}
 
 		return DefWindowProcW(hWnd, message, wParam, lParam);
@@ -1819,7 +1837,13 @@ namespace Alice
 			DirectX::Mouse::ProcessMessage(message, wParam, lParam);
 			break;
 
-		case WM_INPUT: case WM_MOUSEMOVE: case WM_LBUTTONDOWN: case WM_LBUTTONUP:
+		case WM_INPUT:
+			// Raw Input은 InputSystem에서 처리 (HandleMessage에서 처리됨)
+			// DirectXTK에도 전달 (버튼 상태 등은 DirectXTK에서 관리)
+			DirectX::Mouse::ProcessMessage(message, wParam, lParam);
+			break;
+
+		case WM_MOUSEMOVE: case WM_LBUTTONDOWN: case WM_LBUTTONUP:
 		case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_MBUTTONDOWN: case WM_MBUTTONUP:
 		case WM_MOUSEWHEEL: case WM_XBUTTONDOWN: case WM_XBUTTONUP: case WM_MOUSEHOVER:
 			DirectX::Mouse::ProcessMessage(message, wParam, lParam);

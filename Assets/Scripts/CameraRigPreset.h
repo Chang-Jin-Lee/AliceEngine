@@ -30,7 +30,7 @@ namespace Alice
 
         // 키 4: 쉐이크
         ALICE_PROPERTY(float, m_shakeAmplitudeKey4, 0.3f);
-        ALICE_PROPERTY(float, m_shakeFrequencyKey4, 20.0f);
+        ALICE_PROPERTY(float, m_shakeFrequencyKey4, 10.0f);
         ALICE_PROPERTY(float, m_shakeDurationKey4, 0.4f);
         ALICE_PROPERTY(float, m_shakeDecayKey4, 2.0f);
 
@@ -40,9 +40,9 @@ namespace Alice
         ALICE_PROPERTY(float, m_slowTimeScaleKey5, 0.2f);
 
         // 스프링 암 줌
-        ALICE_PROPERTY(float, m_springArmDistance, 35.0f);
-        ALICE_PROPERTY(float, m_springArmMinDistance, 8.0f);
-        ALICE_PROPERTY(float, m_springArmMaxDistance, 60.0f);
+        ALICE_PROPERTY(float, m_springArmDistance, 2.0f);
+        ALICE_PROPERTY(float, m_springArmMinDistance, 1.0f);
+        ALICE_PROPERTY(float, m_springArmMaxDistance, 3.0f);
         ALICE_PROPERTY(float, m_springArmZoomSpeed, 0.01f);
 
         // 런타임에 계속 반영할지 여부

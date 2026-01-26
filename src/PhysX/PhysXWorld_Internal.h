@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // PhysXWorld_Internal.h (split from PhysXWorld.cpp)
 #include "PhysXWorld.h"
@@ -941,7 +941,9 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	enum class ActorOpType : uint8_t { Add, Remove };
 	struct ActorOp { PxActor* actor = nullptr; ActorOpType type = ActorOpType::Add; };
 	std::vector<ActorOp> pendingActorOps;
+	std::unordered_set<PxActor*> pendingAddSet; // 동일 액터 Add 중복 방지 (키네마틱 등 첫 프레임 2회 Enqueue 방지)
 	std::vector<PxBase*> pendingRelease; // actors, joints, meshes, etc.
+	std::unordered_set<PxBase*> pendingReleaseSet;
 
 #if PHYSXWRAP_ENABLE_CCT && PHYSXWRAP_HAS_CCT_HEADERS
 	std::vector<PxController*> pendingControllerRelease;
@@ -969,6 +971,8 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	{
 		if (!a) return;
 		std::scoped_lock lock(pendingMtx);
+		if (!pendingAddSet.insert(a).second)
+			return; // 이미 Add 대기 중이면 중복 푸시 방지
 		pendingActorOps.push_back({ a, ActorOpType::Add });
 	}
 
@@ -976,6 +980,7 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	{
 		if (!a) return;
 		std::scoped_lock lock(pendingMtx);
+		pendingAddSet.erase(a); // 같은 액터를 나중에 다시 Add 할 수 있도록
 		pendingActorOps.push_back({ a, ActorOpType::Remove });
 	}
 
@@ -983,6 +988,8 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	{
 		if (!b) return;
 		std::scoped_lock lock(pendingMtx);
+		if (!pendingReleaseSet.insert(b).second)
+			return;
 		pendingRelease.push_back(b);
 	}
 
@@ -998,7 +1005,9 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 	void FlushPending(bool allowImmediateRelease)
 	{
 		std::vector<ActorOp> actorOps;
+		std::unordered_set<PxActor*> addSet;
 		std::vector<PxBase*> rels;
+		std::unordered_set<PxBase*> relSet;
 
 #if PHYSXWRAP_ENABLE_CCT && PHYSXWRAP_HAS_CCT_HEADERS
 		std::vector<PxController*> ctrls;
@@ -1006,7 +1015,9 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 		{
 			std::scoped_lock lock(pendingMtx);
 			actorOps.swap(pendingActorOps);
+			addSet.swap(pendingAddSet);
 			rels.swap(pendingRelease);
+			relSet.swap(pendingReleaseSet);
 
 #if PHYSXWRAP_ENABLE_CCT && PHYSXWRAP_HAS_CCT_HEADERS
 			ctrls.swap(pendingControllerRelease);
@@ -1018,7 +1029,9 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			// Can't touch scene now (e.g. during simulate). Put everything back.
 			std::scoped_lock lock(pendingMtx);
 			pendingActorOps.insert(pendingActorOps.end(), actorOps.begin(), actorOps.end());
+			pendingAddSet.insert(addSet.begin(), addSet.end());
 			pendingRelease.insert(pendingRelease.end(), rels.begin(), rels.end());
+			pendingReleaseSet.insert(relSet.begin(), relSet.end());
 
 #if PHYSXWRAP_ENABLE_CCT && PHYSXWRAP_HAS_CCT_HEADERS
 			pendingControllerRelease.insert(pendingControllerRelease.end(), ctrls.begin(), ctrls.end());
@@ -1033,11 +1046,20 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 			{
 				PxActor* a = op.actor;
 				if (!a) continue;
+				if (relSet.find(static_cast<PxBase*>(a)) != relSet.end())
+					continue;
 				switch (op.type)
 				{
 				case ActorOpType::Add:
 					if (!a->getScene())
+					{
 						scene->addActor(*a);
+						if (enableActiveTransforms)
+						{
+							if (PxRigidDynamic* rd = a->is<PxRigidDynamic>())
+								rd->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_POSE_INTEGRATION_PREVIEW, true);
+						}
+					}
 					break;
 				case ActorOpType::Remove:
 					if (a->getScene() == scene)
@@ -1046,11 +1068,6 @@ struct PhysXWorld::Impl : public std::enable_shared_from_this<PhysXWorld::Impl>
 				}
 			}
 		}
-
-		// TODO: 나중에 구조를 변경해서 중복을 허용하지 않게 만들자
-		// 솔트해서 중복 제거하는 방식이 좋은건 아니라고 생각함
-		std::sort(rels.begin(), rels.end());
-		rels.erase(std::unique(rels.begin(), rels.end()), rels.end());
 
 		for (PxBase* b : rels)
 		{
@@ -1920,9 +1937,17 @@ public:
 	void SetKinematicTarget(const Vec3& p, const Quat& q) override
 	{
 		if (!body) return;
+
 		auto s = world.lock();
 		if (!s || !s->scene) return;
 		SceneWriteLock wl(s->scene, s->enableSceneLocks);
+		// 아직 scene에 add 안 된 프레임이면 kinematicTarget 금지 (PhysX assert 방지)
+		if (body->getScene() == nullptr)
+		{
+			body->setGlobalPose(ToPxTransform(p, q));
+			return;
+		}
+		// 키네마틱 아니면 글로벌 포즈로 처리
 		if (!HasRigidBodyFlag(body->getRigidBodyFlags(), PxRigidBodyFlag::eKINEMATIC))
 		{
 			body->setGlobalPose(ToPxTransform(p, q));
