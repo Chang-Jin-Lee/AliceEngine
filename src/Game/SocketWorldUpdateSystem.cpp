@@ -1,6 +1,7 @@
 #include "Game/SocketWorldUpdateSystem.h"
 
 #include <algorithm>
+#include <cmath>
 #include <unordered_set>
 #include <utility>
 
@@ -28,6 +29,25 @@ namespace Alice
             return (mesh && mesh->sourceModel);
         }
 
+        bool LooksColumnMajor(const DirectX::XMFLOAT4X4& m)
+        {
+            const float rowT = std::fabs(m._41) + std::fabs(m._42) + std::fabs(m._43);
+            const float colT = std::fabs(m._14) + std::fabs(m._24) + std::fabs(m._34);
+            constexpr float kEps = 1e-4f;
+            return (rowT <= kEps && colT > kEps);
+        }
+
+        DirectX::XMFLOAT4X4 NormalizeSocketWorld(const DirectX::XMFLOAT4X4& world)
+        {
+            if (!LooksColumnMajor(world))
+                return world;
+            DirectX::XMMATRIX m = DirectX::XMLoadFloat4x4(&world);
+            m = DirectX::XMMatrixTranspose(m);
+            DirectX::XMFLOAT4X4 out{};
+            DirectX::XMStoreFloat4x4(&out, m);
+            return out;
+        }
+
         void AddPose(std::vector<SocketPose>& poses, const std::string& name, const DirectX::XMFLOAT4X4& world)
         {
             if (name.empty())
@@ -39,7 +59,7 @@ namespace Alice
             }
             SocketPose p{};
             p.name = name;
-            p.world = world;
+            p.world = NormalizeSocketWorld(world);
             poses.push_back(std::move(p));
         }
 
@@ -95,9 +115,10 @@ namespace Alice
             const auto* anim = world.GetComponent<SkinnedAnimationComponent>(owner);
             auto* sockets = world.GetComponent<SocketComponent>(owner);
 
-            const bool advActive = (adv && adv->enabled && HasMeshForSockets(m_registry, skinned));
-            const bool skinnedActive = (!adv && anim && HasMeshForSockets(m_registry, skinned));
-            const bool animBpActive = (!adv && !skinnedActive && animBp && HasMeshForSockets(m_registry, skinned));
+            const bool advEnabled = (adv && adv->enabled);
+            const bool advActive = (advEnabled && HasMeshForSockets(m_registry, skinned));
+            const bool skinnedActive = (!advEnabled && anim && HasMeshForSockets(m_registry, skinned));
+            const bool animBpActive = (!advEnabled && !skinnedActive && animBp && HasMeshForSockets(m_registry, skinned));
 
             if (advActive)
             {

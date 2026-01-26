@@ -2276,241 +2276,11 @@
                 "roughness": 0.5,
                 "shadingMode": -1
             },
-            "Scripts": [
-                {
-                    "enabled": true,
-                    "name": "CharacterAnimatorComponent",
-                    "props": {
-                        "m_additiveClip": "Recoil",
-                        "m_additiveDuration": 0.25,
-                        "m_additiveRefClip": "Idle",
-                        "m_aimWeight": 1.0,
-                        "m_aimYawDeg": 0.0,
-                        "m_attackClip": "Attack01",
-                        "m_attackDuration": 1.5,
-                        "m_attackHitTime": 0.699999988079071,
-                        "m_attackPlaySpeed": 1.0,
-                        "m_blendSpeed": 8.0,
-                        "m_crouchClip": "CrouchDown",
-                        "m_crouchDuration": 1.0,
-                        "m_enableAdditive": false,
-                        "m_enableAim": false,
-                        "m_enableFootIK": true,
-                        "m_enableIK": false,
-                        "m_enableUpperLayer": false,
-                        "m_gravity": 18.0,
-                        "m_idleClip": "Idle",
-                        "m_ikChainLength": 3,
-                        "m_ikLiftSpeed": 5.0,
-                        "m_ikTargetLocal": {
-                            "x": 0.0,
-                            "y": 1.2000000476837158,
-                            "z": 0.20000000298023224
-                        },
-                        "m_ikTipBone": "Hand_L",
-                        "m_ikWeight": 1.0,
-                        "m_jumpSpeed": 6.5,
-                        "m_leftFootBasePos": {
-                            "x": -0.20000000298023224,
-                            "y": 0.0,
-                            "z": 0.10000000149011612
-                        },
-                        "m_leftFootBone": "Ball_L",
-                        "m_maxLiftHeight": 0.5,
-                        "m_moveSpeed": 10.0,
-                        "m_runClip": "Run",
-                        "m_runMultiplier": 1.600000023841858,
-                        "m_socketName": "WeaponPoint",
-                        "m_socketParentBone": "Hand_R",
-                        "m_socketPos": {
-                            "x": 0.10000000149011612,
-                            "y": 0.05000000074505806,
-                            "z": 0.0
-                        },
-                        "m_socketRotDeg": {
-                            "x": 0.0,
-                            "y": 90.0,
-                            "z": 0.0
-                        },
-                        "m_socketScale": {
-                            "x": 1.0,
-                            "y": 1.0,
-                            "z": 1.0
-                        },
-                        "m_transitionDuration": 0.20000000298023224,
-                        "m_upperClip": "Aim",
-                        "m_walkClip": "Walk",
-                        "m_weaponObjName": "Weapon"
-                    }
-                }
-            ],
-            "SkinnedAnimation": {
-                "clipIndex": 9,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 145.00028553861193
-            },
-            "SkinnedMesh": {
-                "boneCount": 248,
-                "instanceAssetPath": "Assets/Fbx/Alice.fbxasset",
-                "meshAssetPath": "Alice"
-            },
-            "Socket": {
-                "sockets": [
-                    {
-                        "name": "RightHand",
-                        "parentBone": "手首.R",
-                        "position": {
-                            "x": 0.0,
-                            "y": 0.0,
-                            "z": 0.0
-                        },
-                        "rotation": {
-                            "x": 0.0,
-                            "y": 0.0,
-                            "z": 0.0
-                        },
-                        "scale": {
-                            "x": 1.0,
-                            "y": 1.0,
-                            "z": 1.0
-                        }
-                    },
-                    {
-                        "name": "MaybeHead",
-                        "parentBone": "耳.L",
-                        "position": {
-                            "x": 0.0,
-                            "y": 0.0,
-                            "z": 0.0
-                        },
-                        "rotation": {
-                            "x": 0.0,
-                            "y": 0.0,
-                            "z": 0.0
-                        },
-                        "scale": {
-                            "x": 1.0,
-                            "y": 1.0,
-                            "z": 1.0
-                        }
-                    }
-                ]
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 0.4358959197998047,
-                    "y": 0.2565133571624756,
-                    "z": -0.2101726531982422
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": -0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "18321786447192496204",
-            "name": "Player"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/Alice_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "Scripts": [
-                {
-                    "enabled": true,
-                    "name": "CharacterAnimatorComponent",
-                    "props": {
-                        "m_additiveClip": "Recoil",
-                        "m_additiveDuration": 0.25,
-                        "m_additiveRefClip": "Idle",
-                        "m_aimWeight": 1.0,
-                        "m_aimYawDeg": 0.0,
-                        "m_attackClip": "Attack01",
-                        "m_attackDuration": 1.5,
-                        "m_attackHitTime": 0.699999988079071,
-                        "m_attackPlaySpeed": 1.0,
-                        "m_blendSpeed": 8.0,
-                        "m_crouchClip": "CrouchDown",
-                        "m_crouchDuration": 1.0,
-                        "m_enableAdditive": false,
-                        "m_enableAim": false,
-                        "m_enableFootIK": true,
-                        "m_enableIK": false,
-                        "m_enableUpperLayer": false,
-                        "m_gravity": 18.0,
-                        "m_idleClip": "Idle",
-                        "m_ikChainLength": 3,
-                        "m_ikLiftSpeed": 5.0,
-                        "m_ikTargetLocal": {
-                            "x": 0.0,
-                            "y": 1.2000000476837158,
-                            "z": 0.20000000298023224
-                        },
-                        "m_ikTipBone": "Hand_L",
-                        "m_ikWeight": 1.0,
-                        "m_jumpSpeed": 6.5,
-                        "m_leftFootBasePos": {
-                            "x": -0.20000000298023224,
-                            "y": 0.0,
-                            "z": 0.10000000149011612
-                        },
-                        "m_leftFootBone": "Ball_L",
-                        "m_maxLiftHeight": 0.5,
-                        "m_moveSpeed": 10.0,
-                        "m_runClip": "Run",
-                        "m_runMultiplier": 1.600000023841858,
-                        "m_socketName": "WeaponPoint",
-                        "m_socketParentBone": "Hand_R",
-                        "m_socketPos": {
-                            "x": 0.10000000149011612,
-                            "y": 0.05000000074505806,
-                            "z": 0.0
-                        },
-                        "m_socketRotDeg": {
-                            "x": 0.0,
-                            "y": 90.0,
-                            "z": 0.0
-                        },
-                        "m_socketScale": {
-                            "x": 1.0,
-                            "y": 1.0,
-                            "z": 1.0
-                        },
-                        "m_transitionDuration": 0.20000000298023224,
-                        "m_upperClip": "Aim",
-                        "m_walkClip": "Walk",
-                        "m_weaponObjName": "Weapon"
-                    }
-                }
-            ],
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 469.37395599507727
+                "timeSec": 79.47548578632995
             },
             "SkinnedMesh": {
                 "boneCount": 248,
@@ -2520,8 +2290,8 @@
             "Socket": {
                 "sockets": [
                     {
-                        "name": "MaybeHead",
-                        "parentBone": "耳.R",
+                        "name": "123",
+                        "parentBone": "手首.L",
                         "position": {
                             "x": 0.0,
                             "y": 0.0,
@@ -2543,9 +2313,9 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 1.668014645576477,
-                    "y": 0.15474200248718262,
-                    "z": 0.2781052589416504
+                    "x": -0.020435109734535217,
+                    "y": -0.16792452335357666,
+                    "z": -0.041956424713134766
                 },
                 "rotation": {
                     "x": 0.0,
@@ -2558,8 +2328,7 @@
                     "z": 1.0
                 }
             },
-            "guid": "4026602927909285879",
-            "name": "Enemy"
+            "guid": "14686318809939303361"
         },
         {
             "Material": {
@@ -2609,29 +2378,29 @@
                     "z": 1.0
                 },
                 "followScale": true,
-                "ownerGuid": "18321786447192496204",
-                "ownerNameDebug": "Player",
-                "socketName": "RightHand"
+                "ownerGuid": "14686318809939303361",
+                "ownerNameDebug": "",
+                "socketName": "123"
             },
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
+                    "x": -0.020435109734535217,
+                    "y": -0.16792452335357666,
+                    "z": -0.041956424713134766
                 },
                 "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
+                    "x": -0.5078355073928833,
+                    "y": 0.33079129457473755,
+                    "z": -0.4576570391654968
                 },
                 "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
+                    "x": 1.0153008699417114,
+                    "y": 0.8533065915107727,
+                    "z": 1.0337138175964355
                 }
             },
-            "guid": "14085305070192088751"
+            "guid": "11137957507606629790"
         }
     ],
     "sceneName": "CombatTest",

@@ -139,7 +139,9 @@ namespace Alice
                                     DirectX::XMMatrixRotationRollPitchYawFromVector(rotation) *
                                     DirectX::XMMatrixTranslationFromVector(translation);
 
-                                DirectX::XMMATRIX boneGRow = DirectX::XMLoadFloat4x4(&rt.globals[(size_t)nodeIdx]);
+                                // rt.globals is column-major (FBX evaluation); transpose to row-major.
+                                DirectX::XMMATRIX boneGRow = DirectX::XMMatrixTranspose(
+                                    DirectX::XMLoadFloat4x4(&rt.globals[(size_t)nodeIdx]));
                                 DirectX::XMMATRIX socketWorld = localRow * boneGRow * worldRow;
 
                                 DirectX::XMStoreFloat4x4(&s.local, localRow);
