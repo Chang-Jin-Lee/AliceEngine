@@ -128,10 +128,11 @@ namespace Alice
         float             metalness   { 0.0f };
         float             normalStrength { 1.0f }; // 노말맵 강도 조절
         int               shadingMode { -1 }; // -1: 전역, 0~5: 개별 셰이딩 모드, 6: OnlyTextureWithOutline
+        bool              transparent { false };
         
         // 아웃라인 파라미터 (shadingMode == 6일 때 사용)
         DirectX::XMFLOAT3 outlineColor { 0.0f, 0.0f, 0.0f }; // 아웃라인 색상
-        float             outlineWidth { 0.01f };             // 아웃라인 두께
+        float             outlineWidth { 0.0f };             // 아웃라인 두께
 
         // 선택적인 알베도 텍스처 경로 (.alice 단일 포맷 또는 원본 이미지 경로)
         std::string       albedoTexturePath;
@@ -176,6 +177,7 @@ namespace Alice
 		DirectX::XMMATRIX g_World;
 		DirectX::XMMATRIX g_View;
 		DirectX::XMMATRIX g_Proj;
+		DirectX::XMMATRIX g_InvViewProj;
 		DirectX::XMMATRIX g_WorldInvTranspose;
 		DirectX::XMFLOAT4 g_Material_ambient;
 		DirectX::XMFLOAT4 g_Material_diffuse;
@@ -219,6 +221,7 @@ namespace Alice
 			g_World = DirectX::XMMatrixIdentity();
 			g_View = DirectX::XMMatrixIdentity();
 			g_Proj = DirectX::XMMatrixIdentity();
+			g_InvViewProj = DirectX::XMMatrixIdentity();
 			g_WorldInvTranspose = DirectX::XMMatrixIdentity();
 			g_LightViewProj = DirectX::XMMatrixIdentity(); // 외부 값(lightViewProj) 의존 -> Identity로 초기화
 
