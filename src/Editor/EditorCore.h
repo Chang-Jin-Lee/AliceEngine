@@ -149,7 +149,9 @@ namespace Alice
                           bool& pvdEnabled,
                           std::string& pvdHost,
                           int& pvdPort,
-                          class UIWorldManager* uiWorldManager = nullptr);
+                          class UIWorldManager* uiWorldManager,
+						  bool& isDebugDraw
+						  );
 
 		template<typename T>
 		void DrawEngineComponent(const char* label, T* comp, std::function<void()> removeFn, const EntityId& _selectedEntity, const std::string& compTypeName)
