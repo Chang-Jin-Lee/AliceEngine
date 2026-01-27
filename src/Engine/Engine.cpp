@@ -2,6 +2,7 @@
 
 #include "Rendering/D3D11/D3D11RenderDevice.h"
 #include "Rendering/DebugDrawSystem.h"
+#include "Rendering/DebugDrawComponentSystem.h"
 #include "Rendering/EffectSystem.h"
 #include "Rendering/TrailEffectRenderSystem.h"
 
@@ -149,6 +150,7 @@ namespace Alice
 		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
 		std::unique_ptr<class DebugDrawSystem> m_gizmoDrawSystem;
+		DebugDrawComponentSystem m_debugDrawComponentSystem;
 		std::unique_ptr<class EffectSystem> m_effectSystem;
 		std::unique_ptr<class TrailEffectRenderSystem> m_trailRenderSystem;
 		std::unique_ptr<ComputeEffectSystem> m_computeEffectSystem;
@@ -1349,6 +1351,15 @@ namespace Alice
 				);
 			}
 
+			pImpl->m_debugDrawComponentSystem.Build(
+				pImpl->m_world,
+				dbg,
+				gizmo,
+				pImpl->m_selectedEntity,
+				pImpl->m_debugDraw,
+				true
+			);
+
 			// 나머지 디버그 요소 (항상 보이도록 오버레이)
 			if (dbg && pImpl->m_debugDraw)
 			{
@@ -1425,40 +1436,6 @@ namespace Alice
 						: DirectX::XMFLOAT4(1.f, 1.f, 0.f, 1.f);
 
 					AddBoxLines(worldCorners, col);
-				}
-
-				// SoundBox: 월드 기준 AABB 를 박스로 시각화
-				for (const auto& [entityId, box] : pImpl->m_world.GetComponents<SoundBoxComponent>())
-				{
-					// 선택된 엔티티 또는 debugDraw가 켜져있을 때만 그림
-					if (entityId != pImpl->m_selectedEntity && !box.debugDraw)
-						continue;
-
-					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
-					DirectX::XMFLOAT3 p = t ? t->position : DirectX::XMFLOAT3(0, 0, 0);
-					DirectX::XMFLOAT3 s = t ? t->scale : DirectX::XMFLOAT3(1, 1, 1);
-
-					DirectX::XMFLOAT3 mn{
-						box.boundsMin.x * s.x + p.x,
-						box.boundsMin.y * s.y + p.y,
-						box.boundsMin.z * s.z + p.z
-					};
-					DirectX::XMFLOAT3 mx{
-						box.boundsMax.x * s.x + p.x,
-						box.boundsMax.y * s.y + p.y,
-						box.boundsMax.z * s.z + p.z
-					};
-
-					DirectX::XMFLOAT3 corners[8] = {
-						{mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mn.y, mx.z}, {mn.x, mn.y, mx.z},
-						{mn.x, mx.y, mn.z}, {mx.x, mx.y, mn.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
-					};
-
-					const DirectX::XMFLOAT4 col = (entityId == pImpl->m_selectedEntity)
-						? DirectX::XMFLOAT4(0.f, 1.f, 1.f, 1.f)
-						: DirectX::XMFLOAT4(0.f, 0.5f, 1.f, 1.f);
-
-					AddBoxLines(corners, col);
 				}
 
 				// AudioSource: 감쇠 반경 시각화

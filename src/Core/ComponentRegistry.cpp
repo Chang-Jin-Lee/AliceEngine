@@ -28,6 +28,7 @@
 #include "Components/AudioListenerComponent.h"
 #include "Components/AudioSourceComponent.h"
 #include "Components/SoundBoxComponent.h"
+#include "Components/DebugDrawBoxComponent.h"
 #include "Components/SocketAttachmentComponent.h"
 #include "Components/HurtboxComponent.h"
 #include "Components/WeaponTraceComponent.h"
@@ -73,6 +74,13 @@ namespace Alice
             .property("x", &XMFLOAT3::x)
             .property("y", &XMFLOAT3::y)
             .property("z", &XMFLOAT3::z);
+
+        rttr::registration::class_<XMFLOAT4>("XMFLOAT4")
+            .constructor<>()
+            .property("x", &XMFLOAT4::x)
+            .property("y", &XMFLOAT4::y)
+            .property("z", &XMFLOAT4::z)
+            .property("w", &XMFLOAT4::w);
 
         // XMFLOAT4X4는 4x4 행렬을 나타내는 타입
         // 렌더링할 때 4x4 행렬을 렌더링하기 위해 등록
@@ -246,6 +254,15 @@ namespace Alice
 			.property("maxDistance", &SoundBoxComponent::maxDistance)
 			.property("debugDraw", &SoundBoxComponent::debugDraw)
 			.property("targetEntity", &SoundBoxComponent::targetEntity);
+
+        // DebugDrawBoxComponent 등록
+        rttr::registration::class_<DebugDrawBoxComponent>("DebugDrawBoxComponent")
+            .constructor<>()
+            .property("boundsMin", &DebugDrawBoxComponent::boundsMin)
+            .property("boundsMax", &DebugDrawBoxComponent::boundsMax)
+            .property("color", &DebugDrawBoxComponent::color)
+            .property("enabled", &DebugDrawBoxComponent::enabled)
+            .property("depthTest", &DebugDrawBoxComponent::depthTest);
 
 		// SocketAttachmentComponent 등록
 		rttr::registration::class_<SocketAttachmentComponent>("SocketAttachmentComponent")
@@ -904,6 +921,8 @@ namespace Alice
         r.Register<WeaponTraceComponent>("Weapon Trace", "Combat");
         r.Register<HealthComponent>("Health", "Combat");
         r.Register<AttackDriverComponent>("Attack Driver", "Combat");
+
+        r.Register<DebugDrawBoxComponent>("Debug Draw Box", "Debug");
 
         r.SortByCategoryThenName();
     }
