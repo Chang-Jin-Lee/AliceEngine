@@ -44,6 +44,7 @@
 #include "Game/SkinnedMeshSystem.h"
 #include "Core/AdvancedAnimSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
+#include "Game/SocketWorldUpdateSystem.h"
 #include "Game/SocketAttachmentSystem.h"
 #include "Game/WeaponTraceSystem.h"
 #include "Game/CombatHitEvent.h"
@@ -167,6 +168,7 @@ namespace Alice
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		AdvancedAnimSystem  m_advancedAnimSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		SocketWorldUpdateSystem m_socketWorldUpdateSystem{ m_skinnedMeshRegistry };
 		SocketAttachmentSystem m_socketAttachmentSystem;
 		WeaponTraceSystem m_weaponTraceSystem;
 		CombatSystem m_combatSystem;
@@ -805,6 +807,7 @@ namespace Alice
 			// 2-4. 애니메이션/소켓 업데이트 (물리 이후: 최신 Transform 반영)
 			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
 			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+			pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
 			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
 			pImpl->m_animUpdatedThisFrame = true;
 
@@ -1525,6 +1528,7 @@ namespace Alice
 			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
 			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, dtSec);
 			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, dtSec);
+			pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
 			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
 			pImpl->m_animUpdatedThisFrame = true;
 		}
