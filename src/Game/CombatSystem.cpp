@@ -40,10 +40,20 @@ namespace Alice
             if (!health || !health->alive)
                 continue;
 
+            if (health->dodgeActive)
+                continue;
+
             if (health->invulnRemaining > 0.0f)
                 continue;
 
-            health->currentHealth -= hit.damage;
+            float damage = hit.damage;
+            if (health->guardActive)
+            {
+                const float scale = std::clamp(health->guardDamageScale, 0.0f, 1.0f);
+                damage *= scale;
+            }
+
+            health->currentHealth -= damage;
             if (health->currentHealth <= 0.0f)
             {
                 health->currentHealth = 0.0f;

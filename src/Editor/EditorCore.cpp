@@ -8469,7 +8469,10 @@ namespace Alice
 					ImGui::Text("Clip Timings");
 					if (ImGui::Button("+ Add Clip"))
 					{
-						driver->clips.emplace_back();
+						AttackDriverClip newClip{};
+						newClip.type = AttackDriverNotifyType::Attack;
+						newClip.source = AttackDriverClipSource::Explicit;
+						driver->clips.emplace_back(std::move(newClip));
 						changed = true;
 					}
 
@@ -8543,6 +8546,14 @@ namespace Alice
 						if (open)
 						{
 							changed |= ImGui::Checkbox("Enabled", &clip.enabled);
+
+							const char* typeLabels[] = { "Attack", "Dodge", "Guard" };
+							int typeIndex = static_cast<int>(clip.type);
+							if (ImGui::Combo("Type", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+							{
+								clip.type = static_cast<AttackDriverNotifyType>(typeIndex);
+								changed = true;
+							}
 
 							const char* sourceLabels[] = { "Explicit", "Base A", "Base B", "Upper A", "Upper B", "Additive" };
 							int sourceIndex = static_cast<int>(clip.source);

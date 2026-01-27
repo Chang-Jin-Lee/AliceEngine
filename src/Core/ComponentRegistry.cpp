@@ -352,10 +352,20 @@ namespace Alice
 			.property("currentHealth", &HealthComponent::currentHealth)
 			.property("invulnDuration", &HealthComponent::invulnDuration)
 			.property("invulnRemaining", &HealthComponent::invulnRemaining)
+			.property("dodgeActive", &HealthComponent::dodgeActive)
+			.property("guardActive", &HealthComponent::guardActive)
+			.property("guardDamageScale", &HealthComponent::guardDamageScale)
 			.property("alive", &HealthComponent::alive)
 			.property("teamId", &HealthComponent::teamId);
 
 		// AttackDriverComponent 등록
+		rttr::registration::enumeration<AttackDriverNotifyType>("AttackDriverNotifyType")
+			(
+				rttr::value("Attack", AttackDriverNotifyType::Attack),
+				rttr::value("Dodge", AttackDriverNotifyType::Dodge),
+				rttr::value("Guard", AttackDriverNotifyType::Guard)
+				);
+
 		rttr::registration::enumeration<AttackDriverClipSource>("AttackDriverClipSource")
 			(
 				rttr::value("Explicit", AttackDriverClipSource::Explicit),
@@ -368,6 +378,7 @@ namespace Alice
 
 		rttr::registration::class_<AttackDriverClip>("AttackDriverClip")
 			.constructor<>()
+			.property("type", &AttackDriverClip::type)
 			.property("source", &AttackDriverClip::source)
 			.property("clipName", &AttackDriverClip::clipName)
 			.property("startTimeSec", &AttackDriverClip::startTimeSec)

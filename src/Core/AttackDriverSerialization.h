@@ -33,6 +33,12 @@ namespace Alice
         inline Json AttackDriverClipToJson(const AttackDriverClip& clip)
         {
             Json j = Json::object();
+            switch (clip.type)
+            {
+            case AttackDriverNotifyType::Dodge: j["type"] = "Dodge"; break;
+            case AttackDriverNotifyType::Guard: j["type"] = "Guard"; break;
+            default: j["type"] = "Attack"; break;
+            }
             switch (clip.source)
             {
             case AttackDriverClipSource::BaseA: j["source"] = "BaseA"; break;
@@ -53,6 +59,21 @@ namespace Alice
         {
             if (!j.is_object())
                 return false;
+
+            if (auto it = j.find("type"); it != j.end())
+            {
+                if (it->is_string())
+                {
+                    const std::string s = it->get<std::string>();
+                    if (s == "Dodge") out.type = AttackDriverNotifyType::Dodge;
+                    else if (s == "Guard") out.type = AttackDriverNotifyType::Guard;
+                    else out.type = AttackDriverNotifyType::Attack;
+                }
+                else if (it->is_number_integer())
+                {
+                    out.type = static_cast<AttackDriverNotifyType>(it->get<int>());
+                }
+            }
 
             if (auto it = j.find("source"); it != j.end())
             {

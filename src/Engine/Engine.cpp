@@ -781,7 +781,7 @@ namespace Alice
 			if (!sceneChangedThisFrame)
 			{
 			// 2-2. 공격 드라이버(노티 등록)
-			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+			pImpl->m_attackDriverSystem.PreUpdate(pImpl->m_world);
 
 			// 2-3. 물리 업데이트
 				// ===================================================================
@@ -810,6 +810,7 @@ namespace Alice
 			// 2-4. 애니메이션/소켓 업데이트 (물리 이후: 최신 Transform 반영)
 			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
 			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+			pImpl->m_attackDriverSystem.PostUpdate(pImpl->m_world);
 			pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
 			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
 			pImpl->m_animUpdatedThisFrame = true;
@@ -1500,9 +1501,10 @@ namespace Alice
 		if (!pImpl->m_animUpdatedThisFrame)
 		{
 			const double dtSec = static_cast<double>(pImpl->m_timer.DeltaTime());
-			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+			pImpl->m_attackDriverSystem.PreUpdate(pImpl->m_world);
 			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, dtSec);
 			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, dtSec);
+			pImpl->m_attackDriverSystem.PostUpdate(pImpl->m_world);
 			pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
 			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
 			pImpl->m_animUpdatedThisFrame = true;
