@@ -75,12 +75,13 @@ namespace Alice
         const TransformComponent& transform,
         const XMFLOAT3& cameraPosition)
     {
-        // Unbound면 항상 BlendWeight 반환
+        // A) Unbound: 항상 후보, w = BlendWeight
         if (volume.unbound)
         {
             return volume.blendWeight;
         }
 
+        // B) Bound(Box): 카메라 위치 기준으로 weight 계산
         // 월드 공간 박스 크기 계산 (Transform의 scale과 volume의 boxSize 곱)
         XMFLOAT3 worldBoxSize;
         worldBoxSize.x = volume.boxSize.x * transform.scale.x;
@@ -90,42 +91,34 @@ namespace Alice
         // 월드 공간 박스 중심 = Transform의 position
         const XMFLOAT3& boxCenter = transform.position;
 
-        // Box 내부 여부 확인
+        // 카메라가 볼륨 내부인지 판정
         bool inside = IsPointInsideBox(cameraPosition, boxCenter, worldBoxSize, transform.rotation);
 
         if (inside)
         {
-            // 내부: BlendWeight 반환
+            // 내부: w = BlendWeight (강하게 적용)
             return volume.blendWeight;
         }
         else
         {
-            // 외부: 표면까지 거리 기반 weight 계산
-            if (volume.blendRadius <= 0.0f)
-            {
-                // BlendRadius가 0이면 외부에서는 적용 안 함
-                return 0.0f;
-            }
-
+            // 외부: 표면까지 거리 d를 구함
             float distance = DistanceToBoxSurface(cameraPosition, boxCenter, worldBoxSize, transform.rotation);
             
-            if (distance < 0.0f)
+            // BlendRadius > 0이고 d <= BlendRadius일 때만 페이드 적용
+            if (volume.blendRadius > 0.0f && distance <= volume.blendRadius)
             {
-                // 내부 (음수 거리)
-                return volume.blendWeight;
+                // t = saturate(1 - d / BlendRadius)
+                float t = 1.0f - (distance / volume.blendRadius);
+                t = std::clamp(t, 0.0f, 1.0f);
+                
+                // w = BlendWeight * t
+                return volume.blendWeight * t;
             }
-
-            if (distance > volume.blendRadius)
+            else
             {
-                // BlendRadius 밖
+                // 그 외는 w = 0
                 return 0.0f;
             }
-
-            // 거리 기반 페이드: t = 1 - (distance / blendRadius)
-            float t = 1.0f - (distance / volume.blendRadius);
-            t = std::clamp(t, 0.0f, 1.0f);
-            
-            return volume.blendWeight * t;
         }
     }
 

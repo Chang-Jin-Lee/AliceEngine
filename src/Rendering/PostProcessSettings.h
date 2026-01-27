@@ -93,20 +93,24 @@ namespace Alice
         /// float 값 블렌딩: lerp(Final, Volume, weight)
         inline void BlendFloat(float& final, float volume, float weight, bool override)
         {
-            if (override && weight > 0.0f)
-            {
-                final = final + (volume - final) * weight;
-            }
+			if (override && weight > 0.0f)
+			{
+				if (weight >= 0.5f)
+					final = volume;
+			}
         }
 
         /// float3 값 블렌딩: lerp(Final, Volume, weight)
         inline void BlendFloat3(DirectX::XMFLOAT3& final, const DirectX::XMFLOAT3& volume, float weight, bool override)
         {
-            if (override && weight > 0.0f)
-            {
-                final.x = final.x + (volume.x - final.x) * weight;
-                final.y = final.y + (volume.y - final.y) * weight;
-                final.z = final.z + (volume.z - final.z) * weight;
+			if (override && weight > 0.0f)
+			{
+				if (weight >= 0.5f)
+				{
+					final.x = final.x + (volume.x - final.x) * weight;
+					final.y = final.y + (volume.y - final.y) * weight;
+					final.z = final.z + (volume.z - final.z) * weight;
+				}
             }
         }
 
@@ -125,6 +129,7 @@ namespace Alice
         /// PostProcessSettings 전체 블렌딩 (maxHDRNits 포함)
         inline void BlendSettings(PostProcessSettings& final, const PostProcessSettings& volume, float weight)
         {
+            weight = std::clamp(weight, 0.0f, 1.0f);
             BlendFloat(final.exposure, volume.exposure, weight, volume.bOverride_Exposure);
             BlendFloat(final.maxHDRNits, volume.maxHDRNits, weight, volume.bOverride_MaxHDRNits);
             BlendFloat3(final.saturation, volume.saturation, weight, volume.bOverride_ColorGradingSaturation);

@@ -5602,6 +5602,32 @@ namespace Alice
 			{
 				bool changed = false;
 
+				// ==== Unbound 설정 (최상단) ====
+				ImGui::Text("Volume Type");
+				changed |= ImGui::Checkbox("Unbound (전역 적용)##PostProcessVolume", &volume->unbound);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Unbound: ON이면 항상 전역 적용 (무한 범위)\nOFF이면 Shape + BlendRadius 기반 공간 적용");
+				
+				if (volume->unbound)
+				{
+					ImGui::SameLine();
+					ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "[전역 적용 중]");
+				}
+				else
+				{
+					ImGui::SameLine();
+					ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.3f, 1.0f), "[공간 기반 적용]");
+				}
+
+				ImGui::Separator();
+
+				// ==== Bound 설정 (Unbound OFF일 때만 의미 있음) ====
+				if (volume->unbound)
+				{
+					// Unbound ON: Shape/BlendRadius 비활성화
+					ImGui::BeginDisabled();
+				}
+
 				// ==== Shape 설정 ====
 				ImGui::Text("Shape");
 				const char* shapeNames[] = { "Box", "Sphere" };
@@ -5611,10 +5637,8 @@ namespace Alice
 					volume->SetShape(static_cast<PostProcessVolumeShape>(currentShape));
 					changed = true;
 				}
-
-				changed |= ImGui::Checkbox("Unbound##PostProcessVolume", &volume->unbound);
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Unbound: true면 항상 활성화 (무한 범위)");
+				if (volume->unbound && ImGui::IsItemHovered())
+					ImGui::SetTooltip("Unbound가 켜져 있어 Shape는 적용되지 않습니다.");
 
 				if (volume->shape == PostProcessVolumeShape::Box)
 				{
@@ -5646,7 +5670,17 @@ namespace Alice
 					changed = true;
 				}
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("볼륨 외부에서도 블렌딩되는 거리 (0이면 내부에서만 적용)");
+				{
+					if (volume->unbound)
+						ImGui::SetTooltip("Unbound가 켜져 있어 BlendRadius는 적용되지 않습니다.");
+					else
+						ImGui::SetTooltip("볼륨 외부에서도 블렌딩되는 거리 (0이면 내부에서만 적용)");
+				}
+
+				if (volume->unbound)
+				{
+					ImGui::EndDisabled();
+				}
 
 				float blendWeight = volume->GetBlendWeight();
 				if (ImGui::SliderFloat("Blend Weight##PostProcessVolume", &blendWeight, 0.0f, 1.0f))

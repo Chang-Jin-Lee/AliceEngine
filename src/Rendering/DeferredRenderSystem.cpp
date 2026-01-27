@@ -348,8 +348,8 @@ namespace Alice
                 m_bloomLevelSRV[level][pingPong].Reset();
             }
         }
-        CreateBloomResources(width, height);
-        
+		CreateBloomResources(width, height);
+
         // Post-Bloom 합성 리소스 리사이즈
         m_postBloomTex.Reset();
         m_postBloomRTV.Reset();
@@ -2147,8 +2147,90 @@ namespace Alice
             m_trailRenderSystem->Render(world, camera);
         }
 
-        SetPostProcessVolume(world, camera);
-       
+        // Post Process Volume 블렌딩 (카메라 위치 기준)
+        {
+            // 기본 설정 생성
+            PostProcessSettings defaultSettings = PostProcessSettings::FromDefaults();
+            defaultSettings.exposure = m_postProcessParams.exposure;
+            defaultSettings.maxHDRNits = m_postProcessParams.maxHDRNits;
+            defaultSettings.saturation = DirectX::XMFLOAT3(
+                m_postProcessParams.colorGradingSaturation.x,
+                m_postProcessParams.colorGradingSaturation.y,
+                m_postProcessParams.colorGradingSaturation.z
+            );
+            defaultSettings.contrast = DirectX::XMFLOAT3(
+                m_postProcessParams.colorGradingContrast.x,
+                m_postProcessParams.colorGradingContrast.y,
+                m_postProcessParams.colorGradingContrast.z
+            );
+            defaultSettings.gamma = DirectX::XMFLOAT3(
+                m_postProcessParams.colorGradingGamma.x,
+                m_postProcessParams.colorGradingGamma.y,
+                m_postProcessParams.colorGradingGamma.z
+            );
+            defaultSettings.gain = DirectX::XMFLOAT3(
+                m_postProcessParams.colorGradingGain.x,
+                m_postProcessParams.colorGradingGain.y,
+                m_postProcessParams.colorGradingGain.z
+            );
+            // Bloom 기본 설정
+            defaultSettings.bloomThreshold = m_bloomSettings.threshold;
+            defaultSettings.bloomKnee = m_bloomSettings.knee;
+            defaultSettings.bloomIntensity = m_bloomSettings.intensity;
+            defaultSettings.bloomGaussianIntensity = m_bloomSettings.gaussianIntensity;
+            defaultSettings.bloomRadius = m_bloomSettings.radius;
+            defaultSettings.bloomDownsample = m_bloomSettings.downsample;
+
+            // Post Process Volume 블렌딩 계산
+            PostProcessSettings finalSettings = m_postProcessVolumeSystem.CalculateFinalSettings(
+                const_cast<World&>(world),  // CalculateFinalSettings는 수정하지 않으므로 안전
+                camera.GetPosition(),
+                defaultSettings
+            );
+
+            // 최종 설정을 m_postProcessParams에 적용
+            m_postProcessParams.exposure = finalSettings.exposure;
+            m_postProcessParams.maxHDRNits = finalSettings.maxHDRNits;
+            m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(
+                finalSettings.saturation.x,
+                finalSettings.saturation.y,
+                finalSettings.saturation.z,
+                1.0f
+            );
+            m_postProcessParams.colorGradingContrast = DirectX::XMFLOAT4(
+                finalSettings.contrast.x,
+                finalSettings.contrast.y,
+                finalSettings.contrast.z,
+                1.0f
+            );
+            m_postProcessParams.colorGradingGamma = DirectX::XMFLOAT4(
+                finalSettings.gamma.x,
+                finalSettings.gamma.y,
+                finalSettings.gamma.z,
+                1.0f
+            );
+            m_postProcessParams.colorGradingGain = DirectX::XMFLOAT4(
+                finalSettings.gain.x,
+                finalSettings.gain.y,
+                finalSettings.gain.z,
+                1.0f
+            );
+            // Bloom 설정 적용
+            m_bloomSettings.threshold = finalSettings.bloomThreshold;
+            m_bloomSettings.knee = finalSettings.bloomKnee;
+            m_bloomSettings.intensity = finalSettings.bloomIntensity;
+            m_bloomSettings.gaussianIntensity = finalSettings.bloomGaussianIntensity;
+            m_bloomSettings.radius = finalSettings.bloomRadius;
+            // 다운샘플링 변경 시 리소스 재생성
+            if (m_bloomSettings.downsample != finalSettings.bloomDownsample)
+            {
+                m_bloomSettings.downsample = finalSettings.bloomDownsample;
+                if (m_sceneWidth > 0 && m_sceneHeight > 0)
+                {
+                    CreateBloomResources(m_sceneWidth, m_sceneHeight);
+                }
+            }
+        }
 
         // 에디터 뷰포트 표시용 LDR 텍스처로 Bloom + 톤매핑 (ImGui::Image에서 사용)
         if (m_viewportRTV)
@@ -3721,7 +3803,6 @@ namespace Alice
 	// Post Process Volume 블렌딩 (카메라 위치 기준)
     void DeferredRenderSystem::SetPostProcessVolume(const World& world, const Camera& camera)
 	{
-		// 기본 설정 생성
 		PostProcessSettings defaultSettings = PostProcessSettings::FromDefaults();
 		defaultSettings.exposure = m_postProcessParams.exposure;
 		defaultSettings.maxHDRNits = m_postProcessParams.maxHDRNits;
@@ -3745,6 +3826,13 @@ namespace Alice
 			m_postProcessParams.colorGradingGain.y,
 			m_postProcessParams.colorGradingGain.z
 		);
+		// Bloom 기본 설정
+		defaultSettings.bloomThreshold = m_bloomSettings.threshold;
+		defaultSettings.bloomKnee = m_bloomSettings.knee;
+		defaultSettings.bloomIntensity = m_bloomSettings.intensity;
+		defaultSettings.bloomGaussianIntensity = m_bloomSettings.gaussianIntensity;
+		defaultSettings.bloomRadius = m_bloomSettings.radius;
+		defaultSettings.bloomDownsample = m_bloomSettings.downsample;
 
 		// Post Process Volume 블렌딩 계산
 		PostProcessSettings finalSettings = m_postProcessVolumeSystem.CalculateFinalSettings(
@@ -3755,6 +3843,7 @@ namespace Alice
 
 		// 최종 설정을 m_postProcessParams에 적용
 		m_postProcessParams.exposure = finalSettings.exposure;
+		m_postProcessParams.maxHDRNits = finalSettings.maxHDRNits;
 		m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(
 			finalSettings.saturation.x,
 			finalSettings.saturation.y,
@@ -3779,6 +3868,12 @@ namespace Alice
 			finalSettings.gain.z,
 			1.0f
 		);
+		// Bloom 설정 적용
+		m_bloomSettings.threshold = finalSettings.bloomThreshold;
+		m_bloomSettings.knee = finalSettings.bloomKnee;
+		m_bloomSettings.intensity = finalSettings.bloomIntensity;
+		m_bloomSettings.gaussianIntensity = finalSettings.bloomGaussianIntensity;
+		m_bloomSettings.radius = finalSettings.bloomRadius;
 	}
 
     void DeferredRenderSystem::ApplyColorGrading(const DirectX::XMFLOAT4& saturation, const DirectX::XMFLOAT4& contrast, const DirectX::XMFLOAT4& gamma, const DirectX::XMFLOAT4& gain)
