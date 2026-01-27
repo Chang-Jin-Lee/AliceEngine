@@ -1,4 +1,5 @@
 #include "Rendering/DeferredRenderSystem.h"
+#include "Rendering/PostProcessSettings.h"
 
 #include <d3dcompiler.h>
 #include <DirectXTK/WICTextureLoader.h>
@@ -1852,20 +1853,26 @@ namespace Alice
         // Deferred Light 패스 (IBL 포함)
         PassDeferredLight(world, camera, shadingMode, enableFillLight, lightViewProj);
 
+
+        // 스카이박스 렌더링
+        if (m_skyboxEnabled)
+        {
+			m_context->RSSetViewports(1, &vp);
+			RenderSkybox(camera);
+        }
+
+
+        // 반투명(알파 블렌딩) 오브젝트는 라이트 패스 이후 Forward-Style로 합성
+        PassTransparentForward(camera, skinnedCommands, shadingMode);
+        
         // TrailEffectRenderSystem 렌더링 (IBL 패스 이후)
         if (m_trailRenderSystem)
         {
             m_trailRenderSystem->Render(world, camera);
         }
 
-        // 스카이박스 렌더링
-        if (m_skyboxEnabled)
-        {
-            RenderSkybox(camera);
-        }
-
-        // 반투명(알파 블렌딩) 오브젝트는 라이트 패스 이후 Forward-Style로 합성
-        PassTransparentForward(camera, skinnedCommands, shadingMode);
+        SetPostProcessVolume(world, camera);
+       
 
         // 에디터 뷰포트 표시용 LDR 텍스처로 Bloom + 톤매핑 (ImGui::Image에서 사용)
         if (m_viewportRTV)
@@ -3256,7 +3263,13 @@ namespace Alice
     
     void DeferredRenderSystem::GetPostProcessParams(float& outExposure, float& outMaxHDRNits, float& outSaturation, float& outContrast, float& outGamma) const
     {
-        GetPostProcessParams(outExposure, outMaxHDRNits);
+		outExposure = m_postProcessParams.exposure;
+
+		// RenderDevice에서 HDR 지원 여부 및 최대 밝기 가져오기
+		float maxNits = 100.0f;
+		m_renderDevice.IsHDRSupported(maxNits);
+		// 사용자가 설정한 값이 있으면 사용, 없으면 모니터 최대 밝기 사용
+		outMaxHDRNits = (m_postProcessParams.maxHDRNits > 0.0f) ? m_postProcessParams.maxHDRNits : maxNits;
         // Vector4의 첫 번째 채널(R)을 반환 (하위 호환성)
         outSaturation = m_postProcessParams.colorGradingSaturation.x;
         outContrast = m_postProcessParams.colorGradingContrast.x;
@@ -3289,6 +3302,69 @@ namespace Alice
             1.0f
         );
     }
+
+	// Post Process Volume 블렌딩 (카메라 위치 기준)
+    void DeferredRenderSystem::SetPostProcessVolume(const World& world, const Camera& camera)
+	{
+		// 기본 설정 생성
+		PostProcessSettings defaultSettings = PostProcessSettings::FromDefaults();
+		defaultSettings.exposure = m_postProcessParams.exposure;
+		defaultSettings.maxHDRNits = m_postProcessParams.maxHDRNits;
+		defaultSettings.saturation = DirectX::XMFLOAT3(
+			m_postProcessParams.colorGradingSaturation.x,
+			m_postProcessParams.colorGradingSaturation.y,
+			m_postProcessParams.colorGradingSaturation.z
+		);
+		defaultSettings.contrast = DirectX::XMFLOAT3(
+			m_postProcessParams.colorGradingContrast.x,
+			m_postProcessParams.colorGradingContrast.y,
+			m_postProcessParams.colorGradingContrast.z
+		);
+		defaultSettings.gamma = DirectX::XMFLOAT3(
+			m_postProcessParams.colorGradingGamma.x,
+			m_postProcessParams.colorGradingGamma.y,
+			m_postProcessParams.colorGradingGamma.z
+		);
+		defaultSettings.gain = DirectX::XMFLOAT3(
+			m_postProcessParams.colorGradingGain.x,
+			m_postProcessParams.colorGradingGain.y,
+			m_postProcessParams.colorGradingGain.z
+		);
+
+		// Post Process Volume 블렌딩 계산
+		PostProcessSettings finalSettings = m_postProcessVolumeSystem.CalculateFinalSettings(
+			const_cast<World&>(world),  // CalculateFinalSettings는 수정하지 않으므로 안전
+			camera.GetPosition(),
+			defaultSettings
+		);
+
+		// 최종 설정을 m_postProcessParams에 적용
+		m_postProcessParams.exposure = finalSettings.exposure;
+		m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(
+			finalSettings.saturation.x,
+			finalSettings.saturation.y,
+			finalSettings.saturation.z,
+			1.0f
+		);
+		m_postProcessParams.colorGradingContrast = DirectX::XMFLOAT4(
+			finalSettings.contrast.x,
+			finalSettings.contrast.y,
+			finalSettings.contrast.z,
+			1.0f
+		);
+		m_postProcessParams.colorGradingGamma = DirectX::XMFLOAT4(
+			finalSettings.gamma.x,
+			finalSettings.gamma.y,
+			finalSettings.gamma.z,
+			1.0f
+		);
+		m_postProcessParams.colorGradingGain = DirectX::XMFLOAT4(
+			finalSettings.gain.x,
+			finalSettings.gain.y,
+			finalSettings.gain.z,
+			1.0f
+		);
+	}
 
     void DeferredRenderSystem::ApplyColorGrading(const DirectX::XMFLOAT4& saturation, const DirectX::XMFLOAT4& contrast, const DirectX::XMFLOAT4& gamma, const DirectX::XMFLOAT4& gain)
     {

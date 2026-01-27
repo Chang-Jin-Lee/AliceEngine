@@ -34,6 +34,8 @@
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
 #include "Components/SocketComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
+#include "Rendering/PostProcessSettings.h"
 
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
@@ -478,6 +480,56 @@ namespace Alice
             .property("range", &RectLightComponent::range)
             .property("enabled", &RectLightComponent::enabled);
 
+        // === PostProcessVolumeComponent 등록 ===
+        rttr::registration::enumeration<PostProcessVolumeShape>("PostProcessVolumeShape")
+            (
+                rttr::value("Box", PostProcessVolumeShape::Box),
+                rttr::value("Sphere", PostProcessVolumeShape::Sphere)
+            );
+        rttr::registration::class_<PostProcessVolumeComponent>("PostProcessVolumeComponent")
+            .constructor<>()
+            .property("shape", &PostProcessVolumeComponent::GetShape, &PostProcessVolumeComponent::SetShape)
+            .property("unbound", &PostProcessVolumeComponent::GetUnbound, &PostProcessVolumeComponent::SetUnbound)
+            .property("boxSize", &PostProcessVolumeComponent::GetBoxSize, &PostProcessVolumeComponent::SetBoxSize)
+            .property("sphereRadius", &PostProcessVolumeComponent::GetSphereRadius, &PostProcessVolumeComponent::SetSphereRadius)
+            .property("blendRadius", &PostProcessVolumeComponent::GetBlendRadius, &PostProcessVolumeComponent::SetBlendRadius)
+                (rttr::metadata("Min", 0.0f))
+            .property("blendWeight", &PostProcessVolumeComponent::GetBlendWeight, &PostProcessVolumeComponent::SetBlendWeight)
+                (rttr::metadata("Min", 0.0f), rttr::metadata("Max", 1.0f))
+            .property("priority", &PostProcessVolumeComponent::GetPriority, &PostProcessVolumeComponent::SetPriority)
+            .property("settings", &PostProcessVolumeComponent::settings);
+
+        // === PostProcessSettings 등록 ===
+        rttr::registration::class_<PostProcessSettings>("PostProcessSettings")
+            .constructor<>()
+            // Exposure
+            .property("bOverride_Exposure", &PostProcessSettings::bOverride_Exposure)
+            .property("exposure", &PostProcessSettings::exposure)
+            .property("bOverride_MaxHDRNits", &PostProcessSettings::bOverride_MaxHDRNits)
+            .property("maxHDRNits", &PostProcessSettings::maxHDRNits)
+            // Color Grading
+            .property("bOverride_ColorGradingSaturation", &PostProcessSettings::bOverride_ColorGradingSaturation)
+            .property("saturation", &PostProcessSettings::saturation)
+            .property("bOverride_ColorGradingContrast", &PostProcessSettings::bOverride_ColorGradingContrast)
+            .property("contrast", &PostProcessSettings::contrast)
+            .property("bOverride_ColorGradingGamma", &PostProcessSettings::bOverride_ColorGradingGamma)
+            .property("gamma", &PostProcessSettings::gamma)
+            .property("bOverride_ColorGradingGain", &PostProcessSettings::bOverride_ColorGradingGain)
+            .property("gain", &PostProcessSettings::gain)
+            // Bloom
+            .property("bOverride_BloomThreshold", &PostProcessSettings::bOverride_BloomThreshold)
+            .property("bloomThreshold", &PostProcessSettings::bloomThreshold)
+            .property("bOverride_BloomKnee", &PostProcessSettings::bOverride_BloomKnee)
+            .property("bloomKnee", &PostProcessSettings::bloomKnee)
+            .property("bOverride_BloomIntensity", &PostProcessSettings::bOverride_BloomIntensity)
+            .property("bloomIntensity", &PostProcessSettings::bloomIntensity)
+            .property("bOverride_BloomGaussianIntensity", &PostProcessSettings::bOverride_BloomGaussianIntensity)
+            .property("bloomGaussianIntensity", &PostProcessSettings::bloomGaussianIntensity)
+            .property("bOverride_BloomRadius", &PostProcessSettings::bOverride_BloomRadius)
+            .property("bloomRadius", &PostProcessSettings::bloomRadius)
+            .property("bOverride_BloomDownsample", &PostProcessSettings::bOverride_BloomDownsample)
+            .property("bloomDownsample", &PostProcessSettings::bloomDownsample);
+
         // === ComputeEffectComponent 등록 ===
         rttr::registration::class_<ComputeEffectComponent>("ComputeEffectComponent")
             .constructor<>()
@@ -884,6 +936,8 @@ namespace Alice
         r.Register<PointLightComponent>("Point Light", "Lighting");
         r.Register<SpotLightComponent>("Spot Light", "Lighting");
         r.Register<RectLightComponent>("Rect Light", "Lighting");
+
+        r.Register<PostProcessVolumeComponent>("Post Process Volume", "Rendering");
 
         r.Register<ComputeEffectComponent>("Compute Effect", "VFX");
         r.Register<EffectComponent>("Effect", "VFX");

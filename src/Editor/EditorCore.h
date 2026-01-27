@@ -248,6 +248,7 @@ namespace Alice
         void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity);
 		
 		// Camera 컴포넌트 인스펙터
 		void DrawInspectorCameraSpringArm(World& world, const EntityId& _selectedEntity);

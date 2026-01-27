@@ -37,6 +37,8 @@
 #include "Components/CameraShakeComponent.h"
 #include "Components/CameraBlendComponent.h"
 #include "Components/CameraInputComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
+#include "Rendering/PostProcessSettings.h"
 #include "Editor/Blueprint/AnimBlueprintEditor.h"
 #include "Game/CombatPhysicsLayers.h"
 
@@ -3157,6 +3159,9 @@ namespace Alice
 				DrawInspectorPointLight(world, selectedEntity);
 				DrawInspectorSpotLight(world, selectedEntity);
 				DrawInspectorRectLight(world, selectedEntity);
+				
+				// 3-3. Post Process Volume
+				DrawInspectorPostProcessVolume(world, selectedEntity);
 
 				// 3-3. Compute Effect
 				DrawInspectorComputeEffect(world, selectedEntity);
@@ -5112,6 +5117,7 @@ namespace Alice
 				typeName == "PointLightComponent" ||
 				typeName == "SpotLightComponent" ||
 				typeName == "RectLightComponent" ||
+				typeName == "PostProcessVolumeComponent" ||
 				typeName == "SkinnedMeshComponent" ||
 				typeName == "SkinnedAnimationComponent")  // Animation Status 섹션에서 처리됨
 				continue;
@@ -5557,6 +5563,236 @@ namespace Alice
 
 				if (ImGui::Button("Remove Rect Light")) {
 					world.RemoveComponent<RectLightComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
+
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* volume = world.GetComponent<PostProcessVolumeComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Post Process Volume", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				// ==== Shape 설정 ====
+				ImGui::Text("Shape");
+				const char* shapeNames[] = { "Box", "Sphere" };
+				int currentShape = static_cast<int>(volume->shape);
+				if (ImGui::Combo("Shape##PostProcessVolume", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames)))
+				{
+					volume->SetShape(static_cast<PostProcessVolumeShape>(currentShape));
+					changed = true;
+				}
+
+				changed |= ImGui::Checkbox("Unbound##PostProcessVolume", &volume->unbound);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Unbound: true면 항상 활성화 (무한 범위)");
+
+				if (volume->shape == PostProcessVolumeShape::Box)
+				{
+					DirectX::XMFLOAT3 boxSize = volume->GetBoxSize();
+					if (ImGui::SliderFloat3("Box Size##PostProcessVolume", &boxSize.x, 0.1f, 100.0f))
+					{
+						volume->SetBoxSize(boxSize);
+						changed = true;
+					}
+				}
+				else if (volume->shape == PostProcessVolumeShape::Sphere)
+				{
+					float radius = volume->GetSphereRadius();
+					if (ImGui::SliderFloat("Sphere Radius##PostProcessVolume", &radius, 0.1f, 50.0f))
+					{
+						volume->SetSphereRadius(radius);
+						changed = true;
+					}
+				}
+
+				ImGui::Separator();
+
+				// ==== 블렌딩 파라미터 ====
+				ImGui::Text("Blending");
+				float blendRadius = volume->GetBlendRadius();
+				if (ImGui::SliderFloat("Blend Radius##PostProcessVolume", &blendRadius, 0.0f, 50.0f))
+				{
+					volume->SetBlendRadius(blendRadius);
+					changed = true;
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("볼륨 외부에서도 블렌딩되는 거리 (0이면 내부에서만 적용)");
+
+				float blendWeight = volume->GetBlendWeight();
+				if (ImGui::SliderFloat("Blend Weight##PostProcessVolume", &blendWeight, 0.0f, 1.0f))
+				{
+					volume->SetBlendWeight(blendWeight);
+					changed = true;
+				}
+
+				int priority = volume->GetPriority();
+				if (ImGui::InputInt("Priority##PostProcessVolume", &priority))
+				{
+					volume->SetPriority(priority);
+					changed = true;
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("우선순위: 높을수록 나중에 블렌딩되어 영향이 큼");
+
+				ImGui::Separator();
+
+				// ==== Post Process Settings ====
+				ImGui::Text("Post Process Settings");
+				PostProcessSettings& settings = volume->settings;
+
+				// Exposure
+				if (ImGui::TreeNode("Exposure##PostProcessVolume"))
+				{
+					changed |= ImGui::Checkbox("Override Exposure##PostProcessVolume", &settings.bOverride_Exposure);
+					if (settings.bOverride_Exposure)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Exposure##PostProcessVolume", &settings.exposure, -3.0f, 3.0f, "%.2f");
+						ImGui::Unindent();
+					}
+					ImGui::TreePop();
+				}
+
+				// Max HDR Nits
+				if (ImGui::TreeNode("Max HDR Nits##PostProcessVolume"))
+				{
+					changed |= ImGui::Checkbox("Override Max HDR Nits##PostProcessVolume", &settings.bOverride_MaxHDRNits);
+					if (settings.bOverride_MaxHDRNits)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Max HDR Nits##PostProcessVolume", &settings.maxHDRNits, 100.0f, 10000.0f, "%.0f nits");
+						ImGui::Unindent();
+					}
+					ImGui::TreePop();
+				}
+
+				// Color Grading
+				if (ImGui::TreeNode("Color Grading##PostProcessVolume"))
+				{
+					// Saturation
+					changed |= ImGui::Checkbox("Override Saturation##PostProcessVolume", &settings.bOverride_ColorGradingSaturation);
+					if (settings.bOverride_ColorGradingSaturation)
+					{
+						ImGui::Indent();
+						changed |= ImGui::ColorEdit3("Saturation (RGB)##PostProcessVolume", &settings.saturation.x,
+							ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+						ImGui::Unindent();
+					}
+
+					// Contrast
+					changed |= ImGui::Checkbox("Override Contrast##PostProcessVolume", &settings.bOverride_ColorGradingContrast);
+					if (settings.bOverride_ColorGradingContrast)
+					{
+						ImGui::Indent();
+						changed |= ImGui::ColorEdit3("Contrast (RGB)##PostProcessVolume", &settings.contrast.x,
+							ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+						ImGui::Unindent();
+					}
+
+					// Gamma
+					changed |= ImGui::Checkbox("Override Gamma##PostProcessVolume", &settings.bOverride_ColorGradingGamma);
+					if (settings.bOverride_ColorGradingGamma)
+					{
+						ImGui::Indent();
+						changed |= ImGui::ColorEdit3("Gamma (RGB)##PostProcessVolume", &settings.gamma.x,
+							ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+						ImGui::Unindent();
+					}
+
+					// Gain
+					changed |= ImGui::Checkbox("Override Gain##PostProcessVolume", &settings.bOverride_ColorGradingGain);
+					if (settings.bOverride_ColorGradingGain)
+					{
+						ImGui::Indent();
+						changed |= ImGui::ColorEdit3("Gain (RGB)##PostProcessVolume", &settings.gain.x,
+							ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+						ImGui::Unindent();
+					}
+
+					ImGui::TreePop();
+				}
+
+				// Bloom
+				if (ImGui::TreeNode("Bloom##PostProcessVolume"))
+				{
+					changed |= ImGui::Checkbox("Override Threshold##PostProcessVolume", &settings.bOverride_BloomThreshold);
+					if (settings.bOverride_BloomThreshold)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Threshold##PostProcessVolume", &settings.bloomThreshold, 0.0f, 5.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Knee##PostProcessVolume", &settings.bOverride_BloomKnee);
+					if (settings.bOverride_BloomKnee)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Knee##PostProcessVolume", &settings.bloomKnee, 0.0f, 1.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Intensity##PostProcessVolume", &settings.bOverride_BloomIntensity);
+					if (settings.bOverride_BloomIntensity)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Intensity##PostProcessVolume", &settings.bloomIntensity, 0.0f, 5.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Gaussian Intensity##PostProcessVolume", &settings.bOverride_BloomGaussianIntensity);
+					if (settings.bOverride_BloomGaussianIntensity)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Gaussian Intensity##PostProcessVolume", &settings.bloomGaussianIntensity, 0.0f, 5.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Radius##PostProcessVolume", &settings.bOverride_BloomRadius);
+					if (settings.bOverride_BloomRadius)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Radius##PostProcessVolume", &settings.bloomRadius, 0.1f, 10.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Downsample##PostProcessVolume", &settings.bOverride_BloomDownsample);
+					if (settings.bOverride_BloomDownsample)
+					{
+						ImGui::Indent();
+						const char* downsampleNames[] = { "1x", "2x", "4x" };
+						int downsampleValues[] = { 1, 2, 4 };
+						int currentDownsample = settings.bloomDownsample;
+						int currentIndex = 0;
+						for (int i = 0; i < IM_ARRAYSIZE(downsampleValues); ++i)
+						{
+							if (downsampleValues[i] == currentDownsample)
+							{
+								currentIndex = i;
+								break;
+							}
+						}
+						if (ImGui::Combo("Downsample##PostProcessVolume", &currentIndex, downsampleNames, IM_ARRAYSIZE(downsampleNames)))
+						{
+							settings.bloomDownsample = downsampleValues[currentIndex];
+							changed = true;
+						}
+						ImGui::Unindent();
+					}
+
+					ImGui::TreePop();
+				}
+
+				if (ImGui::Button("Remove Post Process Volume"))
+				{
+					world.RemoveComponent<PostProcessVolumeComponent>(_selectedEntity);
 					g_SceneDirty = true;
 					return;
 				}
