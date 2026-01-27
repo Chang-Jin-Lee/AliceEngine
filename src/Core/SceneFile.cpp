@@ -21,6 +21,7 @@
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
 #include "Components/ComputeEffectComponent.h"
+#include "Components/DebugDrawBoxComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
 #include "Components/SocketComponent.h"
@@ -429,6 +430,12 @@ namespace Alice
                 rttr::instance inst = copy;
                 outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
                 copy.soundPath = NormalizePathToRelative(copy.soundPath);
+            }
+
+            if (const auto* dbgBox = world.GetComponent<DebugDrawBoxComponent>(id); dbgBox)
+            {
+                rttr::instance inst = const_cast<DebugDrawBoxComponent&>(*dbgBox);
+                outEntity["DebugDrawBox"] = JsonRttr::ToJsonObject(inst);
             }
 
             if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(id); socketAttach)
@@ -911,6 +918,15 @@ namespace Alice
                 SoundBoxComponent& sb = world.AddComponent<SoundBoxComponent>(id);
                 rttr::instance inst = sb;
                 if (!JsonRttr::FromJsonObject(inst, *itSB)) return false;
+            }
+
+            // DebugDrawBox (선택)
+            auto itDbg = e.find("DebugDrawBox");
+            if (itDbg != e.end() && itDbg->is_object())
+            {
+                DebugDrawBoxComponent& dd = world.AddComponent<DebugDrawBoxComponent>(id);
+                rttr::instance inst = dd;
+                if (!JsonRttr::FromJsonObject(inst, *itDbg)) return false;
             }
 
             // SocketAttachment (선택)
