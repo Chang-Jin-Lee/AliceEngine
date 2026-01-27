@@ -356,8 +356,19 @@ namespace Alice
 			.property("teamId", &HealthComponent::teamId);
 
 		// AttackDriverComponent 등록
+		rttr::registration::enumeration<AttackDriverClipSource>("AttackDriverClipSource")
+			(
+				rttr::value("Explicit", AttackDriverClipSource::Explicit),
+				rttr::value("BaseA", AttackDriverClipSource::BaseA),
+				rttr::value("BaseB", AttackDriverClipSource::BaseB),
+				rttr::value("UpperA", AttackDriverClipSource::UpperA),
+				rttr::value("UpperB", AttackDriverClipSource::UpperB),
+				rttr::value("Additive", AttackDriverClipSource::Additive)
+				);
+
 		rttr::registration::class_<AttackDriverClip>("AttackDriverClip")
 			.constructor<>()
+			.property("source", &AttackDriverClip::source)
 			.property("clipName", &AttackDriverClip::clipName)
 			.property("startTimeSec", &AttackDriverClip::startTimeSec)
 			.property("endTimeSec", &AttackDriverClip::endTimeSec)
@@ -628,7 +639,8 @@ namespace Alice
             .property("restitution", &Phy_ColliderComponent::restitution)
             .property("layerBits", &Phy_ColliderComponent::layerBits)
             .property("ignoreLayers", &Phy_ColliderComponent::ignoreLayers)
-            .property("isTrigger", &Phy_ColliderComponent::isTrigger);
+            .property("isTrigger", &Phy_ColliderComponent::isTrigger)
+            .property("debugDraw", &Phy_ColliderComponent::debugDraw);
 
         // === Phy_MeshColliderComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
         rttr::registration::class_<Phy_MeshColliderComponent>("Phy_MeshColliderComponent")
@@ -645,7 +657,8 @@ namespace Alice
             .property("doubleSidedQueries", &Phy_MeshColliderComponent::doubleSidedQueries)
             .property("validate", &Phy_MeshColliderComponent::validate)
             .property("shiftVertices", &Phy_MeshColliderComponent::shiftVertices)
-            .property("vertexLimit", &Phy_MeshColliderComponent::vertexLimit);
+            .property("vertexLimit", &Phy_MeshColliderComponent::vertexLimit)
+            .property("debugDraw", &Phy_MeshColliderComponent::debugDraw);
 
         // === Phy_TerrainHeightFieldComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
         rttr::registration::class_<Phy_TerrainHeightFieldComponent>("Phy_TerrainHeightFieldComponent")

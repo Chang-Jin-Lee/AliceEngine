@@ -43,6 +43,55 @@ namespace Alice
             outIdx = std::atoi(key.c_str());
             return true;
         }
+
+        void FireAnimNotifiesForAdvance(AdvancedAnimationComponent& animComp,
+            const std::string& clipName,
+            float prevTime,
+            float currTime,
+            float durationSec,
+            bool loop,
+            float deltaTime)
+        {
+            if (clipName.empty() || durationSec <= 0.0f)
+                return;
+
+            if (prevTime == currTime)
+                return;
+
+            if (!loop || deltaTime == 0.0f)
+            {
+                animComp.CheckAndFireNotifiesClamped(clipName, prevTime, currTime, durationSec);
+                return;
+            }
+
+            // Handle wrap-around for looping clips (forward/backward).
+            if (deltaTime > 0.0f)
+            {
+                if (prevTime <= currTime)
+                {
+                    animComp.CheckAndFireNotifiesClamped(clipName, prevTime, currTime, durationSec);
+                }
+                else
+                {
+                    // Wrapped forward: [prev -> end], then [0 -> curr]
+                    animComp.CheckAndFireNotifiesClamped(clipName, prevTime, durationSec, durationSec);
+                    animComp.CheckAndFireNotifiesClamped(clipName, 0.0f, currTime, durationSec);
+                }
+            }
+            else
+            {
+                if (prevTime >= currTime)
+                {
+                    animComp.CheckAndFireNotifiesClamped(clipName, prevTime, currTime, durationSec);
+                }
+                else
+                {
+                    // Wrapped backward: [prev -> 0], then [end -> curr]
+                    animComp.CheckAndFireNotifiesClamped(clipName, prevTime, 0.0f, durationSec);
+                    animComp.CheckAndFireNotifiesClamped(clipName, durationSec, currTime, durationSec);
+                }
+            }
+        }
     }
 
     AdvancedAnimSystem::Runtime::Runtime()
@@ -316,35 +365,80 @@ namespace Alice
                 AdvanceTime(animComp.base.timeA, (float)dtSec, animComp.base.speedA, dur, animComp.base.loopA);
                 
                 // 노티파이 실행 (현재 시간이 바뀌었으므로 체크)
-                // 루프가 되어 시간이 0으로 돌아간 경우는 몽타주에서 잘 안쓰이므로 단순 범위 체크만 적용
-                if (prevTime < animComp.base.timeA) 
-                {
-                    animComp.CheckAndFireNotifies(animComp.base.clipA, prevTime, animComp.base.timeA);
-                }
+                FireAnimNotifiesForAdvance(
+                    animComp,
+                    animComp.base.clipA,
+                    prevTime,
+                    animComp.base.timeA,
+                    dur,
+                    animComp.base.loopA,
+                    static_cast<float>(dtSec) * animComp.base.speedA);
             }
 
             if (animComp.base.autoAdvance && baseB)
             {
+                float prevTime = animComp.base.timeB;
                 const float dur = GetClipDurationSec(baseB);
                 AdvanceTime(animComp.base.timeB, (float)dtSec, animComp.base.speedB, dur, animComp.base.loopB);
+                if (!animComp.base.clipB.empty() && animComp.base.clipB != animComp.base.clipA)
+                {
+                    FireAnimNotifiesForAdvance(
+                        animComp,
+                        animComp.base.clipB,
+                        prevTime,
+                        animComp.base.timeB,
+                        dur,
+                        animComp.base.loopB,
+                        static_cast<float>(dtSec) * animComp.base.speedB);
+                }
             }
 
             if (animComp.upper.autoAdvance && upperA)
             {
+                float prevTime = animComp.upper.timeA;
                 const float dur = GetClipDurationSec(upperA);
                 AdvanceTime(animComp.upper.timeA, (float)dtSec, animComp.upper.speedA, dur, animComp.upper.loopA);
+                FireAnimNotifiesForAdvance(
+                    animComp,
+                    animComp.upper.clipA,
+                    prevTime,
+                    animComp.upper.timeA,
+                    dur,
+                    animComp.upper.loopA,
+                    static_cast<float>(dtSec) * animComp.upper.speedA);
             }
 
             if (animComp.upper.autoAdvance && upperB)
             {
+                float prevTime = animComp.upper.timeB;
                 const float dur = GetClipDurationSec(upperB);
                 AdvanceTime(animComp.upper.timeB, (float)dtSec, animComp.upper.speedB, dur, animComp.upper.loopB);
+                if (!animComp.upper.clipB.empty() && animComp.upper.clipB != animComp.upper.clipA)
+                {
+                    FireAnimNotifiesForAdvance(
+                        animComp,
+                        animComp.upper.clipB,
+                        prevTime,
+                        animComp.upper.timeB,
+                        dur,
+                        animComp.upper.loopB,
+                        static_cast<float>(dtSec) * animComp.upper.speedB);
+                }
             }
 
             if (animComp.additive.autoAdvance && additiveA)
             {
+                float prevTime = animComp.additive.time;
                 const float dur = GetClipDurationSec(additiveA);
                 AdvanceTime(animComp.additive.time, (float)dtSec, animComp.additive.speed, dur, animComp.additive.loop);
+                FireAnimNotifiesForAdvance(
+                    animComp,
+                    animComp.additive.clip,
+                    prevTime,
+                    animComp.additive.time,
+                    dur,
+                    animComp.additive.loop,
+                    static_cast<float>(dtSec) * animComp.additive.speed);
             }
 
             if (animComp.procedural.strength > 0.0f)

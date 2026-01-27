@@ -2,15 +2,25 @@
 
 #include <string>
 #include <vector>
-#include <unordered_set>
 #include <cstdint>
 
 #include "Core/Entity.h"
 
 namespace Alice
 {
+    enum class AttackDriverClipSource : std::uint8_t
+    {
+        Explicit = 0,
+        BaseA = 1,
+        BaseB = 2,
+        UpperA = 3,
+        UpperB = 4,
+        Additive = 5,
+    };
+
     struct AttackDriverClip
     {
+        AttackDriverClipSource source = AttackDriverClipSource::Explicit;
         std::string clipName;
         float startTimeSec = 0.1f;
         float endTimeSec = 0.2f;
@@ -28,6 +38,6 @@ namespace Alice
 
         // 내부 상태
         std::uint64_t registeredHash = 0;
-        std::unordered_set<std::string> registeredClipNames;
+        std::uint64_t notifyTag = 0;
     };
 }

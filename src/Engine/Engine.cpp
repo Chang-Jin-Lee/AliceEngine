@@ -56,7 +56,6 @@
 
 #include "PhysX/Module/PhysicsModule.h" // 물리 모듈
 #include "PhysX/PhysicsSystem.h" // 물리 시스템
-#include "PhysX/Module/PhysicsDebug.h" // 물리 디버그 드로우
 
 //UI
 #include "UI/UIWorldManager.h"
@@ -1366,9 +1365,6 @@ namespace Alice
 			// 나머지 디버그 요소 (항상 보이도록 오버레이)
 			if (dbg && pImpl->m_debugDraw)
 			{
-				// 물리 콜라이더 와이어프레임 그리기
-				PhysicsDebug::DrawColliders(pImpl->m_world, *dbg);
-
 				// === FBX/SkinnedMesh 디버그 AABB 박스 ===
 				// - SkinnedMeshRegistry의 sourceModel(FbxModel)에서 로컬 AABB를 얻어,
 				//   엔티티 Transform(S*R*T)을 적용한 OBB(로컬 AABB의 월드 변환)를 라인으로 표시합니다.
