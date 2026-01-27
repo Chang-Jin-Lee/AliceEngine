@@ -1,4 +1,5 @@
 #include "Rendering/DeferredRenderSystem.h"
+#include "Rendering/DebugDrawSystem.h"
 
 #include <d3dcompiler.h>
 #include <DirectXTK/WICTextureLoader.h>
@@ -3856,6 +3857,33 @@ namespace Alice
         
         // 뷰포트 RTV를 SRV로 읽을 수 있도록 BackBuffer로 복귀 (ImGui::Image가 viewportSRV를 읽기 위해 필수)
         // DirectX11에서는 같은 리소스를 RTV와 SRV로 동시에 바인딩할 수 없음
+        RestoreBackBuffer();
+    }
+
+    void DeferredRenderSystem::RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera)
+    {
+        ID3D11RenderTargetView* viewportRTV = m_viewportRTV.Get();
+        if (!viewportRTV || m_sceneWidth == 0 || m_sceneHeight == 0)
+        {
+            return;
+        }
+
+        D3D11_VIEWPORT viewport = {};
+        viewport.Width = static_cast<float>(m_sceneWidth);
+        viewport.Height = static_cast<float>(m_sceneHeight);
+        viewport.MaxDepth = 1.0f;
+
+        m_context->RSSetViewports(1, &viewport);
+        m_context->OMSetRenderTargets(1, &viewportRTV, nullptr);
+
+        float blendFactor[4] = { 0, 0, 0, 0 };
+        if (m_ppBlendOpaque) m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
+        if (m_ppDepthOff) m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        if (m_ppRasterNoCull) m_context->RSSetState(m_ppRasterNoCull.Get());
+
+        debugDraw.Render(camera);
+
+        // SRV로 읽을 수 있도록 백버퍼 복귀
         RestoreBackBuffer();
     }
 

@@ -25,6 +25,7 @@
 namespace Alice
 {
     class ResourceManager;
+    class DebugDrawSystem;
     class TrailEffectRenderSystem;
     /// 디퍼드 렌더링 시스템입니다.
     /// - G-Buffer 패스: 지오메트리 정보를 G-Buffer에 렌더링
@@ -117,6 +118,9 @@ namespace Alice
                 
         /// 뷰포트 렌더 타겟에 파티클 오버레이 합성 (에디터 모드용)
         void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
+
+        /// 에디터 뷰포트에 DebugDraw 라인을 합성합니다.
+        void RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;

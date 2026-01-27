@@ -1606,6 +1606,19 @@ namespace Alice
 			}
 		}
 
+		// 에디터 모드: DebugDraw를 뷰포트 렌더 타겟에 합성
+		if (pImpl->m_editorMode && pImpl->m_debugDrawSystem)
+		{
+			if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+			{
+				pImpl->m_forwardRenderSystem->RenderDebugOverlayToViewport(*pImpl->m_debugDrawSystem, pImpl->m_camera);
+			}
+			else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+			{
+				pImpl->m_deferredRenderSystem->RenderDebugOverlayToViewport(*pImpl->m_debugDrawSystem, pImpl->m_camera);
+			}
+		}
+
 		// 게임 모드: 백버퍼에 파티클 오버레이 합성
 		if (!pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_computeEffectSystem->HasActiveEffect() && pImpl->m_forwardRenderSystem)
 		{
@@ -1678,7 +1691,6 @@ namespace Alice
 
 		// ============================================= 오버레이 =============================================
 		// 디버그 드로우 및 ImGui(에디터 전용)
-		if (pImpl->m_debugDrawSystem) pImpl->m_debugDrawSystem->Render(pImpl->m_camera);
 		if (pImpl->m_effectSystem) pImpl->m_effectSystem->Render(pImpl->m_world, pImpl->m_camera);
 		if (pImpl->m_trailRenderSystem)pImpl->m_trailRenderSystem->Render(pImpl->m_world, pImpl->m_camera);
 		// SwordRenderSystem은 DeferredRenderSystem 내부에서 호출되므로 여기서는 호출하지 않음
