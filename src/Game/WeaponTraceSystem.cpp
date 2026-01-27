@@ -11,6 +11,7 @@
 #include "Components/HurtboxComponent.h"
 #include "Components/AdvancedAnimationComponent.h"
 #include "Components/SocketComponent.h"
+#include "Components/SocketPoseOutputComponent.h"
 #include "Game/CombatPhysicsLayers.h"
 #include "Game/CombatHitEvent.h"
 #include "PhysX/IPhysicsWorld.h"
@@ -19,7 +20,7 @@ namespace Alice
 {
     namespace
     {
-        EntityId ResolveOwner(World& world, WeaponTraceComponent& trace)
+        EntityId ResolveOwner(World& world, WeaponTraceComponent& trace, EntityId self)
         {
             if (trace.ownerCached != InvalidEntityId)
             {
@@ -34,7 +35,7 @@ namespace Alice
             }
 
             if (trace.ownerGuid == 0)
-                return InvalidEntityId;
+                return self;
 
             EntityId resolved = world.FindEntityByGuid(trace.ownerGuid);
             if (resolved == InvalidEntityId)
@@ -46,6 +47,18 @@ namespace Alice
 
         bool TryGetSocketWorldMatrix(World& world, EntityId owner, const std::string& socketName, DirectX::XMMATRIX& out)
         {
+            if (auto* poses = world.GetComponent<SocketPoseOutputComponent>(owner))
+            {
+                for (const auto& p : poses->poses)
+                {
+                    if (p.name == socketName)
+                    {
+                        out = DirectX::XMLoadFloat4x4(&p.world);
+                        return true;
+                    }
+                }
+            }
+
             // 1) Match by socket name (e.g. "Trace_Base", "Trace_Tip")
             if (auto* adv = world.GetComponent<AdvancedAnimationComponent>(owner))
             {
@@ -98,7 +111,7 @@ namespace Alice
         if (!physics)
             return;
 
-        auto&& traces = world.GetComponents<WeaponTraceComponent>(); // & -> &&·Î ¹Ù²Þ
+        auto&& traces = world.GetComponents<WeaponTraceComponent>(); // & -> &&ï¿½ï¿½ ï¿½Ù²ï¿½
         if (traces.empty())
             return;
 
@@ -114,7 +127,7 @@ namespace Alice
                 continue;
             }
 
-            const EntityId owner = ResolveOwner(world, trace);
+            const EntityId owner = ResolveOwner(world, trace, eid);
             if (owner == InvalidEntityId || trace.traceSocketNames.empty())
                 continue;
 
