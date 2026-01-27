@@ -2602,18 +2602,18 @@
                     "yawRad": 0.0
                 },
                 "base": {
-                    "autoAdvance": true,
-                    "blend01": 1.0336369499324922e-24,
-                    "clipA": "alice-Apose_arm|Idle",
-                    "clipB": "alice-Apose_arm|Walk",
+                    "autoAdvance": false,
+                    "blend01": 0.0007026225212030113,
+                    "clipA": "alice-Apose_arm|Crouch",
+                    "clipB": "alice-Apose_arm|Crouch",
                     "enabled": true,
                     "layerAlpha": 1.0,
                     "loopA": false,
                     "loopB": true,
                     "speedA": 1.0,
                     "speedB": 1.0,
-                    "timeA": 3.7333333492279053,
-                    "timeB": 2.507905960083008
+                    "timeA": 1.0,
+                    "timeB": 1.0
                 },
                 "enabled": true,
                 "ik": {
@@ -2637,6 +2637,8 @@
                     "timeSec": 0.0
                 },
                 "sockets": [
+                    {},
+                    {},
                     {},
                     {},
                     {},
@@ -2868,13 +2870,13 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": -0.7807298302650452,
+                    "x": -0.07572366297245026,
                     "y": 0.0,
-                    "z": -1.6107902526855469
+                    "z": 0.8277594447135925
                 },
                 "rotation": {
                     "x": 0.0,
-                    "y": 0.30153802037239075,
+                    "y": 4.866851806640625,
                     "z": 0.0
                 },
                 "scale": {
@@ -2934,7 +2936,7 @@
                 "maxDistance": 60.0,
                 "minDistance": 8.0,
                 "mode": 0,
-                "pitchDeg": -0.5215430855751038,
+                "pitchDeg": 1.913642406463623,
                 "pitchMaxDeg": 80.0,
                 "pitchMinDeg": -45.0,
                 "positionDamping": 8.0,
@@ -2943,7 +2945,7 @@
                 "shoulderOffset": 0.30000001192092896,
                 "shoulderSide": 1.0,
                 "targetName": "Player",
-                "yawDeg": 108.96794891357422
+                "yawDeg": -152.9511260986328
             },
             "CameraInput": {
                 "blendTimeKey3": 0.6000000238418579,
@@ -2973,7 +2975,7 @@
                 "frequency": 20.0
             },
             "CameraSpringArm": {
-                "distance": 2.99999737739563,
+                "distance": 2.9999983310699463,
                 "distanceDamping": 6.0,
                 "enableCollision": true,
                 "enableZoom": true,
@@ -3014,14 +3016,14 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": -3.7152209281921387,
-                    "y": 1.4726934432983398,
-                    "z": -0.9194244146347046
+                    "x": 1.0205789804458618,
+                    "y": 1.600178599357605,
+                    "z": 3.6345512866973877
                 },
                 "rotation": {
-                    "x": -0.00910264439880848,
-                    "y": 1.901849627494812,
-                    "z": -1.862645593320167e-09
+                    "x": 0.03339936211705208,
+                    "y": -2.6695008277893066,
+                    "z": -9.31322685637781e-10
                 },
                 "scale": {
                     "x": 1.0,
@@ -3092,7 +3094,7 @@
                 "capsuleAlignYAxis": true,
                 "capsuleHalfHeight": 0.5,
                 "capsuleRadius": 0.5,
-                "debugDraw": false,
+                "debugDraw": true,
                 "dynamicFriction": 0.5,
                 "halfExtents": {
                     "x": 1.0,
@@ -3102,7 +3104,7 @@
                 "ignoreLayers": 0,
                 "isTrigger": true,
                 "layerBits": 8,
-                "radius": 0.5,
+                "radius": 1.0,
                 "restitution": 0.0,
                 "staticFriction": 0.5,
                 "type": "Sphere"
@@ -3189,14 +3191,14 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.08557327091693878,
-                    "y": 1.1778075695037842,
-                    "z": -0.05322747305035591
+                    "x": 0.004289154428988695,
+                    "y": 1.1432263851165771,
+                    "z": -0.10019627213478088
                 },
                 "rotation": {
-                    "x": -0.5680485963821411,
-                    "y": 0.8564143776893616,
-                    "z": -0.07559261471033096
+                    "x": -0.4402396082878113,
+                    "y": 0.9982335567474365,
+                    "z": -0.18285898864269257
                 },
                 "scale": {
                     "x": 0.4000000059604645,
@@ -3240,7 +3242,7 @@
                 "clipIndex": 2,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 505.6434913750272
+                "timeSec": 963.5327195595019
             },
             "SkinnedMesh": {
                 "boneCount": 248,
@@ -3366,24 +3368,24 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": -1.0899426937103271,
-                    "y": 0.8492181301116943,
-                    "z": -1.5215246677398682
+                    "x": -0.002847708761692047,
+                    "y": 0.7583783268928528,
+                    "z": 0.5770492553710938
                 },
                 "rotation": {
-                    "x": 0.7464789748191833,
-                    "y": 1.947431206703186,
-                    "z": -2.984563112258911
+                    "x": -0.2566400170326233,
+                    "y": 0.21013912558555603,
+                    "z": -1.4747117757797241
                 },
                 "scale": {
-                    "x": 1.0000007152557373,
-                    "y": 1.000000238418579,
-                    "z": 1.000000238418579
+                    "x": 0.9999998211860657,
+                    "y": 1.0000005960464478,
+                    "z": 0.9999998807907104
                 }
             },
             "WeaponTrace": {
-                "active": true,
-                "attackInstanceId": 13,
+                "active": false,
+                "attackInstanceId": 34,
                 "baseDamage": 10.0,
                 "debugDraw": true,
                 "ownerGuid": "7962531513969683154",
