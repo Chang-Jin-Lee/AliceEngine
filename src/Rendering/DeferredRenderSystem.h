@@ -24,6 +24,7 @@
 namespace Alice
 {
     class ResourceManager;
+    class DebugDrawSystem;
     class TrailEffectRenderSystem;
     /// 디퍼드 렌더링 시스템입니다.
     /// - G-Buffer 패스: 지오메트리 정보를 G-Buffer에 렌더링
@@ -91,6 +92,13 @@ namespace Alice
         /// 스카이박스 활성화/비활성화를 설정합니다.
         void SetSkyboxEnabled(bool enabled);
 
+        /// Shadow 업데이트 간격(프레임). 1이면 매 프레임 갱신.
+        void SetShadowUpdateInterval(std::uint32_t frames);
+        /// Shadow 해상도 스케일 (1=원본, 2=1/2, 4=1/4 등).
+        void SetShadowResolutionScale(std::uint32_t scale);
+        /// Shadow 맵 강제 갱신 플래그.
+        void ForceShadowUpdate();
+
         /// 배경색을 설정합니다 (스카이박스가 Off일 때 사용).
         void SetBackgroundColor(const DirectX::XMFLOAT4& color) { m_backgroundColor = color; }
         const DirectX::XMFLOAT4& GetBackgroundColor() const { return m_backgroundColor; }
@@ -115,6 +123,9 @@ namespace Alice
                 
         /// 뷰포트 렌더 타겟에 파티클 오버레이 합성 (에디터 모드용)
         void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
+
+        /// 에디터 뷰포트에 DebugDraw 라인을 합성합니다.
+        void RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera, bool depthTest);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
@@ -174,8 +185,8 @@ namespace Alice
 
         /// 백버퍼로 렌더 타겟을 복귀시킵니다 (ImGui 등 후처리를 위해).
         void RestoreBackBuffer();
-        // G-Buffer 개수 (Position, Normal, Metalness, Roughness, BaseColor)
-        static constexpr int GBufferCount = 5;
+        // G-Buffer 개수 (Normal+Roughness, Metalness, BaseColor)
+        static constexpr int GBufferCount = 3;
 
         // G-Buffer 생성
         bool CreateGBuffer(std::uint32_t width, std::uint32_t height);
@@ -250,6 +261,10 @@ namespace Alice
         // 월드 행렬 구성
         DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& transform) const;
         DirectX::XMMATRIX BuildWorldMatrix(const World& world, EntityId entityId, const TransformComponent& transform) const;
+
+        // Shadow 리소스 관리
+        std::uint32_t GetShadowMapSizePx() const;
+        bool EnsureShadowMapResources();
         
         // 텍스처 로딩
         ID3D11ShaderResourceView* GetOrCreateTexture(const std::string& path);
@@ -272,6 +287,8 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_gBufferVS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_gBufferPS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_gBufferInputLayout;
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_gBufferInstancedVS;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_gBufferInstancedInputLayout;
 
         // ==== 스키닝용 G-Buffer 셰이더 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>      m_gBufferSkinnedVS;
@@ -319,6 +336,8 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowVS;
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowSkinnedVS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_shadowInputLayout; // POSITION only
+        Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowInstancedVS;
+        Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_shadowInstancedInputLayout;
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_shadowSkinnedInstancedVS;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>      m_shadowSkinnedInstancedInputLayout;
 
@@ -426,6 +445,17 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_shadowSRV;
         D3D11_VIEWPORT                                  m_shadowViewport {};
         ShadowSettings                                  m_shadowSettings {};
+
+        // ==== Shadow 캐시/갱신 설정 ====
+        std::uint64_t                                   m_shadowFrameIndex = 0;
+        std::uint64_t                                   m_shadowLastUpdateFrame = 0;
+        DirectX::XMMATRIX                               m_lastShadowViewProj = DirectX::XMMatrixIdentity();
+        DirectX::XMFLOAT3                               m_lastShadowLightDir{ 0.0f, 0.0f, 0.0f };
+        bool                                            m_shadowCacheDirty = true;
+        bool                                            m_shadowEnabledLast = true;
+        std::uint32_t                                   m_shadowUpdateInterval = 2; // 1: 매 프레임
+        std::uint32_t                                   m_shadowResolutionScale = 2; // 1: 원본, 2: 1/2
+        std::uint32_t                                   m_shadowMapSizePxEffective = 0;
 
         // Forward와 동일한 조명/재질 파라미터 (에디터 UI 공유)
         LightingParameters                              m_lightingParameters {};
