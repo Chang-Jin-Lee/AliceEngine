@@ -3,5 +3,5 @@
         "Assets/Materials/tile_0.mat"
     ],
     "mesh": "tile",
-    "source_fbx": "Resource/fbx/Background/tile_orign/tile.fbx"
+    "source_fbx": "Resource/Test/4_Resources/background/tile_orign/tile.fbx"
 }

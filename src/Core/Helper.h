@@ -80,7 +80,7 @@ using namespace DirectX::SimpleMath;
 }
 
 template <typename T>
-void SAFE_RELEASE(T* p)
+void SAFE_RELEASE(T*& p)
 {
 	if (p)
 	{
@@ -90,7 +90,7 @@ void SAFE_RELEASE(T* p)
 }
 
 template <typename T>
-void SAFE_DELETE(T* p)
+void SAFE_DELETE(T*& p)
 {
 	if (p)
 	{

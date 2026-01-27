@@ -49,6 +49,7 @@
                     "strength": 0.0,
                     "timeSec": 0.0
                 },
+                "sockets": [],
                 "upper": {
                     "autoAdvance": true,
                     "blend01": 0.0,
@@ -73,9 +74,18 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": -5.538904190063477,
                     "y": 0.0,
@@ -92,7 +102,7 @@
                     "z": 0.9999998807907104
                 }
             },
-            "id": 1
+            "guid": "892725779770173500"
         },
         {
             "AdvancedAnimation": {
@@ -143,6 +153,7 @@
                     "strength": 0.0,
                     "timeSec": 0.0
                 },
+                "sockets": [],
                 "upper": {
                     "autoAdvance": true,
                     "blend01": 0.0,
@@ -167,7 +178,15 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "Scripts": [
                 {
@@ -182,10 +201,10 @@
                         "m_attackClip": "Attack01",
                         "m_attackDuration": 1.5,
                         "m_attackHitTime": 0.699999988079071,
+                        "m_attackPlaySpeed": 1.0,
                         "m_blendSpeed": 8.0,
                         "m_crouchClip": "CrouchDown",
                         "m_crouchDuration": 1.0,
-                        "m_crouchFireClip": "CrouchFire",
                         "m_enableAdditive": false,
                         "m_enableAim": false,
                         "m_enableFootIK": true,
@@ -230,6 +249,7 @@
                             "y": 1.0,
                             "z": 1.0
                         },
+                        "m_transitionDuration": 0.20000000298023224,
                         "m_upperClip": "Aim",
                         "m_walkClip": "Rapi整合ReIm_arm|Walk",
                         "m_weaponObjName": "Weapon"
@@ -242,6 +262,7 @@
                 "meshAssetPath": "Rapi"
             },
             "Transform": {
+                "enabled": true,
                 "position": {
                     "x": -2.0916202068328857,
                     "y": 0.0,
@@ -258,7 +279,7 @@
                     "z": 0.05000000074505806
                 }
             },
-            "id": 2
+            "guid": "1099477809798538202"
         },
         {
             "AdvancedAnimation": {
@@ -279,17 +300,17 @@
                 },
                 "base": {
                     "autoAdvance": true,
-                    "blend01": 3.0948503990657628e-06,
-                    "clipA": "alice-Apose_arm|Swing",
-                    "clipB": "alice-Apose_arm|Swing",
+                    "blend01": 5.605193857299268e-45,
+                    "clipA": "alice-Apose_arm|Idle",
+                    "clipB": "alice-Apose_arm|Walk",
                     "enabled": true,
                     "layerAlpha": 1.0,
                     "loopA": false,
                     "loopB": true,
                     "speedA": 1.0,
                     "speedB": 1.0,
-                    "timeA": 0.30000001192092896,
-                    "timeB": 0.30000001192092896
+                    "timeA": 3.7333333492279053,
+                    "timeB": 2.2950477600097656
                 },
                 "enabled": true,
                 "ik": {
@@ -309,6 +330,7 @@
                     "strength": 0.0,
                     "timeSec": 0.0
                 },
+                "sockets": [],
                 "upper": {
                     "autoAdvance": true,
                     "blend01": 0.0,
@@ -333,7 +355,15 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
             "Scripts": [
                 {
@@ -348,10 +378,10 @@
                         "m_attackClip": "alice-Apose_arm|Swing",
                         "m_attackDuration": 1.5,
                         "m_attackHitTime": 0.699999988079071,
+                        "m_attackPlaySpeed": 1.0,
                         "m_blendSpeed": 8.0,
                         "m_crouchClip": "alice-Apose_arm|Crouch",
                         "m_crouchDuration": 1.0,
-                        "m_crouchFireClip": "alice-Apose_arm|Shoot",
                         "m_enableAdditive": true,
                         "m_enableAim": false,
                         "m_enableFootIK": false,
@@ -396,6 +426,7 @@
                             "y": 1.0,
                             "z": 1.0
                         },
+                        "m_transitionDuration": 0.20000000298023224,
                         "m_upperClip": "Aim",
                         "m_walkClip": "alice-Apose_arm|Walk",
                         "m_weaponObjName": "Wonderland"
@@ -407,15 +438,39 @@
                 "instanceAssetPath": "Assets/Fbx/Alice.fbxasset",
                 "meshAssetPath": "Alice"
             },
+            "Socket": {
+                "sockets": [
+                    {
+                        "name": "RightHand",
+                        "parentBone": "手首.R",
+                        "position": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "rotation": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "scale": {
+                            "x": 1.0,
+                            "y": 1.0,
+                            "z": 1.0
+                        }
+                    }
+                ]
+            },
             "Transform": {
+                "enabled": true,
                 "position": {
-                    "x": -0.20878779888153076,
+                    "x": 0.6556768417358398,
                     "y": 0.0,
-                    "z": -0.08538030087947845
+                    "z": 1.0616390705108643
                 },
                 "rotation": {
                     "x": 0.0,
-                    "y": 4.7123894691467285,
+                    "y": 6.283186435699463,
                     "z": 0.0
                 },
                 "scale": {
@@ -424,7 +479,7 @@
                     "z": 0.9999998807907104
                 }
             },
-            "id": 3,
+            "guid": "9589923605606287449",
             "name": "Alice"
         },
         {
@@ -437,33 +492,105 @@
                     "z": 0.699999988079071
                 },
                 "metalness": 0.0,
-                "roughness": 0.5
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
+            },
+            "MeshCollider": {
+                "doubleSidedQueries": false,
+                "dynamicFriction": 0.5,
+                "flipNormals": false,
+                "ignoreLayers": 0,
+                "isTrigger": false,
+                "layerBits": 1,
+                "meshAssetPath": "",
+                "restitution": 0.0,
+                "shiftVertices": true,
+                "staticFriction": 0.5,
+                "type": "Convex",
+                "validate": false,
+                "vertexLimit": 255
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": false,
+                "isKinematic": true,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": false
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
             },
             "SkinnedMesh": {
                 "boneCount": 1,
                 "instanceAssetPath": "Assets/Fbx/AmazingWonderland.fbxasset",
                 "meshAssetPath": "AmazingWonderland"
             },
+            "SocketAttachment": {
+                "extraPos": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "extraRotRad": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "extraScale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "followScale": true,
+                "ownerGuid": "9589923605606287449",
+                "ownerNameDebug": "Alice",
+                "socketName": "RightHand"
+            },
             "Transform": {
+                "enabled": true,
                 "position": {
-                    "x": -0.02541981264948845,
-                    "y": 0.0979834571480751,
-                    "z": 0.03980041295289993
+                    "x": 0.33390578627586365,
+                    "y": 0.8492180109024048,
+                    "z": 1.0550445318222046
                 },
                 "rotation": {
-                    "x": 2.9235928058624268,
-                    "y": 0.5380570888519287,
-                    "z": 2.347113847732544
+                    "x": 0.7464785575866699,
+                    "y": 1.64589524269104,
+                    "z": -2.9845643043518066
                 },
                 "scale": {
-                    "x": 0.009999999776482582,
-                    "y": 0.009999999776482582,
-                    "z": 0.009999999776482582
+                    "x": 1.0000005960464478,
+                    "y": 0.9999983310699463,
+                    "z": 0.9999980330467224
                 }
             },
-            "id": 4,
-            "name": "Wonderland"
+            "guid": "7622734674562597002",
+            "name": "Weapon"
         }
     ],
+    "sceneName": "AnimTest",
     "version": 1
 }
