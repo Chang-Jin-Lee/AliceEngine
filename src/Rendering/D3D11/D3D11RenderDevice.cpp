@@ -40,8 +40,8 @@ namespace Alice
         UINT createDeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 
 #ifdef _DEBUG
-        // 디버그 빌드에서는 D3D 디버그 레이어를 활성화합니다.
         createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+        // 디버그 빌드에서는 D3D 디버그 레이어를 활성화합니다.
 #endif
 
         D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;

@@ -77,6 +77,85 @@ VSOutput main(VSInput input)
 }
 )";
 
+        // G-Buffer Instanced Vertex Shader (정적 메시 인스턴싱)
+        inline static const char* GBufferInstancedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+    int      gShadingMode;
+    int      gPad0;
+    
+    // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
+};
+
+struct VSInput
+{
+    float3 Position   : POSITION;
+    float3 Normal     : NORMAL;
+    float2 TexCoord   : TEXCOORD0;
+    float4 iWorld0    : INSTANCE_WORLD0;
+    float4 iWorld1    : INSTANCE_WORLD1;
+    float4 iWorld2    : INSTANCE_WORLD2;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+    float3 WorldPos : TEXCOORD0;
+    float3 Normal   : TEXCOORD1;
+    float2 TexCoord : TEXCOORD2;
+    float3 TangentW : TEXCOORD3;
+    float3 BitanW   : TEXCOORD4;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput output;
+    
+    // 인스턴스 월드 행렬 복원 (전치 행렬 기준)
+    float4x4 world;
+    world[0] = input.iWorld0;
+    world[1] = input.iWorld1;
+    world[2] = input.iWorld2;
+    world[3] = float4(0, 0, 0, 1);
+    
+    float3 N = normalize(mul(world, float4(input.Normal, 0.0f)).xyz);
+    
+    float3 posOffset = (gOutlineWidth > 0.0f) ? (N * gOutlineWidth) : float3(0, 0, 0);
+    float4 posW = mul(world, float4(input.Position + posOffset, 1.0f));
+    output.Position = mul(mul(posW, gView), gProj);
+    output.WorldPos = posW.xyz;
+    
+    output.Normal = N;
+    
+    float3 up = (abs(N.y) > 0.999f) ? float3(1,0,0) : float3(0,1,0);
+    float3 T = normalize(cross(up, N));
+    float3 B = normalize(cross(N, T));
+    
+    output.TangentW = T;
+    output.BitanW = B;
+    output.TexCoord = input.TexCoord;
+    
+    return output;
+}
+)";
+
         // G-Buffer Skinned Vertex Shader
         inline static const char* GBufferSkinnedVS = R"(
 cbuffer CBPerObject : register(b0)
@@ -303,11 +382,9 @@ struct VertexOut
 
 struct GBufferOut
 {
-    float4 PositionWS : SV_Target0;
-    float4 NormalWS   : SV_Target1;
-    float4 Metalness  : SV_Target2;
-    float4 Roughness  : SV_Target3;
-    float4 BaseColor  : SV_Target4;
+    float4 NormalRoughness : SV_Target0;
+    float4 Metalness       : SV_Target1;
+    float4 BaseColor       : SV_Target2;
 };
 
 Texture2D  g_DiffuseMap : register(t0);
@@ -321,13 +398,9 @@ GBufferOut main(VertexOut pIn)
     // 아웃라인 패스 감지: Width가 0보다 크면 아웃라인용 드로우콜임
     if (gOutlineWidth > 0.0f)
     {
-        // 1. Position: 깊이 버퍼에 써야 하므로 위치는 저장
-        gOut.PositionWS = float4(pIn.WorldPos, 1.0f);
-        
-        // 2. Normal/Roughness/Metalness: 조명 연산 방해 안 되게 더미 값
-        gOut.NormalWS   = float4(0.5f, 0.5f, 1.0f, 0.0f); 
+        // 1. Normal/Roughness/Metalness: 조명 연산 방해 안 되게 더미 값
+        gOut.NormalRoughness = float4(0.5f, 0.5f, 1.0f, 1.0f);
         gOut.Metalness  = float4(0.0f, 0.0f, 0.0f, 1.0f);
-        gOut.Roughness  = float4(1.0f, 0.0f, 0.0f, 1.0f);
         
         // 3. BaseColor: 아웃라인 색상
         // 4. Alpha (ShadingMode): 1.0f -> 인코딩 시 mode 6 (TextureOnly/Unlit)이 됨
@@ -375,10 +448,8 @@ GBufferOut main(VertexOut pIn)
     // Normal을 [0,1] 범위로 인코딩하여 저장 (LightPS에서 디코딩)
     float3 normalEncoded = N * 0.5f + 0.5f;
     
-    gOut.PositionWS = float4(pIn.WorldPos, 1.0f);
-    gOut.NormalWS   = float4(normalEncoded, 1.0f);
+    gOut.NormalRoughness = float4(normalEncoded, roughness);
     gOut.Metalness  = float4(metalness, 0, 0, 1);
-    gOut.Roughness  = float4(roughness, 0, 0, 1);
     // shadingMode를 [0,1] 범위로 인코딩하여 저장 (0~6 -> 0.0~1.0)
     gOut.BaseColor  = float4(baseColor, saturate((float)gShadingMode / 6.0f));
     
@@ -468,16 +539,15 @@ struct PS_INPUT_QUAD
     float2 uv : TEXCOORD0;
 };
 
-// G-Buffer 텍스처
-Texture2D g_PositionWS : register(t0);
-Texture2D g_NormalWS : register(t1);
-Texture2D g_Metalness : register(t2);
-Texture2D g_Roughness : register(t3);
-Texture2D g_BaseColor : register(t4);
-TextureCube g_IBL_Diffuse : register(t5);
-TextureCube g_IBL_Specular : register(t6);
-Texture2D   g_IBL_BRDF_LUT : register(t7);
-Texture2D<float> g_ShadowMap : register(t8);
+// G-Buffer 텍스처 (압축)
+Texture2D g_NormalRoughness : register(t0);
+Texture2D g_Metalness : register(t1);
+Texture2D g_BaseColor : register(t2);
+Texture2D<float> g_SceneDepth : register(t3);
+TextureCube g_IBL_Diffuse : register(t4);
+TextureCube g_IBL_Specular : register(t5);
+Texture2D   g_IBL_BRDF_LUT : register(t6);
+Texture2D<float> g_ShadowMap : register(t7);
 
 SamplerState g_Sam : register(s0);
 SamplerComparisonState g_ShadowSampler : register(s1);
@@ -489,6 +559,7 @@ cbuffer ConstantBuffer : register(b0)
     float4x4 g_World;
     float4x4 g_View;
     float4x4 g_Proj;
+    float4x4 g_InvViewProj;
     float4x4 g_WorldInvTranspose;
     float4 g_Material_ambient;
     float4 g_Material_diffuse;
@@ -665,21 +736,27 @@ void AccumulateLegacy(float3 N, float3 V, float3 L, float3 lightColor, float att
 float4 main(PS_INPUT_QUAD pIn) : SV_Target
 {
     // G-Buffer 가져오기
-    float4 positionWS = g_PositionWS.Sample(g_Sam, pIn.uv);
-    float4 normalWS_packed = g_NormalWS.Sample(g_Sam, pIn.uv);
+    float4 normalRoughness = g_NormalRoughness.Sample(g_Sam, pIn.uv);
     float4 metalness_packed = g_Metalness.Sample(g_Sam, pIn.uv);
-    float4 roughness_packed = g_Roughness.Sample(g_Sam, pIn.uv);
     float4 baseColor = g_BaseColor.Sample(g_Sam, pIn.uv);
+    float depth = g_SceneDepth.Sample(g_Sam, pIn.uv);
     
-    // 배경 체크
-    if (length(normalWS_packed.xyz) < 0.1f) discard;
+    // 배경 체크 (Depth가 1.0이면 배경)
+    if (depth >= 0.9999f) discard;
 
     // 데이터 복원
-    float3 posW = positionWS.xyz;
     // Normal을 [0,1]에서 [-1,1]로 디코딩
-    float3 N = normalize(normalWS_packed.xyz * 2.0f - 1.0f);
+    float3 N = normalize(normalRoughness.xyz * 2.0f - 1.0f);
     float metalness = metalness_packed.r;
-    float roughness = max(roughness_packed.r, 0.04f);
+    float roughness = max(normalRoughness.w, 0.04f);
+    
+    // Depth에서 월드 포지션 복원
+    float2 ndc;
+    ndc.x = pIn.uv.x * 2.0f - 1.0f;
+    ndc.y = (1.0f - pIn.uv.y) * 2.0f - 1.0f;
+    float4 clip = float4(ndc, depth, 1.0f);
+    float4 posW4 = mul(clip, g_InvViewProj);
+    float3 posW = posW4.xyz / max(posW4.w, 1e-6f);
     float3 albedo = baseColor.rgb;
     float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
     
@@ -1270,6 +1347,62 @@ VSOutput main(VSInput input)
 {
     VSOutput o;
     float4 posW = mul(float4(input.Position, 1.0f), gWorld);
+    o.Position = mul(mul(posW, gView), gProj);
+    return o;
+}
+)";
+
+        // Shadow Instanced VS (Static)
+        inline static const char* ShadowInstancedVS = R"(
+cbuffer CBPerObject : register(b0)
+{
+    float4x4 gWorld;
+    float4x4 gView;
+    float4x4 gProj;
+    float4   gMaterialColor;
+    float    gRoughness;
+    float    gMetalness;
+    int      gUseTexture;
+    int      gEnableNormalMap;
+    int      gShadingMode;
+    int      gPad0;
+    
+    // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
+    float2   gPad1;
+    
+    // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
+    float    gNormalStrength;
+    float    gPad2; // 4바이트 패딩
+    
+    // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
+    float3   gOutlineColor;
+    float    gOutlineWidth;
+};
+
+struct VSInput
+{
+    float3 Position : POSITION;
+    float4 iWorld0  : INSTANCE_WORLD0;
+    float4 iWorld1  : INSTANCE_WORLD1;
+    float4 iWorld2  : INSTANCE_WORLD2;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_POSITION;
+};
+
+VSOutput main(VSInput input)
+{
+    VSOutput o;
+    
+    float4x4 world;
+    world[0] = input.iWorld0;
+    world[1] = input.iWorld1;
+    world[2] = input.iWorld2;
+    world[3] = float4(0, 0, 0, 1);
+    
+    float4 posW = mul(world, float4(input.Position, 1.0f));
     o.Position = mul(mul(posW, gView), gProj);
     return o;
 }
