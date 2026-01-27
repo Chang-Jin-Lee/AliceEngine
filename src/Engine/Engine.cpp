@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <cfloat>      // FLT_MAX
 #include <algorithm>   // std::max
+#include <cmath>       // std::fabsf
 #include <memory>
 #include <fstream>
 #include <sstream>
@@ -43,6 +44,7 @@
 #include "Game/SkinnedMeshSystem.h"
 #include "Core/AdvancedAnimSystem.h"
 #include "Game/SkinnedAnimationSystem.h"
+#include "Game/SocketWorldUpdateSystem.h"
 #include "Game/SocketAttachmentSystem.h"
 #include "Game/WeaponTraceSystem.h"
 #include "Game/CombatHitEvent.h"
@@ -98,6 +100,7 @@ namespace Alice
 		bool m_isRunning = false;            // 엔진 자체가 실행중인지 판단
 		bool m_isPlaying = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
 		bool m_editorMode = true;             // true: 에디터, false: 게임 전용
+		bool m_debugDraw = true;
 		EntityId m_selectedEntity{ InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
 
 		World          m_world;
@@ -146,6 +149,7 @@ namespace Alice
 		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
 		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+		std::unique_ptr<class DebugDrawSystem> m_gizmoDrawSystem;
 		std::unique_ptr<class EffectSystem> m_effectSystem;
 		std::unique_ptr<class TrailEffectRenderSystem> m_trailRenderSystem;
 		std::unique_ptr<ComputeEffectSystem> m_computeEffectSystem;
@@ -164,6 +168,7 @@ namespace Alice
 		SkinnedMeshSystem   m_skinnedMeshSystem{ m_skinnedMeshRegistry };
 		AdvancedAnimSystem  m_advancedAnimSystem{ m_skinnedMeshRegistry };
 		SkinnedAnimationSystem m_skinnedAnimSystem{ m_skinnedMeshRegistry };
+		SocketWorldUpdateSystem m_socketWorldUpdateSystem{ m_skinnedMeshRegistry };
 		SocketAttachmentSystem m_socketAttachmentSystem;
 		WeaponTraceSystem m_weaponTraceSystem;
 		CombatSystem m_combatSystem;
@@ -508,64 +513,112 @@ namespace Alice
 		pImpl->m_forwardRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		pImpl->m_forwardRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 
-		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
+		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height))
+		{
+			ALICE_LOG_ERRORF("pImpl->m_forwardRenderSystem->Initialize: fail...");
+			return false;
+		}
 
 		// Deferred 렌더러 설정
 		pImpl->m_deferredRenderSystem = std::make_unique<DeferredRenderSystem>(*pImpl->m_renderDevice);
 		pImpl->m_deferredRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		pImpl->m_deferredRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 
-		if (!pImpl->m_deferredRenderSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
+		if (!pImpl->m_deferredRenderSystem->Initialize(pImpl->m_width, pImpl->m_height))
+		{
+			ALICE_LOG_ERRORF("pImpl->m_deferredRenderSystem->Initialize: fail...");
+			return false;
+		}
+
+		ALICE_LOG_ERRORF("pImpl->m_deferredRenderSystem->Initialize: next...");
 
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
-		if (!pImpl->m_debugDrawSystem->Initialize()) return false;
+		if (!pImpl->m_debugDrawSystem->Initialize())
+		{
+			ALICE_LOG_ERRORF("pImpl->m_debugDrawSystem->Initialize(): fail...");
+			return false;
+		}
+
+		pImpl->m_gizmoDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_gizmoDrawSystem->Initialize())
+		{
+			ALICE_LOG_ERRORF("pImpl->m_gizmoDrawSystem->Initialize(): fail...");
+			return false;
+		}
 
 		pImpl->m_effectSystem = std::make_unique<EffectSystem>(*pImpl->m_renderDevice);
-		if (!pImpl->m_effectSystem->Initialize()) return false;
+		if (!pImpl->m_effectSystem->Initialize())
+		{
+			ALICE_LOG_ERRORF("pImpl->m_effectSystem->Initialize(): fail...");
+			return false;
+		}
 
 		pImpl->m_trailRenderSystem = std::make_unique<TrailEffectRenderSystem>(*pImpl->m_renderDevice);
 		pImpl->m_trailRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		if (!pImpl->m_trailRenderSystem->Initialize()) return false;
-
+		
 		// DeferredRenderSystem에 TrailEffectRenderSystem 주입
 		if (pImpl->m_deferredRenderSystem && pImpl->m_trailRenderSystem)
 		{
 			pImpl->m_deferredRenderSystem->SetSwordRenderSystem(pImpl->m_trailRenderSystem.get());
 		}
 
-	// ============================================= UI 시스템 초기화 (씬 로드 전에 초기화 필요) =============================================
-	// UIWorldManager 초기화를 씬 로드 전으로 이동
-	// 씬 로드 시 LoadUI가 호출되는데, 이때 UIWorldManager가 이미 초기화되어 있어야 Post-load fixup이 정상 작동함
-	{
-		auto* device = pImpl->m_renderDevice->GetDevice();
-		auto* context = pImpl->m_renderDevice->GetImmediateContext();
-		if (device && context)
-		{
-			pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
-			ALICE_LOG_INFO("Engine::Initialize: UIWorldManager initialized (before scene load).");
-		}
-	}
+		ALICE_LOG_INFO("[Debug] EffectSystem Init Success. Next: UIWorldManager...");
 
-		// Compute Effect System 설정
+		// ============================================= UI 시스템 초기화 =============================================
+		{
+			auto* device = pImpl->m_renderDevice->GetDevice();
+			auto* context = pImpl->m_renderDevice->GetImmediateContext();
+			if (device && context)
+			{
+				// UI 초기화 시작 로그
+				ALICE_LOG_INFO("[Debug] Calling UIWorldManager::Initalize...");
+
+				pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
+
+				// UI 초기화 완료 로그
+				ALICE_LOG_INFO("[Debug] UIWorldManager initialized (before scene load).");
+			}
+			else
+			{
+				ALICE_LOG_ERRORF("[Debug] Device or Context is NULL inside UI Block!");
+			}
+		}
+
+		ALICE_LOG_INFO("[Debug] Next: ComputeEffectSystem...");
+
+		// ============================================= Compute Effect System =============================================
 		pImpl->m_computeEffectSystem = std::make_unique<ComputeEffectSystem>(*pImpl->m_renderDevice);
-		if (!pImpl->m_computeEffectSystem->Initialize(pImpl->m_width, pImpl->m_height)) return false;
+
+		// ComputeEffectSystem 초기화 시작 로그
+		ALICE_LOG_INFO("[Debug] Calling ComputeEffectSystem::Initialize...");
+
+		if (!pImpl->m_computeEffectSystem->Initialize(pImpl->m_width, pImpl->m_height))
+		{
+			ALICE_LOG_ERRORF("[Debug] ComputeEffectSystem Init Failed!");
+			return false;
+		}
+
+		ALICE_LOG_INFO("[Debug] ComputeEffectSystem Init Success. Next: Scene Loading...");
 
 		// ============================================= 카메라 & 스크립트 =============================================
-		// 기본 카메라 위치 설정 및 핫리로드 로드
 		pImpl->m_cameraPosition = { 0.0f, 2.0f, -5.0f };
 		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
 		pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, static_cast<float>(pImpl->m_width) / pImpl->m_height, 0.1f, 5000.0f);
 
+		ALICE_LOG_INFO("[Debug] Calling ScriptHotReload_Load...");
 		ScriptHotReload_Load();
 
 		// ============================================= 씬 관리 =============================================
-		// 씬 매니저 생성 및 초기 씬 로드
 		pImpl->m_resourceManager.Clear();
 		pImpl->m_sceneManager = std::make_unique<SceneManager>(pImpl->m_world, pImpl->m_resourceManager);
 
 		bool isSceneLoaded = false;
-		if (!pImpl->m_editorMode) // 게임 모드: 빌드 설정에서 씬 로드 시도
+		ALICE_LOG_INFO("[Debug] Loading Scene...");
+
+		if (!pImpl->m_editorMode)
 		{
+			// 여기서 죽을 수도 있음 (리소스 로딩)
 			isSceneLoaded = LoadStartupSceneFromBuildSettings(pImpl->m_world, pImpl->m_resourceManager, exeDir, &pImpl->m_uiWorld);
 		}
 
@@ -574,6 +627,7 @@ namespace Alice
 			pImpl->m_sceneManager->SwitchToImmediate("SampleScene");
 			ALICE_LOG_INFO("Engine::Initialize: Loaded SampleScene (Fallback or Editor).");
 		}
+		ALICE_LOG_INFO("[Debug] Scene Loaded. Next: PhysicsSystem...");
 
 		// ============================================= 물리 시스템 생성 =============================================
 		// PhysicsSystem 생성 (ECS 브릿지) - 씬 로드 이후, RefreshPhysicsForCurrentWorld 호출 전
@@ -753,6 +807,7 @@ namespace Alice
 			// 2-4. 애니메이션/소켓 업데이트 (물리 이후: 최신 Transform 반영)
 			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
 			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+			pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
 			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
 			pImpl->m_animUpdatedThisFrame = true;
 
@@ -1229,18 +1284,77 @@ namespace Alice
 				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
 				pImpl->m_useForwardRendering,
 				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort,
-				&pImpl->m_uiWorld
+				&pImpl->m_uiWorld,
+				pImpl->m_debugDraw
 			);
-			pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
-
-			// 디버그 축(XYZ) 그리기
-			if (auto* dbg = pImpl->m_debugDrawSystem.get())
+			if (static_cast<Impl::ShadingMode>(shadingMode) != pImpl->m_shadingMode)
 			{
-				dbg->Clear();
-				dbg->AddLine({ 0.f, 0.f, 0.f }, { 1.f, 0.f, 0.f }, { 1.f, 0.f, 0.f, 1.f }); // X: Red
-				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 1.f, 0.f }, { 0.f, 1.f, 0.f, 1.f }); // Y: Green
-				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f }, { 0.f, 0.f, 1.f, 1.f }); // Z: Blue
+				pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
+			}
 
+			DebugDrawSystem* gizmo = pImpl->m_gizmoDrawSystem.get();
+			DebugDrawSystem* dbg = pImpl->m_debugDrawSystem.get();
+			if (gizmo) gizmo->Clear();
+			if (dbg) dbg->Clear();
+
+			// 디버그 축(XYZ) + 그리드 (깊이 테스트용)
+			if (gizmo && pImpl->m_debugDraw)
+			{
+				const float axisLen = 300.0f;
+				const float axisRadius = 0.08f;
+
+				// X축: 약간 다홍빛이 도는 레드 (순수 빨강보다 세련됨)
+				const DirectX::XMFLOAT4 colorX = { 0.9f, 0.2f, 0.2f, 1.0f };
+				// Y축: 형광 연두색 느낌을 약간 섞은 그린 (가시성 확보)
+				const DirectX::XMFLOAT4 colorY = { 0.2f, 0.8f, 0.2f, 1.0f };
+				// Z축: 깊이감 있는 스카이 블루/아주르 블루
+				const DirectX::XMFLOAT4 colorZ = { 0.2f, 0.4f, 0.9f, 1.0f };
+
+				gizmo->AddCylinder({ -axisLen, 0.f, 0.f }, { axisLen, 0.f, 0.f }, axisRadius, colorX); // X
+				gizmo->AddCylinder({ 0.f, -axisLen, 0.f }, { 0.f, axisLen, 0.f }, axisRadius, colorY); // Y
+				gizmo->AddCylinder({ 0.f, 0.0f, -axisLen }, { 0.f, 0.f, axisLen }, axisRadius, colorZ); // Z
+
+				// 에디터 격자 (XZ 평면) - 카메라 높이에 따라 셀 크기를 키워 멀어질수록 합쳐 보이게 처리
+				auto AddGridXZ = [&](float baseStep, int halfLines, float y,
+					const DirectX::XMFLOAT4& minorCol, const DirectX::XMFLOAT4& majorCol)
+				{
+					const DirectX::XMFLOAT3 camPos = pImpl->m_camera.GetPosition();
+					float step = baseStep;
+					const float height = std::fabsf(camPos.y);
+
+					// 높이에 따라 셀 크기를 키움 (멀수록 덜 촘촘하게)
+					while (height > step * 5.0f && step < baseStep * 128.0f)
+					{
+						step *= 2.0f;
+					}
+
+					const int majorEvery = 5;
+					const float extent = step * static_cast<float>(halfLines);
+
+					const float centerX = std::round(camPos.x / step) * step;
+					const float centerZ = std::round(camPos.z / step) * step;
+
+					for (int i = -halfLines; i <= halfLines; ++i)
+					{
+						const float x = centerX + static_cast<float>(i) * step;
+						const float z = centerZ + static_cast<float>(i) * step;
+						const DirectX::XMFLOAT4 col = (i % majorEvery == 0) ? majorCol : minorCol;
+
+						gizmo->AddLine({ x, y, centerZ - extent }, { x, y, centerZ + extent }, col);
+						gizmo->AddLine({ centerX - extent, y, z }, { centerX + extent, y, z }, col);
+					}
+				};
+
+				AddGridXZ(
+					1.0f, 20, 0.0f,
+					{ 0.25f, 0.25f, 0.25f, 1.0f },
+					{ 0.35f, 0.35f, 0.35f, 1.0f }
+				);
+			}
+
+			// 나머지 디버그 요소 (항상 보이도록 오버레이)
+			if (dbg && pImpl->m_debugDraw)
+			{
 				// 물리 콜라이더 와이어프레임 그리기
 				PhysicsDebug::DrawColliders(pImpl->m_world, *dbg);
 
@@ -1414,6 +1528,7 @@ namespace Alice
 			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
 			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, dtSec);
 			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, dtSec);
+			pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
 			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
 			pImpl->m_animUpdatedThisFrame = true;
 		}
@@ -1561,6 +1676,26 @@ namespace Alice
 			}
 		}
 
+		// 에디터 모드: DebugDraw를 뷰포트 렌더 타겟에 합성
+		if (pImpl->m_editorMode)
+		{
+			auto RenderDebugOverlay = [&](DebugDrawSystem* system, bool depthTest)
+			{
+				if (!system) return;
+				if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+				{
+					pImpl->m_forwardRenderSystem->RenderDebugOverlayToViewport(*system, pImpl->m_camera, depthTest);
+				}
+				else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+				{
+					pImpl->m_deferredRenderSystem->RenderDebugOverlayToViewport(*system, pImpl->m_camera, depthTest);
+				}
+			};
+
+			RenderDebugOverlay(pImpl->m_gizmoDrawSystem.get(), true);
+			RenderDebugOverlay(pImpl->m_debugDrawSystem.get(), false);
+		}
+
 		// 게임 모드: 백버퍼에 파티클 오버레이 합성
 		if (!pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_computeEffectSystem->HasActiveEffect() && pImpl->m_forwardRenderSystem)
 		{
@@ -1635,7 +1770,6 @@ namespace Alice
 
 		// ============================================= 오버레이 =============================================
 		// 디버그 드로우 및 ImGui(에디터 전용)
-		if (pImpl->m_debugDrawSystem) pImpl->m_debugDrawSystem->Render(pImpl->m_camera);
 		if (pImpl->m_effectSystem) pImpl->m_effectSystem->Render(pImpl->m_world, pImpl->m_camera);
 		if (pImpl->m_trailRenderSystem)pImpl->m_trailRenderSystem->Render(pImpl->m_world, pImpl->m_camera);
 		// SwordRenderSystem은 DeferredRenderSystem 내부에서 호출되므로 여기서는 호출하지 않음

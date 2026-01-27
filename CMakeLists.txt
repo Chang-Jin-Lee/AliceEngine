@@ -130,6 +130,7 @@ set(ENGINE_SOURCES
     # AnimBlueprint
     ${ALICE_SRC_DIR}/Game/AnimBlueprintAsset.cpp
     ${ALICE_SRC_DIR}/Game/SocketAttachmentSystem.cpp
+    ${ALICE_SRC_DIR}/Game/SocketWorldUpdateSystem.cpp
     ${ALICE_SRC_DIR}/Game/HurtboxFactory.cpp
     ${ALICE_SRC_DIR}/Game/WeaponTraceSystem.cpp
     ${ALICE_SRC_DIR}/Game/CombatSystem.cpp
@@ -265,6 +266,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/TrailEffectComponent.h
     ${ALICE_SRC_DIR}/Components/EffectComponent.h
     ${ALICE_SRC_DIR}/Components/SocketAttachmentComponent.h
+    ${ALICE_SRC_DIR}/Components/SocketPoseOutputComponent.h
     ${ALICE_SRC_DIR}/Components/HurtboxComponent.h
     ${ALICE_SRC_DIR}/Components/WeaponTraceComponent.h
     ${ALICE_SRC_DIR}/Components/HealthComponent.h
@@ -301,6 +303,7 @@ set(ENGINE_HEADERS
 	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
     ${ALICE_SRC_DIR}/Game/AdvancedAnimSystem.h
     ${ALICE_SRC_DIR}/Game/SocketAttachmentSystem.h
+    ${ALICE_SRC_DIR}/Game/SocketWorldUpdateSystem.h
     ${ALICE_SRC_DIR}/Game/HurtboxFactory.h
     ${ALICE_SRC_DIR}/Game/WeaponTraceSystem.h
     ${ALICE_SRC_DIR}/Game/CombatPhysicsLayers.h

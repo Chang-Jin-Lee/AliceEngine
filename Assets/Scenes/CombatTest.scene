@@ -2236,10 +2236,10 @@
                 "maxSubsteps": 4
             },
             "Transform": {
-                "enabled": false,
+                "enabled": true,
                 "position": {
                     "x": 0.0,
-                    "y": 0.0,
+                    "y": 4.099999904632568,
                     "z": 0.0
                 },
                 "rotation": {
@@ -2248,107 +2248,79 @@
                     "z": 0.0
                 },
                 "scale": {
-                    "x": 100.0,
-                    "y": 0.10000000149011612,
-                    "z": 100.0
+                    "x": 0.019999999552965164,
+                    "y": 0.019999999552965164,
+                    "z": 0.019999999552965164
                 }
             },
-            "guid": "3001",
-            "name": "PhysicsSettings"
+            "guid": "11925422794981022414",
+            "name": "GroundAndPhysSetting"
         },
         {
-            "AdvancedAnimation": {
-                "additive": {
-                    "alpha": 1.0,
-                    "autoAdvance": true,
-                    "clip": "",
-                    "enabled": false,
-                    "loop": false,
-                    "refClip": "",
-                    "speed": 1.0,
-                    "time": 0.0
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/Alice_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
                 },
-                "aim": {
-                    "enabled": false,
-                    "weight": 1.0,
-                    "yawRad": 0.0
+                "metalness": 0.0,
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
                 },
-                "base": {
-                    "autoAdvance": true,
-                    "blend01": 0.0,
-                    "clipA": "alice-Apose_arm|Swing",
-                    "clipB": "",
-                    "enabled": true,
-                    "layerAlpha": 1.0,
-                    "loopA": true,
-                    "loopB": false,
-                    "speedA": 1.0,
-                    "speedB": 1.0,
-                    "timeA": 0.12010029703378677,
-                    "timeB": 0.12010029703378677
-                },
-                "enabled": true,
-                "ik": {
-                    "chainLength": 3,
-                    "enabled": false,
-                    "targetMS": {
-                        "x": 0.0,
-                        "y": 0.0,
-                        "z": 0.0
-                    },
-                    "tipBone": "Hand_L",
-                    "weight": 1.0
-                },
-                "playing": false,
-                "procedural": {
-                    "seed": 0,
-                    "strength": 0.0,
-                    "timeSec": 0.0
-                },
-                "sockets": [],
-                "upper": {
-                    "autoAdvance": true,
-                    "blend01": 0.0,
-                    "clipA": "",
-                    "clipB": "",
-                    "enabled": true,
-                    "layerAlpha": 1.0,
-                    "loopA": true,
-                    "loopB": true,
-                    "speedA": 1.0,
-                    "speedB": 1.0,
-                    "timeA": 0.0,
-                    "timeB": 0.0
-                }
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
             },
-            "Scripts": [
-                {
-                    "enabled": true,
-                    "name": "CharacterAnimatorComponent"
-                }
-            ],
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
-                "speed": 0.0,
-                "timeSec": 0.0
+                "speed": 1.0,
+                "timeSec": 79.47548578632995
             },
             "SkinnedMesh": {
                 "boneCount": 248,
                 "instanceAssetPath": "Assets/Fbx/Alice.fbxasset",
                 "meshAssetPath": "Alice"
             },
+            "Socket": {
+                "sockets": [
+                    {
+                        "name": "123",
+                        "parentBone": "手首.L",
+                        "position": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "rotation": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "scale": {
+                            "x": 1.0,
+                            "y": 1.0,
+                            "z": 1.0
+                        }
+                    }
+                ]
+            },
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.30000001192092896,
-                    "y": 0.0,
-                    "z": 0.0
+                    "x": -0.020435109734535217,
+                    "y": -0.16792452335357666,
+                    "z": -0.041956424713134766
                 },
                 "rotation": {
                     "x": 0.0,
                     "y": 0.0,
-                    "z": 0.0
+                    "z": -0.0
                 },
                 "scale": {
                     "x": 1.0,
@@ -2356,10 +2328,81 @@
                     "z": 1.0
                 }
             },
-            "guid": "1001",
-            "name": "Alice"
+            "guid": "14686318809939303361"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/Wonderland_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.009999999776482582,
+                "roughness": 0.5,
+                "shadingMode": -1
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
+            "SkinnedMesh": {
+                "boneCount": 1,
+                "instanceAssetPath": "Assets/Fbx/Wonderland.fbxasset",
+                "meshAssetPath": "Wonderland"
+            },
+            "SocketAttachment": {
+                "extraPos": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "extraRotRad": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "extraScale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "followScale": true,
+                "ownerGuid": "14686318809939303361",
+                "ownerNameDebug": "",
+                "socketName": "123"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -0.020435109734535217,
+                    "y": -0.16792452335357666,
+                    "z": -0.041956424713134766
+                },
+                "rotation": {
+                    "x": -0.5078355073928833,
+                    "y": 0.33079129457473755,
+                    "z": -0.4576570391654968
+                },
+                "scale": {
+                    "x": 1.0153008699417114,
+                    "y": 0.8533065915107727,
+                    "z": 1.0337138175964355
+                }
+            },
+            "guid": "11137957507606629790"
         }
     ],
-    "sceneName": "AnimTest",
+    "sceneName": "CombatTest",
     "version": 1
 }
