@@ -1118,7 +1118,8 @@ namespace Alice
     bool DeferredRenderSystem::CreateSamplerStates()
     {
         D3D11_SAMPLER_DESC sDesc = {};
-        sDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        sDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+        sDesc.MaxAnisotropy = 16;
         sDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
         sDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
         sDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -1128,6 +1129,7 @@ namespace Alice
 
         // Shadow Sampler
         sDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+        sDesc.MaxAnisotropy = 1;
         sDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
         sDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
         sDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -1137,6 +1139,7 @@ namespace Alice
 
         // Linear Sampler
         sDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        sDesc.MaxAnisotropy = 1;
         sDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
         sDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
         sDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;

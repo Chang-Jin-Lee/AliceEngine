@@ -4210,11 +4210,11 @@ namespace Alice
 			ImGui::Separator();
 			ImGui::TextUnformatted("Skybox");
 
-			static int  skyboxChoice = 3; // 0 Off, 1 Bridge, 2 Indoor, 3 Baker
+			static int  skyboxChoice = 3; // 0 Off, 1 Bridge, 2 Indoor, 3 Baker, 4 darkenv
 			static int  lastSkyboxChoice = -1;
 			static bool lastForward = false;
 
-			const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker" };
+			const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker", "darkenv"};
 
 			auto ApplySkybox = [&](auto& renderer)
 			{
@@ -4230,6 +4230,7 @@ namespace Alice
 				case 1: renderer.SetIblSet("Bridge", "bridge");       break;
 				case 2: renderer.SetIblSet("Indoor", "indoor");       break;
 				case 3: renderer.SetIblSet("Sample", "BakerSample");  break;
+				case 4: renderer.SetIblSet("darkenv", "darkenvDiffuseHDR");  break;
 				default: break;
 				}
 			};
