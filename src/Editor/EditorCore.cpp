@@ -8459,45 +8459,112 @@ namespace Alice
 						}
 					}
 
-					if (!clipNames.empty())
+					ImGui::Separator();
+					ImGui::Text("Clip Timings");
+					if (ImGui::Button("+ Add Clip"))
 					{
-						const char* preview = driver->clipName.empty() ? "(none)" : driver->clipName.c_str();
-						if (ImGui::BeginCombo("Clip", preview))
-						{
-							const bool selNone = driver->clipName.empty();
-							if (ImGui::Selectable("(none)", selNone))
-							{
-								driver->clipName.clear();
-								changed = true;
-							}
-							if (selNone)
-								ImGui::SetItemDefaultFocus();
-
-							for (const auto& name : clipNames)
-							{
-								const bool sel = (driver->clipName == name);
-								if (ImGui::Selectable(name.c_str(), sel))
-								{
-									driver->clipName = name;
-									changed = true;
-								}
-								if (sel)
-									ImGui::SetItemDefaultFocus();
-							}
-							ImGui::EndCombo();
-						}
+						driver->clips.emplace_back();
+						changed = true;
 					}
-					else
+
+					for (size_t i = 0; i < driver->clips.size(); ++i)
 					{
-						ImGui::TextDisabled("No animation clips available (SkinnedMesh/FBX not ready).");
+						AttackDriverClip& clip = driver->clips[i];
+						ImGui::PushID(static_cast<int>(i));
+
+						const char* clipPreview = clip.clipName.empty() ? "(none)" : clip.clipName.c_str();
+						bool open = ImGui::TreeNode("Clip", "%s [%.2f - %.2f]", clipPreview, clip.startTimeSec, clip.endTimeSec);
+
+						ImGui::SameLine();
+						bool moveUp = ImGui::SmallButton("^");
+						ImGui::SameLine();
+						bool moveDown = ImGui::SmallButton("v");
+						ImGui::SameLine();
+						bool duplicate = ImGui::SmallButton("Dup");
+						ImGui::SameLine();
+						bool remove = ImGui::SmallButton("Remove");
+
+						if (moveUp && i > 0)
+						{
+							std::swap(driver->clips[i - 1], driver->clips[i]);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (moveDown && (i + 1) < driver->clips.size())
+						{
+							std::swap(driver->clips[i + 1], driver->clips[i]);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (duplicate)
+						{
+							driver->clips.insert(driver->clips.begin() + static_cast<ptrdiff_t>(i + 1), clip);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (remove)
+						{
+							driver->clips.erase(driver->clips.begin() + static_cast<ptrdiff_t>(i));
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+
+						if (open)
+						{
+							changed |= ImGui::Checkbox("Enabled", &clip.enabled);
+
+							if (!clipNames.empty())
+							{
+								if (ImGui::BeginCombo("Clip", clipPreview))
+								{
+									const bool selNone = clip.clipName.empty();
+									if (ImGui::Selectable("(none)", selNone))
+									{
+										clip.clipName.clear();
+										changed = true;
+									}
+									if (selNone)
+										ImGui::SetItemDefaultFocus();
+
+									for (const auto& name : clipNames)
+									{
+										const bool sel = (clip.clipName == name);
+										if (ImGui::Selectable(name.c_str(), sel))
+										{
+											clip.clipName = name;
+											changed = true;
+										}
+										if (sel)
+											ImGui::SetItemDefaultFocus();
+									}
+									ImGui::EndCombo();
+								}
+							}
+							else
+							{
+								ImGui::TextDisabled("No animation clips available (SkinnedMesh/FBX not ready).");
+							}
+
+							changed |= ImGui::DragFloat("Start Time (sec)", &clip.startTimeSec, 0.01f, 0.0f, 60.0f);
+							changed |= ImGui::DragFloat("End Time (sec)", &clip.endTimeSec, 0.01f, 0.0f, 60.0f);
+
+							if (clip.endTimeSec < clip.startTimeSec)
+								ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "Warning: End < Start");
+
+							ImGui::TreePop();
+						}
+
+						ImGui::PopID();
 					}
 				}
-
-				changed |= ImGui::DragFloat("Start Time (sec)", &driver->startTimeSec, 0.01f, 0.0f, 60.0f);
-				changed |= ImGui::DragFloat("End Time (sec)", &driver->endTimeSec, 0.01f, 0.0f, 60.0f);
-
-				if (driver->endTimeSec < driver->startTimeSec)
-					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "Warning: End < Start");
 
 				if (changed) g_SceneDirty = true;
 			}

@@ -339,12 +339,17 @@ namespace Alice
 			.property("teamId", &HealthComponent::teamId);
 
 		// AttackDriverComponent 등록
+		rttr::registration::class_<AttackDriverClip>("AttackDriverClip")
+			.constructor<>()
+			.property("clipName", &AttackDriverClip::clipName)
+			.property("startTimeSec", &AttackDriverClip::startTimeSec)
+			.property("endTimeSec", &AttackDriverClip::endTimeSec)
+			.property("enabled", &AttackDriverClip::enabled);
+
 		rttr::registration::class_<AttackDriverComponent>("AttackDriverComponent")
 			.constructor<>()
 			.property("traceGuid", &AttackDriverComponent::traceGuid)
-			.property("clipName", &AttackDriverComponent::clipName)
-			.property("startTimeSec", &AttackDriverComponent::startTimeSec)
-			.property("endTimeSec", &AttackDriverComponent::endTimeSec);
+			.property("clips", &AttackDriverComponent::clips);
 
 		// SocketDef / SocketComponent 등록 (씬 저장/로드 및 인스펙터)
 		rttr::registration::class_<SocketDef>("SocketDef")
