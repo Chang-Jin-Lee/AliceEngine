@@ -11,7 +11,7 @@
 namespace Alice
 {
     /// 아주 단순한 DebugDraw 시스템입니다.
-    /// - 선(line)만 그립니다.
+    /// - 선(line)과 단색 면(triangle)을 그립니다.
     /// - ECS/World 에 의존하지 않습니다.
     class DebugDrawSystem
     {
@@ -30,6 +30,13 @@ namespace Alice
                      const DirectX::XMFLOAT3& to,
                      const DirectX::XMFLOAT4& color);
 
+        /// 월드 공간에서 원통을 추가합니다 (단색).
+        void AddCylinder(const DirectX::XMFLOAT3& from,
+                         const DirectX::XMFLOAT3& to,
+                         float radius,
+                         const DirectX::XMFLOAT4& color,
+                         int segments = 12);
+
         /// 카메라 기준으로 모든 디버그 라인을 렌더링합니다.
         void Render(const Camera& camera);
 
@@ -47,6 +54,10 @@ namespace Alice
 
         bool CreateShadersAndInputLayout();
         bool EnsureVertexBufferSize(std::size_t vertexCount);
+        void AddTriangle(const DirectX::XMFLOAT3& a,
+                         const DirectX::XMFLOAT3& b,
+                         const DirectX::XMFLOAT3& c,
+                         const DirectX::XMFLOAT4& color);
 
     private:
         ID3D11RenderDevice& m_renderDevice;
@@ -60,7 +71,8 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11PixelShader>   m_pixelShader;
         Microsoft::WRL::ComPtr<ID3D11InputLayout>   m_inputLayout;
 
-        std::vector<DebugVertex> m_vertices;
+        std::vector<DebugVertex> m_lineVertices;
+        std::vector<DebugVertex> m_triVertices;
         std::size_t              m_vertexCapacity { 0 };
     };
 }

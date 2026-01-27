@@ -53,16 +53,14 @@ namespace Alice
                 auto mesh = m_registry.Find(comp.meshAssetPath);
                 if (!mesh)
                 {
-                    //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: mesh not found for key=\"%s\"",
-                    //               comp.meshAssetPath.c_str());
+                    //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: mesh not found for key=\"%s\"", comp.meshAssetPath.c_str());
                     continue;
                 }
 
                 const TransformComponent* t = world.GetComponent<TransformComponent>(entityId);
                 if (!t)
                 {
-                    //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no Transform",
-                    //               static_cast<unsigned>(entityId));
+                    //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no Transform", static_cast<unsigned>(entityId));
                     continue;
                 }
                 if (!t->enabled) continue;
