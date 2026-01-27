@@ -19,6 +19,7 @@
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Rendering/RenderTypes.h"
+#include "Rendering/PostProcessVolumeSystem.h"
 
 namespace Alice
 {
@@ -179,6 +180,7 @@ namespace Alice
 
         // ==== 포스트 프로세스 파라미터 ====
         PostProcessParams m_postProcessParams;
+        PostProcessVolumeSystem m_postProcessVolumeSystem;  // Post Process Volume 시스템
 
         // ==== IBL (Image-Based Lighting) 리소스 ====
         // - Diffuse IBL: Irradiance map (간접 난반사)

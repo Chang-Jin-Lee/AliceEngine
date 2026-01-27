@@ -19,8 +19,7 @@
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Rendering/RenderTypes.h"
-
-
+#include "Rendering/PostProcessVolumeSystem.h"
 
 namespace Alice
 {
@@ -128,6 +127,8 @@ namespace Alice
         
         /// 포스트 프로세스 파라미터 설정하기 (Color Grading 포함)
         void SetPostProcessParams(float exposure, float maxHDRNits, float saturation, float contrast, float gamma);
+
+        void SetPostProcessVolume(const World& world, const Camera& camera);
 
         /// Color Grading 파라미터만 설정하기 (Unreal Engine 스타일 - RGB 채널별 제어)
         /// @param saturation 채도 (R,G,B 채널별, 0.0 = 흑백, 1.0 = 원본, 2.0+ = 과포화, W=1.0)
@@ -434,6 +435,7 @@ namespace Alice
 
         // ==== 포스트 프로세스 파라미터 ====
         PostProcessParams m_postProcessParams;
+        PostProcessVolumeSystem m_postProcessVolumeSystem;  // Post Process Volume 시스템
         
         // ==== Bloom 파라미터 ====
         BloomSettings m_bloomSettings;
