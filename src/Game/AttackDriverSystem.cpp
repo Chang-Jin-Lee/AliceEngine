@@ -1,5 +1,7 @@
 #include "Game/AttackDriverSystem.h"
 
+#include <functional>
+
 #include "Core/World.h"
 #include "Components/AttackDriverComponent.h"
 #include "Components/WeaponTraceComponent.h"
@@ -9,6 +11,29 @@ namespace Alice
 {
     namespace
     {
+        std::uint64_t HashCombine(std::uint64_t seed, std::uint64_t value)
+        {
+            return seed ^ (value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+        }
+
+        std::uint64_t HashClip(const AttackDriverClip& clip)
+        {
+            std::uint64_t h = 0;
+            h = HashCombine(h, std::hash<std::string>{}(clip.clipName));
+            h = HashCombine(h, std::hash<float>{}(clip.startTimeSec));
+            h = HashCombine(h, std::hash<float>{}(clip.endTimeSec));
+            h = HashCombine(h, std::hash<bool>{}(clip.enabled));
+            return h;
+        }
+
+        std::uint64_t HashClipList(const std::vector<AttackDriverClip>& clips)
+        {
+            std::uint64_t h = 0;
+            for (const auto& clip : clips)
+                h = HashCombine(h, HashClip(clip));
+            return h;
+        }
+
         EntityId ResolveTraceEntity(World& world, AttackDriverComponent& driver, EntityId self)
         {
             if (driver.traceCached != InvalidEntityId)
@@ -63,47 +88,46 @@ namespace Alice
             if (!anim || !anim->enabled)
                 continue;
 
-            if (driver.clipName.empty())
+            const std::uint32_t gen = world.GetEntityGeneration(entityId);
+            const std::uint64_t currentHash = HashClipList(driver.clips);
+            if (currentHash == driver.registeredHash)
                 continue;
 
-            if (driver.registered && driver.registeredClipName != driver.clipName)
+            for (const auto& clipName : driver.registeredClipNames)
             {
-                if (!driver.registeredClipName.empty())
-                {
-                    // Remove previously registered notifies to avoid duplicate firing.
-                    anim->notifies.erase(driver.registeredClipName);
-                }
-                driver.registered = false;
+                anim->notifies.erase(clipName);
+            }
+            driver.registeredClipNames.clear();
+
+            for (const auto& clip : driver.clips)
+            {
+                if (!clip.enabled || clip.clipName.empty())
+                    continue;
+
+                driver.registeredClipNames.insert(clip.clipName);
+
+                anim->AddNotify(clip.clipName, clip.startTimeSec, [entityId, gen, &world]() {
+                    if (!world.IsEntityValid(entityId, gen))
+                        return;
+                    auto* driverComp = world.GetComponent<AttackDriverComponent>(entityId);
+                    if (!driverComp)
+                        return;
+                    EntityId traceId = ResolveTraceEntity(world, *driverComp, entityId);
+                    ActivateTrace(world, traceId);
+                });
+
+                anim->AddNotify(clip.clipName, clip.endTimeSec, [entityId, gen, &world]() {
+                    if (!world.IsEntityValid(entityId, gen))
+                        return;
+                    auto* driverComp = world.GetComponent<AttackDriverComponent>(entityId);
+                    if (!driverComp)
+                        return;
+                    EntityId traceId = ResolveTraceEntity(world, *driverComp, entityId);
+                    DeactivateTrace(world, traceId);
+                });
             }
 
-            if (driver.registered)
-                continue;
-
-            const std::uint32_t gen = world.GetEntityGeneration(entityId);
-            const std::string clip = driver.clipName;
-
-            anim->AddNotify(clip, driver.startTimeSec, [entityId, gen, &world]() {
-                if (!world.IsEntityValid(entityId, gen))
-                    return;
-                auto* driverComp = world.GetComponent<AttackDriverComponent>(entityId);
-                if (!driverComp)
-                    return;
-                EntityId traceId = ResolveTraceEntity(world, *driverComp, entityId);
-                ActivateTrace(world, traceId);
-            });
-
-            anim->AddNotify(clip, driver.endTimeSec, [entityId, gen, &world]() {
-                if (!world.IsEntityValid(entityId, gen))
-                    return;
-                auto* driverComp = world.GetComponent<AttackDriverComponent>(entityId);
-                if (!driverComp)
-                    return;
-                EntityId traceId = ResolveTraceEntity(world, *driverComp, entityId);
-                DeactivateTrace(world, traceId);
-            });
-
-            driver.registered = true;
-            driver.registeredClipName = driver.clipName;
+            driver.registeredHash = currentHash;
         }
     }
 }

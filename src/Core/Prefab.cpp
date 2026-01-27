@@ -28,6 +28,7 @@
 #include "Components/SocketComponent.h"
 #include "Components/AdvancedAnimationComponent.h"
 #include "Core/SocketSerialization.h"
+#include "Core/AttackDriverSerialization.h"
 #include "Core/WeaponTraceSerialization.h"
 
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
@@ -521,12 +522,7 @@ namespace Alice
             if (itAttackDriver != root.end() && itAttackDriver->is_object())
             {
                 AttackDriverComponent& ad = world.AddComponent<AttackDriverComponent>(entity);
-                if (auto itGuid = itAttackDriver->find("traceGuid"); itGuid != itAttackDriver->end())
-                    ad.traceGuid = ParseGuidOrZero(*itGuid);
-                JsonRttr::json copy = *itAttackDriver;
-                copy.erase("traceGuid");
-                rttr::instance inst = ad;
-                if (!JsonRttr::FromJsonObject(inst, copy))
+                if (!AttackDriverSerialization::JsonToAttackDriverComponent(*itAttackDriver, ad))
                     return InvalidEntityId;
             }
 
@@ -799,10 +795,7 @@ namespace Alice
             // AttackDriver
             if (const auto* attackDriver = world.GetComponent<AttackDriverComponent>(entity); attackDriver)
             {
-                rttr::instance inst = const_cast<AttackDriverComponent&>(*attackDriver);
-                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
-                obj["traceGuid"] = std::to_string(attackDriver->traceGuid);
-                root["AttackDriver"] = obj;
+                root["AttackDriver"] = AttackDriverSerialization::AttackDriverComponentToJson(*attackDriver);
             }
 
             // Point Light

@@ -2257,6 +2257,23 @@
             "name": "GroundAndPhysSetting"
         },
         {
+            "AttackDriver": {
+                "clips": [
+                    {
+                        "clipName": "alice-Apose_arm|Attack",
+                        "enabled": true,
+                        "endTimeSec": 0.20000000298023224,
+                        "startTimeSec": 0.10000000149011612
+                    },
+                    {
+                        "clipName": "alice-Apose_arm|Attack2",
+                        "enabled": true,
+                        "endTimeSec": 0.20000000298023224,
+                        "startTimeSec": 0.10000000149011612
+                    }
+                ],
+                "traceGuid": "0"
+            },
             "Material": {
                 "albedoTexturePath": "",
                 "assetPath": "Assets/Materials/Alice_0.mat",
@@ -2274,13 +2291,14 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 79.47548578632995
+                "timeSec": 144.67901299870573
             },
             "SkinnedMesh": {
                 "boneCount": 248,
@@ -2348,7 +2366,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2385,19 +2404,19 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": -0.020435109734535217,
-                    "y": -0.16792452335357666,
-                    "z": -0.041956424713134766
+                    "x": 0.03628277778625488,
+                    "y": 0.9251669645309448,
+                    "z": -0.5634452104568481
                 },
                 "rotation": {
-                    "x": -0.5078355073928833,
-                    "y": 0.33079129457473755,
-                    "z": -0.4576570391654968
+                    "x": -0.06216265261173248,
+                    "y": 0.5571280717849731,
+                    "z": 0.42506301403045654
                 },
                 "scale": {
-                    "x": 1.0153008699417114,
-                    "y": 0.8533065915107727,
-                    "z": 1.0337138175964355
+                    "x": 0.9999995827674866,
+                    "y": 1.0,
+                    "z": 1.000000238418579
                 }
             },
             "guid": "11137957507606629790"

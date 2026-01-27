@@ -18,7 +18,8 @@
                 },
                 "outlineWidth": 0.0010000000474974513,
                 "roughness": 1.0,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "PhysicsSceneSettings": {
                 "enableGroundPlane": true,
@@ -2304,7 +2305,8 @@
                 },
                 "outlineWidth": -0.9100000262260437,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2356,7 +2358,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2408,7 +2411,8 @@
                 },
                 "outlineWidth": -0.33000001311302185,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2460,7 +2464,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": 5
+                "shadingMode": 5,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2512,7 +2517,8 @@
                 },
                 "outlineWidth": -0.7699999809265137,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2681,7 +2687,8 @@
                 },
                 "outlineWidth": 0.0010000000474974513,
                 "roughness": 0.5,
-                "shadingMode": 5
+                "shadingMode": 5,
+                "transparent": false
             },
             "Scripts": [
                 {
@@ -3033,7 +3040,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3085,7 +3093,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3137,7 +3146,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3189,7 +3199,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3241,7 +3252,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3293,7 +3305,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3345,7 +3358,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3397,7 +3411,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3449,7 +3464,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3501,7 +3517,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3553,7 +3570,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3605,7 +3623,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3657,7 +3676,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3709,7 +3729,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3761,7 +3782,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3813,7 +3835,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3865,7 +3888,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3917,7 +3941,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3969,7 +3994,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -4021,7 +4047,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -4073,7 +4100,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -4125,7 +4153,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -4177,7 +4206,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -4229,7 +4259,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -4281,7 +4312,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -4341,14 +4373,78 @@
                 "ownerGuid": "7962531513969683154",
                 "ownerNameDebug": "Player",
                 "queryLayerBits": 0,
-                "radius": 10.0,
+                "shapes": [
+                    {
+                        "boxHalfExtents": {
+                            "x": 0.05000000074505806,
+                            "y": 0.05000000074505806,
+                            "z": 0.20000000298023224
+                        },
+                        "capsuleHalfHeight": 0.20000000298023224,
+                        "enabled": true,
+                        "localPos": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "localRotDeg": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "name": "Shape",
+                        "radius": 0.05000000074505806,
+                        "type": "Sphere"
+                    },
+                    {
+                        "boxHalfExtents": {
+                            "x": 0.05000000074505806,
+                            "y": 0.05000000074505806,
+                            "z": 0.20000000298023224
+                        },
+                        "capsuleHalfHeight": 0.20000000298023224,
+                        "enabled": true,
+                        "localPos": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "localRotDeg": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "name": "Shape",
+                        "radius": 0.05000000074505806,
+                        "type": "Sphere"
+                    },
+                    {
+                        "boxHalfExtents": {
+                            "x": 0.05000000074505806,
+                            "y": 0.05000000074505806,
+                            "z": 0.20000000298023224
+                        },
+                        "capsuleHalfHeight": 0.20000000298023224,
+                        "enabled": true,
+                        "localPos": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "localRotDeg": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "name": "Shape",
+                        "radius": 0.05000000074505806,
+                        "type": "Sphere"
+                    }
+                ],
+                "subSteps": 1,
                 "targetLayerBits": 0,
                 "teamId": 0,
-                "traceSocketNames": [
-                    "RightHand",
-                    "APoint",
-                    "BPoint"
-                ]
+                "traceBasisGuid": "0"
             },
             "guid": "10970757830035052100",
             "name": "Weapon"
@@ -4379,13 +4475,14 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 2,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1028.6555851174053
+                "timeSec": 1108.476444727974
             },
             "SkinnedMesh": {
                 "boneCount": 248,
@@ -4479,7 +4576,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "RigidBody": {
                 "angularDamping": 0.05000000074505806,
@@ -4536,14 +4634,14 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": -0.20690059661865234,
-                    "y": 1.203792929649353,
-                    "z": 0.3756835162639618
+                    "x": -0.3236003518104553,
+                    "y": 1.0032227039337158,
+                    "z": -0.12944728136062622
                 },
                 "rotation": {
-                    "x": -1.138427495956421,
-                    "y": 3.0366008281707764,
-                    "z": -0.741120457649231
+                    "x": -0.7950310111045837,
+                    "y": -1.246689796447754,
+                    "z": 1.881995677947998
                 },
                 "scale": {
                     "x": 0.20000000298023224,
