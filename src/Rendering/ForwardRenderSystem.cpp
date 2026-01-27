@@ -212,6 +212,11 @@ namespace Alice
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateRasterizerStates failed.");
             return false;
         }
+        if (!CreateDepthStencilStates())
+        {
+            ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateDepthStencilStates failed.");
+            return false;
+        }
         if (!CreateInstanceBuffer(2048))
         {
             ALICE_LOG_ERRORF("ForwardRenderSystem::Initialize: CreateInstanceBuffer failed.");
@@ -703,6 +708,22 @@ namespace Alice
         desc.SlopeScaledDepthBias = 0.0f;
         desc.CullMode = D3D11_CULL_FRONT;    // 앞면을 제거하고 뒷면을 그림
         if (FAILED(m_device->CreateRasterizerState(&desc, m_rsCullFront.ReleaseAndGetAddressOf()))) return false;
+
+        return true;
+    }
+
+    bool ForwardRenderSystem::CreateDepthStencilStates()
+    {
+        D3D11_DEPTH_STENCIL_DESC dsDesc = {};
+        dsDesc.DepthEnable = TRUE;
+        dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+        dsDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+        dsDesc.StencilEnable = FALSE;
+
+        if (FAILED(m_device->CreateDepthStencilState(&dsDesc, m_depthStencilStateReadOnly.ReleaseAndGetAddressOf())))
+        {
+            return false;
+        }
 
         return true;
     }
@@ -2246,7 +2267,7 @@ namespace Alice
         RestoreBackBuffer();
     }
 
-    void ForwardRenderSystem::RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera)
+    void ForwardRenderSystem::RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera, bool depthTest)
     {
         ID3D11RenderTargetView* viewportRTV = m_viewportRTV.Get();
         if (!viewportRTV || m_sceneWidth == 0 || m_sceneHeight == 0)
@@ -2254,17 +2275,37 @@ namespace Alice
             return;
         }
 
+        // Depth SRV 충돌 방지
+        ID3D11ShaderResourceView* nullSRVs[8] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        m_context->PSSetShaderResources(0, 8, nullSRVs);
+        m_context->VSSetShaderResources(0, 8, nullSRVs);
+        m_context->CSSetShaderResources(0, 8, nullSRVs);
+
         D3D11_VIEWPORT viewport = {};
         viewport.Width = static_cast<float>(m_sceneWidth);
         viewport.Height = static_cast<float>(m_sceneHeight);
         viewport.MaxDepth = 1.0f;
 
         m_context->RSSetViewports(1, &viewport);
-        m_context->OMSetRenderTargets(1, &viewportRTV, nullptr);
+        if (depthTest)
+        {
+            m_context->OMSetRenderTargets(1, &viewportRTV, m_sceneDSV.Get());
+        }
+        else
+        {
+            m_context->OMSetRenderTargets(1, &viewportRTV, nullptr);
+        }
 
         float blendFactor[4] = { 0, 0, 0, 0 };
         if (m_ppBlendOpaque) m_context->OMSetBlendState(m_ppBlendOpaque.Get(), blendFactor, 0xFFFFFFFF);
-        if (m_ppDepthOff) m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        if (depthTest)
+        {
+            m_context->OMSetDepthStencilState(m_depthStencilStateReadOnly.Get(), 0);
+        }
+        else
+        {
+            if (m_ppDepthOff) m_context->OMSetDepthStencilState(m_ppDepthOff.Get(), 0);
+        }
         if (m_ppRasterNoCull) m_context->RSSetState(m_ppRasterNoCull.Get());
 
         debugDraw.Render(camera);

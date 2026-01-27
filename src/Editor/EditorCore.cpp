@@ -1894,7 +1894,8 @@ namespace Alice
 		bool& pvdEnabled,
 		std::string& pvdHost,
 		int& pvdPort,
-		UIWorldManager* uiWorldManager)
+		UIWorldManager* uiWorldManager,
+		bool& isDebugDraw)
 	{
 		// UIWorldManager 저장
 		m_uiWorldManager = uiWorldManager;
@@ -2311,6 +2312,14 @@ namespace Alice
 
 			ImGui::Separator();
 			ImGui::Text("DeltaTime: %.3f  FPS: %.1f", deltaTime, fps);
+
+			ImGui::Separator();
+			// 렌더링 시스템 선택 체크박스
+			ImGui::Checkbox("Show DebugDraw", &isDebugDraw);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("체크: 디버그 라인 켜기\n해제: 디버그 라인 끄기");
+			}
 
 			ImGui::Separator();
 			// 렌더링 시스템 선택 체크박스

@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <cfloat>      // FLT_MAX
 #include <algorithm>   // std::max
+#include <cmath>       // std::fabsf
 #include <memory>
 #include <fstream>
 #include <sstream>
@@ -98,6 +99,7 @@ namespace Alice
 		bool m_isRunning = false;            // 엔진 자체가 실행중인지 판단
 		bool m_isPlaying = false;            // 재생 / 일시정지 상태 (에디터 모드에서만 사용)
 		bool m_editorMode = true;             // true: 에디터, false: 게임 전용
+		bool m_debugDraw = true;
 		EntityId m_selectedEntity{ InvalidEntityId }; // 현재 선택된 엔티티 (하이러키)
 
 		World          m_world;
@@ -146,6 +148,7 @@ namespace Alice
 		std::unique_ptr<ForwardRenderSystem> m_forwardRenderSystem;
 		std::unique_ptr<DeferredRenderSystem> m_deferredRenderSystem;
 		std::unique_ptr<class DebugDrawSystem> m_debugDrawSystem;
+		std::unique_ptr<class DebugDrawSystem> m_gizmoDrawSystem;
 		std::unique_ptr<class EffectSystem> m_effectSystem;
 		std::unique_ptr<class TrailEffectRenderSystem> m_trailRenderSystem;
 		std::unique_ptr<ComputeEffectSystem> m_computeEffectSystem;
@@ -531,6 +534,13 @@ namespace Alice
 		if (!pImpl->m_debugDrawSystem->Initialize())
 		{
 			ALICE_LOG_ERRORF("pImpl->m_debugDrawSystem->Initialize(): fail...");
+			return false;
+		}
+
+		pImpl->m_gizmoDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
+		if (!pImpl->m_gizmoDrawSystem->Initialize())
+		{
+			ALICE_LOG_ERRORF("pImpl->m_gizmoDrawSystem->Initialize(): fail...");
 			return false;
 		}
 
@@ -1271,21 +1281,77 @@ namespace Alice
 				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
 				pImpl->m_useForwardRendering,
 				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort,
-				&pImpl->m_uiWorld
+				&pImpl->m_uiWorld,
+				pImpl->m_debugDraw
 			);
 			if (static_cast<Impl::ShadingMode>(shadingMode) != pImpl->m_shadingMode)
 			{
 				pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
 			}
 
-			// 디버그 축(XYZ) 그리기
-			if (auto* dbg = pImpl->m_debugDrawSystem.get())
-			{
-				dbg->Clear();
-				dbg->AddLine({ 0.f, 0.f, 0.f }, { 1.f, 0.f, 0.f }, { 1.f, 0.f, 0.f, 1.f }); // X: Red
-				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 1.f, 0.f }, { 0.f, 1.f, 0.f, 1.f }); // Y: Green
-				dbg->AddLine({ 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f }, { 0.f, 0.f, 1.f, 1.f }); // Z: Blue
+			DebugDrawSystem* gizmo = pImpl->m_gizmoDrawSystem.get();
+			DebugDrawSystem* dbg = pImpl->m_debugDrawSystem.get();
+			if (gizmo) gizmo->Clear();
+			if (dbg) dbg->Clear();
 
+			// 디버그 축(XYZ) + 그리드 (깊이 테스트용)
+			if (gizmo && pImpl->m_debugDraw)
+			{
+				const float axisLen = 300.0f;
+				const float axisRadius = 0.08f;
+
+				// X축: 약간 다홍빛이 도는 레드 (순수 빨강보다 세련됨)
+				const DirectX::XMFLOAT4 colorX = { 0.9f, 0.2f, 0.2f, 1.0f };
+				// Y축: 형광 연두색 느낌을 약간 섞은 그린 (가시성 확보)
+				const DirectX::XMFLOAT4 colorY = { 0.2f, 0.8f, 0.2f, 1.0f };
+				// Z축: 깊이감 있는 스카이 블루/아주르 블루
+				const DirectX::XMFLOAT4 colorZ = { 0.2f, 0.4f, 0.9f, 1.0f };
+
+				gizmo->AddCylinder({ -axisLen, 0.f, 0.f }, { axisLen, 0.f, 0.f }, axisRadius, colorX); // X
+				gizmo->AddCylinder({ 0.f, -axisLen, 0.f }, { 0.f, axisLen, 0.f }, axisRadius, colorY); // Y
+				gizmo->AddCylinder({ 0.f, 0.0f, -axisLen }, { 0.f, 0.f, axisLen }, axisRadius, colorZ); // Z
+
+				// 에디터 격자 (XZ 평면) - 카메라 높이에 따라 셀 크기를 키워 멀어질수록 합쳐 보이게 처리
+				auto AddGridXZ = [&](float baseStep, int halfLines, float y,
+					const DirectX::XMFLOAT4& minorCol, const DirectX::XMFLOAT4& majorCol)
+				{
+					const DirectX::XMFLOAT3 camPos = pImpl->m_camera.GetPosition();
+					float step = baseStep;
+					const float height = std::fabsf(camPos.y);
+
+					// 높이에 따라 셀 크기를 키움 (멀수록 덜 촘촘하게)
+					while (height > step * 5.0f && step < baseStep * 128.0f)
+					{
+						step *= 2.0f;
+					}
+
+					const int majorEvery = 5;
+					const float extent = step * static_cast<float>(halfLines);
+
+					const float centerX = std::round(camPos.x / step) * step;
+					const float centerZ = std::round(camPos.z / step) * step;
+
+					for (int i = -halfLines; i <= halfLines; ++i)
+					{
+						const float x = centerX + static_cast<float>(i) * step;
+						const float z = centerZ + static_cast<float>(i) * step;
+						const DirectX::XMFLOAT4 col = (i % majorEvery == 0) ? majorCol : minorCol;
+
+						gizmo->AddLine({ x, y, centerZ - extent }, { x, y, centerZ + extent }, col);
+						gizmo->AddLine({ centerX - extent, y, z }, { centerX + extent, y, z }, col);
+					}
+				};
+
+				AddGridXZ(
+					1.0f, 20, 0.0f,
+					{ 0.25f, 0.25f, 0.25f, 1.0f },
+					{ 0.35f, 0.35f, 0.35f, 1.0f }
+				);
+			}
+
+			// 나머지 디버그 요소 (항상 보이도록 오버레이)
+			if (dbg && pImpl->m_debugDraw)
+			{
 				// 물리 콜라이더 와이어프레임 그리기
 				PhysicsDebug::DrawColliders(pImpl->m_world, *dbg);
 
@@ -1607,16 +1673,23 @@ namespace Alice
 		}
 
 		// 에디터 모드: DebugDraw를 뷰포트 렌더 타겟에 합성
-		if (pImpl->m_editorMode && pImpl->m_debugDrawSystem)
+		if (pImpl->m_editorMode)
 		{
-			if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+			auto RenderDebugOverlay = [&](DebugDrawSystem* system, bool depthTest)
 			{
-				pImpl->m_forwardRenderSystem->RenderDebugOverlayToViewport(*pImpl->m_debugDrawSystem, pImpl->m_camera);
-			}
-			else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
-			{
-				pImpl->m_deferredRenderSystem->RenderDebugOverlayToViewport(*pImpl->m_debugDrawSystem, pImpl->m_camera);
-			}
+				if (!system) return;
+				if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
+				{
+					pImpl->m_forwardRenderSystem->RenderDebugOverlayToViewport(*system, pImpl->m_camera, depthTest);
+				}
+				else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+				{
+					pImpl->m_deferredRenderSystem->RenderDebugOverlayToViewport(*system, pImpl->m_camera, depthTest);
+				}
+			};
+
+			RenderDebugOverlay(pImpl->m_gizmoDrawSystem.get(), true);
+			RenderDebugOverlay(pImpl->m_debugDrawSystem.get(), false);
 		}
 
 		// 게임 모드: 백버퍼에 파티클 오버레이 합성

@@ -120,7 +120,7 @@ namespace Alice
         void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
 
         /// 에디터 뷰포트에 DebugDraw 라인을 합성합니다.
-        void RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera);
+        void RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera, bool depthTest);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;

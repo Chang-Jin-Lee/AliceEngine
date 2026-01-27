@@ -74,6 +74,7 @@ namespace Alice
         bool CreateSamplerState();
 		bool CreateBlendStates();
         bool CreateRasterizerStates();
+        bool CreateDepthStencilStates();
         bool CreateInstanceBuffer(std::uint32_t initialCapacity);
         bool EnsureInstanceBufferCapacity(std::size_t requiredCount);
 
@@ -205,6 +206,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_sceneDSV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneDepthSRV;
+        Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_depthStencilStateReadOnly;
 
         std::uint32_t                                   m_sceneWidth  = 0;
         std::uint32_t                                   m_sceneHeight = 0;
@@ -308,7 +310,7 @@ namespace Alice
         void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
 
         /// 에디터 뷰포트에 DebugDraw 라인을 합성합니다.
-        void RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera);
+        void RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera, bool depthTest);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
