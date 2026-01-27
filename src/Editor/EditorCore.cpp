@@ -3855,9 +3855,18 @@ namespace Alice
 							XMFLOAT3 newPosition, newRotation, newScale;
 							if (DecomposeLocalMatrix(localMatrix, newPosition, newRotation, newScale))
 							{
-								transform->position = newPosition;
-								transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
-								transform->scale = newScale;
+								if (gizmoOp == ImGuizmo::TRANSLATE)
+								{
+									transform->position = newPosition;
+								}
+								else if (gizmoOp == ImGuizmo::ROTATE)
+								{
+									transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
+								}
+								else if (gizmoOp == ImGuizmo::SCALE)
+								{
+									transform->scale = newScale;
+								}
 							}
 
 							// ImGuizmo로 Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
