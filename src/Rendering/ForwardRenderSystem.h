@@ -23,6 +23,7 @@
 namespace Alice
 {
     class ResourceManager;
+    class DebugDrawSystem;
     /// 간단한 Forward 렌더 시스템입니다.
     /// - 큐브 1개를 그려서 Phong / Blinn-Phong 라이트를 확인할 수 있습니다.
     /// - World의 TransformComponent를 읽어와 월드 행렬을 구성합니다.
@@ -73,6 +74,7 @@ namespace Alice
         bool CreateSamplerState();
 		bool CreateBlendStates();
         bool CreateRasterizerStates();
+        bool CreateDepthStencilStates();
         bool CreateInstanceBuffer(std::uint32_t initialCapacity);
         bool EnsureInstanceBufferCapacity(std::size_t requiredCount);
 
@@ -204,6 +206,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneDepthTex;
         Microsoft::WRL::ComPtr<ID3D11DepthStencilView>  m_sceneDSV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_sceneDepthSRV;
+        Microsoft::WRL::ComPtr<ID3D11DepthStencilState> m_depthStencilStateReadOnly;
 
         std::uint32_t                                   m_sceneWidth  = 0;
         std::uint32_t                                   m_sceneHeight = 0;
@@ -305,6 +308,9 @@ namespace Alice
         
         /// 뷰포트 렌더 타겟에 파티클 오버레이 합성 (에디터 모드용)
         void RenderParticleOverlayToViewport(ID3D11ShaderResourceView* particleSRV);
+
+        /// 에디터 뷰포트에 DebugDraw 라인을 합성합니다.
+        void RenderDebugOverlayToViewport(DebugDrawSystem& debugDraw, const Camera& camera, bool depthTest);
 
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
