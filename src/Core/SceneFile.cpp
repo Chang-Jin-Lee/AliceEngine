@@ -21,8 +21,11 @@
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
 #include "Components/ComputeEffectComponent.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
+#include "Components/AnimBlueprintComponent.h"
 #include "Components/SocketComponent.h"
 #include "Core/SocketSerialization.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
@@ -86,6 +89,79 @@ namespace Alice
             if (j.is_number_unsigned() || j.is_number_integer())
                 return j.get<std::uint64_t>();
             return 0;
+        }
+
+        static void ReadStringArray(const JsonRttr::json& j, std::vector<std::string>& out)
+        {
+            out.clear();
+
+            if (j.is_string())
+            {
+                out.push_back(j.get<std::string>());
+                return;
+            }
+
+            if (!j.is_array())
+                return;
+
+            for (const auto& item : j)
+            {
+                if (item.is_string())
+                {
+                    out.push_back(item.get<std::string>());
+                    continue;
+                }
+
+                if (item.is_number() || item.is_boolean())
+                {
+                    out.push_back(item.dump());
+                    continue;
+                }
+
+                if (item.is_object())
+                {
+                    auto itName = item.find("name");
+                    if (itName != item.end() && itName->is_string())
+                        out.push_back(itName->get<std::string>());
+                }
+            }
+        }
+
+        template<typename T>
+        static bool ReadRttrArray(const JsonRttr::json& j, std::vector<T>& out)
+        {
+            out.clear();
+
+            if (j.is_null())
+                return true;
+
+            if (j.is_object())
+            {
+                T value{};
+                rttr::instance inst = value;
+                if (!JsonRttr::FromJsonObject(inst, j)) return false;
+                out.push_back(std::move(value));
+                return true;
+            }
+
+            if (!j.is_array())
+                return false;
+
+            for (const auto& item : j)
+            {
+                if (!item.is_object())
+                {
+                    // 잘못된 항목은 스킵 (이전 데이터 호환용)
+                    continue;
+                }
+
+                T value{};
+                rttr::instance inst = value;
+                if (!JsonRttr::FromJsonObject(inst, item)) return false;
+                out.push_back(std::move(value));
+            }
+
+            return true;
         }
 
         // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
@@ -404,6 +480,14 @@ namespace Alice
                 outEntity["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* animBp = world.GetComponent<AnimBlueprintComponent>(id); animBp)
+            {
+                AnimBlueprintComponent copy = *animBp;
+                copy.blueprintPath = NormalizePathToRelative(copy.blueprintPath);
+                rttr::instance inst = copy;
+                outEntity["AnimBlueprint"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* socketComp = world.GetComponent<SocketComponent>(id); socketComp)
             {
                 outEntity["Socket"] = SocketSerialization::SocketComponentToJson(*socketComp);
@@ -412,9 +496,9 @@ namespace Alice
             if (const auto* audio = world.GetComponent<AudioSourceComponent>(id); audio)
             {
                 AudioSourceComponent copy = *audio;
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
                 rttr::instance inst = copy;
                 outEntity["AudioSource"] = JsonRttr::ToJsonObject(inst);
-                copy.soundPath = NormalizePathToRelative(copy.soundPath);
             }
 
             if (const auto* listener = world.GetComponent<AudioListenerComponent>(id); listener)
@@ -426,9 +510,9 @@ namespace Alice
 
             {
                 SoundBoxComponent copy = *sb;
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
                 rttr::instance inst = copy;
                 outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
-                copy.soundPath = NormalizePathToRelative(copy.soundPath);
             }
 
             if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(id); socketAttach)
@@ -452,6 +536,12 @@ namespace Alice
                 rttr::instance inst = const_cast<WeaponTraceComponent&>(*weaponTrace);
                 JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
                 obj["ownerGuid"] = std::to_string(weaponTrace->ownerGuid);
+                {
+                    JsonRttr::json names = JsonRttr::json::array();
+                    for (const auto& name : weaponTrace->traceSocketNames)
+                        names.push_back(name);
+                    obj["traceSocketNames"] = std::move(names);
+                }
                 outEntity["WeaponTrace"] = obj;
             }
 
@@ -533,6 +623,18 @@ namespace Alice
             {
                 rttr::instance inst = const_cast<ComputeEffectComponent&>(*computeEffect);
                 outEntity["ComputeEffect"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* effect = world.GetComponent<EffectComponent>(id); effect)
+            {
+                rttr::instance inst = const_cast<EffectComponent&>(*effect);
+                outEntity["Effect"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* trail = world.GetComponent<TrailEffectComponent>(id); trail)
+            {
+                rttr::instance inst = const_cast<TrailEffectComponent&>(*trail);
+                outEntity["TrailEffect"] = JsonRttr::ToJsonObject(inst);
             }
 
             // PhysX Components
@@ -718,8 +820,31 @@ namespace Alice
             if (itAA != e.end() && itAA->is_object())
             {
                 AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(id);
+                JsonRttr::json copy = *itAA;
+
+                if (auto itChains = copy.find("ikChains"); itChains != copy.end())
+                {
+                    if (!ReadRttrArray(*itChains, aa.ikChains)) return false;
+                    copy.erase("ikChains");
+                }
+
+                if (auto itSockets = copy.find("sockets"); itSockets != copy.end())
+                {
+                    if (!ReadRttrArray(*itSockets, aa.sockets)) return false;
+                    copy.erase("sockets");
+                }
+
                 rttr::instance inst = aa;
-                if (!JsonRttr::FromJsonObject(inst, *itAA)) return false;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
+            }
+
+            // AnimBlueprint (선택)
+            auto itAnimBp = e.find("AnimBlueprint");
+            if (itAnimBp != e.end() && itAnimBp->is_object())
+            {
+                AnimBlueprintComponent& ab = world.AddComponent<AnimBlueprintComponent>(id);
+                rttr::instance inst = ab;
+                if (!JsonRttr::FromJsonObject(inst, *itAnimBp)) return false;
             }
 
             // Socket (선택)
@@ -827,6 +952,24 @@ namespace Alice
                 ComputeEffectComponent& ce = world.AddComponent<ComputeEffectComponent>(id);
                 rttr::instance inst = ce;
                 if (!JsonRttr::FromJsonObject(inst, *itCE)) return false;
+            }
+
+            // Effect 선택
+            auto itEffect = e.find("Effect");
+            if (itEffect != e.end() && itEffect->is_object())
+            {
+                EffectComponent& ec = world.AddComponent<EffectComponent>(id);
+                rttr::instance inst = ec;
+                if (!JsonRttr::FromJsonObject(inst, *itEffect)) return false;
+            }
+
+            // TrailEffect 선택
+            auto itTrail = e.find("TrailEffect");
+            if (itTrail != e.end() && itTrail->is_object())
+            {
+                TrailEffectComponent& te = world.AddComponent<TrailEffectComponent>(id);
+                rttr::instance inst = te;
+                if (!JsonRttr::FromJsonObject(inst, *itTrail)) return false;
             }
 
             // PhysX Components
@@ -951,6 +1094,11 @@ namespace Alice
 
                 JsonRttr::json copy = *itWeaponTrace;
                 copy.erase("ownerGuid");
+                if (auto itNames = copy.find("traceSocketNames"); itNames != copy.end())
+                {
+                    ReadStringArray(*itNames, wt.traceSocketNames);
+                    copy.erase("traceSocketNames");
+                }
                 rttr::instance inst = wt;
                 if (!JsonRttr::FromJsonObject(inst, copy)) return false;
             }

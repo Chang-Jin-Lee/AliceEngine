@@ -12,6 +12,7 @@
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/AdvancedAnimationComponent.h"
+#include "Components/AnimBlueprintComponent.h"
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
@@ -210,9 +211,35 @@ namespace Alice
             .property("additive", &AdvancedAnimationComponent::additive)
             .property("procedural", &AdvancedAnimationComponent::procedural)
             .property("ik", &AdvancedAnimationComponent::ik)
+            .property("ikChains", &AdvancedAnimationComponent::ikChains)
             .property("aim", &AdvancedAnimationComponent::aim)
             .property("sockets", &AdvancedAnimationComponent::sockets);
 
+        // AnimParamType enum 등록
+        rttr::registration::enumeration<AnimParamType>("AnimParamType")
+            (
+                rttr::value("Bool", AnimParamType::Bool),
+                rttr::value("Int", AnimParamType::Int),
+                rttr::value("Float", AnimParamType::Float),
+                rttr::value("Trigger", AnimParamType::Trigger)
+            );
+
+        // AnimParamValue 등록
+        rttr::registration::class_<AnimParamValue>("AnimParamValue")
+            .constructor<>()
+            .property("type", &AnimParamValue::type)
+            .property("b", &AnimParamValue::b)
+            .property("i", &AnimParamValue::i)
+            .property("f", &AnimParamValue::f)
+            .property("trigger", &AnimParamValue::trigger);
+
+        // AnimBlueprintComponent 등록
+        rttr::registration::class_<AnimBlueprintComponent>("AnimBlueprintComponent")
+            .constructor<>()
+            .property("blueprintPath", &AnimBlueprintComponent::blueprintPath)
+            .property("playing", &AnimBlueprintComponent::playing)
+            .property("speed", &AnimBlueprintComponent::speed)
+            .property("params", &AnimBlueprintComponent::params);
 
 		//  Enum 등록
 		rttr::registration::enumeration<SoundBoxType>("alice_SoundBoxType")
@@ -871,6 +898,8 @@ namespace Alice
             });
 
         r.Register<SkinnedAnimationComponent>("Skinned Animation", "Rendering");
+        r.Register<AdvancedAnimationComponent>("Advanced Animation", "Rendering");
+        r.Register<AnimBlueprintComponent>("Anim Blueprint", "Rendering");
         r.Register<SocketComponent>("Socket", "Rendering");
 
         r.Register<CameraComponent>("Camera", "Camera");
