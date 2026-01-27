@@ -142,7 +142,7 @@ namespace Alice
         // ------------------------------
         // 고급 애니메이션 컴포넌트가 있는 엔티티만 처리합니다.
         // 일반 애니메이션(SkinnedAnimationComponent)은 엔진의 기본 시스템이 담당합니다.
-        for (auto [entityId, animComp] : world.GetComponents<AdvancedAnimationComponent>())
+        for (auto&& [entityId, animComp] : world.GetComponents<AdvancedAnimationComponent>())
         {
             // 비활성화 상태면 스킵
             if (!animComp.enabled)

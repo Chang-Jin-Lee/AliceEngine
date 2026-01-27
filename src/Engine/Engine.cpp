@@ -514,6 +514,8 @@ namespace Alice
 		pImpl->m_forwardRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		pImpl->m_forwardRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
 
+		pImpl->m_attackDriverSystem.SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
+
 		if (!pImpl->m_forwardRenderSystem->Initialize(pImpl->m_width, pImpl->m_height))
 		{
 			ALICE_LOG_ERRORF("pImpl->m_forwardRenderSystem->Initialize: fail...");
