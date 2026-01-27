@@ -33,6 +33,15 @@ namespace Alice
         inline Json AttackDriverClipToJson(const AttackDriverClip& clip)
         {
             Json j = Json::object();
+            switch (clip.source)
+            {
+            case AttackDriverClipSource::BaseA: j["source"] = "BaseA"; break;
+            case AttackDriverClipSource::BaseB: j["source"] = "BaseB"; break;
+            case AttackDriverClipSource::UpperA: j["source"] = "UpperA"; break;
+            case AttackDriverClipSource::UpperB: j["source"] = "UpperB"; break;
+            case AttackDriverClipSource::Additive: j["source"] = "Additive"; break;
+            default: j["source"] = "Explicit"; break;
+            }
             j["clipName"] = clip.clipName;
             j["startTimeSec"] = clip.startTimeSec;
             j["endTimeSec"] = clip.endTimeSec;
@@ -45,6 +54,23 @@ namespace Alice
             if (!j.is_object())
                 return false;
 
+            if (auto it = j.find("source"); it != j.end())
+            {
+                if (it->is_string())
+                {
+                    const std::string s = it->get<std::string>();
+                    if (s == "BaseA") out.source = AttackDriverClipSource::BaseA;
+                    else if (s == "BaseB") out.source = AttackDriverClipSource::BaseB;
+                    else if (s == "UpperA") out.source = AttackDriverClipSource::UpperA;
+                    else if (s == "UpperB") out.source = AttackDriverClipSource::UpperB;
+                    else if (s == "Additive") out.source = AttackDriverClipSource::Additive;
+                    else out.source = AttackDriverClipSource::Explicit;
+                }
+                else if (it->is_number_integer())
+                {
+                    out.source = static_cast<AttackDriverClipSource>(it->get<int>());
+                }
+            }
             if (auto it = j.find("clipName"); it != j.end() && it->is_string())
                 out.clipName = it->get<std::string>();
             if (auto it = j.find("startTimeSec"); it != j.end() && it->is_number())
