@@ -185,7 +185,7 @@ static aiQuaternion InterpQuat(const aiQuatKey* keys, unsigned count, double t)
 
 static void DecomposeAiMatrix(const aiMatrix4x4& m, FbxLocalSRT& out)
 {
-	// ★ 핵심: XMMatrixDecompose 대신 Assimp의 Decompose 사용
+	// XMMatrixDecompose 대신 Assimp의 Decompose 사용
 	// FBX 노드 변환(프리/포스트 회전, 피벗 베이크, 축 변환 포함)에서 정확함
 	// 이렇게 하면 EvaluateLocalsAt()에서 채널이 있는데 position key가 없는 본도
 	// bind translation이 정상으로 들어감
