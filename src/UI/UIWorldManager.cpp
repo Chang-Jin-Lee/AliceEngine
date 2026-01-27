@@ -76,84 +76,119 @@
 // inputSystem은 추후에 싱글톤인 경우 SceneManager에서 변경하기
 void UIWorldManager::Initalize(ID3D11Device* pDev, ID3D11DeviceContext* pDevCon, UINT w, UINT h, Alice::InputSystem& tmpInput)
 {
-    m_d3dDev = pDev;
-    m_devCon = pDevCon;
+	ALICE_LOG_INFO("[UIWorld] Initialize Start");
 
+	m_d3dDev = pDev;
+	m_devCon = pDevCon;
 
-    //3D에 합성할 2D Tex 생성
-    Create2DTex(w, h);
+	// 1. 3D Texture 생성 (여기서 만드는 텍스처 포맷이 B8G8R8A8 인지 확인 필요)
+	ALICE_LOG_INFO("[UIWorld] Calling Create2DTex...");
+	Create2DTex(w, h);
+	ALICE_LOG_INFO("[UIWorld] Create2DTex Success");
 
-    // D2D Factory
-    D2D1_FACTORY_OPTIONS options = {};
-    HR_T(D2D1CreateFactory(
-        D2D1_FACTORY_TYPE_SINGLE_THREADED,
-        __uuidof(ID2D1Factory8),
-        &options,
-        reinterpret_cast<void**>(m_d2DFactory.GetAddressOf())
-    ));
+	HRESULT hr = S_OK;
 
-    // DXGI device
-    Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
-    HR_T(m_d3dDev->QueryInterface(IID_PPV_ARGS(dxgiDevice.GetAddressOf())));;
+	// 2. D2D Factory 생성
+	ALICE_LOG_INFO("[UIWorld] Creating D2D Factory...");
+	D2D1_FACTORY_OPTIONS options = {};
+	// 디버그 레이어 활성화 (렌더독 등에서 도움됨)
+#if defined(_DEBUG)
+	options.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
+#endif
 
+	hr = D2D1CreateFactory(
+		D2D1_FACTORY_TYPE_SINGLE_THREADED,
+		__uuidof(ID2D1Factory8),
+		&options,
+		reinterpret_cast<void**>(m_d2DFactory.GetAddressOf())
+	);
+	if (FAILED(hr)) { ALICE_LOG_ERRORF("[UIWorld] D2D1CreateFactory Failed. HR=0x%08X", hr); return; }
 
-    // D2D 디바이스
-    m_d2DFactory->CreateDevice((dxgiDevice.Get()), m_d2DDevice.GetAddressOf());
-    m_d2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, m_d2DdevCon.GetAddressOf());
+	// 3. DXGI Device 가져오기
+	ALICE_LOG_INFO("[UIWorld] QueryInterface DXGI Device...");
+	Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+	hr = m_d3dDev->QueryInterface(IID_PPV_ARGS(dxgiDevice.GetAddressOf()));
+	if (FAILED(hr)) { ALICE_LOG_ERRORF("[UIWorld] QI DXGI Failed. HR=0x%08X", hr); return; }
 
+	// 4. D2D Device 생성
+	ALICE_LOG_INFO("[UIWorld] Creating D2D Device...");
+	hr = m_d2DFactory->CreateDevice((dxgiDevice.Get()), m_d2DDevice.GetAddressOf());
+	if (FAILED(hr)) { ALICE_LOG_ERRORF("[UIWorld] CreateDevice Failed. HR=0x%08X", hr); return; }
 
-    // DWrite
-    HR_T(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
-        reinterpret_cast<IUnknown**>(m_D3DWFactory.GetAddressOf())));
+	// 5. D2D Device Context 생성
+	ALICE_LOG_INFO("[UIWorld] Creating D2D Device Context...");
+	hr = m_d2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, m_d2DdevCon.GetAddressOf());
+	if (FAILED(hr)) { ALICE_LOG_ERRORF("[UIWorld] CreateDeviceContext Failed. HR=0x%08X", hr); return; }
 
-    // brush 생성
-    HR_T(m_d2DdevCon->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::DeepSkyBlue, 0.5f), &m_brush));
+	// 6. DWrite Factory
+	ALICE_LOG_INFO("[UIWorld] Creating DWrite Factory...");
+	hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+		reinterpret_cast<IUnknown**>(m_D3DWFactory.GetAddressOf()));
+	if (FAILED(hr)) { ALICE_LOG_ERRORF("[UIWorld] DWriteCreateFactory Failed. HR=0x%08X", hr); return; }
 
-    // Tex -> DXGI Surface
-    HR_T(m_tex2D.As(&m_dxgiSurface));
+	// 7. Brush 생성
+	ALICE_LOG_INFO("[UIWorld] Creating Brush...");
+	hr = m_d2DdevCon->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::DeepSkyBlue, 0.5f), &m_brush);
+	if (FAILED(hr)) { ALICE_LOG_ERRORF("[UIWorld] CreateSolidColorBrush Failed. HR=0x%08X", hr); return; }
 
-    // 이미지 -> bitmap
-     HR_T(CoCreateInstance(
-        CLSID_WICImagingFactory,
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&m_wicFactory)
-    ));
+	// 8. Texture -> DXGI Surface 변환
+	ALICE_LOG_INFO("[UIWorld] Texture As DXGI Surface...");
+	if (!m_tex2D) { ALICE_LOG_ERRORF("[UIWorld] m_tex2D is NULL! Check Create2DTex."); return; }
 
-    // D2D에 target bitmap 생성
-    D2D1_BITMAP_PROPERTIES1 bmpProps = {};
-    bmpProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    bmpProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
-    bmpProps.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
-    bmpProps.dpiX = 96.0f;   //인치당 픽셸수
-    bmpProps.dpiY = 96.0f;
-    m_d2DdevCon->CreateBitmapFromDxgiSurface(m_dxgiSurface.Get(), &bmpProps, m_d2dTargetBitmap.GetAddressOf());
-    m_d2DdevCon->SetTarget(m_d2dTargetBitmap.Get());
+	hr = m_tex2D.As(&m_dxgiSurface);
+	if (FAILED(hr)) { ALICE_LOG_ERRORF("[UIWorld] m_tex2D.As(DXGISurface) Failed. HR=0x%08X (Format mismatch?)", hr); return; }
 
-    //일단 임시로 로우 포인터로 받음
-    m_inputSystem = &tmpInput;
+	// 9. WIC Factory (COM 초기화 필수)
+	ALICE_LOG_INFO("[UIWorld] Creating WIC Factory...");
+	hr = CoCreateInstance(
+		CLSID_WICImagingFactory,
+		nullptr,
+		CLSCTX_INPROC_SERVER,
+		IID_PPV_ARGS(&m_wicFactory)
+	);
+	if (FAILED(hr)) {
+		ALICE_LOG_ERRORF("[UIWorld] CoCreateInstance(WIC) Failed. HR=0x%08X (Did you call CoInitialize?)", hr);
+		return;
+	}
 
- 
-    // 하위 Manager나 Object들에게 변수를 넘겨주기 위해 struct 구조로 넘겨줄 예정
-    // ID2D1Factory8 -> ID2D1Factory1 변환 (QueryInterface)
-    Microsoft::WRL::ComPtr<ID2D1Factory1> factory1;
-    HR_T(m_d2DFactory.As(&factory1));
-    m_RenderStruct.m_d2DFactory = factory1;
-    
-    // ID2D1Device7 -> ID2D1Device 변환 (QueryInterface)
-    Microsoft::WRL::ComPtr<ID2D1Device> device;
-    HR_T(m_d2DDevice.As(&device));
-    m_RenderStruct.m_d2DDevice = device;
-    
-    m_RenderStruct.m_d2DdevCon = m_d2DdevCon;
-    m_RenderStruct.m_D3DWFactory = m_D3DWFactory;
-    m_RenderStruct.m_brush = m_brush;
-    m_RenderStruct.m_wicImageFactory = m_wicFactory;
-    m_RenderStruct.m_d2dTargetBitmap = m_d2dTargetBitmap;
-    m_RenderStruct.m_width = w;
-    m_RenderStruct.m_height = h;
+	// 10. Bitmap from Surface (가장 위험한 구간)
+	ALICE_LOG_INFO("[UIWorld] Creating Bitmap from Surface...");
+	D2D1_BITMAP_PROPERTIES1 bmpProps = {};
+	bmpProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM; // ★ 여기랑 Create2DTex의 포맷이 다르면 죽음
+	bmpProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+	bmpProps.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+	bmpProps.dpiX = 96.0f;
+	bmpProps.dpiY = 96.0f;
 
-    ChangeScene("Default");
+	hr = m_d2DdevCon->CreateBitmapFromDxgiSurface(m_dxgiSurface.Get(), &bmpProps, m_d2dTargetBitmap.GetAddressOf());
+	if (FAILED(hr)) { ALICE_LOG_ERRORF("[UIWorld] CreateBitmapFromDxgiSurface Failed. HR=0x%08X", hr); return; }
+
+	m_d2DdevCon->SetTarget(m_d2dTargetBitmap.Get());
+
+	// 11. 마무리
+	ALICE_LOG_INFO("[UIWorld] Finalizing Setup...");
+	m_inputSystem = &tmpInput;
+
+	Microsoft::WRL::ComPtr<ID2D1Factory1> factory1;
+	if (FAILED(m_d2DFactory.As(&factory1))) { ALICE_LOG_WARN("[UIWorld] Factory1 Cast Failed"); }
+	m_RenderStruct.m_d2DFactory = factory1;
+
+	Microsoft::WRL::ComPtr<ID2D1Device> device;
+	if (FAILED(m_d2DDevice.As(&device))) { ALICE_LOG_WARN("[UIWorld] Device Cast Failed"); }
+	m_RenderStruct.m_d2DDevice = device;
+
+	m_RenderStruct.m_d2DdevCon = m_d2DdevCon;
+	m_RenderStruct.m_D3DWFactory = m_D3DWFactory;
+	m_RenderStruct.m_brush = m_brush;
+	m_RenderStruct.m_wicImageFactory = m_wicFactory;
+	m_RenderStruct.m_d2dTargetBitmap = m_d2dTargetBitmap;
+	m_RenderStruct.m_width = w;
+	m_RenderStruct.m_height = h;
+
+	ALICE_LOG_INFO("[UIWorld] Calling ChangeScene...");
+	ChangeScene("Default");
+
+	ALICE_LOG_INFO("[UIWorld] Initialize Success.");
 }
 
 

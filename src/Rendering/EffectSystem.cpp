@@ -4,6 +4,7 @@
 
 #include <d3dcompiler.h>
 #include <cmath>
+#include <Core/Logger.h>
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
@@ -66,15 +67,50 @@ float4 main(PSInput input) : SV_TARGET
 
 	bool EffectSystem::Initialize()
 	{
-		if (!m_device || !m_context) return false;
-		if (!CreateShadersAndInputLayout()) return false;
-		if (!CreateCrescentMesh()) return false;
+		// [1] 진입 확인
+		ALICE_LOG_INFO("EffectSystem::Initialize: Begin");
 
-		// PerEffect 상수 버퍼 생성
+		if (!m_device || !m_context)
+		{
+			ALICE_LOG_ERRORF("EffectSystem::Initialize: Device or Context is null.");
+			return false;
+		}
+
+		// [2] 쉐이더 생성 시도
+		ALICE_LOG_INFO("EffectSystem::Initialize: Calling CreateShadersAndInputLayout...");
+
+		// 가장 유력한 용의자 1: 여기서 쉐이더 컴파일 에러나면 예외 던지고 죽을 수 있음
+		if (!CreateShadersAndInputLayout())
+		{
+			ALICE_LOG_ERRORF("EffectSystem::Initialize: CreateShadersAndInputLayout failed.");
+			return false;
+		}
+		ALICE_LOG_INFO("EffectSystem::Initialize: Shaders Created.");
+
+		// [3] 메쉬 생성 시도
+		ALICE_LOG_INFO("EffectSystem::Initialize: Calling CreateCrescentMesh...");
+
+		// 유력한 용의자 2: 버퍼 생성 실패
+		if (!CreateCrescentMesh())
+		{
+			ALICE_LOG_ERRORF("EffectSystem::Initialize: CreateCrescentMesh failed.");
+			return false;
+		}
+		ALICE_LOG_INFO("EffectSystem::Initialize: Mesh Created.");
+
+		// [4] 상수 버퍼 생성 시도
+		ALICE_LOG_INFO("EffectSystem::Initialize: Creating Constant Buffer...");
 		D3D11_BUFFER_DESC desc = { sizeof(CBPerEffect), D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 };
-		if (FAILED(m_device->CreateBuffer(&desc, nullptr, m_cbPerEffect.ReleaseAndGetAddressOf()))) return false;
 
-		// 알파 블렌딩용 블렌드 스테이트 생성
+		HRESULT hr = m_device->CreateBuffer(&desc, nullptr, m_cbPerEffect.ReleaseAndGetAddressOf());
+		if (FAILED(hr))
+		{
+			ALICE_LOG_ERRORF("EffectSystem::Initialize: m_device->CreateBuffer fail... HR=0x%08X", hr);
+			return false;
+		}
+
+		// [5] 블렌드 스테이트 생성 시도
+		ALICE_LOG_INFO("EffectSystem::Initialize: Creating Blend State...");
 		D3D11_BLEND_DESC blendDesc = {};
 		blendDesc.RenderTarget[0].BlendEnable = TRUE;
 		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
@@ -84,10 +120,19 @@ float4 main(PSInput input) : SV_TARGET
 		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
 		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		if (FAILED(m_device->CreateBlendState(&blendDesc, m_blendState.ReleaseAndGetAddressOf()))) return false;
 
+		hr = m_device->CreateBlendState(&blendDesc, m_blendState.ReleaseAndGetAddressOf());
+		if (FAILED(hr))
+		{
+			ALICE_LOG_ERRORF("EffectSystem::Initialize: m_device->CreateBlendState fail... HR=0x%08X", hr);
+			return false;
+		}
+
+		// [6] 최종 성공
+		ALICE_LOG_INFO("EffectSystem::Initialize: Success.");
 		return true;
 	}
+
 
 	void EffectSystem::Render(const World& world, const Camera& camera)
 	{
