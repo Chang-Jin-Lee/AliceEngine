@@ -8,5 +8,5 @@
         "Assets/Materials/Wonderland_5.mat"
     ],
     "mesh": "Wonderland",
-    "source_fbx": "Resource/fbx/Wonderland/Wonderland.fbx"
+    "source_fbx": "Resource/Test/fbx/Wonderland_Part/Wonderland.fbx"
 }
