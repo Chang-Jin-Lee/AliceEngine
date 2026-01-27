@@ -86,6 +86,8 @@ public:
 	void BuildPaletteAt(int clipIndex, double timeSec, std::vector<DirectX::XMFLOAT4X4>& outPalette);
 	// 임의 클립/시간 전역 행렬 생성 (소켓용)
 	void EvaluateGlobalsAt(int clipIndex, double timeSec, std::vector<DirectX::XMFLOAT4X4>& outGlobal);
+	// 모든 노드 전역 행렬 생성 (스킨에 포함되지 않는 소켓 본까지 포함)
+	void EvaluateGlobalsAtFull(int clipIndex, double timeSec, std::vector<DirectX::XMFLOAT4X4>& outGlobal);
 
 	// 임의 클립/시간 로컬 SRT 생성 (고급 블렌드/IK용)
 	void EvaluateLocalsAt(int clipIndex, double timeSec,
