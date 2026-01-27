@@ -355,6 +355,14 @@ namespace Alice
 			.property("dodgeActive", &HealthComponent::dodgeActive)
 			.property("guardActive", &HealthComponent::guardActive)
 			.property("guardDamageScale", &HealthComponent::guardDamageScale)
+			.property("hitThisFrame", &HealthComponent::hitThisFrame)
+			.property("guardHitThisFrame", &HealthComponent::guardHitThisFrame)
+			.property("dodgeAvoidedThisFrame", &HealthComponent::dodgeAvoidedThisFrame)
+			.property("lastHitDamage", &HealthComponent::lastHitDamage)
+			.property("lastHitAttacker", &HealthComponent::lastHitAttacker)
+			.property("lastHitPart", &HealthComponent::lastHitPart)
+			.property("lastHitPosWS", &HealthComponent::lastHitPosWS)
+			.property("lastHitNormalWS", &HealthComponent::lastHitNormalWS)
 			.property("alive", &HealthComponent::alive)
 			.property("teamId", &HealthComponent::teamId);
 

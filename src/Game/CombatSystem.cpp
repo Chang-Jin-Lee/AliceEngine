@@ -9,6 +9,17 @@
 
 namespace Alice
 {
+    void CombatSystem::BeginFrame(World& world)
+    {
+        for (auto&& [id, health] : world.GetComponents<HealthComponent>())
+        {
+            (void)id;
+            health.hitThisFrame = false;
+            health.guardHitThisFrame = false;
+            health.dodgeAvoidedThisFrame = false;
+        }
+    }
+
     void CombatSystem::Update(World& world, float dtSec)
     {
         if (dtSec <= 0.0f)
@@ -41,17 +52,34 @@ namespace Alice
                 continue;
 
             if (health->dodgeActive)
+            {
+                health->dodgeAvoidedThisFrame = true;
+                health->lastHitDamage = 0.0f;
+                health->lastHitAttacker = hit.attackerOwner;
+                health->lastHitPart = hit.part;
+                health->lastHitPosWS = hit.hitPosWS;
+                health->lastHitNormalWS = hit.hitNormalWS;
                 continue;
+            }
 
             if (health->invulnRemaining > 0.0f)
                 continue;
 
             float damage = hit.damage;
-            if (health->guardActive)
+            const bool guarded = health->guardActive;
+            if (guarded)
             {
                 const float scale = std::clamp(health->guardDamageScale, 0.0f, 1.0f);
                 damage *= scale;
             }
+
+            health->hitThisFrame = true;
+            health->guardHitThisFrame = health->guardHitThisFrame || guarded;
+            health->lastHitDamage = damage;
+            health->lastHitAttacker = hit.attackerOwner;
+            health->lastHitPart = hit.part;
+            health->lastHitPosWS = hit.hitPosWS;
+            health->lastHitNormalWS = hit.hitNormalWS;
 
             health->currentHealth -= damage;
             if (health->currentHealth <= 0.0f)

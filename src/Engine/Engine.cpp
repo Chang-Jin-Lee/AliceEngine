@@ -815,6 +815,9 @@ namespace Alice
 			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
 			pImpl->m_animUpdatedThisFrame = true;
 
+			// 프레임 단위 전투 플래그 초기화
+			pImpl->m_combatSystem.BeginFrame(pImpl->m_world);
+
 			// 소켓 기반 무기 스윕 판정
 			pImpl->m_weaponTraceSystem.Update(pImpl->m_world, dt, &pImpl->m_combatHitQueue);
 
