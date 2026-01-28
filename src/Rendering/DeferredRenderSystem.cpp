@@ -1339,7 +1339,7 @@ namespace Alice
             return true;
         }
 
-        m_shadowCacheDirty = true;
+        m_shadowCacheDirty = true;  
         return CreateShadowMapResources();
     }
 
@@ -2339,8 +2339,7 @@ namespace Alice
                 outlineColor = mat->outlineColor;
                 outlineWidth = mat->outlineWidth;
                 toonCuts = XMFLOAT4(mat->toonPbrCut1, mat->toonPbrCut2, mat->toonPbrCut3, mat->toonPbrStrength);
-                toonLevels = XMFLOAT4(mat->toonPbrLevel1, mat->toonPbrLevel2, mat->toonPbrLevel3,
-                                      mat->toonPbrBlur ? 1.0f : 0.0f);
+                toonLevels = XMFLOAT4(mat->toonPbrLevel1, mat->toonPbrLevel2, mat->toonPbrLevel3, 0.0f);
                 if (mat->shadingMode >= 0) objectShadingMode = mat->shadingMode;
                 if (!mat->albedoTexturePath.empty()) {
                     texSRV = GetOrCreateTexture(mat->albedoTexturePath);
