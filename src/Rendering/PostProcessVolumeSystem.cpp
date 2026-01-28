@@ -7,34 +7,148 @@ using namespace DirectX;
 
 namespace Alice
 {
+    /// UE 스타일 weight 계산 (연속적)
+    static float ComputeUEWeight(float sd, float br, float bw)
+    {
+        bw = std::clamp(bw, 0.0f, 1.0f);
+        br = std::max(0.0f, br);
+
+        if (br <= 0.0f)
+            return (sd < 0.0f) ? bw : 0.0f;
+
+        if (sd < 0.0f) // inside
+            return bw;
+
+        // outside fade
+        float t = 1.0f - (sd / br);
+        t = std::clamp(t, 0.0f, 1.0f);
+        return bw * t;
+    }
+
     PostProcessSettings PostProcessVolumeSystem::CalculateFinalSettings(
         World& world,
         const XMFLOAT3& cameraPosition,
         const PostProcessSettings& defaultSettings)
     {
-        // 1. 후보 수집 및 weight 계산
+        // 1. 후보 수집 및 signed distance 계산
         std::vector<PostProcessVolumeCandidate> candidates;
         CollectCandidates(world, cameraPosition, candidates);
 
         // 2. Priority 기준 정렬 (낮은 priority가 먼저, 높은 priority가 나중에 블렌딩)
-        // UE 스타일: 높은 priority가 나중에 적용되어 최종값에 더 큰 영향
         std::sort(candidates.begin(), candidates.end(),
             [](const PostProcessVolumeCandidate& a, const PostProcessVolumeCandidate& b)
             {
                 return a.volume->priority < b.volume->priority;
             });
 
-        // 3. 기본 설정으로 시작
-        PostProcessSettings final = defaultSettings;
-
-        // 4. 각 볼륨에 대해 블렌딩
-        for (const auto& candidate : candidates)
+        // 3. 가장 높은 Priority의 Bound 볼륨 찾기 (트랜지션 대상)
+        PostProcessVolumeCandidate* activeCandidate = nullptr;
+        int highestPriority = INT_MIN;
+        for (auto& candidate : candidates)
         {
-            if (candidate.weight > 0.0f)
+            if (!candidate.volume->unbound && candidate.volume->priority > highestPriority)
             {
-                PostProcessBlend::BlendSettings(final, candidate.volume->settings, candidate.weight);
+                highestPriority = candidate.volume->priority;
+                activeCandidate = &candidate;
             }
         }
+
+        // Active 볼륨의 weight를 UE 방식으로 재계산
+        if (activeCandidate && !activeCandidate->volume->unbound)
+        {
+            float br = std::max(0.0f, activeCandidate->volume->blendRadius);
+            float bw = std::clamp(activeCandidate->volume->blendWeight, 0.0f, 1.0f);
+            activeCandidate->weight = ComputeUEWeight(activeCandidate->signedDistance, br, bw);
+        }
+
+        // 4. 영향 시작 감지 및 스냅샷 저장 (w > 0이 되는 순간)
+        bool isAffectingNow = (activeCandidate != nullptr && !activeCandidate->volume->unbound && activeCandidate->weight > 0.0f);
+        bool wasAffecting = m_transitionState.wasAffecting;
+        bool isEntering = !wasAffecting && isAffectingNow;  // 영향 시작 전이
+
+        if (isEntering && activeCandidate)
+        {
+            // 영향이 시작되는 순간 바깥값 저장
+            // 이전 프레임의 최종값이 있으면 그것을 사용, 없으면 defaultSettings + Unbound만 적용
+            if (m_transitionState.hasPreviousFrameFinal)
+            {
+                m_transitionState.outsideSnapshot = m_transitionState.previousFrameFinal;
+            }
+            else
+            {
+                // 이전 프레임 값이 없으면 defaultSettings + Unbound 볼륨들만 적용된 값
+                PostProcessSettings outsideFinal = defaultSettings;
+                for (const auto& candidate : candidates)
+                {
+                    if (candidate.volume->unbound && candidate.weight > 0.0f)
+                    {
+                        PostProcessBlend::BlendSettings(outsideFinal, candidate.volume->settings, candidate.weight);
+                    }
+                }
+                m_transitionState.outsideSnapshot = outsideFinal;
+            }
+            m_transitionState.hasOutsideSnapshot = true;
+            m_transitionState.activeVolumeId = activeCandidate->entityId;
+        }
+
+        // 5. OutsideSnapshot 결정
+        PostProcessSettings outsideSnapshot;
+        //if (m_transitionState.hasOutsideSnapshot)
+        {
+            outsideSnapshot = m_transitionState.outsideSnapshot;
+        }
+        //else
+        //{
+        //    // 스냅샷이 없으면 defaultSettings 사용
+        //    outsideSnapshot = defaultSettings;
+        //}
+
+        // 6. Active 볼륨이 있으면 거리 기반 weight 계산 및 Final 계산
+        PostProcessSettings final;
+        if (activeCandidate && !activeCandidate->volume->unbound && activeCandidate->weight > 0.0f)
+        {
+            // Final = OutsideSnapshot에서 시작
+            final = outsideSnapshot;
+
+            // BlendSettings에 volume->settings 원본 사용 (override 플래그 포함)
+            PostProcessBlend::BlendSettings(final, activeCandidate->volume->settings, activeCandidate->weight);
+        }
+        else
+        {
+            // Active 볼륨이 없거나 영향이 없으면 OutsideSnapshot 사용
+            final = outsideSnapshot;
+
+            // Unbound 볼륨들 적용
+            for (const auto& candidate : candidates)
+            {
+                if (candidate.volume->unbound && candidate.weight > 0.0f)
+                {
+                    PostProcessBlend::BlendSettings(final, candidate.volume->settings, candidate.weight);
+                }
+            }
+        }
+
+        // 7. 상태 업데이트
+        bool wasAffectingBefore = m_transitionState.wasAffecting;
+        m_transitionState.wasAffecting = isAffectingNow;
+
+        // 밖으로 완전히 벗어났을 때 (영향 종료)
+        if (wasAffectingBefore && !isAffectingNow)
+        {
+            // activeVolumeId 무효화 (복귀 완료)
+            m_transitionState.activeVolumeId = InvalidEntityId;
+            // outsideSnapshot은 그대로 유지 (복귀 목표 값)
+        }
+        else if (!isAffectingNow && !m_transitionState.hasOutsideSnapshot)
+        {
+            // 처음 밖에 있고 스냅샷이 없으면 현재 값을 저장
+            m_transitionState.outsideSnapshot = final;
+            m_transitionState.hasOutsideSnapshot = true;
+        }
+
+        // 이전 프레임의 final 값 저장 (다음 프레임 진입 감지용)
+        m_transitionState.previousFrameFinal = final;
+        m_transitionState.hasPreviousFrameFinal = true;
 
         return final;
     }
@@ -54,17 +168,38 @@ namespace Alice
             if (!transform || !transform->enabled)
                 continue;
 
-            // Weight 계산
-            //float weight = CalculateVolumeWeight(*volume, *transform, cameraPosition);
-            float weight = CalculateVolumeWeight(volume, *transform, cameraPosition);
+            // Unbound는 항상 후보
+            if (volume.unbound)
+            {
+                PostProcessVolumeCandidate candidate;
+                candidate.entityId = entityId;
+                candidate.volume = const_cast<PostProcessVolumeComponent*>(&volume);
+                candidate.transform = transform;
+                candidate.weight = std::clamp(volume.blendWeight, 0.0f, 1.0f);
+                candidate.signedDistance = -1.0f;  // Unbound는 내부로 간주
+                outCandidates.push_back(candidate);
+                continue;
+            }
 
-            if (weight > 0.0f)
+            // Bound 볼륨: signed distance 계산
+            XMFLOAT3 worldBoxSize;
+            worldBoxSize.x = volume.boxSize.x * transform->scale.x;
+            worldBoxSize.y = volume.boxSize.y * transform->scale.y;
+            worldBoxSize.z = volume.boxSize.z * transform->scale.z;
+
+            float sd = DistanceToBoxSurface(cameraPosition, transform->position, worldBoxSize, transform->rotation);
+
+            // Weight 계산 (거리 기반)
+            float weight = CalculateVolumeWeight(volume, *transform, cameraPosition, sd);
+
+            if (weight > 0.0f || sd < 0.0f)  // 내부이거나 weight > 0인 경우 후보로 추가
             {
                 PostProcessVolumeCandidate candidate;
                 candidate.entityId = entityId;
                 candidate.volume = const_cast<PostProcessVolumeComponent*>(&volume);
                 candidate.transform = transform;
                 candidate.weight = weight;
+                candidate.signedDistance = sd;
                 outCandidates.push_back(candidate);
             }
         }
@@ -73,53 +208,19 @@ namespace Alice
     float PostProcessVolumeSystem::CalculateVolumeWeight(
         const PostProcessVolumeComponent& volume,
         const TransformComponent& transform,
-        const XMFLOAT3& cameraPosition)
+        const XMFLOAT3& cameraPosition,
+        float signedDistance)
     {
-        // A) Unbound: 항상 후보, w = BlendWeight
+        // Unbound면 항상 BlendWeight 반환 (전역 적용)
         if (volume.unbound)
         {
-            return volume.blendWeight;
+            return std::clamp(volume.blendWeight, 0.0f, 1.0f);
         }
 
-        // B) Bound(Box): 카메라 위치 기준으로 weight 계산
-        // 월드 공간 박스 크기 계산 (Transform의 scale과 volume의 boxSize 곱)
-        XMFLOAT3 worldBoxSize;
-        worldBoxSize.x = volume.boxSize.x * transform.scale.x;
-        worldBoxSize.y = volume.boxSize.y * transform.scale.y;
-        worldBoxSize.z = volume.boxSize.z * transform.scale.z;
-
-        // 월드 공간 박스 중심 = Transform의 position
-        const XMFLOAT3& boxCenter = transform.position;
-
-        // 카메라가 볼륨 내부인지 판정
-        bool inside = IsPointInsideBox(cameraPosition, boxCenter, worldBoxSize, transform.rotation);
-
-        if (inside)
-        {
-            // 내부: w = BlendWeight (강하게 적용)
-            return volume.blendWeight;
-        }
-        else
-        {
-            // 외부: 표면까지 거리 d를 구함
-            float distance = DistanceToBoxSurface(cameraPosition, boxCenter, worldBoxSize, transform.rotation);
-            
-            // BlendRadius > 0이고 d <= BlendRadius일 때만 페이드 적용
-            if (volume.blendRadius > 0.0f && distance <= volume.blendRadius)
-            {
-                // t = saturate(1 - d / BlendRadius)
-                float t = 1.0f - (distance / volume.blendRadius);
-                t = std::clamp(t, 0.0f, 1.0f);
-                
-                // w = BlendWeight * t
-                return volume.blendWeight * t;
-            }
-            else
-            {
-                // 그 외는 w = 0
-                return 0.0f;
-            }
-        }
+        // Bound 볼륨: UE 방식 weight 계산
+        float br = std::max(0.0f, volume.blendRadius);
+        float bw = std::clamp(volume.blendWeight, 0.0f, 1.0f);
+        return ComputeUEWeight(signedDistance, br, bw);
     }
 
     bool PostProcessVolumeSystem::IsPointInsideBox(
@@ -209,5 +310,70 @@ namespace Alice
             float distance = XMVectorGetX(XMVector3Length(diff));
             return distance;  // 양수 = 외부 거리
         }
+    }
+
+    float PostProcessVolumeSystem::DistanceToBoxCenter(
+        const XMFLOAT3& point,
+        const XMFLOAT3& boxCenter,
+        const XMFLOAT3& boxSize,
+        const XMFLOAT3& boxRotationRad)
+    {
+        // 회전 행렬 계산
+        XMMATRIX rotationMatrix = XMMatrixRotationRollPitchYaw(
+            boxRotationRad.x,  // Pitch
+            boxRotationRad.y,  // Yaw
+            boxRotationRad.z   // Roll
+        );
+
+        // 박스 중심을 원점으로 이동
+        XMVECTOR localPoint = XMVectorSubtract(XMLoadFloat3(&point), XMLoadFloat3(&boxCenter));
+
+        // 회전의 역행렬을 적용하여 로컬 공간으로 변환
+        XMMATRIX invRotation = XMMatrixTranspose(rotationMatrix);
+        localPoint = XMVector3Transform(localPoint, invRotation);
+
+        // 로컬 공간 좌표
+        XMFLOAT3 local;
+        XMStoreFloat3(&local, localPoint);
+
+        // 원점까지의 거리 계산
+        float distance = XMVectorGetX(XMVector3Length(localPoint));
+        return distance;
+    }
+
+    PostProcessSettings PostProcessVolumeSystem::CalculateVolumeTarget(
+        const PostProcessSettings& baseSettings,
+        const PostProcessSettings& volumeSettings)
+    {
+        // VolumeTarget = baseSettings에서 override된 항목만 volumeSettings 값으로 교체
+        PostProcessSettings target = baseSettings;
+
+        // override된 항목만 볼륨값으로 교체
+        if (volumeSettings.bOverride_Exposure)
+            target.exposure = volumeSettings.exposure;
+        if (volumeSettings.bOverride_MaxHDRNits)
+            target.maxHDRNits = volumeSettings.maxHDRNits;
+        if (volumeSettings.bOverride_ColorGradingSaturation)
+            target.saturation = volumeSettings.saturation;
+        if (volumeSettings.bOverride_ColorGradingContrast)
+            target.contrast = volumeSettings.contrast;
+        if (volumeSettings.bOverride_ColorGradingGamma)
+            target.gamma = volumeSettings.gamma;
+        if (volumeSettings.bOverride_ColorGradingGain)
+            target.gain = volumeSettings.gain;
+        if (volumeSettings.bOverride_BloomThreshold)
+            target.bloomThreshold = volumeSettings.bloomThreshold;
+        if (volumeSettings.bOverride_BloomKnee)
+            target.bloomKnee = volumeSettings.bloomKnee;
+        if (volumeSettings.bOverride_BloomIntensity)
+            target.bloomIntensity = volumeSettings.bloomIntensity;
+        if (volumeSettings.bOverride_BloomGaussianIntensity)
+            target.bloomGaussianIntensity = volumeSettings.bloomGaussianIntensity;
+        if (volumeSettings.bOverride_BloomRadius)
+            target.bloomRadius = volumeSettings.bloomRadius;
+        if (volumeSettings.bOverride_BloomDownsample)
+            target.bloomDownsample = volumeSettings.bloomDownsample;
+
+        return target;
     }
 }

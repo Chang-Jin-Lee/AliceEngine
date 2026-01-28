@@ -91,26 +91,26 @@ namespace Alice
     namespace PostProcessBlend
     {
         /// float 값 블렌딩: lerp(Final, Volume, weight)
+        /// weight에 비례하여 점진적으로 블렌딩 (UE 스타일)
         inline void BlendFloat(float& final, float volume, float weight, bool override)
         {
-			if (override && weight > 0.0f)
-			{
-				if (weight >= 0.5f)
-					final = volume;
-			}
+            if (override && weight > 0.0f)
+            {
+                // lerp: final = final + (volume - final) * weight
+                final = final + (volume - final) * weight;
+            }
         }
 
         /// float3 값 블렌딩: lerp(Final, Volume, weight)
+        /// weight에 비례하여 점진적으로 블렌딩 (UE 스타일)
         inline void BlendFloat3(DirectX::XMFLOAT3& final, const DirectX::XMFLOAT3& volume, float weight, bool override)
         {
-			if (override && weight > 0.0f)
-			{
-				if (weight >= 0.5f)
-				{
-					final.x = final.x + (volume.x - final.x) * weight;
-					final.y = final.y + (volume.y - final.y) * weight;
-					final.z = final.z + (volume.z - final.z) * weight;
-				}
+            if (override && weight > 0.0f)
+            {
+                // lerp: final = final + (volume - final) * weight
+                final.x = final.x + (volume.x - final.x) * weight;
+                final.y = final.y + (volume.y - final.y) * weight;
+                final.z = final.z + (volume.z - final.z) * weight;
             }
         }
 

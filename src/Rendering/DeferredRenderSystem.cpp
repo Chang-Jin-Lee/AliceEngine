@@ -2149,37 +2149,42 @@ namespace Alice
 
         // Post Process Volume 블렌딩 (카메라 위치 기준)
         {
-            // 기본 설정 생성
-            PostProcessSettings defaultSettings = PostProcessSettings::FromDefaults();
-            defaultSettings.exposure = m_postProcessParams.exposure;
-            defaultSettings.maxHDRNits = m_postProcessParams.maxHDRNits;
-            defaultSettings.saturation = DirectX::XMFLOAT3(
-                m_postProcessParams.colorGradingSaturation.x,
-                m_postProcessParams.colorGradingSaturation.y,
-                m_postProcessParams.colorGradingSaturation.z
-            );
-            defaultSettings.contrast = DirectX::XMFLOAT3(
-                m_postProcessParams.colorGradingContrast.x,
-                m_postProcessParams.colorGradingContrast.y,
-                m_postProcessParams.colorGradingContrast.z
-            );
-            defaultSettings.gamma = DirectX::XMFLOAT3(
-                m_postProcessParams.colorGradingGamma.x,
-                m_postProcessParams.colorGradingGamma.y,
-                m_postProcessParams.colorGradingGamma.z
-            );
-            defaultSettings.gain = DirectX::XMFLOAT3(
-                m_postProcessParams.colorGradingGain.x,
-                m_postProcessParams.colorGradingGain.y,
-                m_postProcessParams.colorGradingGain.z
-            );
-            // Bloom 기본 설정
-            defaultSettings.bloomThreshold = m_bloomSettings.threshold;
-            defaultSettings.bloomKnee = m_bloomSettings.knee;
-            defaultSettings.bloomIntensity = m_bloomSettings.intensity;
-            defaultSettings.bloomGaussianIntensity = m_bloomSettings.gaussianIntensity;
-            defaultSettings.bloomRadius = m_bloomSettings.radius;
-            defaultSettings.bloomDownsample = m_bloomSettings.downsample;
+            // 기본 설정: EditorCore의 Default Settings 사용 (설정되지 않았으면 현재 m_postProcessParams 사용)
+            PostProcessSettings defaultSettings = m_defaultPostProcessSettings;
+            
+            // EditorCore의 Default Settings가 설정되지 않았으면 현재 m_postProcessParams 사용
+            if (!m_hasDefaultPostProcessSettings)
+            {
+                defaultSettings.exposure = m_postProcessParams.exposure;
+                defaultSettings.maxHDRNits = m_postProcessParams.maxHDRNits;
+                defaultSettings.saturation = DirectX::XMFLOAT3(
+                    m_postProcessParams.colorGradingSaturation.x,
+                    m_postProcessParams.colorGradingSaturation.y,
+                    m_postProcessParams.colorGradingSaturation.z
+                );
+                defaultSettings.contrast = DirectX::XMFLOAT3(
+                    m_postProcessParams.colorGradingContrast.x,
+                    m_postProcessParams.colorGradingContrast.y,
+                    m_postProcessParams.colorGradingContrast.z
+                );
+                defaultSettings.gamma = DirectX::XMFLOAT3(
+                    m_postProcessParams.colorGradingGamma.x,
+                    m_postProcessParams.colorGradingGamma.y,
+                    m_postProcessParams.colorGradingGamma.z
+                );
+                defaultSettings.gain = DirectX::XMFLOAT3(
+                    m_postProcessParams.colorGradingGain.x,
+                    m_postProcessParams.colorGradingGain.y,
+                    m_postProcessParams.colorGradingGain.z
+                );
+                // Bloom 기본 설정
+                defaultSettings.bloomThreshold = m_bloomSettings.threshold;
+                defaultSettings.bloomKnee = m_bloomSettings.knee;
+                defaultSettings.bloomIntensity = m_bloomSettings.intensity;
+                defaultSettings.bloomGaussianIntensity = m_bloomSettings.gaussianIntensity;
+                defaultSettings.bloomRadius = m_bloomSettings.radius;
+                defaultSettings.bloomDownsample = m_bloomSettings.downsample;
+            }
 
             // Post Process Volume 블렌딩 계산
             PostProcessSettings finalSettings = m_postProcessVolumeSystem.CalculateFinalSettings(
@@ -3842,6 +3847,7 @@ namespace Alice
 		);
 
 		// 최종 설정을 m_postProcessParams에 적용
+        //DirectX::XMVectorLerp()
 		m_postProcessParams.exposure = finalSettings.exposure;
 		m_postProcessParams.maxHDRNits = finalSettings.maxHDRNits;
 		m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(
@@ -3934,6 +3940,12 @@ namespace Alice
         {
             CreateBloomResources(m_sceneWidth, m_sceneHeight);
         }
+    }
+
+    void DeferredRenderSystem::SetDefaultPostProcessSettings(const PostProcessSettings& settings)
+    {
+        m_defaultPostProcessSettings = settings;
+        m_hasDefaultPostProcessSettings = true;
     }
 
     bool DeferredRenderSystem::SetIblSet(const std::string& iblDir, const std::string& iblName)
