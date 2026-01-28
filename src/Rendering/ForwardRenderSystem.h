@@ -24,6 +24,7 @@ namespace Alice
 {
     class ResourceManager;
     class DebugDrawSystem;
+    class UIRenderer;
     /// 간단한 Forward 렌더 시스템입니다.
     /// - 큐브 1개를 그려서 Phong / Blinn-Phong 라이트를 확인할 수 있습니다.
     /// - World의 TransformComponent를 읽어와 월드 행렬을 구성합니다.
@@ -324,10 +325,15 @@ namespace Alice
         /// @param viewport 뷰포트 영역
         void RenderUI(UIWorldManager& uiWorld, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
+        /// AliceUI 렌더러 주입
+        void SetUIRenderer(UIRenderer* renderer) { m_uiRenderer = renderer; }
+
     private:
         // ==== UI 합성 리소스 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_uiQuadVS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_uiCompositePS;
+
+        UIRenderer*                                    m_uiRenderer{ nullptr };
         
         bool CreateUIResources();
     };

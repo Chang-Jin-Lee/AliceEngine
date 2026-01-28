@@ -23,6 +23,7 @@
 #include "Rendering/ShaderCode/CommonShaderCode.h"
 #include "Rendering/ShaderCode/DeferredShader.h"
 #include "Rendering/TrailEffectRenderSystem.h"
+#include "AliceUI/UIRenderer.h"
 #include <fstream>
 #include <sstream>
 
@@ -2143,6 +2144,12 @@ namespace Alice
         // 반투명(알파 블렌딩) 오브젝트는 라이트 패스 이후 Forward-Style로 합성
         PassTransparentForward(camera, skinnedCommands, shadingMode);
 
+        // 월드 UI 렌더링 (씬 컬러 + 깊이 위에 합성)
+        if (m_uiRenderer)
+        {
+            m_uiRenderer->RenderWorld(world, camera, m_sceneRTV.Get(), m_sceneDSV.Get());
+        }
+
         // 에디터 뷰포트 표시용 LDR 텍스처로 Bloom + 톤매핑 (ImGui::Image에서 사용)
         if (m_viewportRTV)
         {
@@ -2163,8 +2170,15 @@ namespace Alice
             }
 
             // UI 렌더링 (Post-processing 이후, 최상단에 렌더링)
-            uiWorld.Render();  // D2D → UI 텍스처 렌더링
-            RenderUI(uiWorld, m_viewportRTV.Get(), viewport);
+            if (m_uiRenderer)
+            {
+                m_uiRenderer->RenderScreen(world, camera, m_viewportRTV.Get(), viewport.Width, viewport.Height);
+            }
+            else
+            {
+                uiWorld.Render();  // D2D → UI 텍스처 렌더링
+                RenderUI(uiWorld, m_viewportRTV.Get(), viewport);
+            }
         }
 
         // 최종 백버퍼 복귀 (ImGui 등 UI 렌더링을 위해)
