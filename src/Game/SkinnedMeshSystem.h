@@ -119,12 +119,15 @@ namespace Alice
                     cmd.color = mat->color;
                     cmd.roughness = mat->roughness;
                     cmd.metalness = mat->metalness;
+                    cmd.ambientOcclusion = mat->ambientOcclusion;
                     cmd.normalStrength = mat->normalStrength;
                     cmd.shadingMode = mat->shadingMode;
                     cmd.transparent = mat->transparent;
                     cmd.outlineColor = mat->outlineColor;
                     cmd.outlineWidth = mat->outlineWidth;
                     cmd.albedoTexturePath = mat->albedoTexturePath;
+                    cmd.toonPbrCuts = DirectX::XMFLOAT4(mat->toonPbrCut1, mat->toonPbrCut2, mat->toonPbrCut3, mat->toonPbrStrength);
+                    cmd.toonPbrLevels = DirectX::XMFLOAT4(mat->toonPbrLevel1, mat->toonPbrLevel2, mat->toonPbrLevel3, 0.0f);
 
                     if (!mat->albedoTexturePath.empty())
                     {

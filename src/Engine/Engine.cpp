@@ -89,7 +89,8 @@ namespace Alice
 			BlinnPhong = 2,
 			Toon = 3,
 			PBR = 4,
-			ToonPBR = 5
+			ToonPBR = 5,
+			ToonPBREditable = 7
 		};
 
 		HINSTANCE m_hInstance = nullptr;

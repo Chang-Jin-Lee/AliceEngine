@@ -51,7 +51,7 @@ namespace Alice
         /// \param world        ECS 월드 (Transform 정보 조회)
         /// \param camera       카메라 (뷰/투영 행렬 및 카메라 위치)
         /// \param entity       (현재는 사용하지 않지만, 향후 특정 엔티티만 선택 렌더링용으로 예약)
-        /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong
+        /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon, 4: PBR, 5: ToonPBR, 6: OnlyTextureWithOutline, 7: ToonPBREditable
         /// \param enableFillLight 보조광 사용 여부
         /// \param skinnedCommands 스키닝 메시 드로우 커맨드 목록
         /// \param uiWorld      UI 월드 매니저 (2D UI 렌더링용)
@@ -91,9 +91,13 @@ namespace Alice
                                const DirectX::XMFLOAT4& materialColor,
                                const float& roughness,
                                const float& metalness,
+                               float ambientOcclusion,
                                const bool& useTexture,
                                const bool& enableNormalMap,
                                int shadingMode,
+                               float normalStrength,
+                               const DirectX::XMFLOAT4& toonPbrCuts,
+                               const DirectX::XMFLOAT4& toonPbrLevels,
                                const DirectX::XMFLOAT3& outlineColor = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
                                float outlineWidth = 0.01f);
 

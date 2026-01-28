@@ -26,7 +26,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -97,7 +101,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -176,7 +184,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -272,7 +284,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -363,7 +379,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -385,6 +405,7 @@ struct GBufferOut
     float4 NormalRoughness : SV_Target0;
     float4 Metalness       : SV_Target1;
     float4 BaseColor       : SV_Target2;
+    float4 ToonParams      : SV_Target3;
 };
 
 Texture2D  g_DiffuseMap : register(t0);
@@ -394,6 +415,10 @@ SamplerState g_Sam : register(s0);
 GBufferOut main(VertexOut pIn)
 {
     GBufferOut gOut;
+    float ao = saturate(gAmbientOcclusion);
+    float aoPacked = min(ao, 0.999f);
+    float shadingEncoded = ((float)gShadingMode + aoPacked) / 8.0f;
+    float outlineEncoded = (6.0f + aoPacked) / 8.0f;
     
     // 아웃라인 패스 감지: Width가 0보다 크면 아웃라인용 드로우콜임
     if (gOutlineWidth > 0.0f)
@@ -401,11 +426,11 @@ GBufferOut main(VertexOut pIn)
         // 1. Normal/Roughness/Metalness: 조명 연산 방해 안 되게 더미 값
         gOut.NormalRoughness = float4(0.5f, 0.5f, 1.0f, 1.0f);
         gOut.Metalness  = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        gOut.ToonParams = float4(0.0f, 0.0f, 0.0f, 0.0f);
         
         // 3. BaseColor: 아웃라인 색상
-        // 4. Alpha (ShadingMode): 1.0f -> 인코딩 시 mode 6 (TextureOnly/Unlit)이 됨
-        //    (LightPS에서 1.0은 Unlit으로 처리되어 BaseColor가 그대로 출력됨)
-        gOut.BaseColor  = float4(gOutlineColor, 1.0f);
+        // 4. Alpha (ShadingMode + AO) 인코딩: mode 6(OnlyTexture) + AO
+        gOut.BaseColor  = float4(gOutlineColor, saturate(outlineEncoded));
         
         return gOut;
     }
@@ -449,16 +474,17 @@ GBufferOut main(VertexOut pIn)
     float3 normalEncoded = N * 0.5f + 0.5f;
     
     gOut.NormalRoughness = float4(normalEncoded, roughness);
-    gOut.Metalness  = float4(metalness, 0, 0, 1);
-    // shadingMode를 [0,1] 범위로 인코딩하여 저장 (0~6 -> 0.0~1.0)
-    gOut.BaseColor  = float4(baseColor, saturate((float)gShadingMode / 6.0f));
+    gOut.Metalness  = float4(metalness, saturate(gToonPbrCuts.x), saturate(gToonPbrCuts.y), saturate(gToonPbrCuts.z));
+    gOut.ToonParams = float4(saturate(gToonPbrCuts.w), saturate(gToonPbrLevels.x), saturate(gToonPbrLevels.y), saturate(gToonPbrLevels.z));
+    // shadingMode + AO를 [0,1] 범위로 인코딩하여 저장
+    gOut.BaseColor  = float4(baseColor, saturate(shadingEncoded));
     
     return gOut;
 }
 )";
 
         // Deferred Light Pixel Shader
-        inline static const char* LightPS = R"(
+        inline static const char* LightPS1 = R"(
 // PBR 헬퍼 함수들
 static const float PI = 3.14159265f;
 static const float INV_PI = 0.31830988618f;
@@ -488,6 +514,36 @@ float GeometrySmith(float NdotV, float NdotL, float roughness)
 float3 FresnelSchlick(float3 F0, float cosTheta)
 {
     return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
+float ToonLevel(float n)
+{
+    if (n > 0.95f) return 1.0f;
+    if (n > 0.5f)  return 0.7f;
+    if (n > 0.2f)  return 0.4f;
+    return 0.1f;
+}
+
+float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
+{
+    float c1 = saturate(cuts.x);
+    float c2 = saturate(cuts.y);
+    float c3 = saturate(cuts.z);
+    c2 = max(c2, c1 + 1e-4f);
+    c3 = max(c3, c2 + 1e-4f);
+
+    float l0 = saturate(levels.x);
+    float l1 = saturate(levels.y);
+    float l2 = saturate(levels.z);
+    float l3 = 1.0f;
+
+    float level = (n > c3) ? l3 :
+                  (n > c2) ? l2 :
+                  (n > c1) ? l1 :
+                             l0;
+
+    float t = saturate(strength);
+    return lerp(n, level, t);
 }
 
 // ShadowCB (register b4)
@@ -543,11 +599,12 @@ struct PS_INPUT_QUAD
 Texture2D g_NormalRoughness : register(t0);
 Texture2D g_Metalness : register(t1);
 Texture2D g_BaseColor : register(t2);
-Texture2D<float> g_SceneDepth : register(t3);
-TextureCube g_IBL_Diffuse : register(t4);
-TextureCube g_IBL_Specular : register(t5);
-Texture2D   g_IBL_BRDF_LUT : register(t6);
-Texture2D<float> g_ShadowMap : register(t7);
+Texture2D g_ToonParams : register(t3);
+Texture2D<float> g_SceneDepth : register(t4);
+TextureCube g_IBL_Diffuse : register(t5);
+TextureCube g_IBL_Specular : register(t6);
+Texture2D   g_IBL_BRDF_LUT : register(t7);
+Texture2D<float> g_ShadowMap : register(t8);
 
 SamplerState g_Sam : register(s0);
 SamplerComparisonState g_ShadowSampler : register(s1);
@@ -695,14 +752,6 @@ float3 EvaluatePBRLight(float3 N, float3 V, float3 L, float3 albedoPBR, float me
     return (diffuse + specular) * lightColor * NdotL;
 }
 
-float ToonLevel(float n)
-{
-    if (n > 0.95f) return 1.0f;
-    if (n > 0.5f)  return 0.7f;
-    if (n > 0.2f)  return 0.4f;
-    return 0.1f;
-}
-
 void AccumulateLegacy(float3 N, float3 V, float3 L, float3 lightColor, float atten, int mode, float shininess,
                       inout float3 outDiffuse, inout float3 outSpecular)
 {
@@ -732,13 +781,16 @@ void AccumulateLegacy(float3 N, float3 V, float3 L, float3 lightColor, float att
     }
     outSpecular += specTerm * lightColor * atten;
 }
+)";
 
+        inline static const char* LightPS2 = R"(
 float4 main(PS_INPUT_QUAD pIn) : SV_Target
 {
     // G-Buffer 가져오기
     float4 normalRoughness = g_NormalRoughness.Sample(g_Sam, pIn.uv);
     float4 metalness_packed = g_Metalness.Sample(g_Sam, pIn.uv);
     float4 baseColor = g_BaseColor.Sample(g_Sam, pIn.uv);
+    float4 toonParams = g_ToonParams.Sample(g_Sam, pIn.uv);
     float depth = g_SceneDepth.Sample(g_Sam, pIn.uv);
     
     // 배경 체크 (Depth가 1.0이면 배경)
@@ -748,6 +800,9 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     // Normal을 [0,1]에서 [-1,1]로 디코딩
     float3 N = normalize(normalRoughness.xyz * 2.0f - 1.0f);
     float metalness = metalness_packed.r;
+    float3 toonCuts = float3(metalness_packed.g, metalness_packed.b, metalness_packed.a);
+    float toonStrength = toonParams.r;
+    float3 toonLevels = toonParams.gba;
     float roughness = max(normalRoughness.w, 0.04f);
     
     // Depth에서 월드 포지션 복원
@@ -760,9 +815,11 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 albedo = baseColor.rgb;
     float3 albedoLinear = pow(max(albedo, 0.0f), 2.2f);
     
-    // shadingMode 디코딩 (0~6 범위)
-    int shadingMode = (int)floor(baseColor.a * 6.0f + 0.5f);
-    shadingMode = clamp(shadingMode, 0, 6);
+    // shadingMode + AO 디코딩
+    float modeAo = saturate(baseColor.a) * 8.0f;
+    int shadingMode = (int)floor(modeAo + 1e-4f);
+    shadingMode = clamp(shadingMode, 0, 7);
+    float ao = saturate(modeAo - shadingMode);
     
     // shadingMode == 6: TextureOnly (빛의 영향을 받지 않는 텍스처만 반환)
     if (shadingMode == 6)
@@ -776,8 +833,9 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     
     float NdotV = saturate(dot(N, V));
 
-    const bool usePbr = (shadingMode == 4 || shadingMode == 5);
-    const bool toonPbr = (shadingMode == 5);
+    const bool usePbr = (shadingMode == 4 || shadingMode == 5 || shadingMode == 7);
+    const bool toonPbr = (shadingMode == 5 || shadingMode == 7);
+    const bool toonEditable = (shadingMode == 7);
 
     float shadowVis = CalcShadowFactorDeferred(posW, g_ShadowMap, g_ShadowSampler);
 
@@ -834,7 +892,6 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     // PBR 연산
     float3 albedoPBR = albedoLinear;
     roughness = max(roughness, 0.04f);
-    float ao = saturate(g_PBRAmbientOcclusion);
 
     // IBL 계산을 위해 필요한 F0와 kD를 여기서 미리 계산해야 합니다.
     // --------------------------------------------------------------------------
@@ -850,8 +907,8 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float ndotl = max(dot(N, L), 0.0f);
         if (toonPbr && ndotl > 0.0f)
         {
-            float level = ToonLevel(ndotl);
-            lit *= level / max(ndotl, 1e-4f);
+            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength) : ToonLevel(ndotl);
+            lit *= toonNdotL / max(ndotl, 1e-4f);
         }
         directLighting += lit * shadowVis * ao;
     }
@@ -870,8 +927,8 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float ndotl = max(dot(N, Lp), 0.0f);
         if (toonPbr && ndotl > 0.0f)
         {
-            float level = ToonLevel(ndotl);
-            lit *= level / max(ndotl, 1e-4f);
+            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength) : ToonLevel(ndotl);
+            lit *= toonNdotL / max(ndotl, 1e-4f);
         }
         extraLighting += lit * ao;
     }
@@ -889,8 +946,8 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float ndotl = max(dot(N, Ls), 0.0f);
         if (toonPbr && ndotl > 0.0f)
         {
-            float level = ToonLevel(ndotl);
-            lit *= level / max(ndotl, 1e-4f);
+            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength) : ToonLevel(ndotl);
+            lit *= toonNdotL / max(ndotl, 1e-4f);
         }
         extraLighting += lit * ao;
     }
@@ -909,8 +966,8 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float ndotl = max(dot(N, Lr), 0.0f);
         if (toonPbr && ndotl > 0.0f)
         {
-            float level = ToonLevel(ndotl);
-            lit *= level / max(ndotl, 1e-4f);
+            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength) : ToonLevel(ndotl);
+            lit *= toonNdotL / max(ndotl, 1e-4f);
         }
         extraLighting += lit * ao;
     }
@@ -953,7 +1010,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -1049,7 +1110,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -1161,6 +1226,36 @@ float3 FresnelSchlick(float3 F0, float cosTheta)
     return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
 }
 
+float ToonLevel(float n)
+{
+    if (n > 0.95f) return 1.0f;
+    if (n > 0.5f)  return 0.7f;
+    if (n > 0.2f)  return 0.4f;
+    return 0.1f;
+}
+
+float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
+{
+    float c1 = saturate(cuts.x);
+    float c2 = saturate(cuts.y);
+    float c3 = saturate(cuts.z);
+    c2 = max(c2, c1 + 1e-4f);
+    c3 = max(c3, c2 + 1e-4f);
+
+    float l0 = saturate(levels.x);
+    float l1 = saturate(levels.y);
+    float l2 = saturate(levels.z);
+    float l3 = 1.0f;
+
+    float level = (n > c3) ? l3 :
+                  (n > c2) ? l2 :
+                  (n > c1) ? l1 :
+                             l0;
+
+    float t = saturate(strength);
+    return lerp(n, level, t);
+}
+
 // 텍스처
 Texture2D  g_DiffuseMap : register(t0);
 Texture2D  g_NormalMap  : register(t1);
@@ -1190,7 +1285,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -1265,7 +1364,7 @@ float4 main(PSIn pIn) : SV_Target
 
     float metalness = saturate(gMetalness);
     float roughness = max(saturate(gRoughness), 0.04f);
-    float ao = 1.0f;
+    float ao = saturate(gAmbientOcclusion);
 
     float3 L = normalize(-g_LightDir);
     float3 V = normalize(g_CameraPosW - pIn.WorldPos);
@@ -1291,6 +1390,16 @@ float4 main(PSIn pIn) : SV_Target
 
     float3 radiance = g_LightColor.rgb * PI * g_LightIntensity;
     float3 direct = (diffuse + specular) * radiance * NdotL * ao;
+
+    const bool toonPbr = (gShadingMode == 5 || gShadingMode == 7);
+    const bool toonEditable = (gShadingMode == 7);
+    if (toonPbr && NdotL > 0.0f)
+    {
+        float toonNdotL = toonEditable
+            ? ToonStepEditable(NdotL, gToonPbrCuts.xyz, gToonPbrLevels.xyz, gToonPbrCuts.w)
+            : ToonLevel(NdotL);
+        direct *= toonNdotL / max(NdotL, 1e-4f);
+    }
 
     // IBL
     float3 diffuseIBL = kD * g_IBL_Diffuse.Sample(g_Sam, N).rgb * albedoLinear;
@@ -1326,7 +1435,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -1372,7 +1485,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -1428,7 +1545,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -1504,7 +1625,11 @@ cbuffer CBPerObject : register(b0)
     
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
-    float    gPad2; // 4바이트 패딩
+    float    gAmbientOcclusion; // 0~1 AO
+    float2   gPadAlign;
+
+    float4   gToonPbrCuts;
+    float4   gToonPbrLevels;
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
