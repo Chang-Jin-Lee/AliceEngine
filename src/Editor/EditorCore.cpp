@@ -1842,6 +1842,10 @@ namespace Alice
 		style.RotationLineThickness = 3.0f;
 		style.RotationOuterLineThickness = 2.0f;
 
+		// Default PostProcess Settings 초기화 및 로드
+		m_defaultPostProcessSettings = PostProcessSettings::FromDefaults();
+		LoadDefaultPostProcessSettings();
+
 		m_initialized = true;
 		return true;
 	}
@@ -1903,6 +1907,11 @@ namespace Alice
 	{
 		// UIWorldManager 저장
 		m_uiWorldManager = uiWorldManager;
+		
+		// 매 프레임 Default PostProcess Settings를 RenderSystem에 전달
+		deferred.SetDefaultPostProcessSettings(m_defaultPostProcessSettings);
+		// ForwardRenderSystem에도 동일한 함수가 필요하면 추가
+		// forward.SetDefaultPostProcessSettings(m_defaultPostProcessSettings);
 		
 		// SceneManager에서 현재 씬 파일 경로를 조회하여 g_CurrentScenePath 업데이트
 		if (sceneManager)
@@ -3139,6 +3148,13 @@ namespace Alice
 				}
 				else if (selectedEntity == InvalidEntityId) {
 					Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
+					
+					// Default Post Process Settings UI
+					ImGui::Separator();
+					if (ImGui::CollapsingHeader("Default Post Process Settings", ImGuiTreeNodeFlags_DefaultOpen))
+					{
+						DrawDefaultPostProcessSettings();
+					}
 				}
 				else {
 					// World 엔티티 Inspector 표시 (기존 로직)
@@ -5591,6 +5607,238 @@ namespace Alice
 
 				if (changed) g_SceneDirty = true;
 			}
+		}
+	}
+
+	void EditorCore::DrawDefaultPostProcessSettings()
+	{
+		PostProcessSettings& settings = m_defaultPostProcessSettings;
+		bool changed = false;
+
+		// 저장/로드 버튼
+		ImGui::Text("Default Post Process Settings");
+		if (ImGui::Button("Save to EngineSettings.json"))
+		{
+			SaveDefaultPostProcessSettings();
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("현재 설정을 EngineSettings.json에 저장합니다.");
+		
+		ImGui::SameLine();
+		if (ImGui::Button("Load from EngineSettings.json"))
+		{
+			LoadDefaultPostProcessSettings();
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("EngineSettings.json에서 설정을 불러옵니다.");
+
+		ImGui::Separator();
+
+		// Exposure
+		if (ImGui::TreeNode("Exposure##DefaultPostProcess"))
+		{
+			changed |= ImGui::SliderFloat("Exposure##DefaultPostProcess", &settings.exposure, -3.0f, 3.0f, "%.2f");
+			ImGui::TreePop();
+		}
+
+		// Max HDR Nits
+		if (ImGui::TreeNode("Max HDR Nits##DefaultPostProcess"))
+		{
+			changed |= ImGui::SliderFloat("Max HDR Nits##DefaultPostProcess", &settings.maxHDRNits, 100.0f, 10000.0f, "%.0f nits");
+			ImGui::TreePop();
+		}
+
+		// Color Grading
+		if (ImGui::TreeNode("Color Grading##DefaultPostProcess"))
+		{
+			ImGui::Text("Saturation (RGB)");
+			changed |= ImGui::ColorEdit3("Saturation (RGB)##DefaultPostProcess", &settings.saturation.x,
+				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+
+			ImGui::Text("Contrast (RGB)");
+			changed |= ImGui::ColorEdit3("Contrast (RGB)##DefaultPostProcess", &settings.contrast.x,
+				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+
+			ImGui::Text("Gamma (RGB)");
+			changed |= ImGui::ColorEdit3("Gamma (RGB)##DefaultPostProcess", &settings.gamma.x,
+				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+
+			ImGui::Text("Gain (RGB)");
+			changed |= ImGui::ColorEdit3("Gain (RGB)##DefaultPostProcess", &settings.gain.x,
+				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+
+			ImGui::TreePop();
+		}
+
+		// Bloom
+		if (ImGui::TreeNode("Bloom##DefaultPostProcess"))
+		{
+			changed |= ImGui::SliderFloat("Bloom Threshold##DefaultPostProcess", &settings.bloomThreshold, 0.0f, 5.0f);
+			changed |= ImGui::SliderFloat("Bloom Knee##DefaultPostProcess", &settings.bloomKnee, 0.0f, 1.0f);
+			changed |= ImGui::SliderFloat("Bloom Intensity##DefaultPostProcess", &settings.bloomIntensity, 0.0f, 5.0f);
+			changed |= ImGui::SliderFloat("Bloom Gaussian Intensity##DefaultPostProcess", &settings.bloomGaussianIntensity, 0.0f, 5.0f);
+			changed |= ImGui::SliderFloat("Bloom Radius##DefaultPostProcess", &settings.bloomRadius, 0.0f, 10.0f);
+			changed |= ImGui::SliderInt("Bloom Downsample##DefaultPostProcess", &settings.bloomDownsample, 1, 8);
+			ImGui::TreePop();
+		}
+
+		if (changed)
+		{
+			// 변경사항이 있으면 자동 저장 (선택사항)
+			// SaveDefaultPostProcessSettings();
+		}
+	}
+
+	void EditorCore::SaveDefaultPostProcessSettings()
+	{
+		namespace fs = std::filesystem;
+		
+		// 프로젝트 루트 경로 계산
+		wchar_t exePathW[MAX_PATH] = {};
+		GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+		fs::path exePath = exePathW;
+		fs::path exeDir = exePath.parent_path();
+		fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+		fs::path settingsPath = projectRoot / "EngineSettings.json";
+
+		try
+		{
+			nlohmann::json j;
+			
+			// 기존 파일이 있으면 읽기
+			if (fs::exists(settingsPath))
+			{
+				std::ifstream ifs(settingsPath);
+				if (ifs.is_open())
+				{
+					ifs >> j;
+					ifs.close();
+				}
+			}
+
+			// Default PostProcess Settings 저장
+			nlohmann::json ppSettings;
+			ppSettings["exposure"] = m_defaultPostProcessSettings.exposure;
+			ppSettings["maxHDRNits"] = m_defaultPostProcessSettings.maxHDRNits;
+			ppSettings["saturation"] = { m_defaultPostProcessSettings.saturation.x, m_defaultPostProcessSettings.saturation.y, m_defaultPostProcessSettings.saturation.z };
+			ppSettings["contrast"] = { m_defaultPostProcessSettings.contrast.x, m_defaultPostProcessSettings.contrast.y, m_defaultPostProcessSettings.contrast.z };
+			ppSettings["gamma"] = { m_defaultPostProcessSettings.gamma.x, m_defaultPostProcessSettings.gamma.y, m_defaultPostProcessSettings.gamma.z };
+			ppSettings["gain"] = { m_defaultPostProcessSettings.gain.x, m_defaultPostProcessSettings.gain.y, m_defaultPostProcessSettings.gain.z };
+			ppSettings["bloomThreshold"] = m_defaultPostProcessSettings.bloomThreshold;
+			ppSettings["bloomKnee"] = m_defaultPostProcessSettings.bloomKnee;
+			ppSettings["bloomIntensity"] = m_defaultPostProcessSettings.bloomIntensity;
+			ppSettings["bloomGaussianIntensity"] = m_defaultPostProcessSettings.bloomGaussianIntensity;
+			ppSettings["bloomRadius"] = m_defaultPostProcessSettings.bloomRadius;
+			ppSettings["bloomDownsample"] = m_defaultPostProcessSettings.bloomDownsample;
+
+			j["defaultPostProcess"] = ppSettings;
+
+			// 파일 저장
+			std::ofstream ofs(settingsPath);
+			if (ofs.is_open())
+			{
+				ofs << j.dump(4);
+				ofs.close();
+				ALICE_LOG_INFO("Default PostProcess Settings saved to EngineSettings.json");
+			}
+			else
+			{
+				ALICE_LOG_ERRORF("Failed to save Default PostProcess Settings to %s", settingsPath.string().c_str());
+			}
+		}
+		catch (const std::exception& e)
+		{
+			ALICE_LOG_ERRORF("Exception while saving Default PostProcess Settings: %s", e.what());
+		}
+	}
+
+	void EditorCore::LoadDefaultPostProcessSettings()
+	{
+		namespace fs = std::filesystem;
+		
+		// 프로젝트 루트 경로 계산
+		wchar_t exePathW[MAX_PATH] = {};
+		GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+		fs::path exePath = exePathW;
+		fs::path exeDir = exePath.parent_path();
+		fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+		fs::path settingsPath = projectRoot / "EngineSettings.json";
+
+		try
+		{
+			if (!fs::exists(settingsPath))
+			{
+				// 파일이 없으면 기본값 유지
+				return;
+			}
+
+			std::ifstream ifs(settingsPath);
+			if (!ifs.is_open())
+			{
+				return;
+			}
+
+			nlohmann::json j;
+			ifs >> j;
+			ifs.close();
+
+			// Default PostProcess Settings 로드
+			if (j.contains("defaultPostProcess"))
+			{
+				const auto& ppSettings = j["defaultPostProcess"];
+				
+				if (ppSettings.contains("exposure"))
+					m_defaultPostProcessSettings.exposure = ppSettings["exposure"].get<float>();
+				if (ppSettings.contains("maxHDRNits"))
+					m_defaultPostProcessSettings.maxHDRNits = ppSettings["maxHDRNits"].get<float>();
+				
+				if (ppSettings.contains("saturation") && ppSettings["saturation"].is_array() && ppSettings["saturation"].size() >= 3)
+				{
+					m_defaultPostProcessSettings.saturation.x = ppSettings["saturation"][0].get<float>();
+					m_defaultPostProcessSettings.saturation.y = ppSettings["saturation"][1].get<float>();
+					m_defaultPostProcessSettings.saturation.z = ppSettings["saturation"][2].get<float>();
+				}
+				
+				if (ppSettings.contains("contrast") && ppSettings["contrast"].is_array() && ppSettings["contrast"].size() >= 3)
+				{
+					m_defaultPostProcessSettings.contrast.x = ppSettings["contrast"][0].get<float>();
+					m_defaultPostProcessSettings.contrast.y = ppSettings["contrast"][1].get<float>();
+					m_defaultPostProcessSettings.contrast.z = ppSettings["contrast"][2].get<float>();
+				}
+				
+				if (ppSettings.contains("gamma") && ppSettings["gamma"].is_array() && ppSettings["gamma"].size() >= 3)
+				{
+					m_defaultPostProcessSettings.gamma.x = ppSettings["gamma"][0].get<float>();
+					m_defaultPostProcessSettings.gamma.y = ppSettings["gamma"][1].get<float>();
+					m_defaultPostProcessSettings.gamma.z = ppSettings["gamma"][2].get<float>();
+				}
+				
+				if (ppSettings.contains("gain") && ppSettings["gain"].is_array() && ppSettings["gain"].size() >= 3)
+				{
+					m_defaultPostProcessSettings.gain.x = ppSettings["gain"][0].get<float>();
+					m_defaultPostProcessSettings.gain.y = ppSettings["gain"][1].get<float>();
+					m_defaultPostProcessSettings.gain.z = ppSettings["gain"][2].get<float>();
+				}
+				
+				if (ppSettings.contains("bloomThreshold"))
+					m_defaultPostProcessSettings.bloomThreshold = ppSettings["bloomThreshold"].get<float>();
+				if (ppSettings.contains("bloomKnee"))
+					m_defaultPostProcessSettings.bloomKnee = ppSettings["bloomKnee"].get<float>();
+				if (ppSettings.contains("bloomIntensity"))
+					m_defaultPostProcessSettings.bloomIntensity = ppSettings["bloomIntensity"].get<float>();
+				if (ppSettings.contains("bloomGaussianIntensity"))
+					m_defaultPostProcessSettings.bloomGaussianIntensity = ppSettings["bloomGaussianIntensity"].get<float>();
+				if (ppSettings.contains("bloomRadius"))
+					m_defaultPostProcessSettings.bloomRadius = ppSettings["bloomRadius"].get<float>();
+				if (ppSettings.contains("bloomDownsample"))
+					m_defaultPostProcessSettings.bloomDownsample = ppSettings["bloomDownsample"].get<int>();
+
+				ALICE_LOG_INFO("Default PostProcess Settings loaded from EngineSettings.json");
+			}
+		}
+		catch (const std::exception& e)
+		{
+			ALICE_LOG_ERRORF("Exception while loading Default PostProcess Settings: %s", e.what());
 		}
 	}
 

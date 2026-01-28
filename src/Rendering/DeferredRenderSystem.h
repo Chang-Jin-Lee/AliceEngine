@@ -169,6 +169,9 @@ namespace Alice
         /// Bloom 설정 설정하기
         void SetBloomSettings(const BloomSettings& settings);
 
+        /// Default PostProcess Settings 설정 (EditorCore에서 호출)
+        void SetDefaultPostProcessSettings(const PostProcessSettings& settings);
+
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }
         const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
 
@@ -469,6 +472,10 @@ namespace Alice
         
         // ==== Bloom 파라미터 ====
         BloomSettings m_bloomSettings;
+
+        // ==== Default PostProcess Settings (EditorCore에서 설정) ====
+        PostProcessSettings m_defaultPostProcessSettings;
+        bool m_hasDefaultPostProcessSettings = false;
 
         // ==== UI 합성 리소스 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_uiQuadVS;

@@ -27,6 +27,7 @@
 #include "Components/AttackDriverComponent.h"
 #include "Components/AnimBlueprintComponent.h"
 #include "Components/SocketComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
 #include "Core/SocketSerialization.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
@@ -625,6 +626,12 @@ namespace Alice
                 outEntity["ComputeEffect"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* postProcessVolume = world.GetComponent<PostProcessVolumeComponent>(id); postProcessVolume)
+            {
+                rttr::instance inst = const_cast<PostProcessVolumeComponent&>(*postProcessVolume);
+                outEntity["PostProcessVolume"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* effect = world.GetComponent<EffectComponent>(id); effect)
             {
                 rttr::instance inst = const_cast<EffectComponent&>(*effect);
@@ -952,6 +959,15 @@ namespace Alice
                 ComputeEffectComponent& ce = world.AddComponent<ComputeEffectComponent>(id);
                 rttr::instance inst = ce;
                 if (!JsonRttr::FromJsonObject(inst, *itCE)) return false;
+            }
+
+            // PostProcessVolume 선택
+            auto itPPV = e.find("PostProcessVolume");
+            if (itPPV != e.end() && itPPV->is_object())
+            {
+                PostProcessVolumeComponent& ppv = world.AddComponent<PostProcessVolumeComponent>(id);
+                rttr::instance inst = ppv;
+                if (!JsonRttr::FromJsonObject(inst, *itPPV)) return false;
             }
 
             // Effect 선택

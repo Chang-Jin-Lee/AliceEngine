@@ -17,6 +17,18 @@ namespace Alice
         PostProcessVolumeComponent* volume;
         TransformComponent* transform;
         float weight;  // 최종 블렌딩 가중치 (0~1)
+        float signedDistance;  // 표면까지의 signed distance (내부: 음수, 외부: 양수)
+    };
+
+    /// 볼륨 트랜지션 상태 (진입/이탈 추적용)
+    struct VolumeTransitionState
+    {
+        bool wasAffecting = false;  // 이전 프레임에 볼륨 영향이 있었는지 (w > 0)
+        PostProcessSettings outsideSnapshot;  // 진입 직전의 최종값 저장
+        bool hasOutsideSnapshot = false;  // 스냅샷이 유효한지
+        EntityId activeVolumeId = InvalidEntityId;  // 현재 트랜지션 대상 볼륨
+        PostProcessSettings previousFrameFinal;  // 이전 프레임의 최종값 (진입 감지용)
+        bool hasPreviousFrameFinal = false;  // 이전 프레임 값이 유효한지
     };
 
     /// Post Process Volume 시스템
@@ -36,6 +48,9 @@ namespace Alice
             const DirectX::XMFLOAT3& cameraPosition,
             const PostProcessSettings& defaultSettings
         );
+
+        /// 볼륨 밖에 있을 때의 설정을 저장합니다 (다음 프레임에서 복귀용)
+        void SetOutsideSettings(const PostProcessSettings& settings) { m_outsideSettings = settings; }
 
         /// Box 볼륨의 표면까지 최소 거리를 계산합니다 (월드 공간).
         /// @param point 월드 공간 점
@@ -62,7 +77,8 @@ namespace Alice
         float CalculateVolumeWeight(
             const PostProcessVolumeComponent& volume,
             const TransformComponent& transform,
-            const DirectX::XMFLOAT3& cameraPosition
+            const DirectX::XMFLOAT3& cameraPosition,
+            float signedDistance
         );
 
         /// Box 내부 여부 확인 (월드 공간, 회전 고려)
@@ -72,5 +88,25 @@ namespace Alice
             const DirectX::XMFLOAT3& boxSize,
             const DirectX::XMFLOAT3& boxRotationRad
         );
+
+        /// 볼륨 원점까지의 거리를 계산합니다
+        float DistanceToBoxCenter(
+            const DirectX::XMFLOAT3& point,
+            const DirectX::XMFLOAT3& boxCenter,
+            const DirectX::XMFLOAT3& boxSize,
+            const DirectX::XMFLOAT3& boxRotationRad
+        );
+
+        /// VolumeTarget을 계산합니다 (override 기반)
+        PostProcessSettings CalculateVolumeTarget(
+            const PostProcessSettings& baseSettings,
+            const PostProcessSettings& volumeSettings
+        );
+
+        /// 볼륨 트랜지션 상태 (단일 카메라용, 필요시 확장 가능)
+        VolumeTransitionState m_transitionState;
+
+        // PostProcess 바깥에 있는 설정
+        PostProcessSettings m_outsideSettings;
     };
 }

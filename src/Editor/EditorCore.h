@@ -22,6 +22,7 @@
 #include "Core/JsonRttr.h"
 #include "Core/ComponentRegistry.h"
 #include "Core/EditorComponentRegistry.h"
+#include "Rendering/PostProcessSettings.h"
 #include "imgui.h"
 #include <functional>
 #include <string>
@@ -252,6 +253,11 @@ namespace Alice
         void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity);
 		
+		// Default Post Process Settings UI
+		void DrawDefaultPostProcessSettings();
+		void SaveDefaultPostProcessSettings();
+		void LoadDefaultPostProcessSettings();
+		
 		// Camera 컴포넌트 인스펙터
 		void DrawInspectorCameraSpringArm(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorCameraLookAt(World& world, const EntityId& _selectedEntity);
@@ -291,6 +297,9 @@ namespace Alice
         void SetInputSystem(InputSystem* inputSystem) { m_inputSystem = inputSystem; }
         void SetUIWorldManager(class UIWorldManager* uiWorldManager) { m_uiWorldManager = uiWorldManager; }
 
+        /// Default PostProcess Settings를 가져옵니다 (PostProcessVolumeSystem에서 사용)
+        const PostProcessSettings& GetDefaultPostProcessSettings() const { return m_defaultPostProcessSettings; }
+
     private:
         /// 씬을 로드한 뒤, World 에 존재하는 SkinnedMeshComponent 들이
         /// SkinnedMeshRegistry 에도 등록되어 있는지 확인하고,
@@ -320,6 +329,9 @@ namespace Alice
 		unsigned long m_selectedUIEntity = 0;
 
         bool               m_scriptBuilded = false;
+
+        // Default PostProcess Settings (Inspector에서 설정하고 저장)
+        PostProcessSettings m_defaultPostProcessSettings;
     };
 }
 
