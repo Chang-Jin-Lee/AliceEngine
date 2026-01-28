@@ -1,4 +1,4 @@
-#include "C_CombatResolver.h"
+﻿#include "C_CombatResolver.h"
 
 namespace Alice::Combat
 {
@@ -35,15 +35,9 @@ namespace Alice::Combat
 
         if (victim.flags.guardActive && victim.targetInFront)
         {
-            const float staminaLoss = 10.0f;
-            out.immediate.push_back({ CommandType::ConsumeStamina, CmdConsumeStamina{ victim.id, staminaLoss } });
-            out.deferred.push_back({ CombatEventType::OnGuarded, victim.id, attacker.id, hit.attackInstanceId, staminaLoss });
+            out.deferred.push_back({ CombatEventType::OnGuarded, victim.id, attacker.id, hit.attackInstanceId, 0.0f });
             return out;
         }
-
-        out.immediate.push_back({ CommandType::ApplyDamage, CmdApplyDamage{ victim.id, hit.damage } });
-        out.immediate.push_back({ CommandType::ForceCancelAttack, CmdForceCancelAttack{ attacker.id } });
-        out.immediate.push_back({ CommandType::DisableTrace, CmdDisableTrace{ attacker.id } });
 
         out.deferred.push_back({ CombatEventType::OnHit, victim.id, attacker.id, hit.attackInstanceId, hit.damage });
         return out;

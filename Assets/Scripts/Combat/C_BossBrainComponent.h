@@ -1,5 +1,8 @@
-#pragma once
-
+﻿#pragma once
+/*
+* 보스 AI. 타겟(플레이어)과의 거리/각도 보고 공격·이동 등 Combat::Intent 생성.
+* 보스/적 캐릭터 엔티티 (보스 엔티티).
+*/
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
 
@@ -7,9 +10,9 @@
 
 namespace Alice
 {
-    class C_BossBrain : public IScript
+    class C_BossBrainComponent : public IScript
     {
-        ALICE_BODY(C_BossBrain);
+        ALICE_BODY(C_BossBrainComponent);
 
     public:
         void Start() override;

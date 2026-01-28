@@ -1,5 +1,8 @@
-#pragma once
-
+﻿#pragma once
+/*
+* ?????/???? ????? ??? Combat::Intent(????????????????? ??)?? ???.
+* ????? ??????? ????? ???? (????? ????).
+*/
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
 #include "Core/InputTypes.h"
@@ -8,9 +11,9 @@
 
 namespace Alice
 {
-    class C_PlayerInputSource : public IScript
+    class C_PlayerInputSourceComponent : public IScript
     {
-        ALICE_BODY(C_PlayerInputSource);
+        ALICE_BODY(C_PlayerInputSourceComponent);
 
     public:
         void Start() override;
@@ -27,8 +30,12 @@ namespace Alice
         ALICE_PROPERTY(int, m_keyDodge, static_cast<int>(KeyCode::Space));
         ALICE_PROPERTY(int, m_keyGuard, static_cast<int>(KeyCode::K));
         ALICE_PROPERTY(bool, m_useMouseAttack, true);
+        /// CCT ?? ?? (m/s). Intent.move ??? ??? desiredVelocity? ???.
+        ALICE_PROPERTY(float, m_moveSpeed, 5.0f);
 
     private:
+        void EnsurePlayerComponents();
+
         Combat::Intent m_cached{};
     };
 }

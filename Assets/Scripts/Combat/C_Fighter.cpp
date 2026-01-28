@@ -1,4 +1,4 @@
-#include "C_Fighter.h"
+﻿#include "C_Fighter.h"
 
 #include <DirectXMath.h>
 #include <cmath>

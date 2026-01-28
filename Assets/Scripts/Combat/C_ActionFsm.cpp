@@ -1,4 +1,4 @@
-#include "C_ActionFsm.h"
+﻿#include "C_ActionFsm.h"
 
 #include <cmath>
 
@@ -57,23 +57,17 @@ namespace Alice::Combat
             if (intent.dodgePressed && sensors.stamina >= 10.0f)
             {
                 Enter(ActionState::Dodge);
-                if (m_db)
-                    out.commands.push_back({ CommandType::PlayAnim, CmdPlayAnim{ self, m_db->dodge.animClip, true, false } });
             }
             else if (intent.guardHeld)
             {
                 if (m_state != ActionState::Guard)
                 {
                     Enter(ActionState::Guard);
-                    if (m_db)
-                        out.commands.push_back({ CommandType::PlayAnim, CmdPlayAnim{ self, m_db->guard.animClip, false, true } });
                 }
             }
             else if (intent.attackPressed && sensors.stamina >= 15.0f)
             {
                 Enter(ActionState::Attack);
-                if (m_db)
-                    out.commands.push_back({ CommandType::PlayAnim, CmdPlayAnim{ self, m_db->attackLight.animClip, true, false } });
             }
             else
             {
@@ -95,10 +89,7 @@ namespace Alice::Combat
         flags.hitActive = sensors.attackWindowActive;
         flags.guardActive = sensors.guardWindowActive;
         flags.invulnActive = sensors.dodgeWindowActive || sensors.invulnActive;
-        if (flags.guardActive && m_state == ActionState::Guard && m_db)
-            flags.parryWindowActive = m_db->guard.parry.Contains(m_stateTime);
-        else
-            flags.parryWindowActive = false;
+        flags.parryWindowActive = false;
         flags.canBeInterrupted = (m_state != ActionState::Dodge);
 
         if (m_state == ActionState::Hitstun)

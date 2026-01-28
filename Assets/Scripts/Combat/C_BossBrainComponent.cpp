@@ -1,4 +1,4 @@
-#include "C_BossBrain.h"
+﻿#include "C_BossBrainComponent.h"
 
 #include <algorithm>
 #include <cmath>
@@ -9,24 +9,24 @@
 
 namespace Alice
 {
-    REGISTER_SCRIPT(C_BossBrain);
+    REGISTER_SCRIPT(C_BossBrainComponent);
 
-    void C_BossBrain::Start()
+    void C_BossBrainComponent::Start()
     {
         m_cooldownTimer = 0.0f;
     }
 
-    void C_BossBrain::Update(float deltaTime)
+    void C_BossBrainComponent::Update(float deltaTime)
     {
         m_cooldownTimer = std::max(0.0f, m_cooldownTimer - deltaTime);
     }
 
-    void C_BossBrain::OnDisable()
+    void C_BossBrainComponent::OnDisable()
     {
         m_cooldownTimer = 0.0f;
     }
 
-    Combat::Intent C_BossBrain::Think(float deltaTime, EntityId targetId)
+    Combat::Intent C_BossBrainComponent::Think(float deltaTime, EntityId targetId)
     {
         Combat::Intent intent{};
 

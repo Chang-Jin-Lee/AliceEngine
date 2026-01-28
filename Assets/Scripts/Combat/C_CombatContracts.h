@@ -1,5 +1,7 @@
-#pragma once
-
+﻿#pragma once
+/*
+* 전투 시스템 전체에서 쓰는 타입·상수 정의. EntityId, Team, ActionState, Intent, Sensors, CombatEvent, Command, FsmOutput, ResolveOutput 등. 스크립트가 아니라 헤더만 있음.
+*/
 #include <cstdint>
 #include <string>
 #include <vector>

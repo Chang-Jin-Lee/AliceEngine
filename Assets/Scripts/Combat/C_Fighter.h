@@ -1,5 +1,8 @@
-#pragma once
-
+﻿#pragma once
+/*
+* 한 캐릭터의 전투 상태(HP, 스태미나, 팀, 상태, 플래그 등)와 BuildSensors/Snapshot 제공.
+* C_CombatSession이 플레이어·보스용 Fighter 인스턴스 2개 보유.
+*/
 #include "C_CombatContracts.h"
 
 namespace Alice

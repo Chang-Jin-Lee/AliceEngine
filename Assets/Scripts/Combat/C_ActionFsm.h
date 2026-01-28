@@ -1,16 +1,17 @@
-#pragma once
-
+﻿#pragma once
+/*
+Intent + Sensors + 이벤트로 상태(Idle/Move/Attack/Dodge/Guard/Hitstun/Dead) 전이, FsmOutput(상태·플래그·Command 목록) 반환.
+C_CombatSession이 playerFsm, bossFsm 2개 보유.
+*/
 #include <vector>
 
 #include "C_CombatContracts.h"
-#include "C_ActionData.h"
-
 namespace Alice::Combat
 {
     class ActionFsm
     {
     public:
-        explicit ActionFsm(const ActionDatabase* db = nullptr) : m_db(db) {}
+        ActionFsm() = default;
 
         void Reset();
 
@@ -24,7 +25,6 @@ namespace Alice::Combat
         float StateTime() const { return m_stateTime; }
 
     private:
-        const ActionDatabase* m_db = nullptr;
         ActionState m_state = ActionState::Idle;
         float m_stateTime = 0.0f;
 
