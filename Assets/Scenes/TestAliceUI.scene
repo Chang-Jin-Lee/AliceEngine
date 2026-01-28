@@ -1,6 +1,15 @@
 {
     "entities": [
         {
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "UIImageController",
+                    "props": {
+                        "rootWidgetName": "TargetImage"
+                    }
+                }
+            ],
             "Transform": {
                 "enabled": true,
                 "position": {
@@ -73,10 +82,10 @@
                 "shaderName": "Default",
                 "space": "Screen",
                 "visibility": "Visible",
-                "widgetName": "UI_Image"
+                "widgetName": "TargetImage"
             },
             "guid": "7124715353307675000",
-            "name": "UI_Image"
+            "name": "TargetImage"
         },
         {
             "Transform": {
@@ -212,15 +221,15 @@
                 "alignV": "Center",
                 "color": {
                     "w": 1.0,
-                    "x": 1.0,
-                    "y": 1.0,
+                    "x": 0.19304990768432617,
+                    "y": 0.0,
                     "z": 1.0
                 },
                 "fontPath": "Resource/Fonts/NotoSansKR-Regular.ttf",
-                "fontSize": 28.0,
+                "fontSize": 60.0,
                 "lineSpacing": 0.0,
                 "maxWidth": 0.0,
-                "text": "버튼",
+                "text": "버튼입니다",
                 "wrap": false
             },
             "UITransform": {
@@ -267,6 +276,15 @@
             "name": "UI_Button"
         },
         {
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "UIGaugeController",
+                    "props": {
+                        "rootWidgetName": "TargetGauge"
+                    }
+                }
+            ],
             "Transform": {
                 "enabled": true,
                 "position": {
@@ -345,10 +363,10 @@
                 "shaderName": "Default",
                 "space": "Screen",
                 "visibility": "Visible",
-                "widgetName": "UI_Gauge"
+                "widgetName": "TargetGauge"
             },
             "guid": "1102842527072772255",
-            "name": "UI_Gauge"
+            "name": "TargetGauge"
         }
     ],
     "sceneName": "TestAliceUI",
