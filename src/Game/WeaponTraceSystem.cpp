@@ -46,20 +46,20 @@ namespace Alice
 
         EntityId ResolveTraceBasis(World& world, WeaponTraceComponent& trace, EntityId self)
         {
+            if (trace.traceBasisGuid == 0)
+            {
+                trace.traceBasisCached = InvalidEntityId;
+                return self;
+            }
+
             if (trace.traceBasisCached != InvalidEntityId)
             {
-                if (trace.traceBasisGuid == 0)
-                    return trace.traceBasisCached;
-
                 if (const auto* idc = world.GetComponent<IDComponent>(trace.traceBasisCached))
                 {
                     if (idc->guid == trace.traceBasisGuid)
                         return trace.traceBasisCached;
                 }
             }
-
-            if (trace.traceBasisGuid == 0)
-                return self;
 
             EntityId resolved = world.FindEntityByGuid(trace.traceBasisGuid);
             if (resolved == InvalidEntityId)
@@ -189,7 +189,6 @@ namespace Alice
                 trace.prevRotsWS = currRots;
                 trace.hasPrevBasis = true;
                 trace.hasPrevShapes = true;
-                continue;
             }
 
             const uint32_t targetLayerBits = (trace.targetLayerBits != 0u)
@@ -206,6 +205,8 @@ namespace Alice
 
             std::vector<SweepHit> hits;
             hits.reserve(32);
+            std::vector<OverlapHit> overlaps;
+            overlaps.reserve(32);
 
             const uint32_t steps = std::max(1u, trace.subSteps);
             const DirectX::XMVECTOR prevBasisPosV = XMLoadFloat3(&trace.prevBasisPos);
@@ -247,10 +248,107 @@ namespace Alice
                     if (!ComputeShapeWorldPose(shape, basisEndWorld, endCenter, endRot))
                         continue;
 
+                    const char* typeName = (shape.type == WeaponTraceShapeType::Sphere)
+                        ? "Sphere"
+                        : (shape.type == WeaponTraceShapeType::Capsule ? "Capsule" : "Box");
+
+                    auto ProcessHit = [&](void* userData,
+                                          const DirectX::XMFLOAT3& hitPosWS,
+                                          const DirectX::XMFLOAT3& hitNormalWS)
+                    {
+                        if (!userData)
+                            return;
+
+                        EntityId hitEntity = world.ExtractEntityIdFromUserData(userData);
+                        if (hitEntity == InvalidEntityId)
+                            return;
+
+                        auto* hurt = world.GetComponent<HurtboxComponent>(hitEntity);
+                        if (!hurt)
+                            return;
+
+                        if (hurt->teamId == trace.teamId)
+                            return;
+
+                        const std::uint64_t victimGuid = (hurt->ownerGuid != 0)
+                            ? hurt->ownerGuid
+                            : static_cast<std::uint64_t>(hitEntity);
+
+                        if (trace.hitVictims.find(victimGuid) != trace.hitVictims.end())
+                            return;
+
+                        trace.hitVictims.insert(victimGuid);
+
+                        if (outHits)
+                        {
+                            const EntityId victimOwner = (hurt->ownerGuid != 0)
+                                ? world.FindEntityByGuid(hurt->ownerGuid)
+                                : (hurt->ownerCached != InvalidEntityId ? hurt->ownerCached : hitEntity);
+
+                            if (trace.debugDraw)
+                            {
+                                ALICE_LOG_INFO("[WeaponTrace] Hit attacker=%llu victim=%llu hurtbox=%llu part=%u dmg=%.2f attackId=%u shape=%s type=%s layerMask=0x%08X queryMask=0x%08X pos=(%.2f,%.2f,%.2f)",
+                                    static_cast<unsigned long long>(owner),
+                                    static_cast<unsigned long long>(victimOwner),
+                                    static_cast<unsigned long long>(hitEntity),
+                                    hurt->part,
+                                    trace.baseDamage * hurt->damageScale,
+                                    trace.attackInstanceId,
+                                    shape.name.c_str(),
+                                    typeName,
+                                    targetLayerBits,
+                                    queryLayerBits,
+                                    hitPosWS.x, hitPosWS.y, hitPosWS.z);
+                            }
+
+                            CombatHitEvent ev{};
+                            ev.attackerOwner = owner;
+                            ev.victimOwner = victimOwner;
+                            ev.hurtboxEntity = hitEntity;
+                            ev.part = hurt->part;
+                            ev.attackInstanceId = trace.attackInstanceId;
+                            ev.damage = trace.baseDamage * hurt->damageScale;
+                            ev.debugLog = trace.debugDraw;
+                            ev.hitPosWS = hitPosWS;
+                            ev.hitNormalWS = hitNormalWS;
+                            outHits->push_back(ev);
+                        }
+                    };
+
                     const DirectX::XMFLOAT3 delta{ endCenter.x - startCenter.x, endCenter.y - startCenter.y, endCenter.z - startCenter.z };
                     const float dist = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
                     if (dist < 0.0001f)
+                    {
+                        overlaps.clear();
+                        uint32_t hitCount = 0;
+                        if (shape.type == WeaponTraceShapeType::Sphere)
+                        {
+                            const Vec3 center(endCenter.x, endCenter.y, endCenter.z);
+                            hitCount = physics->OverlapSphereQ(center, shape.radius, overlaps, filter, 64);
+                        }
+                        else if (shape.type == WeaponTraceShapeType::Capsule)
+                        {
+                            const Vec3 center(endCenter.x, endCenter.y, endCenter.z);
+                            const Quat rot(endRot.x, endRot.y, endRot.z, endRot.w);
+                            hitCount = physics->OverlapCapsuleQ(center, rot, shape.radius, shape.capsuleHalfHeight, overlaps, filter, 64, true);
+                        }
+                        else if (shape.type == WeaponTraceShapeType::Box)
+                        {
+                            const Vec3 center(endCenter.x, endCenter.y, endCenter.z);
+                            const Quat rot(endRot.x, endRot.y, endRot.z, endRot.w);
+                            const Vec3 halfExtents(shape.boxHalfExtents.x, shape.boxHalfExtents.y, shape.boxHalfExtents.z);
+                            hitCount = physics->OverlapBoxQ(center, rot, halfExtents, overlaps, filter, 64);
+                        }
+
+                        if (hitCount > 0)
+                        {
+                            const DirectX::XMFLOAT3 hitPosWS = endCenter;
+                            const DirectX::XMFLOAT3 hitNormalWS{ 0.0f, 1.0f, 0.0f };
+                            for (uint32_t h = 0; h < hitCount && h < overlaps.size(); ++h)
+                                ProcessHit(overlaps[h].userData, hitPosWS, hitNormalWS);
+                        }
                         continue;
+                    }
 
                     const Vec3 origin(startCenter.x, startCenter.y, startCenter.z);
                     const Vec3 dir(delta.x / dist, delta.y / dist, delta.z / dist);
@@ -279,66 +377,9 @@ namespace Alice
                     for (uint32_t h = 0; h < hitCount && h < hits.size(); ++h)
                     {
                         const auto& hit = hits[h];
-                        if (!hit.userData)
-                            continue;
-
-                        EntityId hitEntity = world.ExtractEntityIdFromUserData(hit.userData);
-                        if (hitEntity == InvalidEntityId)
-                            continue;
-
-                        auto* hurt = world.GetComponent<HurtboxComponent>(hitEntity);
-                        if (!hurt)
-                            continue;
-
-                        if (hurt->teamId == trace.teamId)
-                            continue;
-
-                        const std::uint64_t victimGuid = (hurt->ownerGuid != 0)
-                            ? hurt->ownerGuid
-                            : static_cast<std::uint64_t>(hitEntity);
-
-                        if (trace.hitVictims.find(victimGuid) != trace.hitVictims.end())
-                            continue;
-
-                        trace.hitVictims.insert(victimGuid);
-
-                        if (outHits)
-                        {
-                            const EntityId victimOwner = (hurt->ownerGuid != 0)
-                                ? world.FindEntityByGuid(hurt->ownerGuid)
-                                : (hurt->ownerCached != InvalidEntityId ? hurt->ownerCached : hitEntity);
-
-                            if (trace.debugDraw)
-                            {
-                                const char* typeName = (shape.type == WeaponTraceShapeType::Sphere)
-                                    ? "Sphere"
-                                    : (shape.type == WeaponTraceShapeType::Capsule ? "Capsule" : "Box");
-                                ALICE_LOG_INFO("[WeaponTrace] Hit attacker=%llu victim=%llu hurtbox=%llu part=%u dmg=%.2f attackId=%u shape=%s type=%s layerMask=0x%08X queryMask=0x%08X pos=(%.2f,%.2f,%.2f)",
-                                    static_cast<unsigned long long>(owner),
-                                    static_cast<unsigned long long>(victimOwner),
-                                    static_cast<unsigned long long>(hitEntity),
-                                    hurt->part,
-                                    trace.baseDamage * hurt->damageScale,
-                                    trace.attackInstanceId,
-                                    shape.name.c_str(),
-                                    typeName,
-                                    targetLayerBits,
-                                    queryLayerBits,
-                                    hit.position.x, hit.position.y, hit.position.z);
-                            }
-
-                            CombatHitEvent ev{};
-                            ev.attackerOwner = owner;
-                            ev.victimOwner = victimOwner;
-                            ev.hurtboxEntity = hitEntity;
-                            ev.part = hurt->part;
-                            ev.attackInstanceId = trace.attackInstanceId;
-                            ev.damage = trace.baseDamage * hurt->damageScale;
-                            ev.debugLog = trace.debugDraw;
-                            ev.hitPosWS = DirectX::XMFLOAT3(hit.position.x, hit.position.y, hit.position.z);
-                            ev.hitNormalWS = DirectX::XMFLOAT3(hit.normal.x, hit.normal.y, hit.normal.z);
-                            outHits->push_back(ev);
-                        }
+                        ProcessHit(hit.userData,
+                            DirectX::XMFLOAT3(hit.position.x, hit.position.y, hit.position.z),
+                            DirectX::XMFLOAT3(hit.normal.x, hit.normal.y, hit.normal.z));
                     }
                 }
             }

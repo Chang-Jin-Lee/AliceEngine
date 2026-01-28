@@ -121,18 +121,29 @@ namespace Alice
 		std::vector<AdvancedAnimSocket> sockets;
 
 		// CPU palette for rendering (auto-filled by AdvancedAnimSystem)
-		// 스키닝용 행렬: Global * InvBindPose
+		// 스키닝용 행렬: GlobalInverse * Global * InvBindPose
 		std::vector<DirectX::XMFLOAT4X4> palette;
 
 		// --------------------------------------------------------
 		// 본 정보 캐싱 (스키닝 행렬에서 순수 Transform 복원용)
 		// --------------------------------------------------------
-		// 본 이름 -> 인덱스 맵
+		// 본 이름 -> 본 인덱스(=boneNames 기준) 맵
 		std::unordered_map<std::string, int> boneToIndex;
 		// 본 인덱스 -> 부모 인덱스 (계층 구조, -1이면 루트)
 		std::vector<int> parentIndices;
-		// 초기 포즈의 역행렬 (스키닝 행렬에서 Global 행렬을 복원하기 위해 필요)
+		// 초기 포즈의 역행렬(InvBind) - Row-Major로 캐싱
 		std::vector<DirectX::XMFLOAT4X4> inverseBindMatrices;
+		// 모델 글로벌 역행렬(GlobalInverse) - Row-Major로 캐싱
+		DirectX::XMFLOAT4X4 globalInverseRow{ 1,0,0,0,
+											 0,1,0,0,
+											 0,0,1,0,
+											 0,0,0,1 };
+		// 본 글로벌(Model Space) 행렬 캐시 - Row-Major
+		std::vector<DirectX::XMFLOAT4X4> boneGlobals;
+		// 캐시 유효성 체크용 메쉬 키 (런타임 전용)
+		std::string boneCacheMeshKey;
+		// 캐시 유효성 체크용 모델 포인터 (런타임 전용)
+		const void* boneCacheModelPtr = nullptr;
 
 		// --------------------------------------------------------
 		// Anim Montage & Notify System (언리얼 엔진 스타일)
@@ -342,31 +353,13 @@ namespace Alice
 		// --------------------------------------------------------
 
 		/// 스키닝 행렬(palette)에서 순수 Model Space 행렬을 복원하는 헬퍼 함수
-		/// palette는 "InvBindPose * Global" 형식이므로, BindPose를 곱해 Global만 남김
+		/// 우선 boneGlobals 캐시를 사용하고, 없으면 palette/InvBind/GlobalInverse로 복원합니다.
 		bool GetBoneModelMatrix(const std::string& boneName, DirectX::XMMATRIX& outMatrix) const
 		{
 			auto it = boneToIndex.find(boneName);
 			if (it == boneToIndex.end()) return false;
 
-			int idx = it->second;
-			if (idx < 0 || idx >= (int)palette.size() || idx >= (int)inverseBindMatrices.size())
-				return false;
-
-			// 1. 현재 프레임의 스키닝 행렬 (InvBind * Global)
-			DirectX::XMMATRIX skinM = DirectX::XMLoadFloat4x4(&palette[idx]);
-
-			// 2. 바인드 포즈의 역행렬 (InvBind)
-			DirectX::XMMATRIX invBindM = DirectX::XMLoadFloat4x4(&inverseBindMatrices[idx]);
-
-			// 3. InvBind를 제거하여 순수 Global(Model Space) 행렬 복원
-			//    SkinM = InvBind * Global 이므로
-			//    Global = Bind * SkinM = (InvBind)^-1 * SkinM
-			DirectX::XMVECTOR det;
-			DirectX::XMMATRIX bindM = DirectX::XMMatrixInverse(&det, invBindM); // InvBind의 역행렬 = BindPose
-
-			// 복원된 모델 공간 행렬
-			outMatrix = bindM * skinM;
-			return true;
+			return GetBoneModelMatrixByIndex(it->second, outMatrix);
 		}
 
 		/// 부모 본 기준의 상대 위치 (씬 그래프의 부모 본 기준 로컬 좌표)
@@ -385,15 +378,9 @@ namespace Alice
 			if (idx >= 0 && idx < (int)parentIndices.size())
 			{
 				int pIdx = parentIndices[idx];
-				if (pIdx >= 0 && pIdx < (int)palette.size() && pIdx < (int)inverseBindMatrices.size())
-				{
-					// 부모의 복원된 Model 행렬 계산
-					DirectX::XMMATRIX pSkin = DirectX::XMLoadFloat4x4(&palette[pIdx]);
-					DirectX::XMMATRIX pInvBind = DirectX::XMLoadFloat4x4(&inverseBindMatrices[pIdx]);
-					DirectX::XMVECTOR pDet;
-					DirectX::XMMATRIX pBind = DirectX::XMMatrixInverse(&pDet, pInvBind);
-					parentModelM = pBind * pSkin;
-				}
+				DirectX::XMMATRIX pM;
+				if (GetBoneModelMatrixByIndex(pIdx, pM))
+					parentModelM = pM;
 			}
 
 			// Local = Model * Parent_Model^(-1)
@@ -422,14 +409,9 @@ namespace Alice
 			if (idx >= 0 && idx < (int)parentIndices.size())
 			{
 				int pIdx = parentIndices[idx];
-				if (pIdx >= 0 && pIdx < (int)palette.size() && pIdx < (int)inverseBindMatrices.size())
-				{
-					DirectX::XMMATRIX pSkin = DirectX::XMLoadFloat4x4(&palette[pIdx]);
-					DirectX::XMMATRIX pInvBind = DirectX::XMLoadFloat4x4(&inverseBindMatrices[pIdx]);
-					DirectX::XMVECTOR pDet;
-					DirectX::XMMATRIX pBind = DirectX::XMMatrixInverse(&pDet, pInvBind);
-					parentModelM = pBind * pSkin;
-				}
+				DirectX::XMMATRIX pM;
+				if (GetBoneModelMatrixByIndex(pIdx, pM))
+					parentModelM = pM;
 			}
 
 			DirectX::XMVECTOR det;
@@ -456,14 +438,9 @@ namespace Alice
 			if (idx >= 0 && idx < (int)parentIndices.size())
 			{
 				int pIdx = parentIndices[idx];
-				if (pIdx >= 0 && pIdx < (int)palette.size() && pIdx < (int)inverseBindMatrices.size())
-				{
-					DirectX::XMMATRIX pSkin = DirectX::XMLoadFloat4x4(&palette[pIdx]);
-					DirectX::XMMATRIX pInvBind = DirectX::XMLoadFloat4x4(&inverseBindMatrices[pIdx]);
-					DirectX::XMVECTOR pDet;
-					DirectX::XMMATRIX pBind = DirectX::XMMatrixInverse(&pDet, pInvBind);
-					parentModelM = pBind * pSkin;
-				}
+				DirectX::XMMATRIX pM;
+				if (GetBoneModelMatrixByIndex(pIdx, pM))
+					parentModelM = pM;
 			}
 
 			DirectX::XMVECTOR det;
@@ -657,6 +634,37 @@ namespace Alice
 		}
 
 	private:
+		/// 본 인덱스로 모델 공간 행렬을 복원 (row-major 기준)
+		bool GetBoneModelMatrixByIndex(int idx, DirectX::XMMATRIX& outMatrix) const
+		{
+			if (idx < 0)
+				return false;
+
+			// 1) 글로벌 캐시가 있으면 바로 사용
+			if (idx < (int)boneGlobals.size())
+			{
+				outMatrix = DirectX::XMLoadFloat4x4(&boneGlobals[idx]);
+				return true;
+			}
+
+			// 2) 캐시가 없으면 palette/InvBind/GlobalInverse로 복원
+			if (idx >= (int)palette.size() || idx >= (int)inverseBindMatrices.size())
+				return false;
+
+			DirectX::XMMATRIX skinM = DirectX::XMLoadFloat4x4(&palette[idx]);           // Row-Major
+			DirectX::XMMATRIX invBindM = DirectX::XMLoadFloat4x4(&inverseBindMatrices[idx]); // Row-Major
+			DirectX::XMMATRIX globalInvM = DirectX::XMLoadFloat4x4(&globalInverseRow);  // Row-Major
+
+			DirectX::XMVECTOR detBind;
+			DirectX::XMMATRIX bindM = DirectX::XMMatrixInverse(&detBind, invBindM);
+
+			DirectX::XMVECTOR detGlobal;
+			DirectX::XMMATRIX globalInvInv = DirectX::XMMatrixInverse(&detGlobal, globalInvM);
+
+			outMatrix = bindM * skinM * globalInvInv;
+			return true;
+		}
+
 		/// 쿼터니언을 오일러 각도(도 단위)로 변환
 		DirectX::XMFLOAT3 QuaternionToEuler(const DirectX::XMFLOAT4& q) const
 		{

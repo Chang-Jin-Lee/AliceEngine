@@ -43,6 +43,7 @@
 #include "Components/WeaponTraceComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
+#include "Game/CombatHitEvent.h"
 
 
 // 물리 컴포넌트들
@@ -441,6 +442,18 @@ namespace Alice
         EntityId ExtractEntityIdFromUserData(void* userData) const;
 
         //==============================================================
+        // ==== Combat (script bridge) ====
+        void SetFrameCombatHits(const std::vector<CombatHitEvent>* hits) { m_frameCombatHits = hits; }
+        bool HasFrameCombatHits() const { return m_frameCombatHits != nullptr; }
+        const std::vector<CombatHitEvent>& GetFrameCombatHits() const
+        {
+            static const std::vector<CombatHitEvent> kEmpty;
+            return m_frameCombatHits ? *m_frameCombatHits : kEmpty;
+        }
+
+        void SetScriptCombatEnabled(bool enabled) { m_scriptCombatEnabled = enabled; }
+        bool IsScriptCombatEnabled() const { return m_scriptCombatEnabled; }
+
         // 물리
         void SetPhysicsWorld(std::shared_ptr<IPhysicsWorld> physicsWorld);
         IPhysicsWorld* GetPhysicsWorld();
@@ -533,6 +546,10 @@ namespace Alice
         // 월드행렬 캐시: EntityId -> 월드행렬 (XMMATRIX는 값 타입이므로 직접 저장)
         // XMMATRIX는 16개 float이므로 XMFLOAT4X4로 저장
         mutable std::unordered_map<EntityId, DirectX::XMFLOAT4X4> m_worldMatrixCache;
+
+        // Combat frame hit buffer (owned by engine)
+        const std::vector<CombatHitEvent>* m_frameCombatHits = nullptr;
+        bool m_scriptCombatEnabled = false;
     };
 
     template <typename T>

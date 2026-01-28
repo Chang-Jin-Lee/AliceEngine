@@ -35,6 +35,13 @@ namespace Alice
 		bool enabled = true;
 	};
 
+	struct AttackDriverClipHistory
+	{
+		std::string clipName;
+		float prevTimeSec = 0.0f;
+		bool valid = false;
+	};
+
 	struct AttackDriverComponent
 	{
 		// 공격을 제어할 트레이스 엔티티 GUID (0이면 자기 자신)
@@ -52,5 +59,13 @@ namespace Alice
 		bool attackActive = false;
 		bool dodgeActive = false;
 		bool guardActive = false;
+
+		// 이전 프레임 시간 캐시 (직렬화 금지)
+		AttackDriverClipHistory prevBaseA;
+		AttackDriverClipHistory prevBaseB;
+		AttackDriverClipHistory prevUpperA;
+		AttackDriverClipHistory prevUpperB;
+		AttackDriverClipHistory prevAdditive;
+		AttackDriverClipHistory prevSkinned;
 	};
 }

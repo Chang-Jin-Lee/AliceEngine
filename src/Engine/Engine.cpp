@@ -821,6 +821,11 @@ namespace Alice
 			// 소켓 기반 무기 스윕 판정
 			pImpl->m_weaponTraceSystem.Update(pImpl->m_world, dt, &pImpl->m_combatHitQueue);
 
+			// Script-side combat resolution (same-frame hit processing)
+			pImpl->m_world.SetFrameCombatHits(&pImpl->m_combatHitQueue);
+			pImpl->m_scriptSystem.PostCombatUpdate(pImpl->m_world, dt);
+			pImpl->m_world.SetFrameCombatHits(nullptr);
+
 				// 물리 이벤트 처리
 				ProcessPhysicsEvents();
 				ProcessCombatHits();
@@ -1213,6 +1218,12 @@ namespace Alice
 	{
 		if (pImpl->m_combatHitQueue.empty())
 			return;
+
+		if (pImpl->m_world.IsScriptCombatEnabled())
+		{
+			pImpl->m_combatHitQueue.clear();
+			return;
+		}
 
 		pImpl->m_combatSystem.ProcessHits(pImpl->m_world, pImpl->m_combatHitQueue);
 		pImpl->m_combatHitQueue.clear();

@@ -287,34 +287,62 @@ namespace Alice
         // ------------------------------------------------------
         if (mesh->sourceModel)
         {
-            // 1. 이름 -> 인덱스 맵
-            if (animComp.boneToIndex.empty())
-            {
-                animComp.boneToIndex = mesh->sourceModel->GetNodeIndexOfName();
-            }
+            const auto& boneNames = mesh->sourceModel->GetBoneNames();
+            const auto& offsets = mesh->sourceModel->GetBoneOffsets();
 
-            // 2. 역 바인드 행렬 (Inverse Bind Matrices)
-            if (animComp.inverseBindMatrices.empty())
-            {
-                const auto& offsets = mesh->sourceModel->GetBoneOffsets();
-                animComp.inverseBindMatrices = offsets;
-            }
+            const void* modelPtr = mesh->sourceModel.get();
+            const bool cacheMismatch =
+                (animComp.boneCacheMeshKey != skinned.meshAssetPath) ||
+                (animComp.boneCacheModelPtr != modelPtr) ||
+                (animComp.boneToIndex.size() != boneNames.size()) ||
+                (animComp.inverseBindMatrices.size() != offsets.size()) ||
+                (animComp.parentIndices.size() != boneNames.size());
 
-            // 3. 부모 인덱스 (Hierarchy)
-            if (animComp.parentIndices.empty())
+            if (cacheMismatch)
             {
+                animComp.boneCacheMeshKey = skinned.meshAssetPath;
+                animComp.boneCacheModelPtr = modelPtr;
+                animComp.boneToIndex.clear();
+                animComp.parentIndices.clear();
+                animComp.inverseBindMatrices.clear();
+                animComp.boneGlobals.clear();
+
+                // 1. 본 이름 -> 본 인덱스 맵
+                animComp.boneToIndex.reserve(boneNames.size());
+                for (size_t i = 0; i < boneNames.size(); ++i)
+                {
+                    animComp.boneToIndex[boneNames[i]] = static_cast<int>(i);
+                }
+
+                // 2. 역 바인드 행렬 (InvBind) -> Row-Major 캐싱
+                animComp.inverseBindMatrices.resize(offsets.size());
+                for (size_t i = 0; i < offsets.size(); ++i)
+                {
+                    DirectX::XMMATRIX offCol = DirectX::XMLoadFloat4x4(&offsets[i]);
+                    DirectX::XMMATRIX offRow = DirectX::XMMatrixTranspose(offCol);
+                    DirectX::XMStoreFloat4x4(&animComp.inverseBindMatrices[i], offRow);
+                }
+
+                // 3. GlobalInverse -> Row-Major 캐싱
+                {
+                    DirectX::XMMATRIX giCol = DirectX::XMLoadFloat4x4(&mesh->sourceModel->GetGlobalInverse());
+                    DirectX::XMMATRIX giRow = DirectX::XMMatrixTranspose(giCol);
+                    DirectX::XMStoreFloat4x4(&animComp.globalInverseRow, giRow);
+                }
+
+                // 4. 부모 인덱스 (Hierarchy)
                 const auto& skeleton = mesh->sourceModel->GetSkeleton();
-                const auto& boneNames = mesh->sourceModel->GetBoneNames();
-                
+                animComp.parentIndices.resize(boneNames.size(), -1);
+
                 // 본 이름 -> 인덱스 맵 생성 (본만 필터링)
                 std::unordered_map<std::string, int> boneNameToIndex;
+                boneNameToIndex.reserve(boneNames.size());
                 for (size_t i = 0; i < boneNames.size(); ++i)
                 {
                     boneNameToIndex[boneNames[i]] = static_cast<int>(i);
                 }
 
                 // 스켈레톤 노드에서 본의 부모 인덱스 찾기
-                animComp.parentIndices.resize(boneNames.size(), -1);
                 for (size_t i = 0; i < skeleton.size(); ++i)
                 {
                     const auto& node = skeleton[i];
@@ -325,7 +353,7 @@ namespace Alice
                     if (it == boneNameToIndex.end()) continue;
 
                     int boneIdx = it->second;
-                    
+
                     // 부모가 본인 경우에만 부모 인덱스 설정
                     if (node.parent >= 0 && node.parent < (int)skeleton.size())
                     {
@@ -531,6 +559,41 @@ namespace Alice
         // Evaluate
         // ------------------------------
         rt.animator->Update(d);
+
+        // ------------------------------
+        // Bone global cache (row-major)
+        // ------------------------------
+        if (mesh->sourceModel)
+        {
+            const auto& boneNames = mesh->sourceModel->GetBoneNames();
+            if (!boneNames.empty())
+            {
+                animComp.boneGlobals.resize(boneNames.size());
+                static const DirectX::XMFLOAT4X4 s_identity{
+                    1,0,0,0,
+                    0,1,0,0,
+                    0,0,1,0,
+                    0,0,0,1
+                };
+
+                for (size_t i = 0; i < boneNames.size(); ++i)
+                {
+                    DirectX::XMMATRIX boneGlobalRow;
+                    if (rt.animator->GetBoneGlobalMatrix(boneNames[i], boneGlobalRow))
+                    {
+                        DirectX::XMStoreFloat4x4(&animComp.boneGlobals[i], boneGlobalRow);
+                    }
+                    else
+                    {
+                        animComp.boneGlobals[i] = s_identity;
+                    }
+                }
+            }
+            else
+            {
+                animComp.boneGlobals.clear();
+            }
+        }
 
         // ------------------------------
         // Palette output
