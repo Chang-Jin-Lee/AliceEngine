@@ -24,7 +24,7 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
-    
+
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
     float    gAmbientOcclusion;
@@ -32,7 +32,7 @@ cbuffer CBPerObject : register(b0)
 
     // ToonPBREditable 파라미터
     float4   gToonPbrCuts;   // (cut1, cut2, cut3, strength)
-    float4   gToonPbrLevels; // (level1, level2, level3, blur)
+    float4   gToonPbrLevels; // (level1, level2, level3, unused)
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -102,7 +102,7 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
-    
+
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
     float    gAmbientOcclusion;
@@ -110,7 +110,7 @@ cbuffer CBPerObject : register(b0)
 
     // ToonPBREditable 파라미터
     float4   gToonPbrCuts;   // (cut1, cut2, cut3, strength)
-    float4   gToonPbrLevels; // (level1, level2, level3, blur)
+    float4   gToonPbrLevels; // (level1, level2, level3, unused)
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -212,7 +212,7 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
-    
+
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
     float    gAmbientOcclusion;
@@ -220,7 +220,7 @@ cbuffer CBPerObject : register(b0)
 
     // ToonPBREditable 파라미터
     float4   gToonPbrCuts;   // (cut1, cut2, cut3, strength)
-    float4   gToonPbrLevels; // (level1, level2, level3, blur)
+    float4   gToonPbrLevels; // (level1, level2, level3, unused)
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -317,7 +317,7 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
-    
+
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
     float    gAmbientOcclusion;
@@ -325,7 +325,7 @@ cbuffer CBPerObject : register(b0)
 
     // ToonPBREditable 파라미터
     float4   gToonPbrCuts;   // (cut1, cut2, cut3, strength)
-    float4   gToonPbrLevels; // (level1, level2, level3, blur)
+    float4   gToonPbrLevels; // (level1, level2, level3, unused)
     
     // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
     float3   gOutlineColor;
@@ -510,7 +510,7 @@ float ToonLevel(float n)
     return 0.1f;
 }
 
-float ToonStepEditable(float n, float3 cuts, float3 levels, float strength, float blur)
+float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
 {
     float c1 = saturate(cuts.x);
     float c2 = saturate(cuts.y);
@@ -523,24 +523,12 @@ float ToonStepEditable(float n, float3 cuts, float3 levels, float strength, floa
     float l2 = saturate(levels.z);
     float l3 = 1.0f;
 
-    float t = saturate(strength);
-    if (blur > 0.5f)
-    {
-        float w = max(fwidth(n) * 2.0f, 0.02f);
-        float s1 = smoothstep(c1 - w, c1 + w, n);
-        float s2 = smoothstep(c2 - w, c2 + w, n);
-        float s3 = smoothstep(c3 - w, c3 + w, n);
-
-        float level = lerp(l0, l1, s1);
-        level = lerp(level, l2, s2);
-        level = lerp(level, l3, s3);
-        return lerp(n, level, t);
-    }
-
     float level = (n > c3) ? l3 :
                   (n > c2) ? l2 :
                   (n > c1) ? l1 :
                              l0;
+
+    float t = saturate(strength);
     return lerp(n, level, t);
 }
 
@@ -548,7 +536,7 @@ float ToonPbrNdotL(float n)
 {
     if (gShadingMode == 7)
     {
-        return ToonStepEditable(n, gToonPbrCuts.xyz, gToonPbrLevels.xyz, gToonPbrCuts.w, gToonPbrLevels.w);
+        return ToonStepEditable(n, gToonPbrCuts.xyz, gToonPbrLevels.xyz, gToonPbrCuts.w);
     }
     return ToonLevel(n);
 }
