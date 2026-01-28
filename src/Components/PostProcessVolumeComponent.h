@@ -48,6 +48,13 @@ namespace Alice
         // ==== Post Process Settings ====
         PostProcessSettings settings;
 
+        // ==== 참조 오브젝트 설정 ====
+        /// 보간 기준이 될 GameObject 이름 (비어있으면 카메라 위치 사용)
+        std::string referenceObjectName;
+
+        /// 참조 오브젝트 사용 여부
+        bool useReferenceObject = false;
+
         // ==== RTTR 연동용 Getter/Setter ====
         bool GetUnbound() const { return unbound; }
         void SetUnbound(bool val) { unbound = val; }
@@ -74,5 +81,11 @@ namespace Alice
 
         float GetSphereRadius() const { return sphereRadius; }
         void SetSphereRadius(float val) { sphereRadius = std::max(0.01f, val); }
+
+        const std::string& GetReferenceObjectName() const { return referenceObjectName; }
+        void SetReferenceObjectName(const std::string& val) { referenceObjectName = val; }
+
+        bool GetUseReferenceObject() const { return useReferenceObject; }
+        void SetUseReferenceObject(bool val) { useReferenceObject = val; }
     };
 }
