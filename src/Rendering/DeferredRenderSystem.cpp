@@ -1339,7 +1339,7 @@ namespace Alice
             return true;
         }
 
-        m_shadowCacheDirty = true;  
+        m_shadowCacheDirty = true;
         return CreateShadowMapResources();
     }
 

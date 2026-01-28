@@ -503,9 +503,12 @@ namespace Alice
                 WeaponTraceComponent& wt = world.AddComponent<WeaponTraceComponent>(entity);
                 if (auto itGuid = itWT->find("ownerGuid"); itGuid != itWT->end())
                     wt.ownerGuid = ParseGuidOrZero(*itGuid);
+                if (auto itGuid = itWT->find("traceBasisGuid"); itGuid != itWT->end())
+                    wt.traceBasisGuid = ParseGuidOrZero(*itGuid);
 
                 JsonRttr::json copy = *itWT;
                 copy.erase("ownerGuid");
+                copy.erase("traceBasisGuid");
                 rttr::instance inst = wt;
                 if (!JsonRttr::FromJsonObject(inst, copy))
                     return InvalidEntityId;
@@ -794,6 +797,7 @@ namespace Alice
                 rttr::instance inst = const_cast<WeaponTraceComponent&>(*weaponTrace);
                 JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
                 obj["ownerGuid"] = std::to_string(weaponTrace->ownerGuid);
+                obj["traceBasisGuid"] = std::to_string(weaponTrace->traceBasisGuid);
                 root["WeaponTrace"] = obj;
             }
 

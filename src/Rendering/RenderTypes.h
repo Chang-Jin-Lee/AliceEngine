@@ -331,7 +331,7 @@ namespace Alice
         
         // [중요] float4 정렬을 위해 16바이트 경계(256)로 정렬
         float             pad_align[2];   // Offset: 248 -> 256 (8바이트 패딩)
-
+        
         // ToonPBREditable 파라미터
         DirectX::XMFLOAT4 toonPbrCuts;    // Offset: 256 -> 272
         DirectX::XMFLOAT4 toonPbrLevels;  // Offset: 272 -> 288 (w: blur)

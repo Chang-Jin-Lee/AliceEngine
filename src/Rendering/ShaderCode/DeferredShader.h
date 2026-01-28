@@ -28,7 +28,7 @@ cbuffer CBPerObject : register(b0)
     float    gNormalStrength;
     float    gAmbientOcclusion; // 0~1 AO
     float2   gPadAlign;
-
+    
     float4   gToonPbrCuts;
     float4   gToonPbrLevels;
     
@@ -103,7 +103,7 @@ cbuffer CBPerObject : register(b0)
     float    gNormalStrength;
     float    gAmbientOcclusion; // 0~1 AO
     float2   gPadAlign;
-
+    
     float4   gToonPbrCuts;
     float4   gToonPbrLevels;
     
@@ -186,7 +186,7 @@ cbuffer CBPerObject : register(b0)
     float    gNormalStrength;
     float    gAmbientOcclusion; // 0~1 AO
     float2   gPadAlign;
-
+    
     float4   gToonPbrCuts;
     float4   gToonPbrLevels;
     
@@ -286,7 +286,7 @@ cbuffer CBPerObject : register(b0)
     float    gNormalStrength;
     float    gAmbientOcclusion; // 0~1 AO
     float2   gPadAlign;
-
+    
     float4   gToonPbrCuts;
     float4   gToonPbrLevels;
     
@@ -381,7 +381,7 @@ cbuffer CBPerObject : register(b0)
     float    gNormalStrength;
     float    gAmbientOcclusion; // 0~1 AO
     float2   gPadAlign;
-
+    
     float4   gToonPbrCuts;
     float4   gToonPbrLevels;
     
@@ -767,6 +767,14 @@ float3 EvaluatePBRLight(float3 N, float3 V, float3 L, float3 albedoPBR, float me
     return (diffuse + specular) * lightColor * NdotL;
 }
 
+float ToonLevel(float n)
+{
+    if (n > 0.95f) return 1.0f;
+    if (n > 0.5f)  return 0.7f;
+    if (n > 0.2f)  return 0.4f;
+    return 0.1f;
+}
+
 void AccumulateLegacy(float3 N, float3 V, float3 L, float3 lightColor, float atten, int mode, float shininess,
                       inout float3 outDiffuse, inout float3 outSpecular)
 {
@@ -909,6 +917,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     // PBR 연산
     float3 albedoPBR = albedoLinear;
     roughness = max(roughness, 0.04f);
+    float ao = saturate(g_PBRAmbientOcclusion);
 
     // IBL 계산을 위해 필요한 F0와 kD를 여기서 미리 계산해야 합니다.
     // --------------------------------------------------------------------------
