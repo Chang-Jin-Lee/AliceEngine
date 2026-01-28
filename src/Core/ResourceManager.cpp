@@ -900,10 +900,10 @@ namespace Alice
            // WIC로 로드 (PNG, JPG, BMP 등) + MipMap 생성
            Microsoft::WRL::ComPtr<ID3D11Resource> res;
            hr = DirectX::CreateWICTextureFromMemoryEx(
-               device,
+                device,
                ctx.Get(),
-               data.data(),
-               static_cast<size_t>(data.size()),
+                data.data(),
+                static_cast<size_t>(data.size()),
                0,
                D3D11_USAGE_DEFAULT,
                D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
@@ -911,8 +911,8 @@ namespace Alice
                D3D11_RESOURCE_MISC_GENERATE_MIPS,
                DirectX::WIC_LOADER_DEFAULT,
                res.GetAddressOf(),
-               outSrv.GetAddressOf()
-           );
+                outSrv.GetAddressOf()
+            );
 
            if (SUCCEEDED(hr) && ctx && outSrv)
            {

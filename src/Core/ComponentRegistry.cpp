@@ -320,20 +320,39 @@ namespace Alice
 			.property("part", &HurtboxComponent::part)
 			.property("damageScale", &HurtboxComponent::damageScale);
 
+		rttr::registration::enumeration<WeaponTraceShapeType>("WeaponTraceShapeType")
+			(
+				rttr::value("Sphere", WeaponTraceShapeType::Sphere),
+				rttr::value("Capsule", WeaponTraceShapeType::Capsule),
+				rttr::value("Box", WeaponTraceShapeType::Box)
+				);
+
+		rttr::registration::class_<WeaponTraceShape>("WeaponTraceShape")
+			.constructor<>()
+			.property("name", &WeaponTraceShape::name)
+			.property("enabled", &WeaponTraceShape::enabled)
+			.property("type", &WeaponTraceShape::type)
+			.property("localPos", &WeaponTraceShape::localPos)
+			.property("localRotDeg", &WeaponTraceShape::localRotDeg)
+			.property("radius", &WeaponTraceShape::radius)
+			.property("capsuleHalfHeight", &WeaponTraceShape::capsuleHalfHeight)
+			.property("boxHalfExtents", &WeaponTraceShape::boxHalfExtents);
+
 		// WeaponTraceComponent 등록
 		rttr::registration::class_<WeaponTraceComponent>("WeaponTraceComponent")
 			.constructor<>()
 			.property("ownerGuid", &WeaponTraceComponent::ownerGuid)
 			.property("ownerNameDebug", &WeaponTraceComponent::ownerNameDebug)
-			.property("traceSocketNames", &WeaponTraceComponent::traceSocketNames)
-			.property("radius", &WeaponTraceComponent::radius)
+			.property("traceBasisGuid", &WeaponTraceComponent::traceBasisGuid)
+			.property("shapes", &WeaponTraceComponent::shapes)
 			.property("active", &WeaponTraceComponent::active)
 			.property("debugDraw", &WeaponTraceComponent::debugDraw)
 			.property("baseDamage", &WeaponTraceComponent::baseDamage)
 			.property("teamId", &WeaponTraceComponent::teamId)
 			.property("attackInstanceId", &WeaponTraceComponent::attackInstanceId)
 			.property("targetLayerBits", &WeaponTraceComponent::targetLayerBits)
-			.property("queryLayerBits", &WeaponTraceComponent::queryLayerBits);
+			.property("queryLayerBits", &WeaponTraceComponent::queryLayerBits)
+			.property("subSteps", &WeaponTraceComponent::subSteps);
 
 		// HealthComponent 등록
 		rttr::registration::class_<HealthComponent>("HealthComponent")

@@ -24,7 +24,7 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
-
+    
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
     float    gAmbientOcclusion;
@@ -102,7 +102,7 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
-
+    
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
     float    gAmbientOcclusion;
@@ -212,7 +212,7 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
-
+    
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
     float    gAmbientOcclusion;
@@ -317,7 +317,7 @@ cbuffer CBPerObject : register(b0)
     
     // HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가
     float2   gPad1;
-
+    
     // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
     float    gNormalStrength;
     float    gAmbientOcclusion;
