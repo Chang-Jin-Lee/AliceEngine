@@ -144,7 +144,8 @@ namespace Alice
             .property("toonPbrLevel1", &MaterialComponent::toonPbrLevel1)
             .property("toonPbrLevel2", &MaterialComponent::toonPbrLevel2)
             .property("toonPbrLevel3", &MaterialComponent::toonPbrLevel3)
-            .property("toonPbrStrength", &MaterialComponent::toonPbrStrength);
+            .property("toonPbrStrength", &MaterialComponent::toonPbrStrength)
+            .property("toonPbrBlur", &MaterialComponent::toonPbrBlur);
 
         // === SkinnedMeshComponent 등록 ===
         // boneMatrices는 뼈 행렬을 나타내는 프로퍼티

@@ -35,5 +35,6 @@ namespace Alice {
         float toonPbrLevel2{ 0.4f };
         float toonPbrLevel3{ 0.7f };
         float toonPbrStrength{ 1.0f }; // 0: 부드러운 PBR, 1: 완전 Toon
+        bool  toonPbrBlur{ false };    // 계단 사이를 부드럽게 블러 처리
     };
 }

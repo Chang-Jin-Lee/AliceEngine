@@ -127,7 +127,8 @@ namespace Alice
                     cmd.outlineWidth = mat->outlineWidth;
                     cmd.albedoTexturePath = mat->albedoTexturePath;
                     cmd.toonPbrCuts = DirectX::XMFLOAT4(mat->toonPbrCut1, mat->toonPbrCut2, mat->toonPbrCut3, mat->toonPbrStrength);
-                    cmd.toonPbrLevels = DirectX::XMFLOAT4(mat->toonPbrLevel1, mat->toonPbrLevel2, mat->toonPbrLevel3, 0.0f);
+                    cmd.toonPbrLevels = DirectX::XMFLOAT4(mat->toonPbrLevel1, mat->toonPbrLevel2, mat->toonPbrLevel3,
+                                                          mat->toonPbrBlur ? 1.0f : 0.0f);
 
                     if (!mat->albedoTexturePath.empty())
                     {
