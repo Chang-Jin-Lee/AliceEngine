@@ -3,6 +3,7 @@
 #include <string>
 #include <rttr/type.h>
 #include <rttr/instance.h>
+#include <rttr/variant.h>
 #include <rttr/registration.h>
 
 #include "Core/Entity.h"
@@ -127,6 +128,14 @@ namespace Alice
 					return found;
 			}
 
+			// 루트/자식 트리에 없으면, 전체 UIWidgetComponent에서 한 번 더 검색 (부모 관계가 없을 때 대비)
+			for (auto [id, widget] : world.GetComponents<UIWidgetComponent>())
+			{
+				const std::string widgetName = GetWidgetNameForEntity(world, id);
+				if (!widgetName.empty() && widgetName == name)
+					return id;
+			}
+
 			return InvalidEntityId;
 		}
 
@@ -136,15 +145,39 @@ namespace Alice
 			int missingRequired = 0;
 		};
 
-		inline void* ResolveWidgetPointer(World& world, EntityId id, const rttr::type& rawType)
+		inline rttr::variant ResolveWidgetPointer(World& world, EntityId id, const rttr::type& rawType)
 		{
-			if (rawType == rttr::type::get<UIWidgetComponent>()) return world.GetComponent<UIWidgetComponent>(id);
-			if (rawType == rttr::type::get<UITransformComponent>()) return world.GetComponent<UITransformComponent>(id);
-			if (rawType == rttr::type::get<UIImageComponent>()) return world.GetComponent<UIImageComponent>(id);
-			if (rawType == rttr::type::get<UITextComponent>()) return world.GetComponent<UITextComponent>(id);
-			if (rawType == rttr::type::get<UIButtonComponent>()) return world.GetComponent<UIButtonComponent>(id);
-			if (rawType == rttr::type::get<UIGaugeComponent>()) return world.GetComponent<UIGaugeComponent>(id);
-			return nullptr;
+			if (rawType == rttr::type::get<UIWidgetComponent>())
+			{
+				auto* comp = world.GetComponent<UIWidgetComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UITransformComponent>())
+			{
+				auto* comp = world.GetComponent<UITransformComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UIImageComponent>())
+			{
+				auto* comp = world.GetComponent<UIImageComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UITextComponent>())
+			{
+				auto* comp = world.GetComponent<UITextComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UIButtonComponent>())
+			{
+				auto* comp = world.GetComponent<UIButtonComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UIGaugeComponent>())
+			{
+				auto* comp = world.GetComponent<UIGaugeComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			return rttr::variant{};
 		}
 
 		template<typename TOwner>
@@ -185,16 +218,22 @@ namespace Alice
 					continue;
 
 				const rttr::type raw = propType.get_raw_type();
-				void* ptr = ResolveWidgetPointer(world, found, raw);
-				if (!ptr)
+				rttr::variant ptr = ResolveWidgetPointer(world, found, raw);
+				if (!ptr.is_valid())
 				{
 					if (!optional)
 						res.missingRequired++;
 					continue;
 				}
 
-				prop.set_value(inst, ptr);
-				res.boundCount++;
+				if (prop.set_value(inst, ptr))
+				{
+					res.boundCount++;
+				}
+				else if (!optional)
+				{
+					res.missingRequired++;
+				}
 			}
 
 			return res;

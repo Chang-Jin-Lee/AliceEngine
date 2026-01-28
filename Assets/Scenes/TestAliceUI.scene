@@ -13,7 +13,7 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.0,
+                    "x": 0.5604997873306274,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -23,8 +23,8 @@
                     "z": 0.0
                 },
                 "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
+                    "x": 0.10000000149011612,
+                    "y": 0.10000000149011612,
                     "z": 1.0
                 }
             },
@@ -36,7 +36,7 @@
                     "z": 1.0
                 },
                 "preserveAspect": true,
-                "texturePath": "Resource/Test/Image/Hanako.png",
+                "texturePath": "Resource/Test/Image/Yuuka_Normal.png",
                 "uvRect": {
                     "w": 1.0,
                     "x": 0.0,
@@ -88,6 +88,15 @@
             "name": "TargetImage"
         },
         {
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "UITextController",
+                    "props": {
+                        "rootWidgetName": "TargetText"
+                    }
+                }
+            ],
             "Transform": {
                 "enabled": true,
                 "position": {
@@ -160,12 +169,21 @@
                 "shaderName": "Default",
                 "space": "Screen",
                 "visibility": "Visible",
-                "widgetName": "UI_Text"
+                "widgetName": "TargetText"
             },
             "guid": "2489823647798193782",
-            "name": "UI_Text"
+            "name": "TargetText"
         },
         {
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "UIButtonController",
+                    "props": {
+                        "rootWidgetName": "TargetButton"
+                    }
+                }
+            ],
             "Transform": {
                 "enabled": true,
                 "position": {
@@ -270,10 +288,10 @@
                 "shaderName": "Default",
                 "space": "Screen",
                 "visibility": "Visible",
-                "widgetName": "UI_Button"
+                "widgetName": "TargetButton"
             },
             "guid": "13865287342599251520",
-            "name": "UI_Button"
+            "name": "TargetButton"
         },
         {
             "Scripts": [
@@ -288,7 +306,7 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.0,
+                    "x": 0.8488515615463257,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -323,7 +341,7 @@
                 "minValue": 0.0,
                 "normalized": false,
                 "smoothing": 0.10000000149011612,
-                "value": 0.7099999785423279
+                "value": 0.550000011920929
             },
             "UITransform": {
                 "alignH": "Center",
