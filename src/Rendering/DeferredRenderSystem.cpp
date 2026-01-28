@@ -18,7 +18,6 @@
 #include "Core/Logger.h"
 #include "Core/World.h"
 #include "Components/TransformComponent.h"
-#include "Components/PostProcessVolumeReferenceComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/TrailEffectComponent.h"
@@ -37,11 +36,13 @@ namespace Alice
     {
         static std::string ResolvePPVReferenceName(const World& world)
         {
-            for (const auto& [entityId, reference] : world.GetComponents<PostProcessVolumeReferenceComponent>())
+            // 첫 번째 활성화된 PostProcessVolumeComponent의 referenceObjectName 사용
+            for (const auto& [entityId, volume] : world.GetComponents<PostProcessVolumeComponent>())
             {
-                if (!reference.enabled)
-                    continue;
-                return reference.referenceObjectName;
+                if (volume.useReferenceObject && !volume.referenceObjectName.empty())
+                {
+                    return volume.referenceObjectName;
+                }
             }
             return {};
         }

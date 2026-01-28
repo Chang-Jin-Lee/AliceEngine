@@ -36,8 +36,6 @@
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
 #include "Components/PostProcessVolumeComponent.h"
-#include "Components/PostProcessVolumeAssignerComponent.h"
-#include "Components/PostProcessVolumeReferenceComponent.h"
 #include "Components/EffectComponent.h"
 #include "Components/TrailEffectComponent.h"
 #include "Components/ComputeEffectComponent.h"

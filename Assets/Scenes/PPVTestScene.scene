@@ -30,6 +30,7 @@
                     "z": 10.0
                 },
                 "priority": 0,
+                "referenceObjectName": "Camera1",
                 "settings": {
                     "bOverride_BloomDownsample": false,
                     "bOverride_BloomGaussianIntensity": false,
@@ -37,7 +38,7 @@
                     "bOverride_BloomKnee": false,
                     "bOverride_BloomRadius": false,
                     "bOverride_BloomThreshold": false,
-                    "bOverride_ColorGradingContrast": false,
+                    "bOverride_ColorGradingContrast": true,
                     "bOverride_ColorGradingGain": false,
                     "bOverride_ColorGradingGamma": false,
                     "bOverride_ColorGradingSaturation": true,
@@ -50,9 +51,9 @@
                     "bloomRadius": 1.0,
                     "bloomThreshold": 1.0,
                     "contrast": {
-                        "x": 1.0,
-                        "y": 1.0,
-                        "z": 1.0
+                        "x": 0.5868725776672363,
+                        "y": 0.0,
+                        "z": 0.0
                     },
                     "exposure": 0.0,
                     "gain": {
@@ -67,14 +68,15 @@
                     },
                     "maxHDRNits": 1000.0,
                     "saturation": {
-                        "x": 0.953667938709259,
-                        "y": 0.4234432876110077,
-                        "z": 0.4234432876110077
+                        "x": 0.992277979850769,
+                        "y": 0.0,
+                        "z": 0.0
                     }
                 },
                 "shape": "Box",
                 "sphereRadius": 5.0,
-                "unbound": false
+                "unbound": false,
+                "useReferenceObject": true
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -90,7 +92,7 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 2.845813512802124,
+                    "x": 4.100765705108643,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -128,9 +130,9 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 3.660886526107788,
-                    "y": 5.502560615539551,
-                    "z": -9.493026733398438
+                    "x": -6.557415008544922,
+                    "y": 7.502560615539551,
+                    "z": -10.650533676147461
                 },
                 "rotation": {
                     "x": 0.0,
@@ -167,6 +169,63 @@
                 "shadingMode": -1,
                 "transparent": false
             },
+            "PostProcessVolume": {
+                "blendRadius": 2.061000108718872,
+                "blendWeight": 1.0,
+                "boxSize": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 10.0
+                },
+                "priority": 0,
+                "referenceObjectName": "Camera1",
+                "settings": {
+                    "bOverride_BloomDownsample": false,
+                    "bOverride_BloomGaussianIntensity": false,
+                    "bOverride_BloomIntensity": false,
+                    "bOverride_BloomKnee": false,
+                    "bOverride_BloomRadius": false,
+                    "bOverride_BloomThreshold": false,
+                    "bOverride_ColorGradingContrast": true,
+                    "bOverride_ColorGradingGain": false,
+                    "bOverride_ColorGradingGamma": false,
+                    "bOverride_ColorGradingSaturation": true,
+                    "bOverride_Exposure": false,
+                    "bOverride_MaxHDRNits": false,
+                    "bloomDownsample": 2,
+                    "bloomGaussianIntensity": 1.0,
+                    "bloomIntensity": 0.5,
+                    "bloomKnee": 0.5,
+                    "bloomRadius": 1.0,
+                    "bloomThreshold": 1.0,
+                    "contrast": {
+                        "x": 0.0,
+                        "y": 0.4478764533996582,
+                        "z": 0.006917022168636322
+                    },
+                    "exposure": 0.0,
+                    "gain": {
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "gamma": {
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "maxHDRNits": 1000.0,
+                    "saturation": {
+                        "x": 0.0,
+                        "y": 1.0,
+                        "z": 0.038609981536865234
+                    }
+                },
+                "shape": "Box",
+                "sphereRadius": 5.0,
+                "unbound": false,
+                "useReferenceObject": true
+            },
             "Scripts": [
                 {
                     "enabled": true,
@@ -191,7 +250,7 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.0,
+                    "x": -6.577139854431152,
                     "y": 0.0,
                     "z": 0.0
                 },

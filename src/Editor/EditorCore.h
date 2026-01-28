@@ -252,8 +252,6 @@ namespace Alice
         void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity);
-        void DrawInspectorPostProcessVolumeAssigner(World& world, const EntityId& _selectedEntity);
-        void DrawInspectorPostProcessVolumeReference(World& world, const EntityId& _selectedEntity);
 		
 		// Default Post Process Settings UI
 		void DrawDefaultPostProcessSettings();

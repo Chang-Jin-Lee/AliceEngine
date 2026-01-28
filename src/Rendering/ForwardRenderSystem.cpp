@@ -16,7 +16,6 @@
 #include <Core/ResourceManager.h>
 #include <Core/Logger.h>
 #include <Core/World.h>
-#include "Components/PostProcessVolumeReferenceComponent.h"
 #include "Rendering/ShaderCode/CommonShaderCode.h"
 #include "Rendering/ShaderCode/ForwardShader.h"
 
@@ -31,11 +30,13 @@ namespace Alice
     {
         static std::string ResolvePPVReferenceName(const World& world)
         {
-            for (const auto& [entityId, reference] : world.GetComponents<PostProcessVolumeReferenceComponent>())
+            // 첫 번째 활성화된 PostProcessVolumeComponent의 referenceObjectName 사용
+            for (const auto& [entityId, volume] : world.GetComponents<PostProcessVolumeComponent>())
             {
-                if (!reference.enabled)
-                    continue;
-                return reference.referenceObjectName;
+                if (volume.useReferenceObject && !volume.referenceObjectName.empty())
+                {
+                    return volume.referenceObjectName;
+                }
             }
             return {};
         }

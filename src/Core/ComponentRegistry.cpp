@@ -37,8 +37,6 @@
 #include "Components/AttackDriverComponent.h"
 #include "Components/SocketComponent.h"
 #include "Components/PostProcessVolumeComponent.h"
-#include "Components/PostProcessVolumeAssignerComponent.h"
-#include "Components/PostProcessVolumeReferenceComponent.h"
 #include "Rendering/PostProcessSettings.h"
 
 // 물리 컴포넌트 헤더
@@ -563,6 +561,8 @@ namespace Alice
             .property("blendWeight", &PostProcessVolumeComponent::GetBlendWeight, &PostProcessVolumeComponent::SetBlendWeight)
                 (rttr::metadata("Min", 0.0f), rttr::metadata("Max", 1.0f))
             .property("priority", &PostProcessVolumeComponent::GetPriority, &PostProcessVolumeComponent::SetPriority)
+            .property("referenceObjectName", &PostProcessVolumeComponent::GetReferenceObjectName, &PostProcessVolumeComponent::SetReferenceObjectName)
+            .property("useReferenceObject", &PostProcessVolumeComponent::GetUseReferenceObject, &PostProcessVolumeComponent::SetUseReferenceObject)
             .property("settings", &PostProcessVolumeComponent::settings);
 
         // === PostProcessSettings 등록 ===
@@ -595,20 +595,6 @@ namespace Alice
             .property("bloomRadius", &PostProcessSettings::bloomRadius)
             .property("bOverride_BloomDownsample", &PostProcessSettings::bOverride_BloomDownsample)
             .property("bloomDownsample", &PostProcessSettings::bloomDownsample);
-
-        // === PostProcessVolumeAssignerComponent 등록 ===
-        rttr::registration::class_<PostProcessVolumeAssignerComponent>("PostProcessVolumeAssignerComponent")
-            .constructor<>()
-            .property("targetGameObjectName", &PostProcessVolumeAssignerComponent::GetTargetGameObjectName, &PostProcessVolumeAssignerComponent::SetTargetGameObjectName)
-            .property("autoApply", &PostProcessVolumeAssignerComponent::GetAutoApply, &PostProcessVolumeAssignerComponent::SetAutoApply)
-            .property("createIfMissing", &PostProcessVolumeAssignerComponent::GetCreateIfMissing, &PostProcessVolumeAssignerComponent::SetCreateIfMissing)
-            .property("templateVolume", &PostProcessVolumeAssignerComponent::templateVolume);
-
-        // === PostProcessVolumeReferenceComponent 등록 ===
-        rttr::registration::class_<PostProcessVolumeReferenceComponent>("PostProcessVolumeReferenceComponent")
-            .constructor<>()
-            .property("enabled", &PostProcessVolumeReferenceComponent::enabled)
-            .property("referenceObjectName", &PostProcessVolumeReferenceComponent::referenceObjectName);
 
         // === ComputeEffectComponent 등록 ===
         rttr::registration::class_<ComputeEffectComponent>("ComputeEffectComponent")
@@ -1020,8 +1006,6 @@ namespace Alice
         r.Register<RectLightComponent>("Rect Light", "Lighting");
 
         r.Register<PostProcessVolumeComponent>("Post Process Volume", "Rendering");
-        r.Register<PostProcessVolumeAssignerComponent>("Post Process Volume Assigner", "Rendering");
-        r.Register<PostProcessVolumeReferenceComponent>("Post Process Volume Reference", "Rendering");
 
         r.Register<ComputeEffectComponent>("Compute Effect", "VFX");
         r.Register<EffectComponent>("Effect", "VFX");
