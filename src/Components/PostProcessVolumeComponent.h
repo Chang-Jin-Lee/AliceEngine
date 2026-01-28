@@ -2,6 +2,7 @@
 
 #include <DirectXMath.h>
 #include "Rendering/PostProcessSettings.h"
+#include <algorithm>
 
 namespace Alice
 {

@@ -172,6 +172,12 @@ namespace Alice
         /// Default PostProcess Settings 설정 (EditorCore에서 호출)
         void SetDefaultPostProcessSettings(const PostProcessSettings& settings);
 
+        /// PostProcessVolume 참조 대상 GameObject 이름 설정
+        void SetPPVReferenceObjectName(const std::string& objectName);
+        
+        /// PostProcessVolume 참조 대상 GameObject 이름 가져오기
+        const std::string& GetPPVReferenceObjectName() const;
+
         LightingParameters& GetLightingParameters() { return m_lightingParameters; }
         const LightingParameters& GetLightingParameters() const { return m_lightingParameters; }
 

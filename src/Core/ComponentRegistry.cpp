@@ -36,6 +36,7 @@
 #include "Components/AttackDriverComponent.h"
 #include "Components/SocketComponent.h"
 #include "Components/PostProcessVolumeComponent.h"
+#include "Components/PostProcessVolumeAssignerComponent.h"
 #include "Rendering/PostProcessSettings.h"
 
 // 물리 컴포넌트 헤더
@@ -558,6 +559,14 @@ namespace Alice
             .property("bOverride_BloomDownsample", &PostProcessSettings::bOverride_BloomDownsample)
             .property("bloomDownsample", &PostProcessSettings::bloomDownsample);
 
+        // === PostProcessVolumeAssignerComponent 등록 ===
+        rttr::registration::class_<PostProcessVolumeAssignerComponent>("PostProcessVolumeAssignerComponent")
+            .constructor<>()
+            .property("targetGameObjectName", &PostProcessVolumeAssignerComponent::GetTargetGameObjectName, &PostProcessVolumeAssignerComponent::SetTargetGameObjectName)
+            .property("autoApply", &PostProcessVolumeAssignerComponent::GetAutoApply, &PostProcessVolumeAssignerComponent::SetAutoApply)
+            .property("createIfMissing", &PostProcessVolumeAssignerComponent::GetCreateIfMissing, &PostProcessVolumeAssignerComponent::SetCreateIfMissing)
+            .property("templateVolume", &PostProcessVolumeAssignerComponent::templateVolume);
+
         // === ComputeEffectComponent 등록 ===
         rttr::registration::class_<ComputeEffectComponent>("ComputeEffectComponent")
             .constructor<>()
@@ -968,6 +977,7 @@ namespace Alice
         r.Register<RectLightComponent>("Rect Light", "Lighting");
 
         r.Register<PostProcessVolumeComponent>("Post Process Volume", "Rendering");
+        r.Register<PostProcessVolumeAssignerComponent>("Post Process Volume Assigner", "Rendering");
 
         r.Register<ComputeEffectComponent>("Compute Effect", "VFX");
         r.Register<EffectComponent>("Effect", "VFX");

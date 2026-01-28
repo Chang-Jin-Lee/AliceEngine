@@ -38,9 +38,9 @@ namespace Alice
     public:
         PostProcessVolumeSystem() = default;
 
-        /// 카메라 위치 기준으로 최종 PostProcessSettings를 계산합니다.
+        /// 참조 위치 기준으로 최종 PostProcessSettings를 계산합니다.
         /// @param world World 객체
-        /// @param cameraPosition 카메라 월드 위치
+        /// @param cameraPosition 카메라 월드 위치 (fallback용, m_referenceObjectName이 설정되면 해당 오브젝트 위치 사용)
         /// @param defaultSettings 기본 설정 (모든 override = false)
         /// @return 블렌딩된 최종 PostProcessSettings
         PostProcessSettings CalculateFinalSettings(
@@ -48,6 +48,13 @@ namespace Alice
             const DirectX::XMFLOAT3& cameraPosition,
             const PostProcessSettings& defaultSettings
         );
+
+        /// PPV 참조 대상 GameObject 이름을 설정합니다.
+        /// @param objectName GameObject 이름 (비어있으면 cameraPosition 사용)
+        void SetReferenceObjectName(const std::string& objectName) { m_referenceObjectName = objectName; m_referenceEntityId = InvalidEntityId; m_referenceResolved = false; }
+
+        /// 현재 설정된 PPV 참조 대상 GameObject 이름을 가져옵니다.
+        const std::string& GetReferenceObjectName() const { return m_referenceObjectName; }
 
         /// 볼륨 밖에 있을 때의 설정을 저장합니다 (다음 프레임에서 복귀용)
         void SetOutsideSettings(const PostProcessSettings& settings) { m_outsideSettings = settings; }
@@ -69,7 +76,7 @@ namespace Alice
         /// 볼륨 후보 수집 및 weight 계산
         void CollectCandidates(
             World& world,
-            const DirectX::XMFLOAT3& cameraPosition,
+            const DirectX::XMFLOAT3& referencePosition,
             std::vector<PostProcessVolumeCandidate>& outCandidates
         );
 
@@ -77,7 +84,7 @@ namespace Alice
         float CalculateVolumeWeight(
             const PostProcessVolumeComponent& volume,
             const TransformComponent& transform,
-            const DirectX::XMFLOAT3& cameraPosition,
+            const DirectX::XMFLOAT3& referencePosition,
             float signedDistance
         );
 
@@ -108,5 +115,12 @@ namespace Alice
 
         // PostProcess 바깥에 있는 설정
         PostProcessSettings m_outsideSettings;
+
+        // PPV 참조 대상 GameObject 설정
+        std::string m_referenceObjectName;  // 참조 대상 GameObject 이름
+        EntityId m_referenceEntityId = InvalidEntityId;  // 캐시된 EntityId
+        bool m_referenceResolved = false;  // 참조가 해결되었는지
+        bool m_fallbackToCamera = true;  // 기본값: 카메라로 fallback
+        bool m_hasWarnedAboutMissingObject = false;  // 경고 스팸 방지
     };
 }
