@@ -301,6 +301,12 @@ namespace Alice
 
 		// UI
         void CreateUIImage();
+		EntityId CreateAliceUIRoot(World& world, std::string_view name);
+		EntityId CreateAliceUIImage(World& world);
+		EntityId CreateAliceUIText(World& world);
+		EntityId CreateAliceUIButton(World& world);
+		EntityId CreateAliceUIGauge(World& world);
+		EntityId CreateAliceUIWorldImage(World& world);
 		void RenderUIHeirarcy();
 		void DrawUIInspector(UISceneManager& manager, UIWorld& uiWorld, unsigned long uiEntityID);
 

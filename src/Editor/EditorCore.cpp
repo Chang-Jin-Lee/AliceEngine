@@ -30,6 +30,12 @@
 #include "Components/SocketAttachmentComponent.h"
 #include "Components/IDComponent.h"
 #include "Components/SocketComponent.h"
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
 #include <cstdio>
 #include <set>
 #include "Components/CameraComponent.h"
@@ -2195,6 +2201,65 @@ namespace Alice
                     g_SceneDirty = true;
                     ImGui::CloseCurrentPopup();
                 }
+				if (ImGui::BeginMenu("AliceUI"))
+				{
+					if (ImGui::MenuItem("Screen Image"))
+					{
+						EntityId e = CreateAliceUIImage(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Image"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Text"))
+					{
+						EntityId e = CreateAliceUIText(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Text"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Button"))
+					{
+						EntityId e = CreateAliceUIButton(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Button"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Gauge"))
+					{
+						EntityId e = CreateAliceUIGauge(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Gauge"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("World Image"))
+					{
+						EntityId e = CreateAliceUIWorldImage(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "World UI Image"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndMenu();
+				}
                 if (ImGui::MenuItem("UI_Image"))
                 {
                     CreateUIImage();
@@ -2739,8 +2804,19 @@ namespace Alice
 				if (children.empty())
 					nodeFlags |= ImGuiTreeNodeFlags_Leaf;
 
-				// 트리 노드 열기
-				bool nodeOpen = ImGui::TreeNodeEx(label.c_str(), nodeFlags);
+			const bool isAliceUI = (world.GetComponent<UIWidgetComponent>(entityId) != nullptr);
+			if (isAliceUI)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.7f, 1.0f));
+			}
+
+			// 트리 노드 열기
+			bool nodeOpen = ImGui::TreeNodeEx(label.c_str(), nodeFlags);
+
+			if (isAliceUI)
+			{
+				ImGui::PopStyleColor();
+			}
 
 				// 선택 처리 (더블클릭으로만 인스펙터 변경 - 드래그앤드롭을 위해)
 				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -2885,6 +2961,14 @@ namespace Alice
 
 			// 루트 엔티티들 가져오기
 			std::vector<EntityId> rootEntities = world.GetRootEntities();
+
+			// AliceUI 엔티티들도 Hierarchy에 포함 (TransformComponent 없는 경우 대비)
+			std::set<EntityId> rootSet(rootEntities.begin(), rootEntities.end());
+			for (auto [id, widget] : world.GetComponents<UIWidgetComponent>())
+			{
+				if (rootSet.insert(id).second)
+					rootEntities.push_back(id);
+			}
 
 			if (rootEntities.empty())
 			{
@@ -8004,6 +8088,96 @@ namespace Alice
 		{
 			ALICE_LOG_ERRORF("[EditorCore] CreateUIImage: Failed to create UIImage");
 		}
+	}
+
+	EntityId EditorCore::CreateAliceUIRoot(World& world, std::string_view name)
+	{
+		EntityId e = world.CreateEntity();
+		world.SetEntityName(e, std::string(name));
+
+		UIWidgetComponent& widget = world.AddComponent<UIWidgetComponent>(e);
+		widget.widgetName = std::string(name);
+		widget.space = AliceUI::UISpace::Screen;
+
+		UITransformComponent& t = world.AddComponent<UITransformComponent>(e);
+		t.anchorMin = DirectX::XMFLOAT2(0.5f, 0.5f);
+		t.anchorMax = DirectX::XMFLOAT2(0.5f, 0.5f);
+		t.position = DirectX::XMFLOAT2(0.0f, 0.0f);
+		t.size = DirectX::XMFLOAT2(200.0f, 80.0f);
+		t.pivot = DirectX::XMFLOAT2(0.5f, 0.5f);
+
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIImage(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Image");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIImageComponent>(e);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIText(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Text");
+		if (e != InvalidEntityId)
+		{
+			UITextComponent& text = world.AddComponent<UITextComponent>(e);
+			text.text = "Text";
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIButton(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Button");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIButtonComponent>(e);
+			world.AddComponent<UIImageComponent>(e);
+			UITextComponent& text = world.AddComponent<UITextComponent>(e);
+			text.text = "Button";
+			UITransformComponent* t = world.GetComponent<UITransformComponent>(e);
+			if (t)
+				t->size = DirectX::XMFLOAT2(220.0f, 60.0f);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIGauge(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Gauge");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIGaugeComponent>(e);
+			UITransformComponent* t = world.GetComponent<UITransformComponent>(e);
+			if (t)
+				t->size = DirectX::XMFLOAT2(260.0f, 24.0f);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIWorldImage(World& world)
+	{
+		EntityId e = world.CreateEntity();
+		world.SetEntityName(e, "World_UI_Image");
+
+		auto& widget = world.AddComponent<UIWidgetComponent>(e);
+		widget.widgetName = "World_UI_Image";
+		widget.space = AliceUI::UISpace::World;
+		widget.billboard = true;
+
+		auto& uiTransform = world.AddComponent<UITransformComponent>(e);
+		uiTransform.size = DirectX::XMFLOAT2(0.6f, 0.6f);
+
+		world.AddComponent<UIImageComponent>(e);
+
+		TransformComponent& t = world.AddComponent<TransformComponent>(e);
+		t.position = DirectX::XMFLOAT3(0.0f, 2.0f, 0.0f);
+
+		return e;
 	}
 
 

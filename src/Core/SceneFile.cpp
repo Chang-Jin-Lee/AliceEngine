@@ -33,6 +33,12 @@
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
 
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
 
 #include "UI/UIWorldManager.h"
 
@@ -559,6 +565,50 @@ namespace Alice
                 JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
                 obj["traceGuid"] = std::to_string(attackDriver->traceGuid);
                 outEntity["AttackDriver"] = obj;
+            }
+
+            // === AliceUI Components ===
+            if (const auto* uiWidget = world.GetComponent<UIWidgetComponent>(id); uiWidget)
+            {
+                rttr::instance inst = const_cast<UIWidgetComponent&>(*uiWidget);
+                outEntity["UIWidget"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiTransform = world.GetComponent<UITransformComponent>(id); uiTransform)
+            {
+                rttr::instance inst = const_cast<UITransformComponent&>(*uiTransform);
+                outEntity["UITransform"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiImage = world.GetComponent<UIImageComponent>(id); uiImage)
+            {
+                UIImageComponent copy = *uiImage;
+                copy.texturePath = NormalizePathToRelative(copy.texturePath);
+                rttr::instance inst = copy;
+                outEntity["UIImage"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiText = world.GetComponent<UITextComponent>(id); uiText)
+            {
+                UITextComponent copy = *uiText;
+                copy.fontPath = NormalizePathToRelative(copy.fontPath);
+                rttr::instance inst = copy;
+                outEntity["UIText"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiButton = world.GetComponent<UIButtonComponent>(id); uiButton)
+            {
+                UIButtonComponent copy = *uiButton;
+                copy.normalTexture = NormalizePathToRelative(copy.normalTexture);
+                copy.hoveredTexture = NormalizePathToRelative(copy.hoveredTexture);
+                copy.pressedTexture = NormalizePathToRelative(copy.pressedTexture);
+                copy.disabledTexture = NormalizePathToRelative(copy.disabledTexture);
+                rttr::instance inst = copy;
+                outEntity["UIButton"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiGauge = world.GetComponent<UIGaugeComponent>(id); uiGauge)
+            {
+                UIGaugeComponent copy = *uiGauge;
+                copy.fillTexture = NormalizePathToRelative(copy.fillTexture);
+                copy.backgroundTexture = NormalizePathToRelative(copy.backgroundTexture);
+                rttr::instance inst = copy;
+                outEntity["UIGauge"] = JsonRttr::ToJsonObject(inst);
             }
 
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
@@ -1132,6 +1182,50 @@ namespace Alice
                 copy.erase("traceGuid");
                 rttr::instance inst = ad;
                 if (!JsonRttr::FromJsonObject(inst, copy)) return false;
+            }
+
+            // === AliceUI Components ===
+            auto itUIWidget = e.find("UIWidget");
+            if (itUIWidget != e.end() && itUIWidget->is_object())
+            {
+                UIWidgetComponent& comp = world.AddComponent<UIWidgetComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIWidget)) return false;
+            }
+            auto itUITransform = e.find("UITransform");
+            if (itUITransform != e.end() && itUITransform->is_object())
+            {
+                UITransformComponent& comp = world.AddComponent<UITransformComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUITransform)) return false;
+            }
+            auto itUIImage = e.find("UIImage");
+            if (itUIImage != e.end() && itUIImage->is_object())
+            {
+                UIImageComponent& comp = world.AddComponent<UIImageComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIImage)) return false;
+            }
+            auto itUIText = e.find("UIText");
+            if (itUIText != e.end() && itUIText->is_object())
+            {
+                UITextComponent& comp = world.AddComponent<UITextComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIText)) return false;
+            }
+            auto itUIButton = e.find("UIButton");
+            if (itUIButton != e.end() && itUIButton->is_object())
+            {
+                UIButtonComponent& comp = world.AddComponent<UIButtonComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIButton)) return false;
+            }
+            auto itUIGauge = e.find("UIGauge");
+            if (itUIGauge != e.end() && itUIGauge->is_object())
+            {
+                UIGaugeComponent& comp = world.AddComponent<UIGaugeComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIGauge)) return false;
             }
 
             return true;
