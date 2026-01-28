@@ -3948,6 +3948,16 @@ namespace Alice
         m_hasDefaultPostProcessSettings = true;
     }
 
+    void DeferredRenderSystem::SetPPVReferenceObjectName(const std::string& objectName)
+    {
+        m_postProcessVolumeSystem.SetReferenceObjectName(objectName);
+    }
+
+    const std::string& DeferredRenderSystem::GetPPVReferenceObjectName() const
+    {
+        return m_postProcessVolumeSystem.GetReferenceObjectName();
+    }
+
     bool DeferredRenderSystem::SetIblSet(const std::string& iblDir, const std::string& iblName)
     {
         return CreateIblResources(iblDir, iblName);

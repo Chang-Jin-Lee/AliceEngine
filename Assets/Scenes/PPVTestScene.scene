@@ -3,7 +3,7 @@
         {
             "Material": {
                 "albedoTexturePath": "",
-                "assetPath": "",
+                "assetPath": "Assets/Materials/Cube_0.mat",
                 "color": {
                     "x": 0.699999988079071,
                     "y": 0.699999988079071,
@@ -16,9 +16,177 @@
                     "y": 0.0,
                     "z": 0.0
                 },
-                "outlineWidth": 0.009999999776482582,
+                "outlineWidth": 0.0,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": true
+            },
+            "PostProcessVolume": {
+                "blendRadius": 1.5460000038146973,
+                "blendWeight": 1.0,
+                "boxSize": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 10.0
+                },
+                "priority": 0,
+                "settings": {
+                    "bOverride_BloomDownsample": false,
+                    "bOverride_BloomGaussianIntensity": false,
+                    "bOverride_BloomIntensity": false,
+                    "bOverride_BloomKnee": false,
+                    "bOverride_BloomRadius": false,
+                    "bOverride_BloomThreshold": false,
+                    "bOverride_ColorGradingContrast": false,
+                    "bOverride_ColorGradingGain": false,
+                    "bOverride_ColorGradingGamma": false,
+                    "bOverride_ColorGradingSaturation": true,
+                    "bOverride_Exposure": false,
+                    "bOverride_MaxHDRNits": false,
+                    "bloomDownsample": 2,
+                    "bloomGaussianIntensity": 1.0,
+                    "bloomIntensity": 0.5,
+                    "bloomKnee": 0.5,
+                    "bloomRadius": 1.0,
+                    "bloomThreshold": 1.0,
+                    "contrast": {
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "exposure": 0.0,
+                    "gain": {
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "gamma": {
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "maxHDRNits": 1000.0,
+                    "saturation": {
+                        "x": 0.953667938709259,
+                        "y": 0.4234432876110077,
+                        "z": 0.4234432876110077
+                    }
+                },
+                "shape": "Box",
+                "sphereRadius": 5.0,
+                "unbound": false
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
+            "SkinnedMesh": {
+                "boneCount": 1,
+                "instanceAssetPath": "Assets/Fbx/Cube.fbxasset",
+                "meshAssetPath": "Cube"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 2.845813512802124,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "757734646206016071"
+        },
+        {
+            "Camera": {
+                "FOV": 45.0,
+                "Far Plane": 1000.0,
+                "Near Plane": 0.10000000149011612,
+                "aspectOverride": 0.0,
+                "primary": false,
+                "useAspectOverride": false
+            },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "CameraMovement",
+                    "props": {
+                        "m_moveSpeed": 10.0
+                    }
+                }
+            ],
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 3.660886526107788,
+                    "y": 5.502560615539551,
+                    "z": -9.493026733398438
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "8569440000225009115",
+            "name": "Camera1"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "assetPath": "Assets/Materials/Cube_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.0,
+                "roughness": 0.5,
+                "shadingMode": -1,
+                "transparent": false
+            },
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SceneSwitchExample",
+                    "props": {
+                        "targetSceneA": "SceneChange\\SceneChange1.scene",
+                        "targetSceneB": "SceneChange\\SceneChange2.scene"
+                    }
+                }
+            ],
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
+            "SkinnedMesh": {
+                "boneCount": 1,
+                "instanceAssetPath": "Assets/Fbx/Cube.fbxasset",
+                "meshAssetPath": "Cube"
             },
             "Transform": {
                 "enabled": true,
@@ -38,9 +206,10 @@
                     "z": 1.0
                 }
             },
-            "guid": "2095909022807386235"
+            "guid": "18180725579263286824",
+            "name": "Cube(FBX)"
         }
     ],
-    "sceneName": "NewScene",
+    "sceneName": "PPVTestScene",
     "version": 1
 }

@@ -1,4 +1,5 @@
 #include "Rendering/PostProcessVolumeSystem.h"
+#include "Core/GameObject.h"
 #include "Core/World.h"
 #include <DirectXMath.h>
 #include <algorithm>
@@ -30,9 +31,86 @@ namespace Alice
         const XMFLOAT3& cameraPosition,
         const PostProcessSettings& defaultSettings)
     {
+        // 참조 위치 결정: m_referenceObjectName이 설정되어 있으면 해당 오브젝트 위치 사용
+        XMFLOAT3 referencePosition = cameraPosition;  // 기본값은 카메라 위치 (fallback)
+        
+        if (!m_referenceObjectName.empty())
+        {
+            bool needRefresh = false;
+            
+            // 캐시 유효성 확인
+            if (m_referenceEntityId == InvalidEntityId || !m_referenceResolved)
+            {
+                needRefresh = true;
+            }
+            else
+            {
+                // 캐시된 EntityId가 여전히 유효한지 확인
+                std::string cachedName = world.GetEntityName(m_referenceEntityId);
+                if (cachedName != m_referenceObjectName)
+                {
+                    needRefresh = true;
+                }
+                else
+                {
+                    // TransformComponent가 여전히 존재하는지 확인
+                    auto* transform = world.GetComponent<TransformComponent>(m_referenceEntityId);
+                    if (!transform || !transform->enabled)
+                    {
+                        needRefresh = true;
+                    }
+                }
+            }
+
+            if (needRefresh)
+            {
+                // World에서 이름으로 GameObject 찾기
+                GameObject refObj = world.FindGameObject(m_referenceObjectName);
+                if (refObj.IsValid())
+                {
+                    m_referenceEntityId = refObj.id();
+                    m_referenceResolved = true;
+                    m_hasWarnedAboutMissingObject = false;  // 찾았으면 경고 플래그 리셋
+                }
+                else
+                {
+                    m_referenceEntityId = InvalidEntityId;
+                    m_referenceResolved = false;
+                    // 경고는 한 번만 출력 (스팸 방지)
+                    if (!m_hasWarnedAboutMissingObject)
+                    {
+                        ALICE_LOG_WARN("PostProcessVolumeSystem: GameObject '%s' not found. Using camera position as fallback.", m_referenceObjectName.c_str());
+                        m_hasWarnedAboutMissingObject = true;
+                    }
+                }
+            }
+
+            // TransformComponent에서 위치 가져오기
+            if (m_referenceEntityId != InvalidEntityId && m_referenceResolved)
+            {
+                auto* transform = world.GetComponent<TransformComponent>(m_referenceEntityId);
+                if (transform && transform->enabled)
+                {
+                    referencePosition = transform->position;
+                }
+                else
+                {
+                    // Transform이 없거나 비활성화면 fallback으로 cameraPosition 사용
+                    m_referenceResolved = false;
+                    if (!m_hasWarnedAboutMissingObject)
+                    {
+                        ALICE_LOG_WARN("PostProcessVolumeSystem: GameObject '%s' has no valid TransformComponent. Using camera position as fallback.", m_referenceObjectName.c_str());
+                        m_hasWarnedAboutMissingObject = true;
+                    }
+                    referencePosition = cameraPosition;
+                }
+            }
+            // Entity를 찾지 못했으면 이미 referencePosition = cameraPosition으로 설정됨
+        }
+
         // 1. 후보 수집 및 signed distance 계산
         std::vector<PostProcessVolumeCandidate> candidates;
-        CollectCandidates(world, cameraPosition, candidates);
+        CollectCandidates(world, referencePosition, candidates);
 
         // 2. Priority 기준 정렬 (낮은 priority가 먼저, 높은 priority가 나중에 블렌딩)
         std::sort(candidates.begin(), candidates.end(),
@@ -155,7 +233,7 @@ namespace Alice
 
     void PostProcessVolumeSystem::CollectCandidates(
         World& world,
-        const XMFLOAT3& cameraPosition,
+        const XMFLOAT3& referencePosition,
         std::vector<PostProcessVolumeCandidate>& outCandidates)
     {
         outCandidates.clear();
@@ -187,10 +265,10 @@ namespace Alice
             worldBoxSize.y = volume.boxSize.y * transform->scale.y;
             worldBoxSize.z = volume.boxSize.z * transform->scale.z;
 
-            float sd = DistanceToBoxSurface(cameraPosition, transform->position, worldBoxSize, transform->rotation);
+            float sd = DistanceToBoxSurface(referencePosition, transform->position, worldBoxSize, transform->rotation);
 
             // Weight 계산 (거리 기반)
-            float weight = CalculateVolumeWeight(volume, *transform, cameraPosition, sd);
+            float weight = CalculateVolumeWeight(volume, *transform, referencePosition, sd);
 
             if (weight > 0.0f || sd < 0.0f)  // 내부이거나 weight > 0인 경우 후보로 추가
             {
@@ -208,7 +286,7 @@ namespace Alice
     float PostProcessVolumeSystem::CalculateVolumeWeight(
         const PostProcessVolumeComponent& volume,
         const TransformComponent& transform,
-        const XMFLOAT3& cameraPosition,
+        const XMFLOAT3& referencePosition,
         float signedDistance)
     {
         // Unbound면 항상 BlendWeight 반환 (전역 적용)

@@ -146,6 +146,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
     ${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.cpp
+    ${ALICE_SRC_DIR}/Components/PostProcessVolumeAssignerComponent.cpp
     
     #PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -272,6 +273,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/HealthComponent.h
     ${ALICE_SRC_DIR}/Components/AttackDriverComponent.h
     ${ALICE_SRC_DIR}/Components/PostProcessVolumeComponent.h
+    ${ALICE_SRC_DIR}/Components/PostProcessVolumeAssignerComponent.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
