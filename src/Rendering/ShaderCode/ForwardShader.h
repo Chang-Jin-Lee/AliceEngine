@@ -510,7 +510,7 @@ float ToonLevel(float n)
     return 0.1f;
 }
 
-float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
+float ToonStepEditable(float n, float3 cuts, float3 levels, float strength, float blur)
 {
     float c1 = saturate(cuts.x);
     float c2 = saturate(cuts.y);
@@ -523,12 +523,24 @@ float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
     float l2 = saturate(levels.z);
     float l3 = 1.0f;
 
+    float t = saturate(strength);
+    if (blur > 0.5f)
+    {
+        float w = max(fwidth(n) * 2.0f, 0.02f);
+        float s1 = smoothstep(c1 - w, c1 + w, n);
+        float s2 = smoothstep(c2 - w, c2 + w, n);
+        float s3 = smoothstep(c3 - w, c3 + w, n);
+
+        float level = lerp(l0, l1, s1);
+        level = lerp(level, l2, s2);
+        level = lerp(level, l3, s3);
+        return lerp(n, level, t);
+    }
+
     float level = (n > c3) ? l3 :
                   (n > c2) ? l2 :
                   (n > c1) ? l1 :
                              l0;
-
-    float t = saturate(strength);
     return lerp(n, level, t);
 }
 
@@ -536,7 +548,7 @@ float ToonPbrNdotL(float n)
 {
     if (gShadingMode == 7)
     {
-        return ToonStepEditable(n, gToonPbrCuts.xyz, gToonPbrLevels.xyz, gToonPbrCuts.w);
+         return ToonStepEditable(n, gToonPbrCuts.xyz, gToonPbrLevels.xyz, gToonPbrCuts.w, gToonPbrLevels.w);
     }
     return ToonLevel(n);
 }
