@@ -391,7 +391,8 @@ namespace Alice
 			.property("clipName", &AttackDriverClip::clipName)
 			.property("startTimeSec", &AttackDriverClip::startTimeSec)
 			.property("endTimeSec", &AttackDriverClip::endTimeSec)
-			.property("enabled", &AttackDriverClip::enabled);
+			.property("enabled", &AttackDriverClip::enabled)
+			.property("canBeInterrupted", &AttackDriverClip::canBeInterrupted);
 
 		rttr::registration::class_<AttackDriverComponent>("AttackDriverComponent")
 			.constructor<>()

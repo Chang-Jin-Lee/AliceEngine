@@ -42,28 +42,11 @@ namespace Alice
     void C_PlayerInputSourceComponent::Update(float deltaTime)
     {
         m_cached = GetIntent(deltaTime);
-
-        auto* cct = GetComponent<Phy_CCTComponent>();
-        if (cct)
-        {
-            float speed = m_moveSpeed;
-            cct->desiredVelocity.x = m_cached.move.x * speed;
-            cct->desiredVelocity.z = m_cached.move.y * speed;
-            cct->desiredVelocity.y = 0.0f;
-        }
     }
 
     void C_PlayerInputSourceComponent::OnDisable()
     {
         m_cached = {};
-
-        auto* cct = GetComponent<Phy_CCTComponent>();
-        if (cct)
-        {
-            cct->desiredVelocity.x = 0.0f;
-            cct->desiredVelocity.y = 0.0f;
-            cct->desiredVelocity.z = 0.0f;
-        }
     }
 
     Combat::Intent C_PlayerInputSourceComponent::GetIntent(float /*deltaTime*/)

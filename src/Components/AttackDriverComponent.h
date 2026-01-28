@@ -33,6 +33,7 @@ namespace Alice
 		float startTimeSec = 0.1f;
 		float endTimeSec = 0.2f;
 		bool enabled = true;
+		bool canBeInterrupted = true;
 	};
 
 	struct AttackDriverClipHistory
@@ -59,6 +60,8 @@ namespace Alice
 		bool attackActive = false;
 		bool dodgeActive = false;
 		bool guardActive = false;
+		bool attackCancelable = true;
+		bool cancelAttackRequested = false;
 
 		// 이전 프레임 시간 캐시 (직렬화 금지)
 		AttackDriverClipHistory prevBaseA;

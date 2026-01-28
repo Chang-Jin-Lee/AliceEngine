@@ -1,6 +1,7 @@
 ﻿#include "C_CombatSessionComponent.h"
 
 #include <unordered_map>
+#include <cmath>
 
 #include "Core/ScriptFactory.h"
 #include "Core/Logger.h"
@@ -9,12 +10,15 @@
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
 #include "Components/AdvancedAnimationComponent.h"
+#include "PhysX/Components/Phy_CCTComponent.h"
+#include "Components/TransformComponent.h"
 
 #include "C_CombatContracts.h"
 #include "C_CombatEventBus.h"
 #include "C_ActionFsm.h"
 #include "C_Fighter.h"
 #include "C_CombatResolver.h"
+#include "C_CombatApply.h"
 #include "C_PlayerInputSourceComponent.h"
 #include "C_BossBrainComponent.h"
 
@@ -28,6 +32,7 @@ namespace Alice
         Combat::ActionFsm bossFsm{};
         Combat::CombatEventBus bus{};
         Combat::CombatResolver resolver{};
+        Combat::CombatApply apply{};
         std::unordered_map<EntityId, Combat::Fighter*> fighterMap;
         Combat::ActionState prevPlayerState = Combat::ActionState::Idle;
         Combat::ActionState prevBossState = Combat::ActionState::Idle;
@@ -39,7 +44,7 @@ namespace Alice
             boss = Combat::Fighter{};
             playerFsm.Reset();
             bossFsm.Reset();
-            bus.ClearFrame();
+            bus.ClearAll();
         }
     };
 
@@ -60,6 +65,61 @@ namespace Alice
         return nullptr;
     }
 
+    static bool HasDeferredEvent(const Combat::ResolveOutput& resolved, Combat::CombatEventType type)
+    {
+        for (const auto& ev : resolved.deferred)
+        {
+            if (ev.type == type)
+                return true;
+        }
+        return false;
+    }
+
+    static void UpdateHealthHitInfo(World& world,
+                                    const Combat::HitEvent& hit,
+                                    const Combat::ResolveOutput& resolved,
+                                    const Combat::FighterSnapshot& victim)
+    {
+        auto* hc = world.GetComponent<HealthComponent>(hit.victimOwner);
+        if (!hc)
+            return;
+
+        hc->lastHitAttacker = hit.attackerOwner;
+        hc->lastHitPart = hit.part;
+        hc->lastHitPosWS = hit.hitPosWS;
+        hc->lastHitNormalWS = hit.hitNormalWS;
+
+        const bool wasHit = HasDeferredEvent(resolved, Combat::CombatEventType::OnHit);
+        const bool wasGuard = HasDeferredEvent(resolved, Combat::CombatEventType::OnGuarded);
+        const bool wasParry = HasDeferredEvent(resolved, Combat::CombatEventType::OnParried);
+
+        if (wasHit || wasGuard || wasParry)
+            hc->hitThisFrame = true;
+
+        if (wasGuard || wasParry)
+            hc->guardHitThisFrame = true;
+
+        if (wasHit)
+            hc->lastHitDamage = hit.damage;
+        else
+            hc->lastHitDamage = 0.0f;
+
+        if (!wasHit && !wasGuard && !wasParry && victim.flags.invulnActive)
+            hc->dodgeAvoidedThisFrame = true;
+    }
+
+    static Combat::ActionFlags BuildFlagsFromSensors(const Combat::Sensors& sensors,
+                                                     Combat::ActionState state)
+    {
+        Combat::ActionFlags flags{};
+        flags.hitActive = sensors.attackWindowActive;
+        flags.guardActive = sensors.guardWindowActive;
+        flags.invulnActive = sensors.dodgeWindowActive || sensors.invulnActive;
+        flags.parryWindowActive = false;
+        flags.canBeInterrupted = (state != Combat::ActionState::Dodge);
+        return flags;
+    }
+
     EntityId C_CombatSessionComponent::ResolveEntity(uint64_t guid) const
     {
         if (guid == 0)
@@ -76,7 +136,7 @@ namespace Alice
         m_state->Init();
 
         if (auto* world = GetWorld())
-            world->SetScriptCombatEnabled(false);
+            world->SetScriptCombatEnabled(true);
     }
 
     void C_CombatSessionComponent::OnEnable()
@@ -85,7 +145,7 @@ namespace Alice
             m_state = std::make_unique<SessionState>();
 
         if (auto* world = GetWorld())
-            world->SetScriptCombatEnabled(false);
+            world->SetScriptCombatEnabled(true);
     }
 
     void C_CombatSessionComponent::OnDisable()
@@ -103,17 +163,12 @@ namespace Alice
             m_state->Init();
     }
 
-    void C_CombatSessionComponent::Update(float /*deltaTime*/)
-    {
-    }
-
-    void C_CombatSessionComponent::PostCombatUpdate(float deltaTime)
+    void C_CombatSessionComponent::Update(float deltaTime)
     {
         if (!m_state || !GetWorld())
             return;
 
         World& world = *GetWorld();
-        world.SetScriptCombatEnabled(false);
         const EntityId playerId = ResolveEntity(m_playerGuid);
         const EntityId bossId = ResolveEntity(m_bossGuid);
         if (playerId == InvalidEntityId || bossId == InvalidEntityId)
@@ -127,13 +182,6 @@ namespace Alice
         m_state->fighterMap.clear();
         m_state->fighterMap[playerId] = &m_state->player;
         m_state->fighterMap[bossId] = &m_state->boss;
-
-        m_state->bus.ClearFrame();
-        if (world.HasFrameCombatHits())
-        {
-            for (const auto& hit : world.GetFrameCombatHits())
-                m_state->bus.PushHit(hit);
-        }
 
         Combat::Intent playerIntent{};
         if (auto* script = FindScriptOnEntity(world, playerId, "C_PlayerInputSourceComponent"))
@@ -155,19 +203,6 @@ namespace Alice
         m_state->player.hp = sPlayer.hp;
         m_state->boss.hp = sBoss.hp;
 
-        if (auto* driver = world.GetComponent<AttackDriverComponent>(playerId))
-        {
-            sPlayer.attackWindowActive = driver->attackActive;
-            sPlayer.guardWindowActive = driver->guardActive;
-            sPlayer.dodgeWindowActive = driver->dodgeActive;
-        }
-        if (auto* driver = world.GetComponent<AttackDriverComponent>(bossId))
-        {
-            sBoss.attackWindowActive = driver->attackActive;
-            sBoss.guardWindowActive = driver->guardActive;
-            sBoss.dodgeWindowActive = driver->dodgeActive;
-        }
-
         const auto& ePlayer = m_state->bus.PeekDeferred(playerId);
         const auto& eBoss = m_state->bus.PeekDeferred(bossId);
 
@@ -181,6 +216,33 @@ namespace Alice
 
         m_state->bus.ClearDeferred(playerId);
         m_state->bus.ClearDeferred(bossId);
+
+        auto ApplyMove = [&](const std::vector<Combat::Command>& cmds)
+        {
+            for (const auto& cmd : cmds)
+            {
+                if (cmd.type != Combat::CommandType::RequestMove)
+                    continue;
+                const auto payload = std::get<Combat::CmdRequestMove>(cmd.payload);
+                auto* cct = world.GetComponent<Phy_CCTComponent>(payload.target);
+                if (!cct)
+                    continue;
+                float dx = payload.move.x;
+                float dz = payload.move.y;
+                const float len = std::sqrt(dx * dx + dz * dz);
+                if (len > 0.0001f)
+                {
+                    dx /= len;
+                    dz /= len;
+                }
+                cct->desiredVelocity.x = dx * payload.speed;
+                cct->desiredVelocity.z = dz * payload.speed;
+                cct->desiredVelocity.y = 0.0f;
+            }
+        };
+        ApplyMove(outPlayer.commands);
+        ApplyMove(outBoss.commands);
+
         auto ApplyAnimByState = [&](EntityId entityId, Combat::ActionState curr, Combat::ActionState& prev) {
             if (curr == prev)
                 return;
@@ -248,6 +310,37 @@ namespace Alice
 
         ApplyAnimByState(playerId, outPlayer.state, m_state->prevPlayerState);
         ApplyAnimByState(bossId, outBoss.state, m_state->prevBossState);
+    }
+
+    void C_CombatSessionComponent::PostCombatUpdate(float deltaTime)
+    {
+        if (!m_state || !GetWorld())
+            return;
+
+        World& world = *GetWorld();
+        const EntityId playerId = ResolveEntity(m_playerGuid);
+        const EntityId bossId = ResolveEntity(m_bossGuid);
+        if (playerId == InvalidEntityId || bossId == InvalidEntityId)
+            return;
+
+        m_state->player.id = playerId;
+        m_state->player.team = Combat::Team::Player;
+        m_state->boss.id = bossId;
+        m_state->boss.team = Combat::Team::Enemy;
+
+        m_state->bus.ClearFrame();
+        if (world.HasFrameCombatHits())
+        {
+            for (const auto& hit : world.GetFrameCombatHits())
+                m_state->bus.PushHit(hit);
+        }
+
+        Combat::Sensors sPlayer = m_state->player.BuildSensors(world, bossId, deltaTime);
+        Combat::Sensors sBoss = m_state->boss.BuildSensors(world, playerId, deltaTime);
+        m_state->player.hp = sPlayer.hp;
+        m_state->boss.hp = sBoss.hp;
+        m_state->player.flags = BuildFlagsFromSensors(sPlayer, m_state->player.state);
+        m_state->boss.flags = BuildFlagsFromSensors(sBoss, m_state->boss.state);
 
         for (const auto& hit : m_state->bus.Hits())
         {
@@ -259,6 +352,9 @@ namespace Alice
                 : m_state->boss.Snapshot();
 
             auto resolved = m_state->resolver.ResolveOne(hit, attacker, victim);
+
+            UpdateHealthHitInfo(world, hit, resolved, victim);
+            m_state->apply.ApplyImmediate(world, m_state->fighterMap, m_state->bus, resolved.immediate, false);
 
             for (const auto& ev : resolved.deferred)
                 m_state->bus.PushDeferred(ev);

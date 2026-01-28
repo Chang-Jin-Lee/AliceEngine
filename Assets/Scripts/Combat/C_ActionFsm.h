@@ -27,6 +27,7 @@ namespace Alice::Combat
     private:
         ActionState m_state = ActionState::Idle;
         float m_stateTime = 0.0f;
+        bool m_attackCommitted = false;
 
         void Enter(ActionState next);
     };

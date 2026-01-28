@@ -21,6 +21,7 @@ namespace Alice::Combat
     {
         m_state = ActionState::Idle;
         m_stateTime = 0.0f;
+        m_attackCommitted = false;
     }
 
     void ActionFsm::Enter(ActionState next)
@@ -29,6 +30,10 @@ namespace Alice::Combat
         {
             m_state = next;
             m_stateTime = 0.0f;
+            if (m_state != ActionState::Attack)
+                m_attackCommitted = false;
+            else
+                m_attackCommitted = false;
         }
     }
 
@@ -54,7 +59,43 @@ namespace Alice::Combat
 
         if (m_state != ActionState::Dead && m_state != ActionState::Hitstun)
         {
-            if (intent.dodgePressed && sensors.stamina >= 10.0f)
+            const bool hasMove = (Abs(intent.move.x) + Abs(intent.move.y)) > 0.001f;
+
+            if (m_state == ActionState::Attack)
+            {
+                if (!m_attackCommitted)
+                {
+                    if (sensors.attackWindowActive)
+                        m_attackCommitted = true;
+                    else
+                    {
+                        if (intent.dodgePressed && sensors.stamina >= 10.0f)
+                        {
+                            Enter(ActionState::Dodge);
+                        }
+                        else if (intent.guardHeld)
+                        {
+                            Enter(ActionState::Guard);
+                        }
+                        else if (hasMove)
+                        {
+                            Enter(ActionState::Move);
+                            out.commands.push_back({ CommandType::RequestMove, CmdRequestMove{ self, intent.move, sensors.moveSpeed, true, true } });
+                        }
+                        else
+                        {
+                            Enter(ActionState::Idle);
+                            out.commands.push_back({ CommandType::RequestMove, CmdRequestMove{ self, {0.0f, 0.0f}, 0.0f, true, false } });
+                        }
+                    }
+                }
+                else
+                {
+                    if (!sensors.attackWindowActive && m_stateTime > 0.05f)
+                        Enter(ActionState::Idle);
+                }
+            }
+            else if (intent.dodgePressed && sensors.stamina >= 10.0f)
             {
                 Enter(ActionState::Dodge);
             }
@@ -71,7 +112,6 @@ namespace Alice::Combat
             }
             else
             {
-                const bool hasMove = (Abs(intent.move.x) + Abs(intent.move.y)) > 0.001f;
                 if (hasMove)
                 {
                     Enter(ActionState::Move);

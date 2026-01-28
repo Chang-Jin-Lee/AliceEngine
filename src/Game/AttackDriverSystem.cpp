@@ -373,6 +373,7 @@ namespace Alice
             driver.attackActive = false;
             driver.dodgeActive = false;
             driver.guardActive = false;
+            driver.attackCancelable = true;
         }
 
         void ApplyHealthState(World& world, EntityId entityId, const AttackDriverComponent& driver)
@@ -385,7 +386,10 @@ namespace Alice
             health->guardActive = driver.guardActive;
         }
 
-        void ApplyWindowState(AttackDriverComponent& driver, AttackDriverNotifyType type, bool active)
+        void ApplyWindowState(AttackDriverComponent& driver,
+                              AttackDriverNotifyType type,
+                              bool active,
+                              bool canBeInterrupted)
         {
             switch (type)
             {
@@ -398,6 +402,8 @@ namespace Alice
             case AttackDriverNotifyType::Attack:
             default:
                 driver.attackActive = driver.attackActive || active;
+                if (active && !canBeInterrupted)
+                    driver.attackCancelable = false;
                 break;
             }
         }
@@ -573,6 +579,8 @@ namespace Alice
                     auto* driverComp = world.GetComponent<AttackDriverComponent>(entityId);
                     if (!driverComp)
                         return;
+                    if (driverComp->cancelAttackRequested)
+                        return;
                     EntityId traceId = ResolveTraceEntity(world, *driverComp, entityId);
                     ActivateTrace(world, traceId);
                 }, driver.notifyTag);
@@ -669,10 +677,21 @@ namespace Alice
                 for (const auto& clip : driver.clips)
                 {
                     if (IsClipWindowActiveSkinned(clip, skinnedState))
-                        ApplyWindowState(driver, clip.type, true);
+                        ApplyWindowState(driver, clip.type, true, clip.canBeInterrupted);
                 }
 
                 CommitPrevTimeSec(driver.prevSkinned, currentClipName, currTimeSec);
+
+                if (driver.cancelAttackRequested)
+                {
+                    if (driver.attackCancelable)
+                        driver.attackActive = false;
+                    else
+                        driver.cancelAttackRequested = false;
+                }
+
+                if (!driver.attackActive)
+                    driver.cancelAttackRequested = false;
 
                 ApplyHealthState(world, entityId, driver);
                 LogChanges();
@@ -748,7 +767,7 @@ namespace Alice
             for (const auto& clip : driver.clips)
             {
                 if (IsClipWindowActive(clip, baseA, baseB, upperA, upperB, additive))
-                    ApplyWindowState(driver, clip.type, true);
+                    ApplyWindowState(driver, clip.type, true, clip.canBeInterrupted);
             }
 
             CommitPrevTimeSec(driver.prevBaseA, baseA.clipName, baseA.currTime);
@@ -756,6 +775,17 @@ namespace Alice
             CommitPrevTimeSec(driver.prevUpperA, upperA.clipName, upperA.currTime);
             CommitPrevTimeSec(driver.prevUpperB, upperB.clipName, upperB.currTime);
             CommitPrevTimeSec(driver.prevAdditive, additive.clipName, additive.currTime);
+
+            if (driver.cancelAttackRequested)
+            {
+                if (driver.attackCancelable)
+                    driver.attackActive = false;
+                else
+                    driver.cancelAttackRequested = false;
+            }
+
+            if (!driver.attackActive)
+                driver.cancelAttackRequested = false;
 
             ApplyHealthState(world, entityId, driver);
             LogChanges();
