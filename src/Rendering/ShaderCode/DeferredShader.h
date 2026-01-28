@@ -475,7 +475,10 @@ GBufferOut main(VertexOut pIn)
     
     gOut.NormalRoughness = float4(normalEncoded, roughness);
     gOut.Metalness  = float4(metalness, saturate(gToonPbrCuts.x), saturate(gToonPbrCuts.y), saturate(gToonPbrCuts.z));
-    gOut.ToonParams = float4(saturate(gToonPbrCuts.w), saturate(gToonPbrLevels.x), saturate(gToonPbrLevels.y), saturate(gToonPbrLevels.z));
+    float toonStrength = saturate(gToonPbrCuts.w);
+    float toonBlur = (gToonPbrLevels.w > 0.5f) ? 1.0f : 0.0f;
+    float toonStrengthPacked = toonStrength * 0.5f + toonBlur * 0.5f;
+    gOut.ToonParams = float4(toonStrengthPacked, saturate(gToonPbrLevels.x), saturate(gToonPbrLevels.y), saturate(gToonPbrLevels.z));
     // shadingMode + AO를 [0,1] 범위로 인코딩하여 저장
     gOut.BaseColor  = float4(baseColor, saturate(shadingEncoded));
     
@@ -524,7 +527,7 @@ float ToonLevel(float n)
     return 0.1f;
 }
 
-float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
+float ToonStepEditable(float n, float3 cuts, float3 levels, float strength, float blur)
 {
     float c1 = saturate(cuts.x);
     float c2 = saturate(cuts.y);
@@ -537,14 +540,27 @@ float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
     float l2 = saturate(levels.z);
     float l3 = 1.0f;
 
+    float t = saturate(strength);
+    if (blur > 0.5f)
+    {
+        float w = max(fwidth(n) * 2.0f, 0.02f);
+        float s1 = smoothstep(c1 - w, c1 + w, n);
+        float s2 = smoothstep(c2 - w, c2 + w, n);
+        float s3 = smoothstep(c3 - w, c3 + w, n);
+
+        float level = lerp(l0, l1, s1);
+        level = lerp(level, l2, s2);
+        level = lerp(level, l3, s3);
+        return lerp(n, level, t);
+    }
+
     float level = (n > c3) ? l3 :
                   (n > c2) ? l2 :
                   (n > c1) ? l1 :
                              l0;
-
-    float t = saturate(strength);
     return lerp(n, level, t);
 }
+
 
 // ShadowCB (register b4)
 cbuffer ShadowCB : register(b4)
@@ -801,7 +817,9 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
     float3 N = normalize(normalRoughness.xyz * 2.0f - 1.0f);
     float metalness = metalness_packed.r;
     float3 toonCuts = float3(metalness_packed.g, metalness_packed.b, metalness_packed.a);
-    float toonStrength = toonParams.r;
+    float toonStrengthPacked = toonParams.r;
+    float toonBlur = (toonStrengthPacked >= 0.5f) ? 1.0f : 0.0f;
+    float toonStrength = saturate((toonStrengthPacked - toonBlur * 0.5f) * 2.0f);
     float3 toonLevels = toonParams.gba;
     float roughness = max(normalRoughness.w, 0.04f);
     
@@ -907,7 +925,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float ndotl = max(dot(N, L), 0.0f);
         if (toonPbr && ndotl > 0.0f)
         {
-            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength) : ToonLevel(ndotl);
+            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength, toonBlur) : ToonLevel(ndotl);
             lit *= toonNdotL / max(ndotl, 1e-4f);
         }
         directLighting += lit * shadowVis * ao;
@@ -927,7 +945,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float ndotl = max(dot(N, Lp), 0.0f);
         if (toonPbr && ndotl > 0.0f)
         {
-            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength) : ToonLevel(ndotl);
+            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength, toonBlur) : ToonLevel(ndotl);
             lit *= toonNdotL / max(ndotl, 1e-4f);
         }
         extraLighting += lit * ao;
@@ -946,7 +964,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float ndotl = max(dot(N, Ls), 0.0f);
         if (toonPbr && ndotl > 0.0f)
         {
-            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength) : ToonLevel(ndotl);
+            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength, toonBlur) : ToonLevel(ndotl);
             lit *= toonNdotL / max(ndotl, 1e-4f);
         }
         extraLighting += lit * ao;
@@ -966,7 +984,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
         float ndotl = max(dot(N, Lr), 0.0f);
         if (toonPbr && ndotl > 0.0f)
         {
-            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength) : ToonLevel(ndotl);
+            float toonNdotL = toonEditable ? ToonStepEditable(ndotl, toonCuts, toonLevels, toonStrength, toonBlur) : ToonLevel(ndotl);
             lit *= toonNdotL / max(ndotl, 1e-4f);
         }
         extraLighting += lit * ao;
@@ -1234,7 +1252,7 @@ float ToonLevel(float n)
     return 0.1f;
 }
 
-float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
+float ToonStepEditable(float n, float3 cuts, float3 levels, float strength, float blur)
 {
     float c1 = saturate(cuts.x);
     float c2 = saturate(cuts.y);
@@ -1247,12 +1265,24 @@ float ToonStepEditable(float n, float3 cuts, float3 levels, float strength)
     float l2 = saturate(levels.z);
     float l3 = 1.0f;
 
+    float t = saturate(strength);
+    if (blur > 0.5f)
+    {
+        float w = max(fwidth(n) * 2.0f, 0.02f);
+        float s1 = smoothstep(c1 - w, c1 + w, n);
+        float s2 = smoothstep(c2 - w, c2 + w, n);
+        float s3 = smoothstep(c3 - w, c3 + w, n);
+
+        float level = lerp(l0, l1, s1);
+        level = lerp(level, l2, s2);
+        level = lerp(level, l3, s3);
+        return lerp(n, level, t);
+    }
+
     float level = (n > c3) ? l3 :
                   (n > c2) ? l2 :
                   (n > c1) ? l1 :
                              l0;
-
-    float t = saturate(strength);
     return lerp(n, level, t);
 }
 
@@ -1396,7 +1426,7 @@ float4 main(PSIn pIn) : SV_Target
     if (toonPbr && NdotL > 0.0f)
     {
         float toonNdotL = toonEditable
-            ? ToonStepEditable(NdotL, gToonPbrCuts.xyz, gToonPbrLevels.xyz, gToonPbrCuts.w)
+            ? ToonStepEditable(NdotL, gToonPbrCuts.xyz, gToonPbrLevels.xyz, gToonPbrCuts.w, gToonPbrLevels.w)
             : ToonLevel(NdotL);
         direct *= toonNdotL / max(NdotL, 1e-4f);
     }
