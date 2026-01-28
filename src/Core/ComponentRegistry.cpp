@@ -37,6 +37,7 @@
 #include "Components/SocketComponent.h"
 #include "Components/PostProcessVolumeComponent.h"
 #include "Components/PostProcessVolumeAssignerComponent.h"
+#include "Components/PostProcessVolumeReferenceComponent.h"
 #include "Rendering/PostProcessSettings.h"
 
 // 물리 컴포넌트 헤더
@@ -567,6 +568,12 @@ namespace Alice
             .property("createIfMissing", &PostProcessVolumeAssignerComponent::GetCreateIfMissing, &PostProcessVolumeAssignerComponent::SetCreateIfMissing)
             .property("templateVolume", &PostProcessVolumeAssignerComponent::templateVolume);
 
+        // === PostProcessVolumeReferenceComponent 등록 ===
+        rttr::registration::class_<PostProcessVolumeReferenceComponent>("PostProcessVolumeReferenceComponent")
+            .constructor<>()
+            .property("enabled", &PostProcessVolumeReferenceComponent::enabled)
+            .property("referenceObjectName", &PostProcessVolumeReferenceComponent::referenceObjectName);
+
         // === ComputeEffectComponent 등록 ===
         rttr::registration::class_<ComputeEffectComponent>("ComputeEffectComponent")
             .constructor<>()
@@ -978,6 +985,7 @@ namespace Alice
 
         r.Register<PostProcessVolumeComponent>("Post Process Volume", "Rendering");
         r.Register<PostProcessVolumeAssignerComponent>("Post Process Volume Assigner", "Rendering");
+        r.Register<PostProcessVolumeReferenceComponent>("Post Process Volume Reference", "Rendering");
 
         r.Register<ComputeEffectComponent>("Compute Effect", "VFX");
         r.Register<EffectComponent>("Effect", "VFX");
