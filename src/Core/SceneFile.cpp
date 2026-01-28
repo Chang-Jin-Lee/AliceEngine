@@ -29,6 +29,7 @@
 #include "Components/SocketComponent.h"
 #include "Components/PostProcessVolumeComponent.h"
 #include "Components/PostProcessVolumeAssignerComponent.h"
+#include "Components/PostProcessVolumeReferenceComponent.h"
 #include "Core/SocketSerialization.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
@@ -639,6 +640,12 @@ namespace Alice
                 outEntity["PostProcessVolumeAssigner"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* postProcessVolumeReference = world.GetComponent<PostProcessVolumeReferenceComponent>(id); postProcessVolumeReference)
+            {
+                rttr::instance inst = const_cast<PostProcessVolumeReferenceComponent&>(*postProcessVolumeReference);
+                outEntity["PostProcessVolumeReference"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* effect = world.GetComponent<EffectComponent>(id); effect)
             {
                 rttr::instance inst = const_cast<EffectComponent&>(*effect);
@@ -984,6 +991,15 @@ namespace Alice
                 PostProcessVolumeAssignerComponent& ppva = world.AddComponent<PostProcessVolumeAssignerComponent>(id);
                 rttr::instance inst = ppva;
                 if (!JsonRttr::FromJsonObject(inst, *itPPVA)) return false;
+            }
+
+            // PostProcessVolumeReference 선택
+            auto itPPVR = e.find("PostProcessVolumeReference");
+            if (itPPVR != e.end() && itPPVR->is_object())
+            {
+                PostProcessVolumeReferenceComponent& ppvr = world.AddComponent<PostProcessVolumeReferenceComponent>(id);
+                rttr::instance inst = ppvr;
+                if (!JsonRttr::FromJsonObject(inst, *itPPVR)) return false;
             }
 
             // Effect 선택

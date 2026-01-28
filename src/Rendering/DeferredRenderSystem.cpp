@@ -18,6 +18,7 @@
 #include "Core/Logger.h"
 #include "Core/World.h"
 #include "Components/TransformComponent.h"
+#include "Components/PostProcessVolumeReferenceComponent.h"
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/TrailEffectComponent.h"
@@ -34,6 +35,17 @@ namespace Alice
 {
     namespace
     {
+        static std::string ResolvePPVReferenceName(const World& world)
+        {
+            for (const auto& [entityId, reference] : world.GetComponents<PostProcessVolumeReferenceComponent>())
+            {
+                if (!reference.enabled)
+                    continue;
+                return reference.referenceObjectName;
+            }
+            return {};
+        }
+
         // 인스턴싱 배치 키 (재질/메시 기준)
         struct InstancedDrawKey
         {
@@ -2186,6 +2198,12 @@ namespace Alice
                 defaultSettings.bloomDownsample = m_bloomSettings.downsample;
             }
 
+            const std::string referenceName = ResolvePPVReferenceName(world);
+            if (referenceName != m_postProcessVolumeSystem.GetReferenceObjectName())
+            {
+                m_postProcessVolumeSystem.SetReferenceObjectName(referenceName);
+            }
+
             // Post Process Volume 블렌딩 계산
             PostProcessSettings finalSettings = m_postProcessVolumeSystem.CalculateFinalSettings(
                 const_cast<World&>(world),  // CalculateFinalSettings는 수정하지 않으므로 안전
@@ -3838,6 +3856,12 @@ namespace Alice
 		defaultSettings.bloomGaussianIntensity = m_bloomSettings.gaussianIntensity;
 		defaultSettings.bloomRadius = m_bloomSettings.radius;
 		defaultSettings.bloomDownsample = m_bloomSettings.downsample;
+
+		const std::string referenceName = ResolvePPVReferenceName(world);
+		if (referenceName != m_postProcessVolumeSystem.GetReferenceObjectName())
+		{
+			m_postProcessVolumeSystem.SetReferenceObjectName(referenceName);
+		}
 
 		// Post Process Volume 블렌딩 계산
 		PostProcessSettings finalSettings = m_postProcessVolumeSystem.CalculateFinalSettings(

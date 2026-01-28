@@ -16,6 +16,7 @@
 #include <Core/ResourceManager.h>
 #include <Core/Logger.h>
 #include <Core/World.h>
+#include "Components/PostProcessVolumeReferenceComponent.h"
 #include "Rendering/ShaderCode/CommonShaderCode.h"
 #include "Rendering/ShaderCode/ForwardShader.h"
 
@@ -28,6 +29,17 @@ namespace Alice
 {
     namespace
     {
+        static std::string ResolvePPVReferenceName(const World& world)
+        {
+            for (const auto& [entityId, reference] : world.GetComponents<PostProcessVolumeReferenceComponent>())
+            {
+                if (!reference.enabled)
+                    continue;
+                return reference.referenceObjectName;
+            }
+            return {};
+        }
+
         // 인스턴싱 배치 키 (재질/메시 기준)
         struct InstancedDrawKey
         {
@@ -1933,6 +1945,12 @@ namespace Alice
                 m_postProcessParams.colorGradingGain.y,
                 m_postProcessParams.colorGradingGain.z
             );
+
+            const std::string referenceName = ResolvePPVReferenceName(world);
+            if (referenceName != m_postProcessVolumeSystem.GetReferenceObjectName())
+            {
+                m_postProcessVolumeSystem.SetReferenceObjectName(referenceName);
+            }
 
             // Post Process Volume 블렌딩 계산
             PostProcessSettings finalSettings = m_postProcessVolumeSystem.CalculateFinalSettings(

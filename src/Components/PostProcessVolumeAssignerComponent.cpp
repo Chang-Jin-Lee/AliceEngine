@@ -21,9 +21,37 @@ namespace Alice
 
         // 2. World에서 GameObject 찾기
         GameObject targetObj = world.FindGameObject(targetGameObjectName);
+        
+        // 2-1. 이름으로 찾지 못한 경우, "Entity_123" 형식인지 확인하여 Entity ID로 직접 검색
         if (!targetObj.IsValid())
         {
-            m_lastApplyMessage = "GameObject '" + targetGameObjectName + "' not found";
+            // "Entity_" 접두사로 시작하는지 확인
+            if (targetGameObjectName.size() > 7 && 
+                targetGameObjectName.substr(0, 7) == "Entity_")
+            {
+                try
+                {
+                    // "Entity_" 뒤의 숫자를 파싱
+                    std::string idStr = targetGameObjectName.substr(7);
+                    EntityId parsedId = static_cast<EntityId>(std::stoul(idStr));
+                    
+                    // EntityId가 유효한지 확인 (간단한 검증: IDComponent 존재 여부)
+                    if (auto* idComp = world.GetComponent<IDComponent>(parsedId))
+                    {
+                        targetObj = GameObject(&world, parsedId, nullptr);
+                    }
+                }
+                catch (...)
+                {
+                    // 파싱 실패 시 무시하고 계속 진행
+                }
+            }
+        }
+        
+        if (!targetObj.IsValid())
+        {
+            m_lastApplyMessage = "GameObject '" + targetGameObjectName + "' not found. "
+                "Make sure the entity name is set correctly (use 'Change Name' in Hierarchy context menu).";
             return false;
         }
 

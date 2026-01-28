@@ -3197,6 +3197,9 @@ namespace Alice
 				// 3-3-1. Post Process Volume Assigner
 				DrawInspectorPostProcessVolumeAssigner(world, selectedEntity);
 
+				// 3-3-2. Post Process Volume Reference
+				DrawInspectorPostProcessVolumeReference(world, selectedEntity);
+
 				// 3-3. Compute Effect
 				DrawInspectorComputeEffect(world, selectedEntity);
 				
@@ -5203,6 +5206,7 @@ namespace Alice
 				typeName == "SpotLightComponent" ||
 				typeName == "RectLightComponent" ||
 				typeName == "PostProcessVolumeComponent" ||
+				typeName == "PostProcessVolumeAssignerComponent" || // 별도 커스텀 Inspector에서 처리
 				typeName == "SkinnedMeshComponent" ||
 				typeName == "SkinnedAnimationComponent")  // Animation Status 섹션에서 처리됨
 				continue;
@@ -5911,13 +5915,41 @@ namespace Alice
 				ImGui::Text("Target GameObject");
 				char nameBuf[256] = {};
 				strncpy_s(nameBuf, assigner->targetGameObjectName.c_str(), sizeof(nameBuf) - 1);
+				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 100.0f);
 				if (ImGui::InputText("Target GameObject Name##PostProcessVolumeAssigner", nameBuf, sizeof(nameBuf)))
 				{
 					assigner->SetTargetGameObjectName(nameBuf);
 					changed = true;
 				}
+				ImGui::PopItemWidth();
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("PostProcessVolumeComponent를 적용할 GameObject 이름");
+				
+				ImGui::SameLine();
+				// 현재 선택된 엔티티의 이름을 자동으로 입력하는 버튼
+				const std::string currentEntityName = world.GetEntityName(_selectedEntity);
+				if (ImGui::Button("Use Selected##PostProcessVolumeAssigner"))
+				{
+					if (!currentEntityName.empty())
+					{
+						assigner->SetTargetGameObjectName(currentEntityName);
+						changed = true;
+					}
+					else
+					{
+						// 이름이 없으면 Entity ID를 사용
+						std::string fallbackName = "Entity_" + std::to_string(static_cast<uint32_t>(_selectedEntity));
+						assigner->SetTargetGameObjectName(fallbackName);
+						changed = true;
+					}
+				}
+				if (ImGui::IsItemHovered())
+				{
+					if (!currentEntityName.empty())
+						ImGui::SetTooltip("현재 선택된 엔티티의 이름 '%s'을 타겟으로 설정", currentEntityName.c_str());
+					else
+						ImGui::SetTooltip("현재 선택된 엔티티 (이름 없음, Entity ID 사용)");
+				}
 
 				// ==== 옵션 ====
 				changed |= ImGui::Checkbox("Auto Apply##PostProcessVolumeAssigner", &assigner->autoApply);
@@ -6161,6 +6193,73 @@ namespace Alice
 					g_SceneDirty = true;
 				}
 				else if (changed)
+				{
+					g_SceneDirty = true;
+				}
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorPostProcessVolumeReference(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* reference = world.GetComponent<PostProcessVolumeReferenceComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Post Process Volume Reference", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				changed |= ImGui::Checkbox("Enabled##PostProcessVolumeReference", &reference->enabled);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("PostProcessVolume 보간 기준을 사용할지 여부");
+
+				char nameBuf[256] = {};
+				strncpy_s(nameBuf, reference->referenceObjectName.c_str(), sizeof(nameBuf) - 1);
+				if (ImGui::InputText("Reference GameObject Name##PostProcessVolumeReference", nameBuf, sizeof(nameBuf)))
+				{
+					reference->referenceObjectName = nameBuf;
+					changed = true;
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("PostProcessVolume 보간 기준이 될 GameObject 이름\n비어있으면 카메라 위치 사용");
+
+				if (reference->enabled)
+				{
+					if (!reference->referenceObjectName.empty())
+					{
+						GameObject refObj = world.FindGameObject(reference->referenceObjectName);
+						if (refObj.IsValid())
+						{
+							auto* transform = world.GetComponent<TransformComponent>(refObj.id());
+							if (transform && transform->enabled)
+							{
+								ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f),
+									"Bound to: %s (Position: %.2f, %.2f, %.2f)",
+									reference->referenceObjectName.c_str(),
+									transform->position.x, transform->position.y, transform->position.z);
+							}
+							else
+							{
+								ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+									"Bound to: %s (Transform not found or disabled)", reference->referenceObjectName.c_str());
+							}
+						}
+						else
+						{
+							ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.3f, 1.0f),
+								"Object not found: %s (using camera position)", reference->referenceObjectName.c_str());
+						}
+					}
+					else
+					{
+						ImGui::TextDisabled("Using camera position as reference");
+					}
+				}
+				else
+				{
+					ImGui::TextDisabled("Disabled (using camera position)");
+				}
+
+				if (changed)
 				{
 					g_SceneDirty = true;
 				}
@@ -9957,5 +10056,3 @@ namespace Alice
 			g_SceneDirty = true;
 	}
 }
-
-
