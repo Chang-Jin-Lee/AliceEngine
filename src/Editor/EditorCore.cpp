@@ -36,6 +36,8 @@
 #include "AliceUI/UITextComponent.h"
 #include "AliceUI/UIButtonComponent.h"
 #include "AliceUI/UIGaugeComponent.h"
+#include "AliceUI/UIRenderer.h"
+#include <cstdint>
 #include <cstdio>
 #include <set>
 #include "Components/CameraComponent.h"
@@ -1840,6 +1842,17 @@ namespace Alice
 
 		ImGui_ImplWin32_Init(hwnd);
 		ImGui_ImplDX11_Init(d3dDevice, d3dContext);
+		ImGui_ImplDX11_CreateDeviceObjects();
+
+		if (m_aliceUIRenderer && io.FontDefault && io.Fonts)
+		{
+			const ImTextureID texId = io.Fonts->TexID.GetTexID();
+			if (texId != ImTextureID_Invalid)
+			{
+				m_aliceUIRenderer->SetDefaultImGuiFont(io.FontDefault,
+					reinterpret_cast<ID3D11ShaderResourceView*>(static_cast<uintptr_t>(texId)));
+			}
+		}
 
 		// ImGuizmo 스타일 설정
 		ImGuizmo::Style& style = ImGuizmo::GetStyle();
@@ -1848,6 +1861,25 @@ namespace Alice
 
 		m_initialized = true;
 		return true;
+	}
+
+	void EditorCore::SetAliceUIRenderer(UIRenderer* renderer)
+	{
+		m_aliceUIRenderer = renderer;
+		if (!m_initialized || !m_aliceUIRenderer)
+			return;
+
+		ImGuiIO& io = ImGui::GetIO();
+
+		if (io.FontDefault && io.Fonts)
+		{
+			const ImTextureID texId = io.Fonts->TexID.GetTexID();
+			if (texId != ImTextureID_Invalid)
+			{
+				m_aliceUIRenderer->SetDefaultImGuiFont(io.FontDefault,
+					reinterpret_cast<ID3D11ShaderResourceView*>(static_cast<uintptr_t>(texId)));
+			}
+		}
 	}
 
 	void EditorCore::Shutdown()
@@ -3557,6 +3589,26 @@ namespace Alice
 				ImVec2 imgMax = ImGui::GetItemRectMax();
 				ImVec2 imgSize = ImGui::GetItemRectSize();
 
+				if (m_aliceUIRenderer && m_hwnd && imgSize.x > 0.0f && imgSize.y > 0.0f && sceneWidth > 0.0f && sceneHeight > 0.0f)
+				{
+					POINT p = { static_cast<LONG>(imgMin.x), static_cast<LONG>(imgMin.y) };
+					::ScreenToClient(m_hwnd, &p);
+					m_aliceUIRenderer->SetScreenInputRect(
+						static_cast<float>(p.x),
+						static_cast<float>(p.y),
+						imgSize.x,
+						imgSize.y,
+						sceneWidth,
+						sceneHeight);
+
+					ImVec2 mousePos = ImGui::GetMousePos();
+					const float u = (mousePos.x - imgMin.x) / imgSize.x;
+					const float v = (mousePos.y - imgMin.y) / imgSize.y;
+					const float mx = u * sceneWidth;
+					const float my = v * sceneHeight;
+					m_aliceUIRenderer->SetScreenMouseOverride(mx, my);
+				}
+
 				// 프리팹 드래그앤드롭: 뷰포트 이미지 위에 드롭 타겟 추가
 				if (ImGui::BeginDragDropTarget())
 				{
@@ -4531,6 +4583,14 @@ namespace Alice
 					}
 
 					g_SceneDirty = true;
+				}
+			}
+			else
+			{
+				if (m_aliceUIRenderer)
+				{
+					m_aliceUIRenderer->ClearScreenInputRect();
+					m_aliceUIRenderer->ClearScreenMouseOverride();
 				}
 			}
 			ImGui::End();
@@ -8126,6 +8186,7 @@ namespace Alice
 		{
 			UITextComponent& text = world.AddComponent<UITextComponent>(e);
 			text.text = "Text";
+			text.fontPath = "Resource/Fonts/NotoSansKR-Regular.ttf";
 		}
 		return e;
 	}
@@ -8139,6 +8200,7 @@ namespace Alice
 			world.AddComponent<UIImageComponent>(e);
 			UITextComponent& text = world.AddComponent<UITextComponent>(e);
 			text.text = "Button";
+			text.fontPath = "Resource/Fonts/NotoSansKR-Regular.ttf";
 			UITransformComponent* t = world.GetComponent<UITransformComponent>(e);
 			if (t)
 				t->size = DirectX::XMFLOAT2(220.0f, 60.0f);

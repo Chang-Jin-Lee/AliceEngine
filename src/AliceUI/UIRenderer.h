@@ -2,6 +2,8 @@
 
 #include <unordered_map>
 #include <vector>
+#include <string>
+#include <memory>
 #include <wrl/client.h>
 #include <DirectXMath.h>
 
@@ -22,6 +24,8 @@ struct ID3D11SamplerState;
 struct ID3D11BlendState;
 struct ID3D11RasterizerState;
 struct ID3D11DepthStencilState;
+struct ImFont;
+struct ImFontAtlas;
 
 namespace Alice
 {
@@ -46,6 +50,11 @@ namespace Alice
 
 		// 셰이더 확장: 커스텀 픽셀 셰이더 등록
 		bool RegisterShader(const std::string& name, const char* pixelShaderSource);
+		void SetDefaultImGuiFont(ImFont* font, ID3D11ShaderResourceView* fontSRV);
+		void SetScreenInputRect(float x, float y, float width, float height, float renderWidth, float renderHeight);
+		void ClearScreenInputRect();
+		void SetScreenMouseOverride(float x, float y);
+		void ClearScreenMouseOverride();
 
 	private:
 		struct ScreenLayout
@@ -98,6 +107,7 @@ namespace Alice
 
 		ID3D11ShaderResourceView* GetTexture(const std::string& path);
 		ID3D11PixelShader* GetPixelShader(const std::string& name) const;
+		bool ResolveUIFont(const std::string& fontPath, float fontSize, ImFont*& outFont, ID3D11ShaderResourceView*& outSrv);
 
 		ID3D11Device* m_device = nullptr;
 		ID3D11DeviceContext* m_context = nullptr;
@@ -109,6 +119,28 @@ namespace Alice
 		std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> m_textureCache;
 		std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11PixelShader>> m_customPS;
 		UIFontCache m_fontCache;
+		ImFont* m_imguiFont{ nullptr };
+		ID3D11ShaderResourceView* m_imguiFontSRV{ nullptr };
+		struct RuntimeUIFont
+		{
+			std::unique_ptr<ImFontAtlas> atlas;
+			ImFont* font{ nullptr };
+			Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
+			std::string fontPath;
+			float baseSize{ 18.0f };
+		};
+		RuntimeUIFont m_runtimeUIFont;
+		std::unordered_map<std::string, RuntimeUIFont> m_runtimeUIFontCache;
+		bool m_inputRectActive{ false };
+		float m_inputRectX{ 0.0f };
+		float m_inputRectY{ 0.0f };
+		float m_inputRectW{ 0.0f };
+		float m_inputRectH{ 0.0f };
+		float m_inputRenderW{ 0.0f };
+		float m_inputRenderH{ 0.0f };
+		bool m_mouseOverrideActive{ false };
+		float m_mouseOverrideX{ 0.0f };
+		float m_mouseOverrideY{ 0.0f };
 
 		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_whiteSRV;
 

@@ -594,6 +594,9 @@ namespace Alice
 					pImpl->m_forwardRenderSystem->SetUIRenderer(&pImpl->m_aliceUIRenderer);
 				if (pImpl->m_deferredRenderSystem)
 					pImpl->m_deferredRenderSystem->SetUIRenderer(&pImpl->m_aliceUIRenderer);
+
+				if (pImpl->m_editorMode)
+					pImpl->m_editorCore.SetAliceUIRenderer(&pImpl->m_aliceUIRenderer);
 			}
 			else
 			{

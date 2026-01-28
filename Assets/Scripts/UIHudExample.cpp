@@ -13,19 +13,14 @@ namespace Alice
 
     RTTR_REGISTRATION
     {
-        using ThisClass = UIHudExample;
-        rttr::registration::class_<UIHudExample>("UIHudExample")
-            .constructor<>()
+        rttr::registration::class_<UIHudExample>(UIHudExample::_Refl_ClassName)
             .property("rootWidgetName", &UIHudExample::rootWidgetName)
-                (rttr::metadata("SerializeField", true))
-            ALICE_BIND_WIDGET(okButton, "OK_Button")
-            ALICE_BIND_WIDGET(titleText, "Title_Text")
-            ALICE_BIND_WIDGET_OPTIONAL(hpGauge, "HP_Gauge");
+                (rttr::metadata("SerializeField", true));
     }
 
     static EntityId FindRootWidgetByName(World& world, const std::string& name)
     {
-        for (auto& [id, widget] : world.GetComponents<UIWidgetComponent>())
+        for (auto [id, widget] : world.GetComponents<UIWidgetComponent>())
         {
             const std::string widgetName = widget.widgetName.empty() ? world.GetEntityName(id) : widget.widgetName;
             if (!widgetName.empty() && widgetName == name)
