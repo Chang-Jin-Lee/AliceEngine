@@ -852,6 +852,9 @@ namespace Alice
 		for (auto [id, button] : world.GetComponents<UIButtonComponent>())
 		{
 			button.clicked = false;
+			const auto prevState = button.state;
+			const bool prevHovered = (prevState == AliceUI::UIButtonState::Hovered ||
+				prevState == AliceUI::UIButtonState::Pressed);
 
 			const auto* widget = world.GetComponent<UIWidgetComponent>(id);
 			if (!widget || widget->space != AliceUI::UISpace::Screen || widget->visibility != AliceUI::UIVisibility::Visible)
@@ -879,13 +882,28 @@ namespace Alice
 			const bool hovered = (mouseX >= rect.minX && mouseX <= rect.maxX &&
 				mouseY >= rect.minY && mouseY <= rect.maxY);
 
+			if (hovered && !prevHovered)
+			{
+				for (auto& fn : button.onHovered)
+					fn();
+			}
+
 			if (hovered && leftPressed)
+			{
 				button.wasPressed = true;
+				for (auto& fn : button.onPressed)
+					fn();
+			}
 
 			if (leftReleased)
 			{
 				if (hovered && button.wasPressed)
 					button.clicked = true;
+				if (button.wasPressed)
+				{
+					for (auto& fn : button.onReleased)
+						fn();
+				}
 				button.wasPressed = false;
 			}
 

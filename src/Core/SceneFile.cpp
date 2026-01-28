@@ -1420,6 +1420,7 @@ namespace Alice
 
         bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // (1) 에디터: 실제 파일
             // (2) 게임  : Assets/... 는 Metas/Chunks 로 패킹되어 있으므로, 바이트 로드 후 JSON 파싱
             const std::filesystem::path resolved = resources.Resolve(logicalPath);
@@ -1441,24 +1442,8 @@ namespace Alice
                                logicalPath.generic_string().c_str(),
                                sp->size(),
                                resolvedStr.c_str());
-                // .alice 파일의 경우 World는 바이트에서 로드하고, UI는 별도 파일로 저장되므로 logicalPath를 사용하여 UI 로드
+                // .alice 파일의 경우 World는 바이트에서 로드
                 if (!LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string())) return false;
-                
-                // UI 로드 (있는 경우)
-                if (uiWorldManager)
-                {
-                    ALICE_LOG_INFO("[SceneFile] LoadAuto: Calling LoadUI for scene: %s", logicalPath.generic_string().c_str());
-                    if (!uiWorldManager->LoadUI(logicalPath, &resources))
-                    {
-                        ALICE_LOG_ERRORF("[SceneFile] LoadAuto: LoadUI failed for: %s", logicalPath.generic_string().c_str());
-                        return false;
-                    }
-                }
-                else
-                {
-                    ALICE_LOG_WARN("[SceneFile] LoadAuto: uiWorldManager is null, skipping UI load");
-                }
-                
                 return true;
             }
 
@@ -1466,43 +1451,22 @@ namespace Alice
             ALICE_LOG_INFO("[SceneFile] LoadAuto: file load. logical=\"%s\" resolved=\"%s\"",
                            logicalPath.generic_string().c_str(),
                            resolvedStr.c_str());
-            return Load(world, resolved, uiWorldManager);
+            return Load(world, resolved, nullptr);
         }
         
         bool Save(const World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // World 저장
             if (!Save(world, path)) return false;
-            
-            // UI 저장 (있는 경우)
-            if (uiWorldManager)
-            {
-                if (!uiWorldManager->SaveUI(path)) return false;
-            }
-            
             return true;
         }
         
         bool Load(World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // World 로드
             if (!Load(world, path)) return false;
-            
-            // UI 로드 (있는 경우)
-            if (uiWorldManager)
-            {
-                ALICE_LOG_INFO("[SceneFile] Load: Calling LoadUI for scene: %s", path.generic_string().c_str());
-                if (!uiWorldManager->LoadUI(path, nullptr))
-                {
-                    ALICE_LOG_ERRORF("[SceneFile] Load: LoadUI failed for: %s", path.generic_string().c_str());
-                    return false;
-                }
-            }
-            else
-            {
-                ALICE_LOG_WARN("[SceneFile] Load: uiWorldManager is null, skipping UI load");
-            }
-            
             return true;
         }
     }
