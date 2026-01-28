@@ -37,8 +37,10 @@ namespace Alice
 
             trace->attackInstanceId++;
             trace->active = true;
-            trace->hasPrevPositions = false;
-            trace->prevPositions.clear();
+            trace->hasPrevBasis = false;
+            trace->hasPrevShapes = false;
+            trace->prevCentersWS.clear();
+            trace->prevRotsWS.clear();
             trace->hitVictims.clear();
             trace->lastAttackInstanceId = trace->attackInstanceId;
         }

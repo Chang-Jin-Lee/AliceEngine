@@ -3883,9 +3883,18 @@ namespace Alice
 							XMFLOAT3 newPosition, newRotation, newScale;
 							if (DecomposeLocalMatrix(localMatrix, newPosition, newRotation, newScale))
 							{
-								transform->position = newPosition;
-								transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
-								transform->scale = newScale;
+								if (gizmoOp == ImGuizmo::TRANSLATE)
+								{
+									transform->position = newPosition;
+								}
+								else if (gizmoOp == ImGuizmo::ROTATE)
+								{
+									transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
+								}
+								else if (gizmoOp == ImGuizmo::SCALE)
+								{
+									transform->scale = newScale;
+								}
 							}
 
 							// ImGuizmo로 Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
@@ -9646,9 +9655,70 @@ namespace Alice
 
 				ImGui::Text("Owner Name: %s", trace->ownerNameDebug.empty() ? "(none)" : trace->ownerNameDebug.c_str());
 
+				std::uint64_t basisGuid = trace->traceBasisGuid;
+				if (ImGui::InputScalar("Trace Basis GUID", ImGuiDataType_U64, &basisGuid))
+				{
+					trace->traceBasisGuid = basisGuid;
+					trace->traceBasisCached = InvalidEntityId;
+					changed = true;
+				}
+
+				if (trace->traceBasisGuid == 0)
+					ImGui::TextDisabled("Trace Basis GUID is 0 -> uses self");
+
+				// Trace basis picker
+				{
+					std::string preview;
+					if (trace->traceBasisGuid == 0)
+					{
+						preview = "(self)";
+					}
+					else
+					{
+						EntityId resolved = world.FindEntityByGuid(trace->traceBasisGuid);
+						preview = (resolved != InvalidEntityId)
+							? world.GetEntityName(resolved)
+							: std::to_string(trace->traceBasisGuid);
+						if (preview.empty())
+							preview = std::to_string(trace->traceBasisGuid);
+					}
+
+					if (ImGui::BeginCombo("Trace Basis (pick entity)", preview.c_str()))
+					{
+						const bool selfSel = (trace->traceBasisGuid == 0);
+						if (ImGui::Selectable("(self)", selfSel))
+						{
+							trace->traceBasisGuid = 0;
+							trace->traceBasisCached = InvalidEntityId;
+							changed = true;
+						}
+						if (selfSel)
+							ImGui::SetItemDefaultFocus();
+
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == trace->traceBasisGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								trace->traceBasisGuid = idc.guid;
+								trace->traceBasisCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+
 				changed |= ImGui::Checkbox("Active", &trace->active);
 				changed |= ImGui::Checkbox("Debug Draw", &trace->debugDraw);
-				changed |= ImGui::DragFloat("Radius", &trace->radius, 0.01f, 0.0f, 10.0f);
+				changed |= ImGui::DragFloat("Base Damage", &trace->baseDamage, 0.1f, 0.0f, 100000.0f);
 
 				uint32_t teamId = trace->teamId;
 				if (ImGui::InputScalar("Team Id", ImGuiDataType_U32, &teamId))
@@ -9678,133 +9748,115 @@ namespace Alice
 					changed = true;
 				}
 
-				ImGui::Separator();
-				ImGui::Text("Trace Socket Names");
-
-				for (size_t i = 0; i < trace->traceSocketNames.size();)
+				uint32_t subSteps = trace->subSteps;
+				if (ImGui::InputScalar("Sub Steps", ImGuiDataType_U32, &subSteps))
 				{
+					trace->subSteps = std::max(1u, subSteps);
+					changed = true;
+				}
+
+				ImGui::Separator();
+				ImGui::Text("Trace Shapes");
+				if (ImGui::Button("Add Shape"))
+				{
+					trace->shapes.emplace_back();
+					changed = true;
+				}
+
+				for (size_t i = 0; i < trace->shapes.size(); ++i)
+				{
+					WeaponTraceShape& shape = trace->shapes[i];
 					ImGui::PushID(static_cast<int>(i));
-					ImGui::TextUnformatted(trace->traceSocketNames[i].c_str());
+
+					const char* typeName = (shape.type == WeaponTraceShapeType::Sphere)
+						? "Sphere"
+						: (shape.type == WeaponTraceShapeType::Capsule ? "Capsule" : "Box");
+					const char* namePreview = shape.name.empty() ? "(unnamed)" : shape.name.c_str();
+					bool open = ImGui::TreeNode("Shape", "%s [%s]", namePreview, typeName);
+
 					ImGui::SameLine();
-					if (ImGui::Button("Remove"))
+					bool moveUp = ImGui::SmallButton("^");
+					ImGui::SameLine();
+					bool moveDown = ImGui::SmallButton("v");
+					ImGui::SameLine();
+					bool duplicate = ImGui::SmallButton("Dup");
+					ImGui::SameLine();
+					bool remove = ImGui::SmallButton("Remove");
+
+					if (moveUp && i > 0)
 					{
-						trace->traceSocketNames.erase(trace->traceSocketNames.begin() + static_cast<long long>(i));
+						std::swap(trace->shapes[i - 1], trace->shapes[i]);
 						changed = true;
 						ImGui::PopID();
+						if (open) ImGui::TreePop();
 						continue;
 					}
+					if (moveDown && (i + 1) < trace->shapes.size())
+					{
+						std::swap(trace->shapes[i + 1], trace->shapes[i]);
+						changed = true;
+						ImGui::PopID();
+						if (open) ImGui::TreePop();
+						continue;
+					}
+					if (duplicate)
+					{
+						trace->shapes.insert(trace->shapes.begin() + static_cast<ptrdiff_t>(i + 1), shape);
+						changed = true;
+						ImGui::PopID();
+						if (open) ImGui::TreePop();
+						continue;
+					}
+					if (remove)
+					{
+						trace->shapes.erase(trace->shapes.begin() + static_cast<ptrdiff_t>(i));
+						changed = true;
+						ImGui::PopID();
+						if (open) ImGui::TreePop();
+						continue;
+					}
+
+					if (open)
+					{
+						char nameBuf[256];
+						std::snprintf(nameBuf, sizeof(nameBuf), "%.255s", shape.name.c_str());
+						if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+						{
+							shape.name = nameBuf;
+							changed = true;
+						}
+
+						changed |= ImGui::Checkbox("Enabled", &shape.enabled);
+
+						const char* typeItems[] = { "Sphere", "Capsule", "Box" };
+						int typeIdx = static_cast<int>(shape.type);
+						if (ImGui::Combo("Type", &typeIdx, typeItems, IM_ARRAYSIZE(typeItems)))
+						{
+							shape.type = static_cast<WeaponTraceShapeType>(typeIdx);
+							changed = true;
+						}
+
+						changed |= ImGui::DragFloat3("Local Pos", &shape.localPos.x, 0.01f);
+						changed |= ImGui::DragFloat3("Local Rot (deg)", &shape.localRotDeg.x, 0.5f);
+
+						if (shape.type == WeaponTraceShapeType::Sphere)
+						{
+							changed |= ImGui::DragFloat("Radius", &shape.radius, 0.01f, 0.0f, 100.0f);
+						}
+						else if (shape.type == WeaponTraceShapeType::Capsule)
+						{
+							changed |= ImGui::DragFloat("Radius", &shape.radius, 0.01f, 0.0f, 100.0f);
+							changed |= ImGui::DragFloat("Half Height", &shape.capsuleHalfHeight, 0.01f, 0.0f, 100.0f);
+						}
+						else if (shape.type == WeaponTraceShapeType::Box)
+						{
+							changed |= ImGui::DragFloat3("Half Extents", &shape.boxHalfExtents.x, 0.01f, 0.0f, 100.0f);
+						}
+
+						ImGui::TreePop();
+					}
+
 					ImGui::PopID();
-					++i;
-				}
-
-				// Add from owner: combo to pick socket name (auto-recognize from owner)
-				EntityId traceOwnerId = (trace->ownerGuid != 0) ? world.FindEntityByGuid(trace->ownerGuid) : trace->ownerCached;
-				if (traceOwnerId != InvalidEntityId)
-				{
-					std::vector<std::string> ownerSocketOptions;
-					auto addOpt = [&ownerSocketOptions](const std::string& value) {
-						if (value.empty()) return;
-						if (std::find(ownerSocketOptions.begin(), ownerSocketOptions.end(), value) == ownerSocketOptions.end())
-							ownerSocketOptions.push_back(value);
-					};
-					if (const auto* sc = world.GetComponent<SocketComponent>(traceOwnerId))
-					{
-						for (const auto& s : sc->sockets)
-						{
-							addOpt(s.name);
-							if (!s.parentBone.empty() && s.parentBone != s.name)
-								addOpt(s.parentBone);
-						}
-					}
-					if (!ownerSocketOptions.empty() && ImGui::BeginCombo("Add from owner socket", "(select to add)"))
-					{
-						for (const auto& name : ownerSocketOptions)
-						{
-							bool already = std::find(trace->traceSocketNames.begin(), trace->traceSocketNames.end(), name) != trace->traceSocketNames.end();
-							if (already)
-								ImGui::BeginDisabled();
-							if (ImGui::Selectable(name.c_str()))
-							{
-								trace->traceSocketNames.push_back(name);
-								changed = true;
-							}
-							if (already)
-							{
-								ImGui::EndDisabled();
-								if (ImGui::IsItemHovered())
-									ImGui::SetTooltip("Already in list");
-							}
-						}
-						ImGui::EndCombo();
-					}
-				}
-
-				// Add new socket name input
-				static char newSocketBuf[128]{};
-				ImGui::SetNextItemWidth(200.0f);
-				bool addSocket = ImGui::InputText("##NewSocketName", newSocketBuf, IM_ARRAYSIZE(newSocketBuf), ImGuiInputTextFlags_EnterReturnsTrue);
-				if (addSocket || (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Enter)))
-				{
-					addSocket = true;
-				}
-				ImGui::SameLine();
-				if (ImGui::Button("Add##TraceSocket") || addSocket)
-				{
-					std::string newName = newSocketBuf;
-					// Trim whitespace
-					if (!newName.empty())
-					{
-						// Remove leading/trailing whitespace
-						size_t start = newName.find_first_not_of(" \t\n\r");
-						if (start != std::string::npos)
-						{
-							size_t end = newName.find_last_not_of(" \t\n\r");
-							newName = newName.substr(start, end - start + 1);
-						}
-						else
-						{
-							newName.clear();
-						}
-					}
-					
-					if (!newName.empty())
-					{
-						// Check for duplicates
-						bool isDuplicate = std::find(trace->traceSocketNames.begin(), trace->traceSocketNames.end(), newName) != trace->traceSocketNames.end();
-						if (!isDuplicate)
-						{
-							trace->traceSocketNames.push_back(newName);
-							changed = true;
-						}
-						// Clear input regardless of whether it was added
-						newSocketBuf[0] = '\0';
-					}
-				}
-				if (ImGui::IsItemHovered() && !std::string(newSocketBuf).empty())
-				{
-					ImGui::SetTooltip("Press Enter or click Add to add socket name");
-				}
-
-				if (ImGui::Button("Auto-fill Trace/WT sockets"))
-				{
-					EntityId ownerId = (trace->ownerGuid != 0) ? world.FindEntityByGuid(trace->ownerGuid) : trace->ownerCached;
-					if (ownerId != InvalidEntityId)
-					{
-						auto addIfMatch = [&](const std::string& name) {
-							if (name.rfind("Trace_", 0) != 0 && name.rfind("WT_", 0) != 0)
-								return;
-							for (const auto& s : trace->traceSocketNames)
-								if (s == name) return;
-							trace->traceSocketNames.push_back(name);
-							changed = true;
-						};
-
-						if (const auto* sc = world.GetComponent<SocketComponent>(ownerId))
-						{
-							for (const auto& s : sc->sockets)
-								addIfMatch(s.name);
-						}
-					}
 				}
 
 				if (changed) g_SceneDirty = true;

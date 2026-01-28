@@ -188,6 +188,7 @@ set(ENGINE_SOURCES
 	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
 	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
+	${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.cpp
 
 	${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
 )
@@ -252,6 +253,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/CameraShakeComponent.h
     ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
     ${ALICE_SRC_DIR}/Components/AdvancedAnimationComponent.h
+    ${ALICE_SRC_DIR}/Components/DebugDrawBoxComponent.h
     ${ALICE_SRC_DIR}/Components/AdvancedAnimator.h
     ${ALICE_SRC_DIR}/Components/SoundBoxComponent.h
     ${ALICE_SRC_DIR}/Components/AudioListenerComponent.h
@@ -292,6 +294,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
+    ${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.h
     ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
     ${ALICE_SRC_DIR}/Rendering/PostProcessSettings.h

@@ -23,6 +23,7 @@
 #include "Components/ComputeEffectComponent.h"
 #include "Components/EffectComponent.h"
 #include "Components/TrailEffectComponent.h"
+#include "Components/DebugDrawBoxComponent.h"
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
 #include "Components/AnimBlueprintComponent.h"
@@ -518,6 +519,12 @@ namespace Alice
                 outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* dbgBox = world.GetComponent<DebugDrawBoxComponent>(id); dbgBox)
+            {
+                rttr::instance inst = const_cast<DebugDrawBoxComponent&>(*dbgBox);
+                outEntity["DebugDrawBox"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(id); socketAttach)
             {
                 rttr::instance inst = const_cast<SocketAttachmentComponent&>(*socketAttach);
@@ -539,12 +546,7 @@ namespace Alice
                 rttr::instance inst = const_cast<WeaponTraceComponent&>(*weaponTrace);
                 JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
                 obj["ownerGuid"] = std::to_string(weaponTrace->ownerGuid);
-                {
-                    JsonRttr::json names = JsonRttr::json::array();
-                    for (const auto& name : weaponTrace->traceSocketNames)
-                        names.push_back(name);
-                    obj["traceSocketNames"] = std::move(names);
-                }
+                obj["traceBasisGuid"] = std::to_string(weaponTrace->traceBasisGuid);
                 outEntity["WeaponTrace"] = obj;
             }
 
@@ -1104,6 +1106,15 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itSB)) return false;
             }
 
+            // DebugDrawBox (선택)
+            auto itDbg = e.find("DebugDrawBox");
+            if (itDbg != e.end() && itDbg->is_object())
+            {
+                DebugDrawBoxComponent& dd = world.AddComponent<DebugDrawBoxComponent>(id);
+                rttr::instance inst = dd;
+                if (!JsonRttr::FromJsonObject(inst, *itDbg)) return false;
+            }
+
             // SocketAttachment (선택)
             auto itSocketAttach = e.find("SocketAttachment");
             if (itSocketAttach != e.end() && itSocketAttach->is_object())
@@ -1139,14 +1150,12 @@ namespace Alice
                 WeaponTraceComponent& wt = world.AddComponent<WeaponTraceComponent>(id);
                 if (auto itGuid = itWeaponTrace->find("ownerGuid"); itGuid != itWeaponTrace->end())
                     wt.ownerGuid = ParseGuidOrZero(*itGuid);
+                if (auto itGuid = itWeaponTrace->find("traceBasisGuid"); itGuid != itWeaponTrace->end())
+                    wt.traceBasisGuid = ParseGuidOrZero(*itGuid);
 
                 JsonRttr::json copy = *itWeaponTrace;
                 copy.erase("ownerGuid");
-                if (auto itNames = copy.find("traceSocketNames"); itNames != copy.end())
-                {
-                    ReadStringArray(*itNames, wt.traceSocketNames);
-                    copy.erase("traceSocketNames");
-                }
+                copy.erase("traceBasisGuid");
                 rttr::instance inst = wt;
                 if (!JsonRttr::FromJsonObject(inst, copy)) return false;
             }

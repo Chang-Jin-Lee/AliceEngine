@@ -29,6 +29,7 @@
 #include "Components/AudioListenerComponent.h"
 #include "Components/AudioSourceComponent.h"
 #include "Components/SoundBoxComponent.h"
+#include "Components/DebugDrawBoxComponent.h"
 #include "Components/SocketAttachmentComponent.h"
 #include "Components/HurtboxComponent.h"
 #include "Components/WeaponTraceComponent.h"
@@ -78,6 +79,13 @@ namespace Alice
             .property("x", &XMFLOAT3::x)
             .property("y", &XMFLOAT3::y)
             .property("z", &XMFLOAT3::z);
+
+        rttr::registration::class_<XMFLOAT4>("XMFLOAT4")
+            .constructor<>()
+            .property("x", &XMFLOAT4::x)
+            .property("y", &XMFLOAT4::y)
+            .property("z", &XMFLOAT4::z)
+            .property("w", &XMFLOAT4::w);
 
         // XMFLOAT4X4는 4x4 행렬을 나타내는 타입
         // 렌더링할 때 4x4 행렬을 렌더링하기 위해 등록
@@ -278,6 +286,15 @@ namespace Alice
 			.property("debugDraw", &SoundBoxComponent::debugDraw)
 			.property("targetEntity", &SoundBoxComponent::targetEntity);
 
+        // DebugDrawBoxComponent 등록
+        rttr::registration::class_<DebugDrawBoxComponent>("DebugDrawBoxComponent")
+            .constructor<>()
+            .property("boundsMin", &DebugDrawBoxComponent::boundsMin)
+            .property("boundsMax", &DebugDrawBoxComponent::boundsMax)
+            .property("color", &DebugDrawBoxComponent::color)
+            .property("enabled", &DebugDrawBoxComponent::enabled)
+            .property("depthTest", &DebugDrawBoxComponent::depthTest);
+
 		// SocketAttachmentComponent 등록
 		rttr::registration::class_<SocketAttachmentComponent>("SocketAttachmentComponent")
 			.constructor<>()
@@ -298,20 +315,39 @@ namespace Alice
 			.property("part", &HurtboxComponent::part)
 			.property("damageScale", &HurtboxComponent::damageScale);
 
+		rttr::registration::enumeration<WeaponTraceShapeType>("WeaponTraceShapeType")
+			(
+				rttr::value("Sphere", WeaponTraceShapeType::Sphere),
+				rttr::value("Capsule", WeaponTraceShapeType::Capsule),
+				rttr::value("Box", WeaponTraceShapeType::Box)
+				);
+
+		rttr::registration::class_<WeaponTraceShape>("WeaponTraceShape")
+			.constructor<>()
+			.property("name", &WeaponTraceShape::name)
+			.property("enabled", &WeaponTraceShape::enabled)
+			.property("type", &WeaponTraceShape::type)
+			.property("localPos", &WeaponTraceShape::localPos)
+			.property("localRotDeg", &WeaponTraceShape::localRotDeg)
+			.property("radius", &WeaponTraceShape::radius)
+			.property("capsuleHalfHeight", &WeaponTraceShape::capsuleHalfHeight)
+			.property("boxHalfExtents", &WeaponTraceShape::boxHalfExtents);
+
 		// WeaponTraceComponent 등록
 		rttr::registration::class_<WeaponTraceComponent>("WeaponTraceComponent")
 			.constructor<>()
 			.property("ownerGuid", &WeaponTraceComponent::ownerGuid)
 			.property("ownerNameDebug", &WeaponTraceComponent::ownerNameDebug)
-			.property("traceSocketNames", &WeaponTraceComponent::traceSocketNames)
-			.property("radius", &WeaponTraceComponent::radius)
+			.property("traceBasisGuid", &WeaponTraceComponent::traceBasisGuid)
+			.property("shapes", &WeaponTraceComponent::shapes)
 			.property("active", &WeaponTraceComponent::active)
 			.property("debugDraw", &WeaponTraceComponent::debugDraw)
 			.property("baseDamage", &WeaponTraceComponent::baseDamage)
 			.property("teamId", &WeaponTraceComponent::teamId)
 			.property("attackInstanceId", &WeaponTraceComponent::attackInstanceId)
 			.property("targetLayerBits", &WeaponTraceComponent::targetLayerBits)
-			.property("queryLayerBits", &WeaponTraceComponent::queryLayerBits);
+			.property("queryLayerBits", &WeaponTraceComponent::queryLayerBits)
+			.property("subSteps", &WeaponTraceComponent::subSteps);
 
 		// HealthComponent 등록
 		rttr::registration::class_<HealthComponent>("HealthComponent")
@@ -1005,6 +1041,8 @@ namespace Alice
         r.Register<WeaponTraceComponent>("Weapon Trace", "Combat");
         r.Register<HealthComponent>("Health", "Combat");
         r.Register<AttackDriverComponent>("Attack Driver", "Combat");
+
+        r.Register<DebugDrawBoxComponent>("Debug Draw Box", "Debug");
 
         r.SortByCategoryThenName();
     }
