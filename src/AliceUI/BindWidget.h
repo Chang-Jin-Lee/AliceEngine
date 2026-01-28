@@ -1,9 +1,9 @@
 #pragma once
 
 #include <string>
-#include <rttr/type>
-#include <rttr/instance>
-#include <rttr/registration>
+#include <rttr/type.h>
+#include <rttr/instance.h>
+#include <rttr/registration.h>
 
 #include "Core/Entity.h"
 #include "Core/World.h"
@@ -18,17 +18,65 @@
 #define UI_META_OPTIONAL    "Optional"
 #define UI_META_WIDGET_NAME "WidgetName"
 
-#define ALICE_BIND_WIDGET(member, ...) \
-    .property(#member, &ThisClass::member) \
-    ( rttr::metadata(UI_META_BIND_WIDGET, true), \
-      rttr::metadata(UI_META_OPTIONAL, false) \
-      __VA_OPT__(, rttr::metadata(UI_META_WIDGET_NAME, __VA_ARGS__)) )
+#define ALICE_BIND_WIDGET(Type, Name) \
+private: \
+    Type Name = nullptr; \
+private: \
+    struct Reflector_BindWidget_##Name { \
+        Reflector_BindWidget_##Name() { \
+            rttr::registration::class_<ThisType>(ThisType::_Refl_ClassName) \
+                .property(#Name, &ThisType::Name) \
+                ( rttr::metadata(UI_META_BIND_WIDGET, true), \
+                  rttr::metadata(UI_META_OPTIONAL, false), \
+                  rttr::metadata(UI_META_WIDGET_NAME, std::string(#Name)) ); \
+        } \
+    }; \
+    inline static Reflector_BindWidget_##Name _reg_bindwidget_##Name;
 
-#define ALICE_BIND_WIDGET_OPTIONAL(member, ...) \
-    .property(#member, &ThisClass::member) \
-    ( rttr::metadata(UI_META_BIND_WIDGET, true), \
-      rttr::metadata(UI_META_OPTIONAL, true) \
-      __VA_OPT__(, rttr::metadata(UI_META_WIDGET_NAME, __VA_ARGS__)) )
+#define ALICE_BIND_WIDGET_NAMED(Type, Name, WidgetNameStr) \
+private: \
+    Type Name = nullptr; \
+private: \
+    struct Reflector_BindWidget_##Name { \
+        Reflector_BindWidget_##Name() { \
+            rttr::registration::class_<ThisType>(ThisType::_Refl_ClassName) \
+                .property(#Name, &ThisType::Name) \
+                ( rttr::metadata(UI_META_BIND_WIDGET, true), \
+                  rttr::metadata(UI_META_OPTIONAL, false), \
+                  rttr::metadata(UI_META_WIDGET_NAME, std::string(WidgetNameStr)) ); \
+        } \
+    }; \
+    inline static Reflector_BindWidget_##Name _reg_bindwidget_##Name;
+
+#define ALICE_BIND_WIDGET_OPTIONAL(Type, Name) \
+private: \
+    Type Name = nullptr; \
+private: \
+    struct Reflector_BindWidget_##Name { \
+        Reflector_BindWidget_##Name() { \
+            rttr::registration::class_<ThisType>(ThisType::_Refl_ClassName) \
+                .property(#Name, &ThisType::Name) \
+                ( rttr::metadata(UI_META_BIND_WIDGET, true), \
+                  rttr::metadata(UI_META_OPTIONAL, true), \
+                  rttr::metadata(UI_META_WIDGET_NAME, std::string(#Name)) ); \
+        } \
+    }; \
+    inline static Reflector_BindWidget_##Name _reg_bindwidget_##Name;
+
+#define ALICE_BIND_WIDGET_OPTIONAL_NAMED(Type, Name, WidgetNameStr) \
+private: \
+    Type Name = nullptr; \
+private: \
+    struct Reflector_BindWidget_##Name { \
+        Reflector_BindWidget_##Name() { \
+            rttr::registration::class_<ThisType>(ThisType::_Refl_ClassName) \
+                .property(#Name, &ThisType::Name) \
+                ( rttr::metadata(UI_META_BIND_WIDGET, true), \
+                  rttr::metadata(UI_META_OPTIONAL, true), \
+                  rttr::metadata(UI_META_WIDGET_NAME, std::string(WidgetNameStr)) ); \
+        } \
+    }; \
+    inline static Reflector_BindWidget_##Name _reg_bindwidget_##Name;
 
 namespace Alice
 {

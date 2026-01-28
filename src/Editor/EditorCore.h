@@ -29,6 +29,7 @@
 
 // Forward declaration
 class UIWorldManager;
+class UIRenderer;
 class UISceneManager;
 
 namespace Alice
@@ -289,6 +290,7 @@ namespace Alice
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
         void SetInputSystem(InputSystem* inputSystem) { m_inputSystem = inputSystem; }
         void SetUIWorldManager(class UIWorldManager* uiWorldManager) { m_uiWorldManager = uiWorldManager; }
+		void SetAliceUIRenderer(UIRenderer* renderer);
 
     private:
         /// 씬을 로드한 뒤, World 에 존재하는 SkinnedMeshComponent 들이
@@ -320,6 +322,7 @@ namespace Alice
 		SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
 		InputSystem* m_inputSystem = nullptr;
 		UIWorldManager* m_uiWorldManager = nullptr;
+		UIRenderer* m_aliceUIRenderer = nullptr;
 		
 		// UI 엔티티 선택 상태 (0이면 선택되지 않음)
 		unsigned long m_selectedUIEntity = 0;

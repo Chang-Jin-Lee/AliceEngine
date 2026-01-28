@@ -14,6 +14,8 @@
 #include <cmath>
 #include <fstream>
 #include <string>
+#include <algorithm>
+#include <unordered_set>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -1308,10 +1310,25 @@ namespace Alice
             
             root["entities"] = JsonRttr::json::array();
 
+            std::unordered_set<EntityId> entitySet;
             const auto& transforms = world.GetComponents<TransformComponent>();
             for (const auto& [id, transform] : transforms)
             {
                 (void)transform;
+                entitySet.insert(id);
+            }
+
+            const auto& uiWidgets = world.GetComponents<UIWidgetComponent>();
+            for (const auto& [id, widget] : uiWidgets)
+            {
+                (void)widget;
+                entitySet.insert(id);
+            }
+
+            std::vector<EntityId> entityList(entitySet.begin(), entitySet.end());
+            std::sort(entityList.begin(), entityList.end());
+            for (EntityId id : entityList)
+            {
                 JsonRttr::json e;
                 if (!WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);
@@ -1328,10 +1345,25 @@ namespace Alice
             root["version"] = 1;
             root["entities"] = JsonRttr::json::array();
 
+            std::unordered_set<EntityId> entitySet;
             const auto& transforms = world.GetComponents<TransformComponent>();
             for (const auto& [id, transform] : transforms)
             {
                 (void)transform;
+                entitySet.insert(id);
+            }
+
+            const auto& uiWidgets = world.GetComponents<UIWidgetComponent>();
+            for (const auto& [id, widget] : uiWidgets)
+            {
+                (void)widget;
+                entitySet.insert(id);
+            }
+
+            std::vector<EntityId> entityList(entitySet.begin(), entitySet.end());
+            std::sort(entityList.begin(), entityList.end());
+            for (EntityId id : entityList)
+            {
                 JsonRttr::json e;
                 if (!WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);

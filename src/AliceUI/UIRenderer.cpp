@@ -6,6 +6,11 @@
 #include <filesystem>
 #include <cfloat>
 #include <cstring>
+#include <cctype>
+#include <cstdint>
+#include <cmath>
+
+#include "imgui.h"
 
 #include "AliceUI/UIShaderCode.h"
 #include "AliceUI/UITransformComponent.h"
@@ -32,6 +37,46 @@ namespace Alice
 		inline bool IsZero(const DirectX::XMFLOAT2& v)
 		{
 			return v.x == 0.0f && v.y == 0.0f;
+		}
+
+		const char* NextUtf8(const char* p, const char* end, std::uint32_t& out)
+		{
+			if (p >= end)
+				return nullptr;
+
+			const unsigned char c0 = static_cast<unsigned char>(*p);
+			if (c0 < 0x80)
+			{
+				out = c0;
+				return p + 1;
+			}
+
+			if ((c0 >> 5) == 0x6 && (p + 1 < end))
+			{
+				const unsigned char c1 = static_cast<unsigned char>(p[1]);
+				out = ((c0 & 0x1F) << 6) | (c1 & 0x3F);
+				return p + 2;
+			}
+
+			if ((c0 >> 4) == 0xE && (p + 2 < end))
+			{
+				const unsigned char c1 = static_cast<unsigned char>(p[1]);
+				const unsigned char c2 = static_cast<unsigned char>(p[2]);
+				out = ((c0 & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+				return p + 3;
+			}
+
+			if ((c0 >> 3) == 0x1E && (p + 3 < end))
+			{
+				const unsigned char c1 = static_cast<unsigned char>(p[1]);
+				const unsigned char c2 = static_cast<unsigned char>(p[2]);
+				const unsigned char c3 = static_cast<unsigned char>(p[3]);
+				out = ((c0 & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
+				return p + 4;
+			}
+
+			out = static_cast<std::uint32_t>(c0);
+			return p + 1;
 		}
 	}
 
@@ -294,10 +339,156 @@ namespace Alice
 		return true;
 	}
 
+	bool UIRenderer::ResolveUIFont(const std::string& fontPath, float fontSize, ImFont*& outFont, ID3D11ShaderResourceView*& outSrv)
+	{
+		outFont = nullptr;
+		outSrv = nullptr;
+		const float requestedSize = (fontSize > 0.0f) ? fontSize : 0.0f;
+		if (m_imguiFont && m_imguiFontSRV && fontPath.empty())
+		{
+			const float base = m_imguiFont->LegacySize;
+			if (requestedSize <= 0.0f || std::abs(requestedSize - base) < 0.5f)
+			{
+				outFont = m_imguiFont;
+				outSrv = m_imguiFontSRV;
+				return true;
+			}
+		}
+		if (!m_device || !m_resources)
+			return false;
+
+		const std::string path = fontPath.empty()
+			? std::string("Resource/Fonts/NotoSansKR-Regular.ttf")
+			: fontPath;
+
+		const int bakeSize = std::max(8, static_cast<int>(std::round(fontSize > 0.0f ? fontSize : 18.0f)));
+		const std::string cacheKey = path + "#" + std::to_string(bakeSize);
+		if (auto it = m_runtimeUIFontCache.find(cacheKey); it != m_runtimeUIFontCache.end())
+		{
+			if (it->second.font && it->second.srv)
+			{
+				outFont = it->second.font;
+				outSrv = it->second.srv.Get();
+				return true;
+			}
+		}
+
+		RuntimeUIFont runtime{};
+		runtime.fontPath = path;
+		runtime.baseSize = static_cast<float>(bakeSize);
+		runtime.atlas = std::make_unique<ImFontAtlas>();
+
+		std::vector<std::uint8_t> fontBytes;
+		if (!m_resources->LoadBinaryAuto(path, fontBytes) || fontBytes.empty())
+			return false;
+
+		ImFontConfig cfg{};
+		cfg.MergeMode = false;
+		cfg.FontDataOwnedByAtlas = true;
+
+		void* ownedData = IM_ALLOC(fontBytes.size());
+		if (!ownedData)
+			return false;
+		memcpy(ownedData, fontBytes.data(), fontBytes.size());
+
+		ImFont* font = runtime.atlas->AddFontFromMemoryTTF(
+			ownedData,
+			static_cast<int>(fontBytes.size()),
+			runtime.baseSize,
+			&cfg,
+			runtime.atlas->GetGlyphRangesKorean());
+		if (!font)
+			return false;
+
+		unsigned char* pixels = nullptr;
+		int width = 0, height = 0;
+		runtime.atlas->GetTexDataAsRGBA32(&pixels, &width, &height);
+		if (!pixels || width <= 0 || height <= 0)
+			return false;
+
+		D3D11_TEXTURE2D_DESC desc{};
+		desc.Width = static_cast<UINT>(width);
+		desc.Height = static_cast<UINT>(height);
+		desc.MipLevels = 1;
+		desc.ArraySize = 1;
+		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		desc.SampleDesc.Count = 1;
+		desc.Usage = D3D11_USAGE_DEFAULT;
+		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+		D3D11_SUBRESOURCE_DATA subResource{};
+		subResource.pSysMem = pixels;
+		subResource.SysMemPitch = static_cast<UINT>(width * 4);
+
+		Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
+		if (FAILED(m_device->CreateTexture2D(&desc, &subResource, &tex)))
+			return false;
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = desc.Format;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = 1;
+
+		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
+		if (FAILED(m_device->CreateShaderResourceView(tex.Get(), &srvDesc, &srv)))
+			return false;
+
+		runtime.font = font;
+		runtime.srv = srv;
+
+		m_runtimeUIFontCache[cacheKey] = std::move(runtime);
+		outFont = m_runtimeUIFontCache[cacheKey].font;
+		outSrv = m_runtimeUIFontCache[cacheKey].srv.Get();
+		return true;
+	}
+
+	void UIRenderer::SetDefaultImGuiFont(ImFont* font, ID3D11ShaderResourceView* fontSRV)
+	{
+		m_imguiFont = font;
+		m_imguiFontSRV = fontSRV;
+	}
+
+	void UIRenderer::SetScreenInputRect(float x, float y, float width, float height, float renderWidth, float renderHeight)
+	{
+		m_inputRectActive = true;
+		m_inputRectX = x;
+		m_inputRectY = y;
+		m_inputRectW = width;
+		m_inputRectH = height;
+		m_inputRenderW = renderWidth;
+		m_inputRenderH = renderHeight;
+	}
+
+	void UIRenderer::ClearScreenInputRect()
+	{
+		m_inputRectActive = false;
+		m_inputRenderW = 0.0f;
+		m_inputRenderH = 0.0f;
+	}
+
+	void UIRenderer::SetScreenMouseOverride(float x, float y)
+	{
+		m_mouseOverrideActive = true;
+		m_mouseOverrideX = x;
+		m_mouseOverrideY = y;
+	}
+
+	void UIRenderer::ClearScreenMouseOverride()
+	{
+		m_mouseOverrideActive = false;
+	}
+
 	void UIRenderer::Update(World& world, InputSystem& input, const Camera& /*camera*/, float screenW, float screenH)
 	{
-		BuildScreenLayout(world, screenW, screenH);
-		UpdateButtonStates(world, input, screenW, screenH);
+		float layoutW = screenW;
+		float layoutH = screenH;
+		if (m_inputRectActive && m_inputRenderW > 0.0f && m_inputRenderH > 0.0f)
+		{
+			layoutW = m_inputRenderW;
+			layoutH = m_inputRenderH;
+		}
+		BuildScreenLayout(world, layoutW, layoutH);
+		UpdateButtonStates(world, input, layoutW, layoutH);
 
 		for (auto [id, gauge] : world.GetComponents<UIGaugeComponent>())
 		{
@@ -634,7 +825,26 @@ namespace Alice
 
 	void UIRenderer::UpdateButtonStates(World& world, InputSystem& input, float /*screenW*/, float /*screenH*/)
 	{
-		const POINT mouse = input.GetMousePosition();
+		float mouseX = 0.0f;
+		float mouseY = 0.0f;
+		if (m_mouseOverrideActive)
+		{
+			mouseX = m_mouseOverrideX;
+			mouseY = m_mouseOverrideY;
+		}
+		else
+		{
+			const POINT mouse = input.GetMousePosition();
+			mouseX = static_cast<float>(mouse.x);
+			mouseY = static_cast<float>(mouse.y);
+			if (m_inputRectActive && m_inputRectW > 0.0f && m_inputRectH > 0.0f)
+			{
+				const float u = (mouseX - m_inputRectX) / m_inputRectW;
+				const float v = (mouseY - m_inputRectY) / m_inputRectH;
+				mouseX = u * (m_inputRenderW > 0.0f ? m_inputRenderW : m_inputRectW);
+				mouseY = v * (m_inputRenderH > 0.0f ? m_inputRenderH : m_inputRectH);
+			}
+		}
 		const bool leftDown = input.IsLeftButtonDown();
 		const bool leftPressed = input.IsMouseButtonPressed(0);
 		const bool leftReleased = input.IsMouseButtonReleased(0);
@@ -666,8 +876,8 @@ namespace Alice
 				continue;
 			}
 
-			const bool hovered = (mouse.x >= rect.minX && mouse.x <= rect.maxX &&
-				mouse.y >= rect.minY && mouse.y <= rect.maxY);
+			const bool hovered = (mouseX >= rect.minX && mouseX <= rect.maxX &&
+				mouseY >= rect.minY && mouseY <= rect.maxY);
 
 			if (hovered && leftPressed)
 				button.wasPressed = true;
@@ -750,20 +960,172 @@ namespace Alice
 		const auto* text = world.GetComponent<UITextComponent>(id);
 		if (!widget || !text)
 			return;
-		if (text->fontPath.empty() || text->text.empty())
-			return;
-		if (!m_resources || !m_device)
+		if (text->text.empty())
 			return;
 
-		const UIFont* font = m_fontCache.Load(*m_resources, m_device, text->fontPath);
-		if (!font || font->lineHeight <= 0.0f)
+		bool useBitmapFont = false;
+		if (!text->fontPath.empty())
+		{
+			std::filesystem::path p(text->fontPath);
+			std::string ext = p.extension().string();
+			std::transform(ext.begin(), ext.end(), ext.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			useBitmapFont = (ext == ".fnt");
+		}
+
+		if (useBitmapFont)
+		{
+			if (!m_resources || !m_device)
+				return;
+
+			const UIFont* font = m_fontCache.Load(*m_resources, m_device, text->fontPath);
+			if (!font || font->lineHeight <= 0.0f)
+				return;
+
+			auto fontTexture = m_fontCache.GetFontTexture(text->fontPath);
+			ID3D11ShaderResourceView* srv = fontTexture.Get() ? fontTexture.Get() : m_whiteSRV.Get();
+
+			const float scale = text->fontSize / font->lineHeight;
+			const float lineHeight = font->lineHeight * scale + text->lineSpacing;
+			const float maxWidth = (text->maxWidth > 0.0f) ? text->maxWidth : (layout.size.x > 0.0f ? layout.size.x : 0.0f);
+			const bool wrap = text->wrap && maxWidth > 0.0f;
+
+			std::vector<float> lineWidths;
+			float lineWidth = 0.0f;
+			float maxLineWidth = 0.0f;
+			int lineCount = 1;
+
+			for (char c : text->text)
+			{
+				if (c == '\n')
+				{
+					lineWidths.push_back(lineWidth);
+					maxLineWidth = std::max(maxLineWidth, lineWidth);
+					lineWidth = 0.0f;
+					++lineCount;
+					continue;
+				}
+
+				auto it = font->glyphs.find(static_cast<int>(static_cast<unsigned char>(c)));
+				if (it == font->glyphs.end())
+					continue;
+
+				const float adv = it->second.xAdvance * scale;
+				if (wrap && lineWidth + adv > maxWidth && lineWidth > 0.0f)
+				{
+					lineWidths.push_back(lineWidth);
+					maxLineWidth = std::max(maxLineWidth, lineWidth);
+					lineWidth = 0.0f;
+					++lineCount;
+				}
+				lineWidth += adv;
+			}
+			lineWidths.push_back(lineWidth);
+			maxLineWidth = std::max(maxLineWidth, lineWidth);
+
+			const float textWidth = maxLineWidth;
+			const float textHeight = lineCount * lineHeight;
+
+			const float originX = layout.pivotBaked ? 0.0f : -layout.pivot.x * layout.size.x;
+			const float originY = layout.pivotBaked ? 0.0f : -layout.pivot.y * layout.size.y;
+
+			float baseX = originX;
+			float baseY = originY;
+			if (layout.size.x > 0.0f)
+			{
+				if (text->alignH == AliceUI::UIAlignH::Center)
+					baseX = (layout.size.x - textWidth) * 0.5f;
+				else if (text->alignH == AliceUI::UIAlignH::Right)
+					baseX = (layout.size.x - textWidth);
+			}
+
+			if (layout.size.y > 0.0f)
+			{
+				if (text->alignV == AliceUI::UIAlignV::Center)
+					baseY = (layout.size.y - textHeight) * 0.5f;
+				else if (text->alignV == AliceUI::UIAlignV::Bottom)
+					baseY = (layout.size.y - textHeight);
+			}
+
+			std::vector<UIVertex> verts;
+			verts.reserve(text->text.size() * 4);
+
+			float x = baseX;
+			float y = baseY;
+			for (char c : text->text)
+			{
+				if (c == '\n')
+				{
+					x = baseX;
+					y += lineHeight;
+					continue;
+				}
+
+				auto it = font->glyphs.find(static_cast<int>(static_cast<unsigned char>(c)));
+				if (it == font->glyphs.end())
+					continue;
+
+				const UIFontGlyph& g = it->second;
+				const float adv = g.xAdvance * scale;
+				if (wrap && maxWidth > 0.0f && x + adv > baseX + maxWidth && x > baseX)
+				{
+					x = baseX;
+					y += lineHeight;
+				}
+
+				const float gx = x + g.xOffset * scale;
+				const float gy = y + g.yOffset * scale;
+				const float gw = g.w * scale;
+				const float gh = g.h * scale;
+
+				DirectX::XMFLOAT3 local[4] = {
+					DirectX::XMFLOAT3(gx, gy, 0),
+					DirectX::XMFLOAT3(gx + gw, gy, 0),
+					DirectX::XMFLOAT3(gx, gy + gh, 0),
+					DirectX::XMFLOAT3(gx + gw, gy + gh, 0)
+				};
+
+				UIVertex v[4]{};
+				for (int i = 0; i < 4; ++i)
+				{
+					DirectX::XMVECTOR p = DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&local[i]), layout.world);
+					DirectX::XMStoreFloat3(&v[i].position, p);
+					v[i].color = text->color;
+				}
+
+				v[0].uv = DirectX::XMFLOAT2(g.u0, g.v0);
+				v[1].uv = DirectX::XMFLOAT2(g.u1, g.v0);
+				v[2].uv = DirectX::XMFLOAT2(g.u0, g.v1);
+				v[3].uv = DirectX::XMFLOAT2(g.u1, g.v1);
+
+				verts.push_back(v[0]);
+				verts.push_back(v[1]);
+				verts.push_back(v[2]);
+				verts.push_back(v[3]);
+
+				x += adv;
+			}
+
+			DrawGlyphs(verts, srv, GetPixelShader(widget->shaderName));
+			return;
+		}
+
+		ImFont* font = nullptr;
+		ID3D11ShaderResourceView* fontSrv = nullptr;
+		if (!ResolveUIFont(text->fontPath, text->fontSize, font, fontSrv))
 			return;
 
-		auto fontTexture = m_fontCache.GetFontTexture(text->fontPath);
-		ID3D11ShaderResourceView* srv = fontTexture.Get() ? fontTexture.Get() : m_whiteSRV.Get();
+		const float bakedSize = font->LegacySize;
+		if (bakedSize <= 0.0f)
+			return;
 
-		const float scale = text->fontSize / font->lineHeight;
-		const float lineHeight = font->lineHeight * scale + text->lineSpacing;
+		ImFontBaked* baked = font->GetFontBaked(bakedSize);
+		if (!baked)
+			return;
+
+		const float scale = bakedSize / baked->Size;
+		const float lineHeight = bakedSize + text->lineSpacing;
+
 		const float maxWidth = (text->maxWidth > 0.0f) ? text->maxWidth : (layout.size.x > 0.0f ? layout.size.x : 0.0f);
 		const bool wrap = text->wrap && maxWidth > 0.0f;
 
@@ -772,9 +1134,17 @@ namespace Alice
 		float maxLineWidth = 0.0f;
 		int lineCount = 1;
 
-		for (char c : text->text)
+		const char* p = text->text.c_str();
+		const char* end = p + text->text.size();
+		while (p < end)
 		{
-			if (c == '\n')
+			std::uint32_t cp = 0;
+			const char* next = NextUtf8(p, end, cp);
+			if (!next)
+				break;
+			p = next;
+
+			if (cp == '\n')
 			{
 				lineWidths.push_back(lineWidth);
 				maxLineWidth = std::max(maxLineWidth, lineWidth);
@@ -783,11 +1153,11 @@ namespace Alice
 				continue;
 			}
 
-			auto it = font->glyphs.find(static_cast<int>(static_cast<unsigned char>(c)));
-			if (it == font->glyphs.end())
+			const ImFontGlyph* glyph = baked->FindGlyphNoFallback((ImWchar)cp);
+			if (!glyph)
 				continue;
 
-			const float adv = it->second.xAdvance * scale;
+			const float adv = glyph->AdvanceX * scale;
 			if (wrap && lineWidth + adv > maxWidth && lineWidth > 0.0f)
 			{
 				lineWidths.push_back(lineWidth);
@@ -829,51 +1199,58 @@ namespace Alice
 
 		float x = baseX;
 		float y = baseY;
-		for (char c : text->text)
+		p = text->text.c_str();
+		while (p < end)
 		{
-			if (c == '\n')
+			std::uint32_t cp = 0;
+			const char* next = NextUtf8(p, end, cp);
+			if (!next)
+				break;
+			p = next;
+
+			if (cp == '\n')
 			{
 				x = baseX;
 				y += lineHeight;
 				continue;
 			}
 
-			auto it = font->glyphs.find(static_cast<int>(static_cast<unsigned char>(c)));
-			if (it == font->glyphs.end())
+			const ImFontGlyph* glyph = baked->FindGlyphNoFallback((ImWchar)cp);
+
+			if (!glyph)
 				continue;
 
-			const UIFontGlyph& g = it->second;
-			const float adv = g.xAdvance * scale;
+			const float adv = glyph->AdvanceX * scale;
 			if (wrap && maxWidth > 0.0f && x + adv > baseX + maxWidth && x > baseX)
 			{
 				x = baseX;
 				y += lineHeight;
 			}
 
-			const float gx = x + g.xOffset * scale;
-			const float gy = y + g.yOffset * scale;
-			const float gw = g.w * scale;
-			const float gh = g.h * scale;
+			const float gx0 = x + glyph->X0 * scale;
+			const float gy0 = y + glyph->Y0 * scale;
+			const float gx1 = x + glyph->X1 * scale;
+			const float gy1 = y + glyph->Y1 * scale;
 
 			DirectX::XMFLOAT3 local[4] = {
-				DirectX::XMFLOAT3(gx, gy, 0),
-				DirectX::XMFLOAT3(gx + gw, gy, 0),
-				DirectX::XMFLOAT3(gx, gy + gh, 0),
-				DirectX::XMFLOAT3(gx + gw, gy + gh, 0)
+				DirectX::XMFLOAT3(gx0, gy0, 0),
+				DirectX::XMFLOAT3(gx1, gy0, 0),
+				DirectX::XMFLOAT3(gx0, gy1, 0),
+				DirectX::XMFLOAT3(gx1, gy1, 0)
 			};
 
 			UIVertex v[4]{};
 			for (int i = 0; i < 4; ++i)
 			{
-				DirectX::XMVECTOR p = DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&local[i]), layout.world);
-				DirectX::XMStoreFloat3(&v[i].position, p);
+				DirectX::XMVECTOR pos = DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&local[i]), layout.world);
+				DirectX::XMStoreFloat3(&v[i].position, pos);
 				v[i].color = text->color;
 			}
 
-			v[0].uv = DirectX::XMFLOAT2(g.u0, g.v0);
-			v[1].uv = DirectX::XMFLOAT2(g.u1, g.v0);
-			v[2].uv = DirectX::XMFLOAT2(g.u0, g.v1);
-			v[3].uv = DirectX::XMFLOAT2(g.u1, g.v1);
+			v[0].uv = DirectX::XMFLOAT2(glyph->U0, glyph->V0);
+			v[1].uv = DirectX::XMFLOAT2(glyph->U1, glyph->V0);
+			v[2].uv = DirectX::XMFLOAT2(glyph->U0, glyph->V1);
+			v[3].uv = DirectX::XMFLOAT2(glyph->U1, glyph->V1);
 
 			verts.push_back(v[0]);
 			verts.push_back(v[1]);
@@ -883,7 +1260,7 @@ namespace Alice
 			x += adv;
 		}
 
-		DrawGlyphs(verts, srv, GetPixelShader(widget->shaderName));
+		DrawGlyphs(verts, fontSrv ? fontSrv : m_whiteSRV.Get(), GetPixelShader(widget->shaderName));
 	}
 
 	void UIRenderer::RenderGauge(const World& world, EntityId id, const ScreenLayout& layout)
@@ -986,6 +1363,8 @@ namespace Alice
 	void UIRenderer::DrawGlyphs(const std::vector<UIVertex>& verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps)
 	{
 		if (verts.empty())
+			return;
+		if (!m_context || !m_vb || !m_ib)
 			return;
 
 		ID3D11ShaderResourceView* srv = texture ? texture : m_whiteSRV.Get();
