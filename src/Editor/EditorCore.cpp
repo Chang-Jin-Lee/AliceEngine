@@ -3014,9 +3014,12 @@ namespace Alice
 			std::vector<EntityId> rootEntities = world.GetRootEntities();
 
 			// AliceUI 엔티티들도 Hierarchy에 포함 (TransformComponent 없는 경우 대비)
+			// 단, 부모가 있는 UI 위젯은 루트 목록에 다시 넣지 않는다.
 			std::set<EntityId> rootSet(rootEntities.begin(), rootEntities.end());
 			for (auto [id, widget] : world.GetComponents<UIWidgetComponent>())
 			{
+				if (world.GetParent(id) != InvalidEntityId)
+					continue;
 				if (rootSet.insert(id).second)
 					rootEntities.push_back(id);
 			}
@@ -3162,7 +3165,7 @@ namespace Alice
 					g_SceneDirty = true;
 				}
 
-				RenderUIHeirarcy();
+				// RenderUIHeirarcy(); // disabled
 				
 			}
 
@@ -8348,6 +8351,36 @@ namespace Alice
 					else
 					{
 						ALICE_LOG_ERRORF("[EditorCore] Failed to create Material file: %s", matPath.string().c_str());
+					}
+				}
+
+				// 새 UI Curve Asset 생성
+				if (ImGui::MenuItem("Create CurveAsset"))
+				{
+					const std::string baseName = "NewCurve";
+					fs::path curvePath = path / (baseName + ".uicurve");
+
+					int index = 1;
+					while (fs::exists(curvePath))
+					{
+						curvePath = path / (baseName + std::to_string(index) + ".uicurve");
+						++index;
+					}
+
+					UICurveAsset asset;
+					asset.name = curvePath.stem().string();
+					asset.keys.push_back({ 0.0f, 0.0f, 0.0f, 0.0f, UICurveInterp::Cubic, UICurveTangentMode::Auto });
+					asset.keys.push_back({ 1.0f, 1.0f, 0.0f, 0.0f, UICurveInterp::Cubic, UICurveTangentMode::Auto });
+					asset.Sort();
+					asset.RecalcAutoTangents();
+
+					if (SaveUICurveAsset(curvePath, asset))
+					{
+						ALICE_LOG_INFO("[EditorCore] Created new Curve asset: %s", curvePath.string().c_str());
+					}
+					else
+					{
+						ALICE_LOG_ERRORF("[EditorCore] Failed to create Curve asset: %s", curvePath.string().c_str());
 					}
 				}
 
