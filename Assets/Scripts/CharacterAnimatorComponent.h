@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <cstdint>
 #include <DirectXMath.h>
 
 #include "Core/IScript.h"
@@ -133,6 +134,8 @@ namespace Alice
         float m_currentCrouchTime = 0.0f;
 
         bool m_notifyRegistered = false;
+        std::uint64_t m_attackNotifyTag = 0;
+        std::uint64_t m_crouchNotifyTag = 0;
 
         float m_currentAttackTime = 0.0f;
         bool m_isAttackReversing = false;

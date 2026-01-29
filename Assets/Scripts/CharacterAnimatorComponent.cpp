@@ -85,6 +85,13 @@ namespace Alice
         auto* anim = go.GetComponent<AdvancedAnimationComponent>();
         if (!anim) anim = &go.AddComponent<AdvancedAnimationComponent>();
 
+        if (m_attackNotifyTag == 0)
+        {
+            const std::uint64_t id = static_cast<std::uint64_t>(go.id());
+            m_attackNotifyTag = 0xA11C000000000000ull | id;
+            m_crouchNotifyTag = 0xA11C100000000000ull | id;
+        }
+
         // ------------------------------------------------------------
         // [추가] 파티클 수명 관리 (시간 지나면 삭제)
         // ------------------------------------------------------------
@@ -107,7 +114,8 @@ namespace Alice
         if (!m_notifyRegistered)
         {
             anim->AddNotify(Get_m_attackClip(), Get_m_attackHitTime(),
-                std::bind(&CharacterAnimatorComponent::OnAttackHit, this));
+                std::bind(&CharacterAnimatorComponent::OnAttackHit, this),
+                m_attackNotifyTag);
             m_notifyRegistered = true;
         }
 
@@ -171,8 +179,10 @@ namespace Alice
         {
             if (m_state == CharState::Standing) {
                 m_state = CharState::Crouching; m_currentCrouchTime = 0.0f; m_isStretchedMode = useStretch;
-                anim->notifies.clear();
-                anim->AddNotify(Get_m_crouchClip(), 0.5f, std::bind(&CharacterAnimatorComponent::OnCrouchHalfway, this));
+                anim->RemoveNotifiesByTag(m_crouchNotifyTag);
+                anim->AddNotify(Get_m_crouchClip(), 0.5f,
+                    std::bind(&CharacterAnimatorComponent::OnCrouchHalfway, this),
+                    m_crouchNotifyTag);
             }
             else if (m_state == CharState::Crouched) {
                 m_state = CharState::StandingUp; m_currentCrouchTime = Get_m_crouchDuration(); m_isStretchedMode = useStretch;

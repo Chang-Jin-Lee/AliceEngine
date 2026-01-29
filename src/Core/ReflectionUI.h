@@ -508,6 +508,15 @@ namespace Alice
                     // 노말맵 강도 조절: 0.0f ~ 5.0f 범위
                     event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 5.0f, "", world);
                 }
+                else if (propName == "toonPbrCut1" || propName == "toonPbrCut2" || propName == "toonPbrCut3" ||
+                         propName == "toonPbrLevel1" || propName == "toonPbrLevel2" || propName == "toonPbrLevel3")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
+                }
+                else if (propName == "toonPbrStrength")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
+                }
                 else
                 {
                     event = Detail::RenderProperty(prop, inst, "", world);
@@ -567,6 +576,19 @@ namespace Alice
                 // roughness, metalness는 자동으로 SliderFloat로 렌더링
                 UIEditEvent event;
                 if (propName == "roughness" || propName == "metalness")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
+                }
+                else if (propName == "normalStrength")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 5.0f, displayLabel, world);
+                }
+                else if (propName == "toonPbrCut1" || propName == "toonPbrCut2" || propName == "toonPbrCut3" ||
+                         propName == "toonPbrLevel1" || propName == "toonPbrLevel2" || propName == "toonPbrLevel3")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
+                }
+                else if (propName == "toonPbrStrength")
                 {
                     event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
                 }

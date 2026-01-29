@@ -35,6 +35,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
 #include "Components/EffectComponent.h"
 #include "Components/TrailEffectComponent.h"
 #include "Components/ComputeEffectComponent.h"

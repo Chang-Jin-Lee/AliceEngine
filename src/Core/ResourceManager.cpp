@@ -862,6 +862,8 @@ namespace Alice
         }
 
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> outSrv = nullptr;
+        Microsoft::WRL::ComPtr<ID3D11DeviceContext> ctx;
+        device->GetImmediateContext(ctx.GetAddressOf());
 
         // 1. ResourceManager의 자동 로드(암호화/경로 처리) 기능을 사용하여 바이너리 확보
         std::vector<std::uint8_t> data;
@@ -895,14 +897,27 @@ namespace Alice
         }
         else
         {
-            // WIC로 로드 시도 (PNG, JPG, BMP 등)
-            hr = DirectX::CreateWICTextureFromMemory(
+           // WIC로 로드 (PNG, JPG, BMP 등) + MipMap 생성
+           Microsoft::WRL::ComPtr<ID3D11Resource> res;
+           hr = DirectX::CreateWICTextureFromMemoryEx(
                 device,
+               ctx.Get(),
                 data.data(),
                 static_cast<size_t>(data.size()),
-                nullptr,
+               0,
+               D3D11_USAGE_DEFAULT,
+               D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
+               0,
+               D3D11_RESOURCE_MISC_GENERATE_MIPS,
+               DirectX::WIC_LOADER_DEFAULT,
+               res.GetAddressOf(),
                 outSrv.GetAddressOf()
             );
+
+           if (SUCCEEDED(hr) && ctx && outSrv)
+           {
+               ctx->GenerateMips(outSrv.Get());
+           }
         }
 
         if (FAILED(hr))
