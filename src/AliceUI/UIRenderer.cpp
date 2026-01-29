@@ -692,6 +692,10 @@ namespace Alice
 				layout.world = worldM;
 			}
 
+			// World-space UI uses Y-up; flip local Y (screen-style Y-down) without moving position.
+			const DirectX::XMMATRIX flipY = DirectX::XMMatrixScaling(1.0f, -1.0f, 1.0f);
+			layout.world = flipY * layout.world;
+
 			if (gauge)
 			{
 				RenderGauge(world, id, layout);
@@ -770,15 +774,17 @@ namespace Alice
 		layout.world = worldM;
 		layout.size = size;
 		layout.pivot = pivot;
-		layout.pivotBaked = true;
+		layout.pivotBaked = false;
 		m_screenLayouts[id] = layout;
 
+		const float originX = -pivot.x * size.x;
+		const float originY = -pivot.y * size.y;
 		// AABB (for input)
 		DirectX::XMFLOAT3 corners[4] = {
-			DirectX::XMFLOAT3(0, 0, 0),
-			DirectX::XMFLOAT3(size.x, 0, 0),
-			DirectX::XMFLOAT3(0, size.y, 0),
-			DirectX::XMFLOAT3(size.x, size.y, 0)
+			DirectX::XMFLOAT3(originX, originY, 0),
+			DirectX::XMFLOAT3(originX + size.x, originY, 0),
+			DirectX::XMFLOAT3(originX, originY + size.y, 0),
+			DirectX::XMFLOAT3(originX + size.x, originY + size.y, 0)
 		};
 
 		ScreenRect rect{};
@@ -1436,10 +1442,10 @@ namespace Alice
 
 		DirectX::XMFLOAT2 pos(
 			t.anchorMin.x * refSize.x + t.position.x,
-			t.anchorMin.y * refSize.y + t.position.y);
+			t.anchorMin.y * refSize.y - t.position.y);
 
 		const DirectX::XMVECTOR scale = DirectX::XMVectorSet(t.scale.x, t.scale.y, 1.0f, 0.0f);
-		const DirectX::XMVECTOR pivot = DirectX::XMVectorSet(outPivot.x * outSize.x, outPivot.y * outSize.y, 0.0f, 0.0f);
+		const DirectX::XMVECTOR pivot = DirectX::XMVectorZero();
 		const DirectX::XMVECTOR trans = DirectX::XMVectorSet(pos.x, pos.y, 0.0f, 1.0f);
 
 		return DirectX::XMMatrixAffineTransformation2D(scale, pivot, t.rotationRad, trans);
@@ -1447,9 +1453,11 @@ namespace Alice
 
 	DirectX::XMFLOAT2 UIRenderer::ResolvePivot(const UITransformComponent& t) const
 	{
-		if (t.useAlignment)
-			return AliceUI::AlignToPivot(t.alignH, t.alignV);
-		return t.pivot;
+		const DirectX::XMFLOAT2 pivot = t.useAlignment
+			? AliceUI::AlignToPivot(t.alignH, t.alignV)
+			: t.pivot;
+		// pivot stored as centered range [-0.5, 0.5] with +Y up, convert to normalized [0,1] with +Y down
+		return DirectX::XMFLOAT2(pivot.x + 0.5f, 0.5f - pivot.y);
 	}
 
 	ID3D11ShaderResourceView* UIRenderer::GetTexture(const std::string& path)

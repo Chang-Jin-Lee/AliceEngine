@@ -15,8 +15,8 @@ namespace Alice
 		DirectX::XMFLOAT2 position{ 0.0f, 0.0f };
 		DirectX::XMFLOAT2 size{ 100.0f, 100.0f };
 
-		// Pivot/Scale/Rotation
-		DirectX::XMFLOAT2 pivot{ 0.5f, 0.5f };
+		// Pivot/Scale/Rotation (pivot: centered range, (0,0)=center, (0.5,0.5)=right-top)
+		DirectX::XMFLOAT2 pivot{ 0.0f, 0.0f };
 		DirectX::XMFLOAT2 scale{ 1.0f, 1.0f };
 		float rotationRad{ 0.0f };
 

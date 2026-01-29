@@ -51,21 +51,22 @@ namespace Alice
 
 		inline DirectX::XMFLOAT2 AlignToPivot(UIAlignH h, UIAlignV v)
 		{
-			float px = 0.5f;
-			float py = 0.5f;
+			// centered pivot range: (-0.5,-0.5) bottom-left, (0,0) center, (0.5,0.5) top-right
+			float px = 0.0f;
+			float py = 0.0f;
 
 			switch (h)
 			{
-			case UIAlignH::Left:   px = 0.0f; break;
-			case UIAlignH::Center: px = 0.5f; break;
-			case UIAlignH::Right:  px = 1.0f; break;
+			case UIAlignH::Left:   px = -0.5f; break;
+			case UIAlignH::Center: px = 0.0f; break;
+			case UIAlignH::Right:  px = 0.5f; break;
 			}
 
 			switch (v)
 			{
-			case UIAlignV::Top:    py = 0.0f; break;
-			case UIAlignV::Center: py = 0.5f; break;
-			case UIAlignV::Bottom: py = 1.0f; break;
+			case UIAlignV::Top:    py = 0.5f; break;
+			case UIAlignV::Center: py = 0.0f; break;
+			case UIAlignV::Bottom: py = -0.5f; break;
 			}
 
 			return DirectX::XMFLOAT2(px, py);
