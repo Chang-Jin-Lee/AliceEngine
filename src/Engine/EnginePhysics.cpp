@@ -2,7 +2,7 @@
 
 namespace Alice
 {
-	void Engine::Impl::Impl::ClearWorldAndPhysics()
+	void Engine::Impl::ClearWorldAndPhysics()
 	{
 		// 월드와 물리 시스템을 함께 정리하는 안전한 진입점
 		// World::Clear()가 호출되면 OnBeforeClear 콜백이 자동으로 PhysicsSystem을 정리하므로,
@@ -13,7 +13,7 @@ namespace Alice
 		m_world.SetPhysicsWorld(nullptr);
 	}
 
-	void Engine::Impl::Impl::RefreshPhysicsForCurrentWorld()
+	void Engine::Impl::RefreshPhysicsForCurrentWorld()
 	{
 		ThreadSafety::AssertMainThread();
 		// 현재 씬의 물리 월드 설정을 갱신
