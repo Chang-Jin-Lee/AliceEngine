@@ -54,7 +54,8 @@ private: \
                 .constructor<>(); \
         } \
     }; \
-    inline static ClassReflector _reg_ctor; 
+    inline static ClassReflector _reg_ctor; \
+public:
 
 // ==================================================================================
 // 2. 변수(필드) 등록 매크로 (ALICE_PROPERTY)

@@ -31,6 +31,14 @@
 #include "Components/SocketAttachmentComponent.h"
 #include "Components/IDComponent.h"
 #include "Components/SocketComponent.h"
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
+#include "AliceUI/UIRenderer.h"
+#include <cstdint>
 #include <cstdio>
 #include <set>
 #include "Components/CameraComponent.h"
@@ -1837,6 +1845,17 @@ namespace Alice
 
 		ImGui_ImplWin32_Init(hwnd);
 		ImGui_ImplDX11_Init(d3dDevice, d3dContext);
+		ImGui_ImplDX11_CreateDeviceObjects();
+
+		if (m_aliceUIRenderer && io.FontDefault && io.Fonts)
+		{
+			const ImTextureID texId = io.Fonts->TexID.GetTexID();
+			if (texId != ImTextureID_Invalid)
+			{
+				m_aliceUIRenderer->SetDefaultImGuiFont(io.FontDefault,
+					reinterpret_cast<ID3D11ShaderResourceView*>(static_cast<uintptr_t>(texId)));
+			}
+		}
 
 		// ImGuizmo 스타일 설정
 		ImGuizmo::Style& style = ImGuizmo::GetStyle();
@@ -1849,6 +1868,25 @@ namespace Alice
 
 		m_initialized = true;
 		return true;
+	}
+
+	void EditorCore::SetAliceUIRenderer(UIRenderer* renderer)
+	{
+		m_aliceUIRenderer = renderer;
+		if (!m_initialized || !m_aliceUIRenderer)
+			return;
+
+		ImGuiIO& io = ImGui::GetIO();
+
+		if (io.FontDefault && io.Fonts)
+		{
+			const ImTextureID texId = io.Fonts->TexID.GetTexID();
+			if (texId != ImTextureID_Invalid)
+			{
+				m_aliceUIRenderer->SetDefaultImGuiFont(io.FontDefault,
+					reinterpret_cast<ID3D11ShaderResourceView*>(static_cast<uintptr_t>(texId)));
+			}
+		}
 	}
 
 	void EditorCore::Shutdown()
@@ -2207,6 +2245,65 @@ namespace Alice
                     g_SceneDirty = true;
                     ImGui::CloseCurrentPopup();
                 }
+				if (ImGui::BeginMenu("AliceUI"))
+				{
+					if (ImGui::MenuItem("Screen Image"))
+					{
+						EntityId e = CreateAliceUIImage(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Image"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Text"))
+					{
+						EntityId e = CreateAliceUIText(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Text"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Button"))
+					{
+						EntityId e = CreateAliceUIButton(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Button"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Gauge"))
+					{
+						EntityId e = CreateAliceUIGauge(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Gauge"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("World Image"))
+					{
+						EntityId e = CreateAliceUIWorldImage(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "World UI Image"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndMenu();
+				}
                 if (ImGui::MenuItem("UI_Image"))
                 {
                     CreateUIImage();
@@ -2751,8 +2848,19 @@ namespace Alice
 				if (children.empty())
 					nodeFlags |= ImGuiTreeNodeFlags_Leaf;
 
-				// 트리 노드 열기
-				bool nodeOpen = ImGui::TreeNodeEx(label.c_str(), nodeFlags);
+			const bool isAliceUI = (world.GetComponent<UIWidgetComponent>(entityId) != nullptr);
+			if (isAliceUI)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.7f, 1.0f));
+			}
+
+			// 트리 노드 열기
+			bool nodeOpen = ImGui::TreeNodeEx(label.c_str(), nodeFlags);
+
+			if (isAliceUI)
+			{
+				ImGui::PopStyleColor();
+			}
 
 				// 선택 처리 (더블클릭으로만 인스펙터 변경 - 드래그앤드롭을 위해)
 				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -2897,6 +3005,14 @@ namespace Alice
 
 			// 루트 엔티티들 가져오기
 			std::vector<EntityId> rootEntities = world.GetRootEntities();
+
+			// AliceUI 엔티티들도 Hierarchy에 포함 (TransformComponent 없는 경우 대비)
+			std::set<EntityId> rootSet(rootEntities.begin(), rootEntities.end());
+			for (auto [id, widget] : world.GetComponents<UIWidgetComponent>())
+			{
+				if (rootSet.insert(id).second)
+					rootEntities.push_back(id);
+			}
 
 			if (rootEntities.empty())
 			{
@@ -3494,6 +3610,26 @@ namespace Alice
 				ImVec2 imgMin = ImGui::GetItemRectMin();
 				ImVec2 imgMax = ImGui::GetItemRectMax();
 				ImVec2 imgSize = ImGui::GetItemRectSize();
+
+				if (m_aliceUIRenderer && m_hwnd && imgSize.x > 0.0f && imgSize.y > 0.0f && sceneWidth > 0.0f && sceneHeight > 0.0f)
+				{
+					POINT p = { static_cast<LONG>(imgMin.x), static_cast<LONG>(imgMin.y) };
+					::ScreenToClient(m_hwnd, &p);
+					m_aliceUIRenderer->SetScreenInputRect(
+						static_cast<float>(p.x),
+						static_cast<float>(p.y),
+						imgSize.x,
+						imgSize.y,
+						sceneWidth,
+						sceneHeight);
+
+					ImVec2 mousePos = ImGui::GetMousePos();
+					const float u = (mousePos.x - imgMin.x) / imgSize.x;
+					const float v = (mousePos.y - imgMin.y) / imgSize.y;
+					const float mx = u * sceneWidth;
+					const float my = v * sceneHeight;
+					m_aliceUIRenderer->SetScreenMouseOverride(mx, my);
+				}
 
 				// 프리팹 드래그앤드롭: 뷰포트 이미지 위에 드롭 타겟 추가
 				if (ImGui::BeginDragDropTarget())
@@ -4580,6 +4716,14 @@ namespace Alice
 					}
 
 					g_SceneDirty = true;
+				}
+			}
+			else
+			{
+				if (m_aliceUIRenderer)
+				{
+					m_aliceUIRenderer->ClearScreenInputRect();
+					m_aliceUIRenderer->ClearScreenMouseOverride();
 				}
 			}
 			ImGui::End();
@@ -8711,6 +8855,98 @@ namespace Alice
 		{
 			ALICE_LOG_ERRORF("[EditorCore] CreateUIImage: Failed to create UIImage");
 		}
+	}
+
+	EntityId EditorCore::CreateAliceUIRoot(World& world, std::string_view name)
+	{
+		EntityId e = world.CreateEntity();
+		world.SetEntityName(e, std::string(name));
+
+		UIWidgetComponent& widget = world.AddComponent<UIWidgetComponent>(e);
+		widget.widgetName = std::string(name);
+		widget.space = AliceUI::UISpace::Screen;
+
+		UITransformComponent& t = world.AddComponent<UITransformComponent>(e);
+		t.anchorMin = DirectX::XMFLOAT2(0.5f, 0.5f);
+		t.anchorMax = DirectX::XMFLOAT2(0.5f, 0.5f);
+		t.position = DirectX::XMFLOAT2(0.0f, 0.0f);
+		t.size = DirectX::XMFLOAT2(200.0f, 80.0f);
+		t.pivot = DirectX::XMFLOAT2(0.5f, 0.5f);
+
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIImage(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Image");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIImageComponent>(e);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIText(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Text");
+		if (e != InvalidEntityId)
+		{
+			UITextComponent& text = world.AddComponent<UITextComponent>(e);
+			text.text = "Text";
+			text.fontPath = "Resource/Fonts/NotoSansKR-Regular.ttf";
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIButton(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Button");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIButtonComponent>(e);
+			world.AddComponent<UIImageComponent>(e);
+			UITextComponent& text = world.AddComponent<UITextComponent>(e);
+			text.text = "Button";
+			text.fontPath = "Resource/Fonts/NotoSansKR-Regular.ttf";
+			UITransformComponent* t = world.GetComponent<UITransformComponent>(e);
+			if (t)
+				t->size = DirectX::XMFLOAT2(220.0f, 60.0f);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIGauge(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Gauge");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIGaugeComponent>(e);
+			UITransformComponent* t = world.GetComponent<UITransformComponent>(e);
+			if (t)
+				t->size = DirectX::XMFLOAT2(260.0f, 24.0f);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIWorldImage(World& world)
+	{
+		EntityId e = world.CreateEntity();
+		world.SetEntityName(e, "World_UI_Image");
+
+		auto& widget = world.AddComponent<UIWidgetComponent>(e);
+		widget.widgetName = "World_UI_Image";
+		widget.space = AliceUI::UISpace::World;
+		widget.billboard = true;
+
+		auto& uiTransform = world.AddComponent<UITransformComponent>(e);
+		uiTransform.size = DirectX::XMFLOAT2(0.6f, 0.6f);
+
+		world.AddComponent<UIImageComponent>(e);
+
+		TransformComponent& t = world.AddComponent<TransformComponent>(e);
+		t.position = DirectX::XMFLOAT3(0.0f, 2.0f, 0.0f);
+
+		return e;
 	}
 
 

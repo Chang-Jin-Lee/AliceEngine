@@ -26,6 +26,7 @@ namespace Alice
     class ResourceManager;
     class DebugDrawSystem;
     class TrailEffectRenderSystem;
+    class UIRenderer;
     /// 디퍼드 렌더링 시스템입니다.
     /// - G-Buffer 패스: 지오메트리 정보를 G-Buffer에 렌더링
     /// - Deferred Light 패스: G-Buffer를 읽어서 조명 계산
@@ -190,7 +191,11 @@ namespace Alice
         /// @param viewport 뷰포트 영역
         void RenderUI(UIWorldManager& uiWorld, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
+        /// AliceUI 렌더러 주입
+        void SetUIRenderer(UIRenderer* renderer) { m_uiRenderer = renderer; }
+
     private:
+        UIRenderer* m_uiRenderer{ nullptr };
 
         /// 백버퍼로 렌더 타겟을 복귀시킵니다 (ImGui 등 후처리를 위해).
         void RestoreBackBuffer();

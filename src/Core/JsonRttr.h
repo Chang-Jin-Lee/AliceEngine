@@ -98,6 +98,8 @@ namespace Alice
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
                     continue;
+                if (prop.get_metadata("BindWidget").is_valid())
+                    continue;
 
                 rttr::variant value = prop.get_value(obj);
                 if (!value.is_valid()) continue;
@@ -122,6 +124,8 @@ namespace Alice
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
                     continue;
+                if (prop.get_metadata("BindWidget").is_valid())
+                    continue;
 
                 rttr::variant value = prop.get_value(obj);
                 if (!value.is_valid()) continue;
@@ -139,6 +143,8 @@ namespace Alice
             {
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
+                    continue;
+                if (prop.get_metadata("BindWidget").is_valid())
                     continue;
 
                 const std::string key = prop.get_name().to_string();
@@ -168,6 +174,8 @@ namespace Alice
             {
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
+                    continue;
+                if (prop.get_metadata("BindWidget").is_valid())
                     continue;
 
                 const std::string key = prop.get_name().to_string();
