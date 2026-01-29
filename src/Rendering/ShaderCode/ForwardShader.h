@@ -554,17 +554,11 @@ float ToonPbrNdotL(float n)
     return ToonLevel(n);
 }
 
-float Dither4x4(float2 pos)
+float DitherThreshold(float2 pos)
 {
-    int2 p = int2(pos) & 3;
-    int idx = p.x + p.y * 4;
-    static const float bayer[16] = {
-        0.0f,  8.0f,  2.0f, 10.0f,
-        12.0f, 4.0f, 14.0f, 6.0f,
-        3.0f, 11.0f, 1.0f,  9.0f,
-        15.0f, 7.0f, 13.0f, 5.0f
-    };
-    return (bayer[idx] + 0.5f) / 16.0f;
+    // Interleaved gradient noise (per-pixel hash, less visible grid)
+    float n = 0.06711056f * pos.x + 0.00583715f * pos.y;
+    return frac(52.9829189f * frac(n));
 }
 )";
 
@@ -590,7 +584,7 @@ float4 main(PSInput input) : SV_TARGET
     float alpha = saturate(alphaTex);
     if (alpha < 1.0f)
     {
-        float threshold = Dither4x4(input.Position.xy);
+        float threshold = DitherThreshold(input.Position.xy);
         clip(alpha - threshold);
     }
     float alphaOut = 1.0f;

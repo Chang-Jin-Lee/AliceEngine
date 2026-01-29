@@ -412,17 +412,11 @@ Texture2D  g_DiffuseMap : register(t0);
 Texture2D  g_NormalMap  : register(t1);
 SamplerState g_Sam : register(s0);
 
-float Dither4x4(float2 pos)
+float DitherThreshold(float2 pos)
 {
-    int2 p = int2(pos) & 3;
-    int idx = p.x + p.y * 4;
-    static const float bayer[16] = {
-        0.0f,  8.0f,  2.0f, 10.0f,
-        12.0f, 4.0f, 14.0f, 6.0f,
-        3.0f, 11.0f, 1.0f,  9.0f,
-        15.0f, 7.0f, 13.0f, 5.0f
-    };
-    return (bayer[idx] + 0.5f) / 16.0f;
+    // Interleaved gradient noise (per-pixel hash, less visible grid)
+    float n = 0.06711056f * pos.x + 0.00583715f * pos.y;
+    return frac(52.9829189f * frac(n));
 }
 
 GBufferOut main(VertexOut pIn)
@@ -465,7 +459,7 @@ GBufferOut main(VertexOut pIn)
     float alpha = saturate(alphaTex);
     if (alpha < 1.0f)
     {
-        float threshold = Dither4x4(pIn.Position.xy);
+        float threshold = DitherThreshold(pIn.Position.xy);
         clip(alpha - threshold);
     }
     
@@ -1370,17 +1364,11 @@ struct PSIn
     float3 BitanW   : TEXCOORD4;
 };
 
-float Dither4x4(float2 pos)
+float DitherThreshold(float2 pos)
 {
-    int2 p = int2(pos) & 3;
-    int idx = p.x + p.y * 4;
-    static const float bayer[16] = {
-        0.0f,  8.0f,  2.0f, 10.0f,
-        12.0f, 4.0f, 14.0f, 6.0f,
-        3.0f, 11.0f, 1.0f,  9.0f,
-        15.0f, 7.0f, 13.0f, 5.0f
-    };
-    return (bayer[idx] + 0.5f) / 16.0f;
+    // Interleaved gradient noise (per-pixel hash, less visible grid)
+    float n = 0.06711056f * pos.x + 0.00583715f * pos.y;
+    return frac(52.9829189f * frac(n));
 }
 
 float3 LinearToSRGB(float3 linearColor)
@@ -1405,7 +1393,7 @@ float4 main(PSIn pIn) : SV_Target
     float alpha = saturate(alphaTex);
     if (alpha < 1.0f)
     {
-        float threshold = Dither4x4(pIn.Position.xy);
+        float threshold = DitherThreshold(pIn.Position.xy);
         clip(alpha - threshold);
     }
     // 거의 불투명은 디퍼드에서 처리하므로 여기서는 제외
