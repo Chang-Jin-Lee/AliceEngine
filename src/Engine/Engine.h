@@ -3,6 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <memory>
+#include <filesystem>
 #include <Core/ComponentRegistry.h>
 
 namespace Alice
@@ -70,6 +71,67 @@ namespace Alice
         /// World::Clear()와 PhysicsSystem 정리를 함께 처리하여 누락을 방지
         void ClearWorldAndPhysics();
         //===========================================
+
+        // =========================
+        // Initialize helpers
+        void InitializeMainThreadAndRegistry();
+        std::filesystem::path InitializeResolveExeDir();
+        bool InitializeConfigureResourceManagers(const std::filesystem::path& exeDir);
+        bool InitializeValidateGameDataIfNeeded();
+        void InitializeLoadPvdSettings(const std::filesystem::path& exeDir);
+        bool InitializePhysicsContext();
+        bool InitializeWindowAndInput(int nCmdShow);
+        bool InitializeRenderDevice();
+        bool InitializeEditorCoreIfNeeded();
+        void InitializeAudio();
+        bool InitializeRenderSystems();
+        bool InitializeUI();
+        bool InitializeComputeEffectSystem();
+        void InitializeCameraAndScriptHotReload();
+        bool InitializeScene(const std::filesystem::path& exeDir);
+        bool InitializePhysicsSystemAndWorldCallbacks();
+        void InitializePostLoadBindings();
+        void InitializeEnsureUIResourcesAfterSceneLoad();
+
+        // =========================
+        // Update helpers
+        void UpdateTimerAndInput(float& outDt);
+        bool UpdateShouldUpdateFromScene() const;
+        void UpdateSceneAndScript(float dt);
+        bool UpdateCommitPendingSceneChanges(float dt); // true면 "sceneChangedThisFrame"
+        void UpdateAttackDriver();
+        void UpdateEnsurePhysicsWorldIfNeeded();
+        void UpdatePhysicsBridge(float dt);
+        void UpdatePhysicsSim(float dt);
+        void UpdateAnimationAndSockets(float dt);
+        void UpdateCombat(float dt);
+        void UpdateCameraSystems(float dt);
+        void UpdateSyncPrimaryCameraFromWorld();
+        void UpdateEditorFreeCam(float dt);
+        void UpdateApplyFinalCameraLookAt();
+        void UpdateUI(float dt);
+
+        // =========================
+        // Render helpers
+        void RenderUpdateWorldTransformCache();
+        void RenderHandlePendingRenderSystemChange();
+        bool RenderValidateRenderSystems() const;
+        void RenderBeginFrame();
+        void RenderEditorUI();
+        void RenderEditorDebugBuild();
+        void RenderEnsureAnimationIfNotUpdated();
+        void RenderBuildSkinnedDrawList();
+        void RenderOnDemandSkinnedMeshLoading();
+        void RenderAudioUpdate();
+        void RenderMainPass();
+        void RenderUnbindDepthOnly();
+        void RenderComputeEffects();
+        void RenderParticleOverlayComposite();
+        void RenderDebugOverlayComposite();
+        void RenderGameModeToneMappingAndUI();
+        void RenderOverlayEffects();
+        void RenderEditorDraw();
+        void RenderEndFrame();
 
     private:
         struct Impl;
