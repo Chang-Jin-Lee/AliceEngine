@@ -4,16 +4,16 @@
 
 namespace Alice
 {
-    struct CombatHitEvent;
+	struct CombatHitEvent;
 }
 
 namespace Alice
 {
-    class World;
+	class World;
 
-    class WeaponTraceSystem
-    {
-    public:
-        void Update(World& world, float dtSec, std::vector<CombatHitEvent>* outHits);
-    };
+	class WeaponTraceSystem
+	{
+	public:
+		void Update(World& world, float dtSec, std::vector<CombatHitEvent>* outHits);
+	};
 }

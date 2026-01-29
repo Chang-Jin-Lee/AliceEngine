@@ -1,5 +1,6 @@
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/DebugDrawSystem.h"
+#include "Rendering/PostProcessSettings.h"
 
 #include <d3dcompiler.h>
 // 텍스처 로더 (vcpkg의 DirectXTK 사용)
@@ -28,6 +29,19 @@ namespace Alice
 {
     namespace
     {
+        static std::string ResolvePPVReferenceName(const World& world)
+        {
+            // 첫 번째 활성화된 PostProcessVolumeComponent의 referenceObjectName 사용
+            for (const auto& [entityId, volume] : world.GetComponents<PostProcessVolumeComponent>())
+            {
+                if (volume.useReferenceObject && !volume.referenceObjectName.empty())
+                {
+                    return volume.referenceObjectName;
+                }
+            }
+            return {};
+        }
+
         // 인스턴싱 배치 키 (재질/메시 기준)
         struct InstancedDrawKey
         {
@@ -42,7 +56,10 @@ namespace Alice
             DirectX::XMFLOAT4 color { 1.0f, 1.0f, 1.0f, 1.0f };
             float roughness = 0.5f;
             float metalness = 0.0f;
+            float ambientOcclusion = 1.0f;
             float normalStrength = 1.0f;
+            DirectX::XMFLOAT4 toonPbrCuts { 0.2f, 0.5f, 0.95f, 1.0f };
+            DirectX::XMFLOAT4 toonPbrLevels { 0.1f, 0.4f, 0.7f, 0.0f };
             int shadingMode = 0;
             int useTexture = 0;
             int enableNormalMap = 0;
@@ -66,7 +83,16 @@ namespace Alice
 
                 if (roughness != rhs.roughness) return roughness < rhs.roughness;
                 if (metalness != rhs.metalness) return metalness < rhs.metalness;
+                if (ambientOcclusion != rhs.ambientOcclusion) return ambientOcclusion < rhs.ambientOcclusion;
                 if (normalStrength != rhs.normalStrength) return normalStrength < rhs.normalStrength;
+                if (toonPbrCuts.x != rhs.toonPbrCuts.x) return toonPbrCuts.x < rhs.toonPbrCuts.x;
+                if (toonPbrCuts.y != rhs.toonPbrCuts.y) return toonPbrCuts.y < rhs.toonPbrCuts.y;
+                if (toonPbrCuts.z != rhs.toonPbrCuts.z) return toonPbrCuts.z < rhs.toonPbrCuts.z;
+                if (toonPbrCuts.w != rhs.toonPbrCuts.w) return toonPbrCuts.w < rhs.toonPbrCuts.w;
+                if (toonPbrLevels.x != rhs.toonPbrLevels.x) return toonPbrLevels.x < rhs.toonPbrLevels.x;
+                if (toonPbrLevels.y != rhs.toonPbrLevels.y) return toonPbrLevels.y < rhs.toonPbrLevels.y;
+                if (toonPbrLevels.z != rhs.toonPbrLevels.z) return toonPbrLevels.z < rhs.toonPbrLevels.z;
+                if (toonPbrLevels.w != rhs.toonPbrLevels.w) return toonPbrLevels.w < rhs.toonPbrLevels.w;
                 if (shadingMode != rhs.shadingMode) return shadingMode < rhs.shadingMode;
                 if (useTexture != rhs.useTexture) return useTexture < rhs.useTexture;
                 if (enableNormalMap != rhs.enableNormalMap) return enableNormalMap < rhs.enableNormalMap;
@@ -92,12 +118,31 @@ namespace Alice
             if (a.color.w != b.color.w) return false;
             if (a.roughness != b.roughness) return false;
             if (a.metalness != b.metalness) return false;
+            if (a.ambientOcclusion != b.ambientOcclusion) return false;
             if (a.normalStrength != b.normalStrength) return false;
+            if (a.toonPbrCuts.x != b.toonPbrCuts.x) return false;
+            if (a.toonPbrCuts.y != b.toonPbrCuts.y) return false;
+            if (a.toonPbrCuts.z != b.toonPbrCuts.z) return false;
+            if (a.toonPbrCuts.w != b.toonPbrCuts.w) return false;
+            if (a.toonPbrLevels.x != b.toonPbrLevels.x) return false;
+            if (a.toonPbrLevels.y != b.toonPbrLevels.y) return false;
+            if (a.toonPbrLevels.z != b.toonPbrLevels.z) return false;
+            if (a.toonPbrLevels.w != b.toonPbrLevels.w) return false;
             if (a.shadingMode != b.shadingMode) return false;
             if (a.useTexture != b.useTexture) return false;
             if (a.enableNormalMap != b.enableNormalMap) return false;
             if (a.reversedWinding != b.reversedWinding) return false;
             return true;
+        }
+
+        inline DirectX::XMFLOAT4 DefaultToonPbrCuts()
+        {
+            return DirectX::XMFLOAT4(0.2f, 0.5f, 0.95f, 1.0f);
+        }
+
+        inline DirectX::XMFLOAT4 DefaultToonPbrLevels()
+        {
+            return DirectX::XMFLOAT4(0.1f, 0.4f, 0.7f, 0.0f);
         }
 
         // 인스턴스 월드 행렬(3x4) 생성용 헬퍼
@@ -637,7 +682,8 @@ namespace Alice
     bool ForwardRenderSystem::CreateSamplerState()
     {
         D3D11_SAMPLER_DESC samplerDesc = {};
-        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        samplerDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+        samplerDesc.MaxAnisotropy = 16;
         samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
         samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
         samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -648,6 +694,8 @@ namespace Alice
         if (FAILED(m_device->CreateSamplerState(&samplerDesc, m_samplerState.ReleaseAndGetAddressOf()))) return false;
 
         // Linear Sampler (톤매핑용)
+        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        samplerDesc.MaxAnisotropy = 1;
         samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
         samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
         samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -804,9 +852,13 @@ namespace Alice
                                                 const XMFLOAT4& materialColor,
                                                 const float& roughness,
                                                 const float& metalness,
+                                                float ambientOcclusion,
                                                 const bool& useTexture,
                                                 const bool& enableNormalMap,
                                                 int shadingMode,
+                                                float normalStrength,
+                                                const XMFLOAT4& toonPbrCuts,
+                                                const XMFLOAT4& toonPbrLevels,
                                                 const XMFLOAT3& outlineColor,
                                                 float outlineWidth)
     {
@@ -818,10 +870,14 @@ namespace Alice
         data.materialColor = materialColor;
         data.roughness     = roughness;
         data.metalness     = metalness;
+        data.ambientOcclusion = ambientOcclusion;
         data.useTexture    = useTexture ? 1 : 0;
         data.enableNormalMap = enableNormalMap ? 1 : 0;
         data.shadingMode   = shadingMode;
         data.pad0          = 0;
+        data.normalStrength = normalStrength;
+        data.toonPbrCuts = toonPbrCuts;
+        data.toonPbrLevels = toonPbrLevels;
         data.outlineColor  = outlineColor;
         data.outlineWidth  = outlineWidth;
 
@@ -1111,6 +1167,7 @@ namespace Alice
 
             float r = (cmd.roughness != 0.0f) ? cmd.roughness : m_lightingParameters.roughness;
             float m = (cmd.metalness != 0.0f) ? cmd.metalness : m_lightingParameters.metalness;
+            float ao = (cmd.shadingMode >= 0) ? cmd.ambientOcclusion : m_lightingParameters.ambientOcclusion;
             const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
             // 아웃라인 파라미터
             XMFLOAT3 outlineColor = cmd.outlineColor;
@@ -1166,7 +1223,10 @@ namespace Alice
                 key.color = XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
                 key.roughness = r;
                 key.metalness = m;
+                key.ambientOcclusion = ao;
                 key.normalStrength = cmd.normalStrength;
+                key.toonPbrCuts = cmd.toonPbrCuts;
+                key.toonPbrLevels = cmd.toonPbrLevels;
                 key.shadingMode = objectShadingMode;
                 key.useTexture = 1;
                 key.enableNormalMap = (norm != nullptr) ? 1 : 0;
@@ -1207,9 +1267,11 @@ namespace Alice
                         m_context->PSSetShaderResources(0, 8, srvs);
 
                         UpdatePerObjectCB(DirectX::XMMatrixIdentity(), view, proj,
-                                          batchKey.color, batchKey.roughness, batchKey.metalness,
+                                          batchKey.color, batchKey.roughness, batchKey.metalness, batchKey.ambientOcclusion,
                                           true, (batchKey.enableNormalMap != 0),
-                                          batchKey.shadingMode, XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                          batchKey.shadingMode, batchKey.normalStrength,
+                                          batchKey.toonPbrCuts, batchKey.toonPbrLevels,
+                                          XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
 
                         m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
                                                         batchKey.startIndex, batchKey.baseVertex, 0);
@@ -1268,9 +1330,11 @@ namespace Alice
                     m_context->PSSetShaderResources(0, 8, srvs);
 
                     UpdatePerObjectCB(DirectX::XMMatrixIdentity(), view, proj,
-                                      batchKey.color, batchKey.roughness, batchKey.metalness,
+                                      batchKey.color, batchKey.roughness, batchKey.metalness, batchKey.ambientOcclusion,
                                       true, (batchKey.enableNormalMap != 0),
-                                      batchKey.shadingMode, XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                      batchKey.shadingMode, batchKey.normalStrength,
+                                      batchKey.toonPbrCuts, batchKey.toonPbrLevels,
+                                      XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
 
                     m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
                                                     batchKey.startIndex, batchKey.baseVertex, 0);
@@ -1314,7 +1378,8 @@ namespace Alice
                     
                     // [Pass 1] 원본
                     UpdatePerObjectCB(cmd.world, view, proj,
-                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr), objectShadingMode, outlineColor, 0.0f);
+                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, ao, true, (m_flatNormalSRV != nullptr),
+                        objectShadingMode, cmd.normalStrength, cmd.toonPbrCuts, cmd.toonPbrLevels, outlineColor, 0.0f);
                     m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
                     
                     // [Pass 2] 아웃라인
@@ -1322,7 +1387,8 @@ namespace Alice
                     {
                         m_context->RSSetState(m_rsCullFront.Get());
                         UpdatePerObjectCB(cmd.world, view, proj,
-                            XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr), objectShadingMode, outlineColor, outlineWidth);
+                            XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, ao, true, (m_flatNormalSRV != nullptr),
+                            objectShadingMode, cmd.normalStrength, cmd.toonPbrCuts, cmd.toonPbrLevels, outlineColor, outlineWidth);
                         m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
                         // 상태 복구
                         m_context->RSSetState(isPositiveDet ? m_rasterizerStateReversed.Get() : m_rasterizerState.Get());
@@ -1340,7 +1406,8 @@ namespace Alice
                 
                 // [Pass 1] 원본
                 UpdatePerObjectCB(cmd.world, view, proj,
-                    XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr), objectShadingMode, outlineColor, 0.0f);
+                    XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, ao, true, (m_flatNormalSRV != nullptr),
+                    objectShadingMode, cmd.normalStrength, cmd.toonPbrCuts, cmd.toonPbrLevels, outlineColor, 0.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 
                 // [Pass 2] 아웃라인
@@ -1348,7 +1415,8 @@ namespace Alice
                 {
                     m_context->RSSetState(m_rsCullFront.Get());
                     UpdatePerObjectCB(cmd.world, view, proj,
-                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, true, (m_flatNormalSRV != nullptr), objectShadingMode, outlineColor, outlineWidth);
+                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, ao, true, (m_flatNormalSRV != nullptr),
+                        objectShadingMode, cmd.normalStrength, cmd.toonPbrCuts, cmd.toonPbrLevels, outlineColor, outlineWidth);
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                     // 상태 복구
                     m_context->RSSetState(isPositiveDet ? m_rasterizerStateReversed.Get() : m_rasterizerState.Get());
@@ -1391,9 +1459,11 @@ namespace Alice
                 m_context->PSSetShaderResources(0, 8, srvs);
 
                 UpdatePerObjectCB(DirectX::XMMatrixIdentity(), view, proj,
-                                  batchKey.color, batchKey.roughness, batchKey.metalness,
+                                  batchKey.color, batchKey.roughness, batchKey.metalness, batchKey.ambientOcclusion,
                                   true, (batchKey.enableNormalMap != 0),
-                                  batchKey.shadingMode, XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                  batchKey.shadingMode, batchKey.normalStrength,
+                                  batchKey.toonPbrCuts, batchKey.toonPbrLevels,
+                                  XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
 
                 m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
                                                 batchKey.startIndex, batchKey.baseVertex, 0);
@@ -1580,7 +1650,9 @@ namespace Alice
                     m_context->RSSetState(m_shadowRasterizerState.Get());
 
                 XMFLOAT4 dummy(1, 1, 1, 1);
-                UpdatePerObjectCB(worldM, lightView, lightProj, dummy, 1, 0, false, false, 0);
+                UpdatePerObjectCB(worldM, lightView, lightProj, dummy, 1, 0, 1.0f, false, false, 0,
+                                  1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
+                                  XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
                 //m_context->DrawIndexed(m_indexCount, 0, 0);
             }
 
@@ -1650,7 +1722,9 @@ namespace Alice
 
                     UpdateBonesCB(cmd.bones, cmd.boneCount);
                     XMFLOAT4 dummy(1, 1, 1, 1);
-                    UpdatePerObjectCB(cmd.world, lightView, lightProj, dummy, 1, 0, false, false, 0);
+                    UpdatePerObjectCB(cmd.world, lightView, lightProj, dummy, 1, 0, 1.0f, false, false, 0,
+                                      1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
+                                      XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 }
 
@@ -1691,7 +1765,9 @@ namespace Alice
                                     m_context->IASetIndexBuffer(currentKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
                                     XMFLOAT4 dummy(1, 1, 1, 1);
-                                    UpdatePerObjectCB(DirectX::XMMatrixIdentity(), lightView, lightProj, dummy, 1, 0, false, false, 0);
+                                    UpdatePerObjectCB(DirectX::XMMatrixIdentity(), lightView, lightProj, dummy, 1, 0, 1.0f, false, false, 0,
+                                                      1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
+                                                      XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
                                     m_context->DrawIndexedInstanced(currentKey.indexCount, (UINT)batchInstances.size(), currentKey.startIndex, currentKey.baseVertex, 0);
                                 }
 
@@ -1718,7 +1794,9 @@ namespace Alice
                             m_context->IASetIndexBuffer(currentKey.indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
                             XMFLOAT4 dummy(1, 1, 1, 1);
-                            UpdatePerObjectCB(DirectX::XMMatrixIdentity(), lightView, lightProj, dummy, 1, 0, false, false, 0);
+                            UpdatePerObjectCB(DirectX::XMMatrixIdentity(), lightView, lightProj, dummy, 1, 0, 1.0f, false, false, 0,
+                                              1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
+                                              XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
                             m_context->DrawIndexedInstanced(currentKey.indexCount, (UINT)batchInstances.size(), currentKey.startIndex, currentKey.baseVertex, 0);
                         }
 
@@ -1804,12 +1882,22 @@ namespace Alice
             XMFLOAT4 color = { m_lightingParameters.baseColor.x, m_lightingParameters.baseColor.y, m_lightingParameters.baseColor.z, 1.0f };
             float rough = m_lightingParameters.roughness;
             float metal = m_lightingParameters.metalness;
+            float ao = m_lightingParameters.ambientOcclusion;
             bool useTex = false;
+            float normalStrength = 1.0f;
+            XMFLOAT4 toonCuts = DefaultToonPbrCuts();
+            XMFLOAT4 toonLevels = DefaultToonPbrLevels();
 
             const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id);
             if (mat) {
                 color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
                 rough = mat->roughness; metal = mat->metalness;
+                if (mat->shadingMode >= 0)
+                    ao = mat->ambientOcclusion;
+                normalStrength = mat->normalStrength;
+                toonCuts = XMFLOAT4(mat->toonPbrCut1, mat->toonPbrCut2, mat->toonPbrCut3, mat->toonPbrStrength);
+                toonLevels = XMFLOAT4(mat->toonPbrLevel1, mat->toonPbrLevel2, mat->toonPbrLevel3,
+                    mat->toonPbrBlur ? 1.0f : 0.0f);
                 useTex = !mat->albedoTexturePath.empty();
             }
             const int objectShadingMode = (mat && mat->shadingMode >= 0) ? mat->shadingMode : shadingMode;
@@ -1840,7 +1928,8 @@ namespace Alice
             bool useNormalMap = (m_normalSRV != nullptr) && useTex;
             
             // [Pass 1] 원본 물체 그리기 (아웃라인 두께 0으로 강제)
-            UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, useTex, useNormalMap, objectShadingMode, outlineColor, 0.0f);
+            UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, ao, useTex, useNormalMap,
+                              objectShadingMode, normalStrength, toonCuts, toonLevels, outlineColor, 0.0f);
             m_context->DrawIndexed(m_indexCount, 0, 0);
 
             // [Pass 2] 아웃라인 그리기 (설정된 경우만)
@@ -1849,7 +1938,8 @@ namespace Alice
                 m_context->RSSetState(m_rsCullFront.Get()); // 뒷면 그리기
                 
                 // 아웃라인 값 적용
-                UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, useTex, useNormalMap, objectShadingMode, outlineColor, outlineWidth);
+                UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, ao, useTex, useNormalMap,
+                                  objectShadingMode, normalStrength, toonCuts, toonLevels, outlineColor, outlineWidth);
                 m_context->DrawIndexed(m_indexCount, 0, 0);
                 
                 // 상태 복구
@@ -1914,6 +2004,75 @@ namespace Alice
         }
 
         // 5. 에디터 뷰포트 표시용 LDR 텍스처로 톤매핑 (ImGui::Image에서 사용)
+        // 5. Post Process Volume 블렌딩 (카메라 위치 기준)
+        {
+            // 기본 설정 생성
+            PostProcessSettings defaultSettings = PostProcessSettings::FromDefaults();
+            defaultSettings.exposure = m_postProcessParams.exposure;
+            defaultSettings.maxHDRNits = m_postProcessParams.maxHDRNits;
+            defaultSettings.saturation = DirectX::XMFLOAT3(
+                m_postProcessParams.colorGradingSaturation.x,
+                m_postProcessParams.colorGradingSaturation.y,
+                m_postProcessParams.colorGradingSaturation.z
+            );
+            defaultSettings.contrast = DirectX::XMFLOAT3(
+                m_postProcessParams.colorGradingContrast.x,
+                m_postProcessParams.colorGradingContrast.y,
+                m_postProcessParams.colorGradingContrast.z
+            );
+            defaultSettings.gamma = DirectX::XMFLOAT3(
+                m_postProcessParams.colorGradingGamma.x,
+                m_postProcessParams.colorGradingGamma.y,
+                m_postProcessParams.colorGradingGamma.z
+            );
+            defaultSettings.gain = DirectX::XMFLOAT3(
+                m_postProcessParams.colorGradingGain.x,
+                m_postProcessParams.colorGradingGain.y,
+                m_postProcessParams.colorGradingGain.z
+            );
+
+            const std::string referenceName = ResolvePPVReferenceName(world);
+            if (referenceName != m_postProcessVolumeSystem.GetReferenceObjectName())
+            {
+                m_postProcessVolumeSystem.SetReferenceObjectName(referenceName);
+            }
+
+            // Post Process Volume 블렌딩 계산
+            PostProcessSettings finalSettings = m_postProcessVolumeSystem.CalculateFinalSettings(
+                const_cast<World&>(world),  // CalculateFinalSettings는 수정하지 않으므로 안전
+                camera.GetPosition(),
+                defaultSettings
+            );
+
+            // 최종 설정을 m_postProcessParams에 적용
+            m_postProcessParams.exposure = finalSettings.exposure;
+            m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(
+                finalSettings.saturation.x,
+                finalSettings.saturation.y,
+                finalSettings.saturation.z,
+                1.0f
+            );
+            m_postProcessParams.colorGradingContrast = DirectX::XMFLOAT4(
+                finalSettings.contrast.x,
+                finalSettings.contrast.y,
+                finalSettings.contrast.z,
+                1.0f
+            );
+            m_postProcessParams.colorGradingGamma = DirectX::XMFLOAT4(
+                finalSettings.gamma.x,
+                finalSettings.gamma.y,
+                finalSettings.gamma.z,
+                1.0f
+            );
+            m_postProcessParams.colorGradingGain = DirectX::XMFLOAT4(
+                finalSettings.gain.x,
+                finalSettings.gain.y,
+                finalSettings.gain.z,
+                1.0f
+            );
+        }
+
+        // 6. 에디터 뷰포트 표시용 LDR 텍스처로 톤매핑 (ImGui::Image에서 사용)
         if (m_viewportRTV)
         {
             D3D11_VIEWPORT viewport = {};
@@ -1981,6 +2140,7 @@ namespace Alice
         {
             if (errorBlob)
             {
+                std::string errorMsg = (char*)errorBlob->GetBufferPointer();
                 ALICE_LOG_ERRORF("Tone Mapping PS (%s) compile error: %s", shaderName, (char*)errorBlob->GetBufferPointer());
             }
             return false;
@@ -2146,6 +2306,10 @@ namespace Alice
 
         PostProcessCB cbData = {};
         GetPostProcessParams(cbData.exposure, cbData.maxHDRNits);
+        cbData.colorGradingSaturation = m_postProcessParams.colorGradingSaturation;
+        cbData.colorGradingContrast = m_postProcessParams.colorGradingContrast;
+        cbData.colorGradingGamma = m_postProcessParams.colorGradingGamma;
+        cbData.colorGradingGain = m_postProcessParams.colorGradingGain;
 
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (SUCCEEDED(m_context->Map(m_cbPostProcess.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
@@ -2192,11 +2356,89 @@ namespace Alice
         // 사용자가 설정한 값이 있으면 사용, 없으면 모니터 최대 밝기 사용
         outMaxHDRNits = (m_postProcessParams.maxHDRNits > 0.0f) ? m_postProcessParams.maxHDRNits : maxNits;
     }
+    
+    void ForwardRenderSystem::GetPostProcessParams(float& outExposure, float& outMaxHDRNits, float& outSaturation, float& outContrast, float& outGamma) const
+    {
+        GetPostProcessParams(outExposure, outMaxHDRNits);
+        // Vector4의 첫 번째 채널(R)을 반환 (하위 호환성)
+        outSaturation = m_postProcessParams.colorGradingSaturation.x;
+        outContrast = m_postProcessParams.colorGradingContrast.x;
+        outGamma = m_postProcessParams.colorGradingGamma.x;
+    }
 
     void ForwardRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits)
     {
         m_postProcessParams.exposure = exposure;
         m_postProcessParams.maxHDRNits = maxHDRNits;
+        // Color Grading은 기본값 유지 (하위 호환성)
+    }
+    
+    void ForwardRenderSystem::SetPostProcessParams(float exposure, float maxHDRNits, float saturation, float contrast, float gamma)
+    {
+        m_postProcessParams.exposure = exposure;
+        m_postProcessParams.maxHDRNits = maxHDRNits;
+        // Color Grading 파라미터 클램프 및 설정 (float을 Vector4로 확장)
+        float satClamped = std::clamp(saturation, ColorGradingLimits::SaturationMin, ColorGradingLimits::SaturationMax);
+        float contClamped = std::clamp(contrast, ColorGradingLimits::ContrastMin, ColorGradingLimits::ContrastMax);
+        float gamClamped = std::clamp(gamma, ColorGradingLimits::GammaMin, ColorGradingLimits::GammaMax);
+        m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(satClamped, satClamped, satClamped, 1.0f);
+        m_postProcessParams.colorGradingContrast = DirectX::XMFLOAT4(contClamped, contClamped, contClamped, 1.0f);
+        m_postProcessParams.colorGradingGamma = DirectX::XMFLOAT4(gamClamped, gamClamped, gamClamped, 1.0f);
+        // Gain은 기본값 유지 (하위 호환성)
+        m_postProcessParams.colorGradingGain = DirectX::XMFLOAT4(
+            ColorGradingLimits::GainDefault, 
+            ColorGradingLimits::GainDefault, 
+            ColorGradingLimits::GainDefault, 
+            1.0f
+        );
+    }
+
+    void ForwardRenderSystem::ApplyColorGrading(const DirectX::XMFLOAT4& saturation, const DirectX::XMFLOAT4& contrast, const DirectX::XMFLOAT4& gamma, const DirectX::XMFLOAT4& gain)
+    {
+        // Color Grading 파라미터만 설정 (Exposure와 MaxHDRNits는 유지)
+        // 각 채널별로 클램프 적용
+        m_postProcessParams.colorGradingSaturation = DirectX::XMFLOAT4(
+            std::clamp(saturation.x, ColorGradingLimits::SaturationMin, ColorGradingLimits::SaturationMax),
+            std::clamp(saturation.y, ColorGradingLimits::SaturationMin, ColorGradingLimits::SaturationMax),
+            std::clamp(saturation.z, ColorGradingLimits::SaturationMin, ColorGradingLimits::SaturationMax),
+            1.0f
+        );
+        m_postProcessParams.colorGradingContrast = DirectX::XMFLOAT4(
+            std::clamp(contrast.x, ColorGradingLimits::ContrastMin, ColorGradingLimits::ContrastMax),
+            std::clamp(contrast.y, ColorGradingLimits::ContrastMin, ColorGradingLimits::ContrastMax),
+            std::clamp(contrast.z, ColorGradingLimits::ContrastMin, ColorGradingLimits::ContrastMax),
+            1.0f
+        );
+        m_postProcessParams.colorGradingGamma = DirectX::XMFLOAT4(
+            std::clamp(gamma.x, ColorGradingLimits::GammaMin, ColorGradingLimits::GammaMax),
+            std::clamp(gamma.y, ColorGradingLimits::GammaMin, ColorGradingLimits::GammaMax),
+            std::clamp(gamma.z, ColorGradingLimits::GammaMin, ColorGradingLimits::GammaMax),
+            1.0f
+        );
+        m_postProcessParams.colorGradingGain = DirectX::XMFLOAT4(
+            std::clamp(gain.x, ColorGradingLimits::GainMin, ColorGradingLimits::GainMax),
+            std::clamp(gain.y, ColorGradingLimits::GainMin, ColorGradingLimits::GainMax),
+            std::clamp(gain.z, ColorGradingLimits::GainMin, ColorGradingLimits::GainMax),
+            1.0f
+        );
+    }
+
+    void ForwardRenderSystem::ApplyColorGrading(float saturation, float contrast, float gamma, float gain)
+    {
+        // 편의 함수: float을 Vector4로 확장
+        DirectX::XMFLOAT4 satVec(saturation, saturation, saturation, 1.0f);
+        DirectX::XMFLOAT4 contVec(contrast, contrast, contrast, 1.0f);
+        DirectX::XMFLOAT4 gamVec(gamma, gamma, gamma, 1.0f);
+        DirectX::XMFLOAT4 gainVec(gain, gain, gain, 1.0f);
+        ApplyColorGrading(satVec, contVec, gamVec, gainVec);
+    }
+
+    void ForwardRenderSystem::GetColorGrading(DirectX::XMFLOAT4& outSaturation, DirectX::XMFLOAT4& outContrast, DirectX::XMFLOAT4& outGamma, DirectX::XMFLOAT4& outGain) const
+    {
+        outSaturation = m_postProcessParams.colorGradingSaturation;
+        outContrast = m_postProcessParams.colorGradingContrast;
+        outGamma = m_postProcessParams.colorGradingGamma;
+        outGain = m_postProcessParams.colorGradingGain;
     }
 
     void ForwardRenderSystem::RenderParticleOverlay(ID3D11ShaderResourceView* particleSRV, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport)
