@@ -17,32 +17,32 @@
 
 namespace Alice
 {
-    namespace
-    {
-        EntityId ResolveOwner(World& world, WeaponTraceComponent& trace, EntityId self)
-        {
-            if (trace.ownerCached != InvalidEntityId)
-            {
-                if (trace.ownerGuid == 0)
-                    return trace.ownerCached;
+	namespace
+	{
+		EntityId ResolveOwner(World& world, WeaponTraceComponent& trace, EntityId self)
+		{
+			if (trace.ownerCached != InvalidEntityId)
+			{
+				if (trace.ownerGuid == 0)
+					return trace.ownerCached;
 
-                if (const auto* idc = world.GetComponent<IDComponent>(trace.ownerCached))
-                {
-                    if (idc->guid == trace.ownerGuid)
-                        return trace.ownerCached;
-                }
-            }
+				if (const auto* idc = world.GetComponent<IDComponent>(trace.ownerCached))
+				{
+					if (idc->guid == trace.ownerGuid)
+						return trace.ownerCached;
+				}
+			}
 
-            if (trace.ownerGuid == 0)
-                return self;
+			if (trace.ownerGuid == 0)
+				return self;
 
-            EntityId resolved = world.FindEntityByGuid(trace.ownerGuid);
-            if (resolved == InvalidEntityId)
-                return InvalidEntityId;
+			EntityId resolved = world.FindEntityByGuid(trace.ownerGuid);
+			if (resolved == InvalidEntityId)
+				return InvalidEntityId;
 
-            trace.ownerCached = resolved;
-            return resolved;
-        }
+			trace.ownerCached = resolved;
+			return resolved;
+		}
 
         EntityId ResolveTraceBasis(World& world, WeaponTraceComponent& trace, EntityId self)
         {
@@ -65,121 +65,121 @@ namespace Alice
             if (resolved == InvalidEntityId)
                 return InvalidEntityId;
 
-            trace.traceBasisCached = resolved;
-            return resolved;
-        }
+			trace.traceBasisCached = resolved;
+			return resolved;
+		}
 
-        bool TryGetBasisPose(World& world, EntityId basis, DirectX::XMFLOAT3& outPos, DirectX::XMFLOAT4& outRot)
-        {
-            const DirectX::XMMATRIX worldMatrix = world.ComputeWorldMatrix(basis);
-            DirectX::XMVECTOR s, r, t;
-            if (!DirectX::XMMatrixDecompose(&s, &r, &t, worldMatrix))
-                return false;
+		bool TryGetBasisPose(World& world, EntityId basis, DirectX::XMFLOAT3& outPos, DirectX::XMFLOAT4& outRot)
+		{
+			const DirectX::XMMATRIX worldMatrix = world.ComputeWorldMatrix(basis);
+			DirectX::XMVECTOR s, r, t;
+			if (!DirectX::XMMatrixDecompose(&s, &r, &t, worldMatrix))
+				return false;
 
-            DirectX::XMStoreFloat3(&outPos, t);
-            DirectX::XMStoreFloat4(&outRot, r);
-            return true;
-        }
+			DirectX::XMStoreFloat3(&outPos, t);
+			DirectX::XMStoreFloat4(&outRot, r);
+			return true;
+		}
 
-        DirectX::XMMATRIX BuildBasisWorldMatrix(const DirectX::XMFLOAT3& pos, const DirectX::XMFLOAT4& rot)
-        {
-            using namespace DirectX;
-            const XMVECTOR q = XMLoadFloat4(&rot);
-            const XMMATRIX R = XMMatrixRotationQuaternion(q);
-            const XMMATRIX T = XMMatrixTranslation(pos.x, pos.y, pos.z);
-            return R * T;
-        }
+		DirectX::XMMATRIX BuildBasisWorldMatrix(const DirectX::XMFLOAT3& pos, const DirectX::XMFLOAT4& rot)
+		{
+			using namespace DirectX;
+			const XMVECTOR q = XMLoadFloat4(&rot);
+			const XMMATRIX R = XMMatrixRotationQuaternion(q);
+			const XMMATRIX T = XMMatrixTranslation(pos.x, pos.y, pos.z);
+			return R * T;
+		}
 
-        DirectX::XMMATRIX BuildShapeLocalMatrix(const WeaponTraceShape& shape)
-        {
-            using namespace DirectX;
-            const float rx = XMConvertToRadians(shape.localRotDeg.x);
-            const float ry = XMConvertToRadians(shape.localRotDeg.y);
-            const float rz = XMConvertToRadians(shape.localRotDeg.z);
-            const XMMATRIX R = XMMatrixRotationRollPitchYaw(rx, ry, rz);
-            const XMMATRIX T = XMMatrixTranslation(shape.localPos.x, shape.localPos.y, shape.localPos.z);
-            return R * T;
-        }
+		DirectX::XMMATRIX BuildShapeLocalMatrix(const WeaponTraceShape& shape)
+		{
+			using namespace DirectX;
+			const float rx = XMConvertToRadians(shape.localRotDeg.x);
+			const float ry = XMConvertToRadians(shape.localRotDeg.y);
+			const float rz = XMConvertToRadians(shape.localRotDeg.z);
+			const XMMATRIX R = XMMatrixRotationRollPitchYaw(rx, ry, rz);
+			const XMMATRIX T = XMMatrixTranslation(shape.localPos.x, shape.localPos.y, shape.localPos.z);
+			return R * T;
+		}
 
-        bool ComputeShapeWorldPose(const WeaponTraceShape& shape, const DirectX::XMMATRIX& basisWorld,
-            DirectX::XMFLOAT3& outCenter, DirectX::XMFLOAT4& outRot)
-        {
-            using namespace DirectX;
-            const XMMATRIX local = BuildShapeLocalMatrix(shape);
-            const XMMATRIX world = local * basisWorld;
-            XMVECTOR s, r, t;
-            if (!XMMatrixDecompose(&s, &r, &t, world))
-                return false;
+		bool ComputeShapeWorldPose(const WeaponTraceShape& shape, const DirectX::XMMATRIX& basisWorld,
+			DirectX::XMFLOAT3& outCenter, DirectX::XMFLOAT4& outRot)
+		{
+			using namespace DirectX;
+			const XMMATRIX local = BuildShapeLocalMatrix(shape);
+			const XMMATRIX world = local * basisWorld;
+			XMVECTOR s, r, t;
+			if (!XMMatrixDecompose(&s, &r, &t, world))
+				return false;
 
-            XMStoreFloat3(&outCenter, t);
-            XMStoreFloat4(&outRot, r);
-            return true;
-        }
-    }
+			XMStoreFloat3(&outCenter, t);
+			XMStoreFloat4(&outRot, r);
+			return true;
+		}
+	}
 
-    void WeaponTraceSystem::Update(World& world, float /*dtSec*/, std::vector<CombatHitEvent>* outHits)
-    {
-        auto* physics = world.GetPhysicsWorld();
-        if (!physics)
-            return;
+	void WeaponTraceSystem::Update(World& world, float /*dtSec*/, std::vector<CombatHitEvent>* outHits)
+	{
+		auto* physics = world.GetPhysicsWorld();
+		if (!physics)
+			return;
 
-        auto&& traces = world.GetComponents<WeaponTraceComponent>(); // & -> &&�� �ٲ�
-        if (traces.empty())
-            return;
+		auto&& traces = world.GetComponents<WeaponTraceComponent>(); // & -> &&�� �ٲ�
+		if (traces.empty())
+			return;
 
-        using namespace DirectX;
+		using namespace DirectX;
 
-        for (auto&& [eid, trace] : traces)
-        {
-            if (!trace.active)
-            {
-                trace.hasPrevBasis = false;
-                trace.hasPrevShapes = false;
-                trace.prevCentersWS.clear();
-                trace.prevRotsWS.clear();
-                trace.hitVictims.clear();
-                continue;
-            }
+		for (auto&& [eid, trace] : traces)
+		{
+			if (!trace.active)
+			{
+				trace.hasPrevBasis = false;
+				trace.hasPrevShapes = false;
+				trace.prevCentersWS.clear();
+				trace.prevRotsWS.clear();
+				trace.hitVictims.clear();
+				continue;
+			}
 
-            const EntityId owner = ResolveOwner(world, trace, eid);
-            const EntityId basis = ResolveTraceBasis(world, trace, eid);
-            if (owner == InvalidEntityId || basis == InvalidEntityId)
-                continue;
+			const EntityId owner = ResolveOwner(world, trace, eid);
+			const EntityId basis = ResolveTraceBasis(world, trace, eid);
+			if (owner == InvalidEntityId || basis == InvalidEntityId)
+				continue;
 
-            if (trace.lastAttackInstanceId != trace.attackInstanceId)
-            {
-                trace.hitVictims.clear();
-                trace.lastAttackInstanceId = trace.attackInstanceId;
-            }
+			if (trace.lastAttackInstanceId != trace.attackInstanceId)
+			{
+				trace.hitVictims.clear();
+				trace.lastAttackInstanceId = trace.attackInstanceId;
+			}
 
-            const size_t shapeCount = trace.shapes.size();
-            if (trace.prevCentersWS.size() != shapeCount || trace.prevRotsWS.size() != shapeCount)
-            {
-                trace.prevCentersWS.assign(shapeCount, DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f));
-                trace.prevRotsWS.assign(shapeCount, DirectX::XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
-                trace.hasPrevShapes = false;
-            }
+			const size_t shapeCount = trace.shapes.size();
+			if (trace.prevCentersWS.size() != shapeCount || trace.prevRotsWS.size() != shapeCount)
+			{
+				trace.prevCentersWS.assign(shapeCount, DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f));
+				trace.prevRotsWS.assign(shapeCount, DirectX::XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+				trace.hasPrevShapes = false;
+			}
 
-            DirectX::XMFLOAT3 currBasisPos{};
-            DirectX::XMFLOAT4 currBasisRot{};
-            if (!TryGetBasisPose(world, basis, currBasisPos, currBasisRot))
-                continue;
+			DirectX::XMFLOAT3 currBasisPos{};
+			DirectX::XMFLOAT4 currBasisRot{};
+			if (!TryGetBasisPose(world, basis, currBasisPos, currBasisRot))
+				continue;
 
-            std::vector<DirectX::XMFLOAT3> currCenters(shapeCount);
-            std::vector<DirectX::XMFLOAT4> currRots(shapeCount);
-            const DirectX::XMMATRIX currBasisWorld = BuildBasisWorldMatrix(currBasisPos, currBasisRot);
-            for (size_t i = 0; i < shapeCount; ++i)
-            {
-                if (!ComputeShapeWorldPose(trace.shapes[i], currBasisWorld, currCenters[i], currRots[i]))
-                {
-                    currCenters[i] = (trace.hasPrevShapes && i < trace.prevCentersWS.size())
-                        ? trace.prevCentersWS[i]
-                        : DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
-                    currRots[i] = (trace.hasPrevShapes && i < trace.prevRotsWS.size())
-                        ? trace.prevRotsWS[i]
-                        : DirectX::XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                }
-            }
+			std::vector<DirectX::XMFLOAT3> currCenters(shapeCount);
+			std::vector<DirectX::XMFLOAT4> currRots(shapeCount);
+			const DirectX::XMMATRIX currBasisWorld = BuildBasisWorldMatrix(currBasisPos, currBasisRot);
+			for (size_t i = 0; i < shapeCount; ++i)
+			{
+				if (!ComputeShapeWorldPose(trace.shapes[i], currBasisWorld, currCenters[i], currRots[i]))
+				{
+					currCenters[i] = (trace.hasPrevShapes && i < trace.prevCentersWS.size())
+						? trace.prevCentersWS[i]
+						: DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+					currRots[i] = (trace.hasPrevShapes && i < trace.prevRotsWS.size())
+						? trace.prevRotsWS[i]
+						: DirectX::XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+				}
+			}
 
             if (!trace.hasPrevBasis || !trace.hasPrevShapes)
             {
@@ -191,62 +191,62 @@ namespace Alice
                 trace.hasPrevShapes = true;
             }
 
-            const uint32_t targetLayerBits = (trace.targetLayerBits != 0u)
-                ? trace.targetLayerBits
-                : ((trace.teamId == 0) ? CombatPhysicsLayers::EnemyHurtboxBit : CombatPhysicsLayers::PlayerHurtboxBit);
-            const uint32_t queryLayerBits = (trace.queryLayerBits != 0u)
-                ? trace.queryLayerBits
-                : CombatPhysicsLayers::AttackQueryLayerBit(trace.teamId);
+			const uint32_t targetLayerBits = (trace.targetLayerBits != 0u)
+				? trace.targetLayerBits
+				: ((trace.teamId == 0) ? CombatPhysicsLayers::EnemyHurtboxBit : CombatPhysicsLayers::PlayerHurtboxBit);
+			const uint32_t queryLayerBits = (trace.queryLayerBits != 0u)
+				? trace.queryLayerBits
+				: CombatPhysicsLayers::AttackQueryLayerBit(trace.teamId);
 
-            SceneQueryFilter filter{};
-            filter.layerMask = targetLayerBits;
-            filter.queryMask = queryLayerBits;
-            filter.hitTriggers = true;
+			SceneQueryFilter filter{};
+			filter.layerMask = targetLayerBits;
+			filter.queryMask = queryLayerBits;
+			filter.hitTriggers = true;
 
             std::vector<SweepHit> hits;
             hits.reserve(32);
             std::vector<OverlapHit> overlaps;
             overlaps.reserve(32);
 
-            const uint32_t steps = std::max(1u, trace.subSteps);
-            const DirectX::XMVECTOR prevBasisPosV = XMLoadFloat3(&trace.prevBasisPos);
-            const DirectX::XMVECTOR currBasisPosV = XMLoadFloat3(&currBasisPos);
-            const DirectX::XMVECTOR prevBasisRotV = XMLoadFloat4(&trace.prevBasisRot);
-            const DirectX::XMVECTOR currBasisRotV = XMLoadFloat4(&currBasisRot);
+			const uint32_t steps = std::max(1u, trace.subSteps);
+			const DirectX::XMVECTOR prevBasisPosV = XMLoadFloat3(&trace.prevBasisPos);
+			const DirectX::XMVECTOR currBasisPosV = XMLoadFloat3(&currBasisPos);
+			const DirectX::XMVECTOR prevBasisRotV = XMLoadFloat4(&trace.prevBasisRot);
+			const DirectX::XMVECTOR currBasisRotV = XMLoadFloat4(&currBasisRot);
 
-            for (uint32_t step = 0; step < steps; ++step)
-            {
-                const float t0 = static_cast<float>(step) / static_cast<float>(steps);
-                const float t1 = static_cast<float>(step + 1) / static_cast<float>(steps);
+			for (uint32_t step = 0; step < steps; ++step)
+			{
+				const float t0 = static_cast<float>(step) / static_cast<float>(steps);
+				const float t1 = static_cast<float>(step + 1) / static_cast<float>(steps);
 
-                DirectX::XMFLOAT3 basisStartPos{};
-                DirectX::XMFLOAT3 basisEndPos{};
-                DirectX::XMFLOAT4 basisStartRot{};
-                DirectX::XMFLOAT4 basisEndRot{};
+				DirectX::XMFLOAT3 basisStartPos{};
+				DirectX::XMFLOAT3 basisEndPos{};
+				DirectX::XMFLOAT4 basisStartRot{};
+				DirectX::XMFLOAT4 basisEndRot{};
 
-                DirectX::XMStoreFloat3(&basisStartPos, DirectX::XMVectorLerp(prevBasisPosV, currBasisPosV, t0));
-                DirectX::XMStoreFloat3(&basisEndPos, DirectX::XMVectorLerp(prevBasisPosV, currBasisPosV, t1));
-                DirectX::XMStoreFloat4(&basisStartRot, DirectX::XMQuaternionSlerp(prevBasisRotV, currBasisRotV, t0));
-                DirectX::XMStoreFloat4(&basisEndRot, DirectX::XMQuaternionSlerp(prevBasisRotV, currBasisRotV, t1));
+				DirectX::XMStoreFloat3(&basisStartPos, DirectX::XMVectorLerp(prevBasisPosV, currBasisPosV, t0));
+				DirectX::XMStoreFloat3(&basisEndPos, DirectX::XMVectorLerp(prevBasisPosV, currBasisPosV, t1));
+				DirectX::XMStoreFloat4(&basisStartRot, DirectX::XMQuaternionSlerp(prevBasisRotV, currBasisRotV, t0));
+				DirectX::XMStoreFloat4(&basisEndRot, DirectX::XMQuaternionSlerp(prevBasisRotV, currBasisRotV, t1));
 
-                const DirectX::XMMATRIX basisStartWorld = BuildBasisWorldMatrix(basisStartPos, basisStartRot);
-                const DirectX::XMMATRIX basisEndWorld = BuildBasisWorldMatrix(basisEndPos, basisEndRot);
+				const DirectX::XMMATRIX basisStartWorld = BuildBasisWorldMatrix(basisStartPos, basisStartRot);
+				const DirectX::XMMATRIX basisEndWorld = BuildBasisWorldMatrix(basisEndPos, basisEndRot);
 
-                for (size_t i = 0; i < shapeCount; ++i)
-                {
-                    const WeaponTraceShape& shape = trace.shapes[i];
-                    if (!shape.enabled)
-                        continue;
+				for (size_t i = 0; i < shapeCount; ++i)
+				{
+					const WeaponTraceShape& shape = trace.shapes[i];
+					if (!shape.enabled)
+						continue;
 
-                    DirectX::XMFLOAT3 startCenter{};
-                    DirectX::XMFLOAT4 startRot{};
-                    DirectX::XMFLOAT3 endCenter{};
-                    DirectX::XMFLOAT4 endRot{};
+					DirectX::XMFLOAT3 startCenter{};
+					DirectX::XMFLOAT4 startRot{};
+					DirectX::XMFLOAT3 endCenter{};
+					DirectX::XMFLOAT4 endRot{};
 
-                    if (!ComputeShapeWorldPose(shape, basisStartWorld, startCenter, startRot))
-                        continue;
-                    if (!ComputeShapeWorldPose(shape, basisEndWorld, endCenter, endRot))
-                        continue;
+					if (!ComputeShapeWorldPose(shape, basisStartWorld, startCenter, startRot))
+						continue;
+					if (!ComputeShapeWorldPose(shape, basisEndWorld, endCenter, endRot))
+						continue;
 
                     const char* typeName = (shape.type == WeaponTraceShapeType::Sphere)
                         ? "Sphere"
@@ -270,20 +270,20 @@ namespace Alice
                         if (hurt->teamId == trace.teamId)
                             return;
 
-                        const std::uint64_t victimGuid = (hurt->ownerGuid != 0)
-                            ? hurt->ownerGuid
-                            : static_cast<std::uint64_t>(hitEntity);
+							const std::uint64_t victimGuid = (hurt->ownerGuid != 0)
+								? hurt->ownerGuid
+								: static_cast<std::uint64_t>(hitEntity);
 
                         if (trace.hitVictims.find(victimGuid) != trace.hitVictims.end())
                             return;
 
-                        trace.hitVictims.insert(victimGuid);
+							trace.hitVictims.insert(victimGuid);
 
-                        if (outHits)
-                        {
-                            const EntityId victimOwner = (hurt->ownerGuid != 0)
-                                ? world.FindEntityByGuid(hurt->ownerGuid)
-                                : (hurt->ownerCached != InvalidEntityId ? hurt->ownerCached : hitEntity);
+							if (outHits)
+							{
+								const EntityId victimOwner = (hurt->ownerGuid != 0)
+									? world.FindEntityByGuid(hurt->ownerGuid)
+									: (hurt->ownerCached != InvalidEntityId ? hurt->ownerCached : hitEntity);
 
                             if (trace.debugDraw)
                             {
@@ -384,12 +384,12 @@ namespace Alice
                 }
             }
 
-            trace.prevBasisPos = currBasisPos;
-            trace.prevBasisRot = currBasisRot;
-            trace.prevCentersWS = currCenters;
-            trace.prevRotsWS = currRots;
-            trace.hasPrevBasis = true;
-            trace.hasPrevShapes = true;
-        }
-    }
+			trace.prevBasisPos = currBasisPos;
+			trace.prevBasisRot = currBasisRot;
+			trace.prevCentersWS = currCenters;
+			trace.prevRotsWS = currRots;
+			trace.hasPrevBasis = true;
+			trace.hasPrevShapes = true;
+		}
+	}
 }

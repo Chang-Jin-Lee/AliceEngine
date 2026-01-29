@@ -19,11 +19,13 @@
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Rendering/RenderTypes.h"
+#include "Rendering/PostProcessVolumeSystem.h"
 
 namespace Alice
 {
     class ResourceManager;
     class DebugDrawSystem;
+    class UIRenderer;
     /// 간단한 Forward 렌더 시스템입니다.
     /// - 큐브 1개를 그려서 Phong / Blinn-Phong 라이트를 확인할 수 있습니다.
     /// - World의 TransformComponent를 읽어와 월드 행렬을 구성합니다.
@@ -51,7 +53,7 @@ namespace Alice
         /// \param world        ECS 월드 (Transform 정보 조회)
         /// \param camera       카메라 (뷰/투영 행렬 및 카메라 위치)
         /// \param entity       (현재는 사용하지 않지만, 향후 특정 엔티티만 선택 렌더링용으로 예약)
-        /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong
+        /// \param shadingMode  0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon, 4: PBR, 5: ToonPBR, 6: OnlyTextureWithOutline, 7: ToonPBREditable
         /// \param enableFillLight 보조광 사용 여부
         /// \param skinnedCommands 스키닝 메시 드로우 커맨드 목록
         /// \param uiWorld      UI 월드 매니저 (2D UI 렌더링용)
@@ -91,9 +93,13 @@ namespace Alice
                                const DirectX::XMFLOAT4& materialColor,
                                const float& roughness,
                                const float& metalness,
+                               float ambientOcclusion,
                                const bool& useTexture,
                                const bool& enableNormalMap,
                                int shadingMode,
+                               float normalStrength,
+                               const DirectX::XMFLOAT4& toonPbrCuts,
+                               const DirectX::XMFLOAT4& toonPbrLevels,
                                const DirectX::XMFLOAT3& outlineColor = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
                                float outlineWidth = 0.01f);
 
@@ -181,6 +187,7 @@ namespace Alice
 
         // ==== 포스트 프로세스 파라미터 ====
         PostProcessParams m_postProcessParams;
+        PostProcessVolumeSystem m_postProcessVolumeSystem;  // Post Process Volume 시스템
 
         // ==== IBL (Image-Based Lighting) 리소스 ====
         // - Diffuse IBL: Irradiance map (간접 난반사)
@@ -315,8 +322,36 @@ namespace Alice
         /// 포스트 프로세스 파라미터 가져오기
         void GetPostProcessParams(float& outExposure, float& outMaxHDRNits) const;
         
+        /// 포스트 프로세스 파라미터 가져오기 (Color Grading 포함)
+        void GetPostProcessParams(float& outExposure, float& outMaxHDRNits, float& outSaturation, float& outContrast, float& outGamma) const;
+        
         /// 포스트 프로세스 파라미터 설정하기
         void SetPostProcessParams(float exposure, float maxHDRNits);
+        
+        /// 포스트 프로세스 파라미터 설정하기 (Color Grading 포함)
+        void SetPostProcessParams(float exposure, float maxHDRNits, float saturation, float contrast, float gamma);
+
+        /// Color Grading 파라미터만 설정하기 (Unreal Engine 스타일 - RGB 채널별 제어)
+        /// @param saturation 채도 (R,G,B 채널별, 0.0 = 흑백, 1.0 = 원본, 2.0+ = 과포화, W=1.0)
+        /// @param contrast 대비 (R,G,B 채널별, 0.0 = 회색, 1.0 = 원본, 2.0 = 고대비, W=1.0)
+        /// @param gamma 감마 보정 (R,G,B 채널별, 0.1~3.0, 1.0 = 원본, <1 = 밝게, >1 = 어둡게, W=1.0)
+        /// @param gain Multiply 스케일 (R,G,B 채널별, 0.0 = 검정, 1.0 = 원본, >1.0 = 밝게, W=1.0)
+        /// 값은 자동으로 안전 범위로 클램프됩니다.
+        void ApplyColorGrading(const DirectX::XMFLOAT4& saturation, const DirectX::XMFLOAT4& contrast, const DirectX::XMFLOAT4& gamma, const DirectX::XMFLOAT4& gain);
+        
+        /// Color Grading 파라미터만 설정하기 (편의 함수 - float을 Vector4로 확장)
+        /// @param saturation 채도 (모든 채널에 동일 적용)
+        /// @param contrast 대비 (모든 채널에 동일 적용)
+        /// @param gamma 감마 보정 (모든 채널에 동일 적용)
+        /// @param gain Multiply 스케일 (모든 채널에 동일 적용)
+        void ApplyColorGrading(float saturation, float contrast, float gamma, float gain);
+        
+        /// Color Grading 파라미터 가져오기
+        /// @param outSaturation 채도 출력 (Vector4)
+        /// @param outContrast 대비 출력 (Vector4)
+        /// @param outGamma 감마 출력 (Vector4)
+        /// @param outGain Gain 출력 (Vector4)
+        void GetColorGrading(DirectX::XMFLOAT4& outSaturation, DirectX::XMFLOAT4& outContrast, DirectX::XMFLOAT4& outGamma, DirectX::XMFLOAT4& outGain) const;
 
         /// UI 텍스처를 최종 렌더 타겟에 합성합니다.
         /// @param uiWorld UIWorldManager 참조 (UI SRV 획득용)
@@ -324,10 +359,15 @@ namespace Alice
         /// @param viewport 뷰포트 영역
         void RenderUI(UIWorldManager& uiWorld, ID3D11RenderTargetView* targetRTV, const D3D11_VIEWPORT& viewport);
 
+        /// AliceUI 렌더러 주입
+        void SetUIRenderer(UIRenderer* renderer) { m_uiRenderer = renderer; }
+
     private:
         // ==== UI 합성 리소스 ====
         Microsoft::WRL::ComPtr<ID3D11VertexShader>     m_uiQuadVS;
         Microsoft::WRL::ComPtr<ID3D11PixelShader>      m_uiCompositePS;
+
+        UIRenderer*                                    m_uiRenderer{ nullptr };
         
         bool CreateUIResources();
     };

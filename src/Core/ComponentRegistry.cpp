@@ -36,6 +36,8 @@
 #include "Components/HealthComponent.h"
 #include "Components/AttackDriverComponent.h"
 #include "Components/SocketComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
+#include "Rendering/PostProcessSettings.h"
 
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
@@ -48,11 +50,20 @@
 #include "PhysX/IPhysicsWorld.h"
 #include "Core/Material.h"
 
-// UI 컴포넌트 헤더
+// UI 컴포넌트 헤더 (레거시)
 #include "UI/UITransform.h"
 #include "UI/UI_ImageComponent.h"
 #include "UI/UI_ScriptComponent.h"
 #include "UI/IUIScript.h"
+
+// AliceUI 컴포넌트 헤더 (신규)
+#include "AliceUI/UICommon.h"
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
 
 using namespace DirectX;
 
@@ -130,13 +141,22 @@ namespace Alice
             .property("color", &MaterialComponent::color)
             .property("roughness", &MaterialComponent::roughness)
             .property("metalness", &MaterialComponent::metalness)
+            .property("ambientOcclusion", &MaterialComponent::ambientOcclusion)
             .property("shadingMode", &MaterialComponent::shadingMode)
             .property("assetPath", &MaterialComponent::assetPath)
             .property("albedoTexturePath", &MaterialComponent::albedoTexturePath)
             .property("transparent", &MaterialComponent::transparent)
             .property("normalStrength", &MaterialComponent::normalStrength)
             .property("outlineColor", &MaterialComponent::outlineColor)
-            .property("outlineWidth", &MaterialComponent::outlineWidth);
+            .property("outlineWidth", &MaterialComponent::outlineWidth)
+            .property("toonPbrCut1", &MaterialComponent::toonPbrCut1)
+            .property("toonPbrCut2", &MaterialComponent::toonPbrCut2)
+            .property("toonPbrCut3", &MaterialComponent::toonPbrCut3)
+            .property("toonPbrLevel1", &MaterialComponent::toonPbrLevel1)
+            .property("toonPbrLevel2", &MaterialComponent::toonPbrLevel2)
+            .property("toonPbrLevel3", &MaterialComponent::toonPbrLevel3)
+            .property("toonPbrStrength", &MaterialComponent::toonPbrStrength)
+            .property("toonPbrBlur", &MaterialComponent::toonPbrBlur);
 
         // === SkinnedMeshComponent 등록 ===
         // boneMatrices는 뼈 행렬을 나타내는 프로퍼티
@@ -578,6 +598,58 @@ namespace Alice
             .property("range", &RectLightComponent::range)
             .property("enabled", &RectLightComponent::enabled);
 
+        // === PostProcessVolumeComponent 등록 ===
+        rttr::registration::enumeration<PostProcessVolumeShape>("PostProcessVolumeShape")
+            (
+                rttr::value("Box", PostProcessVolumeShape::Box),
+                rttr::value("Sphere", PostProcessVolumeShape::Sphere)
+            );
+        rttr::registration::class_<PostProcessVolumeComponent>("PostProcessVolumeComponent")
+            .constructor<>()
+            .property("shape", &PostProcessVolumeComponent::GetShape, &PostProcessVolumeComponent::SetShape)
+            .property("unbound", &PostProcessVolumeComponent::GetUnbound, &PostProcessVolumeComponent::SetUnbound)
+            .property("boxSize", &PostProcessVolumeComponent::GetBoxSize, &PostProcessVolumeComponent::SetBoxSize)
+            .property("sphereRadius", &PostProcessVolumeComponent::GetSphereRadius, &PostProcessVolumeComponent::SetSphereRadius)
+            .property("blendRadius", &PostProcessVolumeComponent::GetBlendRadius, &PostProcessVolumeComponent::SetBlendRadius)
+                (rttr::metadata("Min", 0.0f))
+            .property("blendWeight", &PostProcessVolumeComponent::GetBlendWeight, &PostProcessVolumeComponent::SetBlendWeight)
+                (rttr::metadata("Min", 0.0f), rttr::metadata("Max", 1.0f))
+            .property("priority", &PostProcessVolumeComponent::GetPriority, &PostProcessVolumeComponent::SetPriority)
+            .property("referenceObjectName", &PostProcessVolumeComponent::GetReferenceObjectName, &PostProcessVolumeComponent::SetReferenceObjectName)
+            .property("useReferenceObject", &PostProcessVolumeComponent::GetUseReferenceObject, &PostProcessVolumeComponent::SetUseReferenceObject)
+            .property("settings", &PostProcessVolumeComponent::settings);
+
+        // === PostProcessSettings 등록 ===
+        rttr::registration::class_<PostProcessSettings>("PostProcessSettings")
+            .constructor<>()
+            // Exposure
+            .property("bOverride_Exposure", &PostProcessSettings::bOverride_Exposure)
+            .property("exposure", &PostProcessSettings::exposure)
+            .property("bOverride_MaxHDRNits", &PostProcessSettings::bOverride_MaxHDRNits)
+            .property("maxHDRNits", &PostProcessSettings::maxHDRNits)
+            // Color Grading
+            .property("bOverride_ColorGradingSaturation", &PostProcessSettings::bOverride_ColorGradingSaturation)
+            .property("saturation", &PostProcessSettings::saturation)
+            .property("bOverride_ColorGradingContrast", &PostProcessSettings::bOverride_ColorGradingContrast)
+            .property("contrast", &PostProcessSettings::contrast)
+            .property("bOverride_ColorGradingGamma", &PostProcessSettings::bOverride_ColorGradingGamma)
+            .property("gamma", &PostProcessSettings::gamma)
+            .property("bOverride_ColorGradingGain", &PostProcessSettings::bOverride_ColorGradingGain)
+            .property("gain", &PostProcessSettings::gain)
+            // Bloom
+            .property("bOverride_BloomThreshold", &PostProcessSettings::bOverride_BloomThreshold)
+            .property("bloomThreshold", &PostProcessSettings::bloomThreshold)
+            .property("bOverride_BloomKnee", &PostProcessSettings::bOverride_BloomKnee)
+            .property("bloomKnee", &PostProcessSettings::bloomKnee)
+            .property("bOverride_BloomIntensity", &PostProcessSettings::bOverride_BloomIntensity)
+            .property("bloomIntensity", &PostProcessSettings::bloomIntensity)
+            .property("bOverride_BloomGaussianIntensity", &PostProcessSettings::bOverride_BloomGaussianIntensity)
+            .property("bloomGaussianIntensity", &PostProcessSettings::bloomGaussianIntensity)
+            .property("bOverride_BloomRadius", &PostProcessSettings::bOverride_BloomRadius)
+            .property("bloomRadius", &PostProcessSettings::bloomRadius)
+            .property("bOverride_BloomDownsample", &PostProcessSettings::bOverride_BloomDownsample)
+            .property("bloomDownsample", &PostProcessSettings::bloomDownsample);
+
         // === ComputeEffectComponent 등록 ===
         rttr::registration::class_<ComputeEffectComponent>("ComputeEffectComponent")
             .constructor<>()
@@ -950,6 +1022,119 @@ namespace Alice
         // IUIScript 등록 (OwnerID만 저장, Owner 포인터는 저장하지 않음)
         rttr::registration::class_<IUIScript>("IUIScript")
             .property("OwnerID", &IUIScript::OwnerID);
+
+        // === AliceUI 컴포넌트/열거형 등록 ===
+        rttr::registration::enumeration<AliceUI::UISpace>("UISpace")
+            (
+                rttr::value("Screen", AliceUI::UISpace::Screen),
+                rttr::value("World", AliceUI::UISpace::World)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIVisibility>("UIVisibility")
+            (
+                rttr::value("Visible", AliceUI::UIVisibility::Visible),
+                rttr::value("Hidden", AliceUI::UIVisibility::Hidden),
+                rttr::value("Collapsed", AliceUI::UIVisibility::Collapsed)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIAlignH>("UIAlignH")
+            (
+                rttr::value("Left", AliceUI::UIAlignH::Left),
+                rttr::value("Center", AliceUI::UIAlignH::Center),
+                rttr::value("Right", AliceUI::UIAlignH::Right)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIAlignV>("UIAlignV")
+            (
+                rttr::value("Top", AliceUI::UIAlignV::Top),
+                rttr::value("Center", AliceUI::UIAlignV::Center),
+                rttr::value("Bottom", AliceUI::UIAlignV::Bottom)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIButtonState>("UIButtonState")
+            (
+                rttr::value("Normal", AliceUI::UIButtonState::Normal),
+                rttr::value("Hovered", AliceUI::UIButtonState::Hovered),
+                rttr::value("Pressed", AliceUI::UIButtonState::Pressed),
+                rttr::value("Disabled", AliceUI::UIButtonState::Disabled)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIGaugeDirection>("UIGaugeDirection")
+            (
+                rttr::value("LeftToRight", AliceUI::UIGaugeDirection::LeftToRight),
+                rttr::value("RightToLeft", AliceUI::UIGaugeDirection::RightToLeft),
+                rttr::value("BottomToTop", AliceUI::UIGaugeDirection::BottomToTop),
+                rttr::value("TopToBottom", AliceUI::UIGaugeDirection::TopToBottom)
+            );
+
+        rttr::registration::class_<UIWidgetComponent>("UIWidgetComponent")
+            .constructor<>()
+            .property("widgetName", &UIWidgetComponent::widgetName)
+            .property("space", &UIWidgetComponent::space)
+            .property("visibility", &UIWidgetComponent::visibility)
+            .property("raycastTarget", &UIWidgetComponent::raycastTarget)
+            .property("interactable", &UIWidgetComponent::interactable)
+            .property("billboard", &UIWidgetComponent::billboard)
+            .property("shaderName", &UIWidgetComponent::shaderName);
+
+        rttr::registration::class_<UITransformComponent>("UITransformComponent")
+            .constructor<>()
+            .property("anchorMin", &UITransformComponent::anchorMin)
+            .property("anchorMax", &UITransformComponent::anchorMax)
+            .property("position", &UITransformComponent::position)
+            .property("size", &UITransformComponent::size)
+            .property("pivot", &UITransformComponent::pivot)
+            .property("scale", &UITransformComponent::scale)
+            .property("rotationRad", &UITransformComponent::rotationRad)
+            .property("alignH", &UITransformComponent::alignH)
+            .property("alignV", &UITransformComponent::alignV)
+            .property("useAlignment", &UITransformComponent::useAlignment)
+            .property("sortOrder", &UITransformComponent::sortOrder);
+
+        rttr::registration::class_<UIImageComponent>("UIImageComponent")
+            .constructor<>()
+            .property("texturePath", &UIImageComponent::texturePath)
+            .property("color", &UIImageComponent::color)
+            .property("uvRect", &UIImageComponent::uvRect)
+            .property("preserveAspect", &UIImageComponent::preserveAspect);
+
+        rttr::registration::class_<UITextComponent>("UITextComponent")
+            .constructor<>()
+            .property("fontPath", &UITextComponent::fontPath)
+            .property("text", &UITextComponent::text)
+            .property("fontSize", &UITextComponent::fontSize)
+            .property("color", &UITextComponent::color)
+            .property("alignH", &UITextComponent::alignH)
+            .property("alignV", &UITextComponent::alignV)
+            .property("wrap", &UITextComponent::wrap)
+            .property("maxWidth", &UITextComponent::maxWidth)
+            .property("lineSpacing", &UITextComponent::lineSpacing);
+
+        rttr::registration::class_<UIButtonComponent>("UIButtonComponent")
+            .constructor<>()
+            .property("enabled", &UIButtonComponent::enabled)
+            .property("state", &UIButtonComponent::state)
+            .property("normalTint", &UIButtonComponent::normalTint)
+            .property("hoveredTint", &UIButtonComponent::hoveredTint)
+            .property("pressedTint", &UIButtonComponent::pressedTint)
+            .property("disabledTint", &UIButtonComponent::disabledTint)
+            .property("normalTexture", &UIButtonComponent::normalTexture)
+            .property("hoveredTexture", &UIButtonComponent::hoveredTexture)
+            .property("pressedTexture", &UIButtonComponent::pressedTexture)
+            .property("disabledTexture", &UIButtonComponent::disabledTexture);
+
+        rttr::registration::class_<UIGaugeComponent>("UIGaugeComponent")
+            .constructor<>()
+            .property("minValue", &UIGaugeComponent::minValue)
+            .property("maxValue", &UIGaugeComponent::maxValue)
+            .property("value", &UIGaugeComponent::value)
+            .property("normalized", &UIGaugeComponent::normalized)
+            .property("direction", &UIGaugeComponent::direction)
+            .property("fillTexture", &UIGaugeComponent::fillTexture)
+            .property("backgroundTexture", &UIGaugeComponent::backgroundTexture)
+            .property("fillColor", &UIGaugeComponent::fillColor)
+            .property("backgroundColor", &UIGaugeComponent::backgroundColor)
+            .property("smoothing", &UIGaugeComponent::smoothing);
     }
 
     // EditorComponentRegistry에 컴포넌트 등록
@@ -989,6 +1174,8 @@ namespace Alice
         r.Register<SpotLightComponent>("Spot Light", "Lighting");
         r.Register<RectLightComponent>("Rect Light", "Lighting");
 
+        r.Register<PostProcessVolumeComponent>("Post Process Volume", "Rendering");
+
         r.Register<ComputeEffectComponent>("Compute Effect", "VFX");
         r.Register<EffectComponent>("Effect", "VFX");
         r.Register<TrailEffectComponent>("Trail Effect", "VFX");
@@ -1009,6 +1196,14 @@ namespace Alice
         r.Register<AttackDriverComponent>("Attack Driver", "Combat");
 
         r.Register<DebugDrawBoxComponent>("Debug Draw Box", "Debug");
+
+        // AliceUI
+        r.Register<UIWidgetComponent>("UI Widget", "UI");
+        r.Register<UITransformComponent>("UI Transform", "UI");
+        r.Register<UIImageComponent>("UI Image", "UI");
+        r.Register<UITextComponent>("UI Text", "UI");
+        r.Register<UIButtonComponent>("UI Button", "UI");
+        r.Register<UIGaugeComponent>("UI Gauge", "UI");
 
         r.SortByCategoryThenName();
     }

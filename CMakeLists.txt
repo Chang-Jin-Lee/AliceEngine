@@ -145,6 +145,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
+    ${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.cpp
     
     #PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -189,6 +190,11 @@ set(ENGINE_SOURCES
 	${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.cpp
 
 	${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
+
+    # AliceUI (Shader 기반 UI)
+    ${ALICE_SRC_DIR}/AliceUI/UIFont.cpp
+    ${ALICE_SRC_DIR}/AliceUI/UIRenderer.cpp
+    ${ALICE_SRC_DIR}/AliceUI/UIShaderCode.cpp
 )
 
 set(ENGINE_HEADERS
@@ -272,6 +278,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/WeaponTraceComponent.h
     ${ALICE_SRC_DIR}/Components/HealthComponent.h
     ${ALICE_SRC_DIR}/Components/AttackDriverComponent.h
+    ${ALICE_SRC_DIR}/Components/PostProcessVolumeComponent.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
@@ -293,6 +300,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.h
     ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
+    ${ALICE_SRC_DIR}/Rendering/PostProcessSettings.h
+    ${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.h
     
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
@@ -346,6 +355,19 @@ set(ENGINE_HEADERS
 
      #UI Object
     ${ALICE_SRC_DIR}/UI/UIBase.h
+
+    # AliceUI (Shader 기반 UI)
+    ${ALICE_SRC_DIR}/AliceUI/UICommon.h
+    ${ALICE_SRC_DIR}/AliceUI/UIWidgetComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UITransformComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UIImageComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UITextComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UIButtonComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UIGaugeComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UIFont.h
+    ${ALICE_SRC_DIR}/AliceUI/UIRenderer.h
+    ${ALICE_SRC_DIR}/AliceUI/UIShaderCode.h
+    ${ALICE_SRC_DIR}/AliceUI/BindWidget.h
 
     # json
     ${ALICE_SRC_DIR}/json/json.hpp

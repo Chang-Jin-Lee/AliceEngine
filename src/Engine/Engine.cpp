@@ -38,6 +38,8 @@
 #include "Rendering/D3D11/ID3D11RenderDevice.h"
 #include "Rendering/ForwardRenderSystem.h"
 #include "Rendering/DeferredRenderSystem.h"
+
+#include "AliceUI/UIRenderer.h"
 #include "Rendering/ComputeEffectSystem.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "Editor/ViewportPicker.h"
@@ -88,7 +90,8 @@ namespace Alice
 			BlinnPhong = 2,
 			Toon = 3,
 			PBR = 4,
-			ToonPBR = 5
+			ToonPBR = 5,
+			ToonPBREditable = 7
 		};
 
 		HINSTANCE m_hInstance = nullptr;
@@ -105,6 +108,7 @@ namespace Alice
 
 		World          m_world;
 		UIWorldManager m_uiWorld;
+		UIRenderer     m_aliceUIRenderer;
 		Camera         m_camera;
 		InputSystem    m_inputSystem;
 		GameTimer      m_timer;
@@ -399,6 +403,7 @@ namespace Alice
 
 		// 3) Editor/기타가 물리를 참조하면 여기서 먼저 정리
 		pImpl->m_editorCore.Shutdown();
+		pImpl->m_aliceUIRenderer.Shutdown();
 
 		// 4) 마지막에 PhysX 컨텍스트 종료
 		pImpl->m_physics.ShutdownContext();
@@ -581,6 +586,19 @@ namespace Alice
 
 				// UI 초기화 완료 로그
 				ALICE_LOG_INFO("[Debug] UIWorldManager initialized (before scene load).");
+
+				// AliceUI 초기화 (D2D 없이 셰이더 기반)
+				if (!pImpl->m_aliceUIRenderer.Initialize(device, context, &pImpl->m_resourceManager))
+				{
+					ALICE_LOG_ERRORF("[AliceUI] UIRenderer Initialize failed.");
+				}
+				if (pImpl->m_forwardRenderSystem)
+					pImpl->m_forwardRenderSystem->SetUIRenderer(&pImpl->m_aliceUIRenderer);
+				if (pImpl->m_deferredRenderSystem)
+					pImpl->m_deferredRenderSystem->SetUIRenderer(&pImpl->m_aliceUIRenderer);
+
+				if (pImpl->m_editorMode)
+					pImpl->m_editorCore.SetAliceUIRenderer(&pImpl->m_aliceUIRenderer);
 			}
 			else
 			{
@@ -923,6 +941,8 @@ namespace Alice
 		
 		// 5. UI 업데이트
 		pImpl->m_uiWorld.Update(pImpl->m_width, pImpl->m_height);
+		pImpl->m_aliceUIRenderer.Update(pImpl->m_world, pImpl->m_inputSystem, pImpl->m_camera,
+			static_cast<float>(pImpl->m_width), static_cast<float>(pImpl->m_height));
 
 	}
 
@@ -1708,6 +1728,7 @@ namespace Alice
 					DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
 					ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
 					deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
+					deferred->RenderPostProcess(backBufferRTV, viewport);
 				}
 
 				// 파티클 오버레이 합성 (톤매핑 후)
@@ -1716,6 +1737,9 @@ namespace Alice
 				{
 					pImpl->m_forwardRenderSystem->RenderParticleOverlay(particleSRV, backBufferRTV, viewport);
 				}
+
+				// UI 렌더링: 최상단
+				pImpl->m_aliceUIRenderer.RenderScreen(pImpl->m_world, pImpl->m_camera, backBufferRTV, viewport.Width, viewport.Height);
 			}
 		}
 		else if (!pImpl->m_editorMode)
@@ -1733,24 +1757,23 @@ namespace Alice
 				{
 					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
 					// UI 렌더링: Post-processing 이후
-					pImpl->m_uiWorld.Render();  // D2D → UI 텍스처 렌더링
-					pImpl->m_forwardRenderSystem->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
+					pImpl->m_aliceUIRenderer.RenderScreen(pImpl->m_world, pImpl->m_camera, backBufferRTV, viewport.Width, viewport.Height);
 				}
 				else
 				{
 					DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
 					ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
-					if (deferred->GetBloomSettings().enabled)
-					{
-						deferred->RenderBloomPass(sceneSRV, backBufferRTV, viewport);
-					}
-					else
-					{
-						deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
-					}
+					//if (deferred->GetBloomSettings().enabled)
+					//{
+					//	deferred->RenderBloomPass(sceneSRV, backBufferRTV, viewport);
+					//}
+					//else
+					//{
+						//deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
+					deferred->RenderPostProcess(backBufferRTV, viewport);
+
 					// UI 렌더링: Post-processing 이후
-					pImpl->m_uiWorld.Render();  // D2D → UI 텍스처 렌더링
-					deferred->RenderUI(pImpl->m_uiWorld, backBufferRTV, viewport);
+					pImpl->m_aliceUIRenderer.RenderScreen(pImpl->m_world, pImpl->m_camera, backBufferRTV, viewport.Width, viewport.Height);
 				}
 			}
 		}
