@@ -348,6 +348,7 @@ namespace Alice
             if (!target) continue;
 
             const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
+            if (tr && !tr->enabled) continue;
             const DirectX::XMFLOAT3 pos = tr ? tr->position : DirectX::XMFLOAT3(0, 0, 0);
             const DirectX::XMFLOAT3 scale = tr ? tr->scale : DirectX::XMFLOAT3(1, 1, 1);
 
@@ -383,7 +384,7 @@ namespace Alice
                 continue;
 
             const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMFLOAT3 scale = tr->scale;
             scale.x = std::abs(scale.x);
@@ -436,7 +437,7 @@ namespace Alice
                 continue;
 
             const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMFLOAT3 scale = tr->scale;
             scale.x = std::abs(scale.x);

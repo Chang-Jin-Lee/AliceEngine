@@ -46,6 +46,9 @@ namespace Alice
                 if (skinned.meshAssetPath.empty())
                     continue;
 
+                if (const auto* tr = world.GetComponent<TransformComponent>(entityId); tr && !tr->enabled)
+                    continue;
+
                 auto* comp = world.GetComponent<AdvancedAnimComponent>(entityId);
                 if (!comp || !comp->enabled)
                     continue;

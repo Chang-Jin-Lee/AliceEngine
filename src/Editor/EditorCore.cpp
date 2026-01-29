@@ -524,6 +524,17 @@ namespace Alice
 				{
 					rttr::instance inst = t;
 					if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
+					if (itT->is_object() && itT->find("visible") == itT->end())
+					{
+						auto itLegacy = itT->find("renderEnabled");
+						if (itLegacy != itT->end())
+						{
+							if (itLegacy->is_boolean())
+								t.visible = itLegacy->get<bool>();
+							else if (itLegacy->is_number())
+								t.visible = (itLegacy->get<double>() != 0.0);
+						}
+					}
 				}
 
 				// Scripts
@@ -854,6 +865,7 @@ namespace Alice
 				DirectX::XMFLOAT3 rotation;
 				DirectX::XMFLOAT3 scale;
 				bool enabled;
+				bool visible;
 			};
 			TransformData oldData;
 			TransformData newData;
@@ -873,6 +885,7 @@ namespace Alice
 					transform->rotation = newData.rotation;
 					transform->scale = newData.scale;
 					transform->enabled = newData.enabled;
+					transform->visible = newData.visible;
 					world.MarkTransformDirty(entityId);
 				}
 			}
@@ -885,6 +898,7 @@ namespace Alice
 					transform->rotation = oldData.rotation;
 					transform->scale = oldData.scale;
 					transform->enabled = oldData.enabled;
+					transform->visible = oldData.visible;
 					world.MarkTransformDirty(entityId);
 				}
 			}
@@ -3797,6 +3811,7 @@ namespace Alice
 							gizmoStartTransform.rotation = transform->rotation;
 							gizmoStartTransform.scale = transform->scale;
 							gizmoStartTransform.enabled = transform->enabled;
+							gizmoStartTransform.visible = transform->visible;
 						}
 
 						if (manipulated)
@@ -4049,6 +4064,7 @@ namespace Alice
 							newTransform.rotation = transform->rotation;
 							newTransform.scale = transform->scale;
 							newTransform.enabled = transform->enabled;
+							newTransform.visible = transform->visible;
 
 							// Transform이 실제로 변경되었는지 확인 (float 비교는 epsilon 사용)
 							constexpr float kFloatEpsilon = 1e-6f;
@@ -4064,7 +4080,8 @@ namespace Alice
 								FloatNotEqual(gizmoStartTransform.scale.x, newTransform.scale.x) ||
 								FloatNotEqual(gizmoStartTransform.scale.y, newTransform.scale.y) ||
 								FloatNotEqual(gizmoStartTransform.scale.z, newTransform.scale.z) ||
-								(gizmoStartTransform.enabled != newTransform.enabled);
+								(gizmoStartTransform.enabled != newTransform.enabled) ||
+								(gizmoStartTransform.visible != newTransform.visible);
 
 							if (hasChanged)
 							{
@@ -5083,6 +5100,7 @@ namespace Alice
 					editStartTransform.rotation = transform->rotation;
 					editStartTransform.scale = transform->scale;
 					editStartTransform.enabled = transform->enabled;
+					editStartTransform.visible = transform->visible;
 					isEditing = true;
 					lastEditedEntity = _selectedEntity;
 				}
@@ -5144,6 +5162,14 @@ namespace Alice
 					anyTransformItemActivated |= ImGui::IsItemActivated();
 				}
 
+				// ---- Render Enabled
+				{
+					auto r = ReflectionUI::RenderProperty(*transform, "visible", "Visible");
+					changed |= r.changed;
+					anyTransformItemActive |= ImGui::IsItemActive();
+					anyTransformItemActivated |= ImGui::IsItemActivated();
+				}
+
 				// === 편집 시작 감지 (Transform 위젯 중 하나라도 막 활성화됐을 때)
 				if (!isEditing && anyTransformItemActivated)
 				{
@@ -5154,6 +5180,7 @@ namespace Alice
 					editStartTransform.rotation = transform->rotation;
 					editStartTransform.scale = transform->scale;
 					editStartTransform.enabled = transform->enabled;
+					editStartTransform.visible = transform->visible;
 				}
 
 				// === Transform 변경 시: 물리 텔레포트 + 월드행렬 캐시 무효화 + dirty
@@ -5177,6 +5204,7 @@ namespace Alice
 					newTransform.rotation = transform->rotation;
 					newTransform.scale = transform->scale;
 					newTransform.enabled = transform->enabled;
+					newTransform.visible = transform->visible;
 
 					// float 비교(너무 타이트하면 커맨드가 과하게 쌓임)
 					constexpr float kEps = 1e-5f;
@@ -5192,7 +5220,8 @@ namespace Alice
 						NE(editStartTransform.scale.x, newTransform.scale.x) ||
 						NE(editStartTransform.scale.y, newTransform.scale.y) ||
 						NE(editStartTransform.scale.z, newTransform.scale.z) ||
-						(editStartTransform.enabled != newTransform.enabled);
+						(editStartTransform.enabled != newTransform.enabled) ||
+						(editStartTransform.visible != newTransform.visible);
 
 					if (hasChanged)
 					{
@@ -8261,6 +8290,8 @@ namespace Alice
 						{ "position", { { "x", 0.0f }, { "y", 0.0f }, { "z", 0.0f } } },
 						{ "rotation", { { "x", 0.0f }, { "y", 0.0f }, { "z", 0.0f } } },
 						{ "scale",    { { "x", 1.0f }, { "y", 1.0f }, { "z", 1.0f } } },
+						{ "enabled", true },
+						{ "visible", true }
 					};
 					j["Scripts"] = nlohmann::json::array();
 

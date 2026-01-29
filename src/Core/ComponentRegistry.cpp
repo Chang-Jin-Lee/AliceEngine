@@ -133,7 +133,8 @@ namespace Alice
             .property("position", &TransformComponent::position)
             .property("rotation", &TransformComponent::rotation)
             .property("scale", &TransformComponent::scale)
-            .property("enabled", &TransformComponent::enabled);
+            .property("enabled", &TransformComponent::enabled)
+            .property("visible", &TransformComponent::visible);
 
         // === MaterialComponent 등록 ===
         rttr::registration::class_<MaterialComponent>("MaterialComponent")
@@ -375,6 +376,10 @@ namespace Alice
 			.property("dodgeActive", &HealthComponent::dodgeActive)
 			.property("guardActive", &HealthComponent::guardActive)
 			.property("guardDamageScale", &HealthComponent::guardDamageScale)
+			.property("groggy", &HealthComponent::groggy)
+			.property("groggyMax", &HealthComponent::groggyMax)
+			.property("groggyGainScale", &HealthComponent::groggyGainScale)
+			.property("groggyDuration", &HealthComponent::groggyDuration)
 			.property("hitThisFrame", &HealthComponent::hitThisFrame)
 			.property("guardHitThisFrame", &HealthComponent::guardHitThisFrame)
 			.property("dodgeAvoidedThisFrame", &HealthComponent::dodgeAvoidedThisFrame)

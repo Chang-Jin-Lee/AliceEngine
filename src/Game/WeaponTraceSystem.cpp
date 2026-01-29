@@ -254,7 +254,10 @@ namespace Alice
 
                     auto ProcessHit = [&](void* userData,
                                           const DirectX::XMFLOAT3& hitPosWS,
-                                          const DirectX::XMFLOAT3& hitNormalWS)
+                                          const DirectX::XMFLOAT3& hitNormalWS,
+                                          uint32_t shapeIndex,
+                                          bool hasSweepFraction,
+                                          float sweepFraction)
                     {
                         if (!userData)
                             return;
@@ -307,8 +310,11 @@ namespace Alice
                             ev.hurtboxEntity = hitEntity;
                             ev.part = hurt->part;
                             ev.attackInstanceId = trace.attackInstanceId;
+                            ev.subShapeIndex = shapeIndex;
                             ev.damage = trace.baseDamage * hurt->damageScale;
                             ev.debugLog = trace.debugDraw;
+                            ev.sweepFraction = sweepFraction;
+                            ev.hasSweepFraction = hasSweepFraction;
                             ev.hitPosWS = hitPosWS;
                             ev.hitNormalWS = hitNormalWS;
                             outHits->push_back(ev);
@@ -345,7 +351,8 @@ namespace Alice
                             const DirectX::XMFLOAT3 hitPosWS = endCenter;
                             const DirectX::XMFLOAT3 hitNormalWS{ 0.0f, 1.0f, 0.0f };
                             for (uint32_t h = 0; h < hitCount && h < overlaps.size(); ++h)
-                                ProcessHit(overlaps[h].userData, hitPosWS, hitNormalWS);
+                                ProcessHit(overlaps[h].userData, hitPosWS, hitNormalWS,
+                                    static_cast<uint32_t>(i), false, 0.0f);
                         }
                         continue;
                     }
@@ -374,12 +381,16 @@ namespace Alice
                     if (hitCount == 0)
                         continue;
 
+                    const float stepScale = 1.0f / static_cast<float>(steps);
                     for (uint32_t h = 0; h < hitCount && h < hits.size(); ++h)
                     {
                         const auto& hit = hits[h];
+                        const float localFraction = (dist > 0.0f) ? (hit.distance / dist) : 0.0f;
+                        const float sweepFraction = t0 + (std::clamp(localFraction, 0.0f, 1.0f) * stepScale);
                         ProcessHit(hit.userData,
                             DirectX::XMFLOAT3(hit.position.x, hit.position.y, hit.position.z),
-                            DirectX::XMFLOAT3(hit.normal.x, hit.normal.y, hit.normal.z));
+                            DirectX::XMFLOAT3(hit.normal.x, hit.normal.y, hit.normal.z),
+                            static_cast<uint32_t>(i), true, sweepFraction);
                     }
                 }
             }

@@ -23,6 +23,12 @@ namespace Alice
         // Guard 시 데미지 배율 (0.5 = 50% 피해)
         float guardDamageScale = 0.5f;
 
+        // Groggy (boss only)
+        float groggy = 0.0f;
+        float groggyMax = 100.0f;
+        float groggyGainScale = 1.0f; // hit damage * scale
+        float groggyDuration = 1.5f;
+
         bool alive = true;
         uint32_t teamId = 0;
 

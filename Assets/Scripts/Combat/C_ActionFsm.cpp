@@ -52,12 +52,17 @@ namespace Alice::Combat
             Enter(ActionState::Dead);
         }
 
+        if (HasEvent(events, CombatEventType::OnGroggy) && m_state != ActionState::Dead)
+        {
+            Enter(ActionState::Groggy);
+        }
+
         if (HasEvent(events, CombatEventType::OnHit) && m_state != ActionState::Dead)
         {
             Enter(ActionState::Hitstun);
         }
 
-        if (m_state != ActionState::Dead && m_state != ActionState::Hitstun)
+        if (m_state != ActionState::Dead && m_state != ActionState::Hitstun && m_state != ActionState::Groggy)
         {
             const bool hasMove = (Abs(intent.move.x) + Abs(intent.move.y)) > 0.001f;
 
@@ -130,12 +135,19 @@ namespace Alice::Combat
         flags.guardActive = sensors.guardWindowActive;
         flags.invulnActive = sensors.dodgeWindowActive || sensors.invulnActive;
         flags.parryWindowActive = false;
-        flags.canBeInterrupted = (m_state != ActionState::Dodge);
+        flags.canBeInterrupted = (m_state != ActionState::Dodge) && (m_state != ActionState::Dead) && (m_state != ActionState::Groggy);
 
         if (m_state == ActionState::Hitstun)
         {
             flags.canBeInterrupted = false;
             if (m_stateTime > 0.4f)
+                Enter(ActionState::Idle);
+        }
+
+        if (m_state == ActionState::Groggy)
+        {
+            flags.canBeInterrupted = false;
+            if (m_stateTime > sensors.groggyDuration)
                 Enter(ActionState::Idle);
         }
 

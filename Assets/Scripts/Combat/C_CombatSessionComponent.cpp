@@ -1,6 +1,7 @@
 ﻿#include "C_CombatSessionComponent.h"
 
 #include <unordered_map>
+#include <algorithm>
 #include <cmath>
 
 #include "Core/ScriptFactory.h"
@@ -75,6 +76,26 @@ namespace Alice
         return false;
     }
 
+    static bool HitSortLess(const Combat::HitEvent& a, const Combat::HitEvent& b)
+    {
+        if (a.attackInstanceId != b.attackInstanceId)
+            return a.attackInstanceId < b.attackInstanceId;
+        if (a.attackerOwner != b.attackerOwner)
+            return a.attackerOwner < b.attackerOwner;
+        if (a.victimOwner != b.victimOwner)
+            return a.victimOwner < b.victimOwner;
+
+        if (a.hasSweepFraction != b.hasSweepFraction)
+            return a.hasSweepFraction;
+        if (a.hasSweepFraction && b.hasSweepFraction && a.sweepFraction != b.sweepFraction)
+            return a.sweepFraction < b.sweepFraction;
+        if (a.subShapeIndex != b.subShapeIndex)
+            return a.subShapeIndex < b.subShapeIndex;
+        if (a.hurtboxEntity != b.hurtboxEntity)
+            return a.hurtboxEntity < b.hurtboxEntity;
+        return a.part < b.part;
+    }
+
     static void UpdateHealthHitInfo(World& world,
                                     const Combat::HitEvent& hit,
                                     const Combat::ResolveOutput& resolved,
@@ -91,12 +112,13 @@ namespace Alice
 
         const bool wasHit = HasDeferredEvent(resolved, Combat::CombatEventType::OnHit);
         const bool wasGuard = HasDeferredEvent(resolved, Combat::CombatEventType::OnGuarded);
+        const bool wasGuardBreak = HasDeferredEvent(resolved, Combat::CombatEventType::OnGuardBreak);
         const bool wasParry = HasDeferredEvent(resolved, Combat::CombatEventType::OnParried);
 
-        if (wasHit || wasGuard || wasParry)
+        if (wasHit || wasGuard || wasGuardBreak || wasParry)
             hc->hitThisFrame = true;
 
-        if (wasGuard || wasParry)
+        if (wasGuard || wasGuardBreak || wasParry)
             hc->guardHitThisFrame = true;
 
         if (wasHit)
@@ -104,7 +126,7 @@ namespace Alice
         else
             hc->lastHitDamage = 0.0f;
 
-        if (!wasHit && !wasGuard && !wasParry && victim.flags.invulnActive)
+        if (!wasHit && !wasGuard && !wasGuardBreak && !wasParry && victim.flags.invulnActive)
             hc->dodgeAvoidedThisFrame = true;
     }
 
@@ -116,7 +138,10 @@ namespace Alice
         flags.guardActive = sensors.guardWindowActive;
         flags.invulnActive = sensors.dodgeWindowActive || sensors.invulnActive;
         flags.parryWindowActive = false;
-        flags.canBeInterrupted = (state != Combat::ActionState::Dodge);
+        flags.canBeInterrupted = (state != Combat::ActionState::Dodge)
+            && (state != Combat::ActionState::Hitstun)
+            && (state != Combat::ActionState::Groggy)
+            && (state != Combat::ActionState::Dead);
         return flags;
     }
 
@@ -176,8 +201,10 @@ namespace Alice
 
         m_state->player.id = playerId;
         m_state->player.team = Combat::Team::Player;
+        m_state->player.canBeHitstunned = true;
         m_state->boss.id = bossId;
         m_state->boss.team = Combat::Team::Enemy;
+        m_state->boss.canBeHitstunned = false;
 
         m_state->fighterMap.clear();
         m_state->fighterMap[playerId] = &m_state->player;
@@ -207,7 +234,15 @@ namespace Alice
         const auto& eBoss = m_state->bus.PeekDeferred(bossId);
 
         auto outPlayer = m_state->playerFsm.Update(playerId, playerIntent, sPlayer, ePlayer, deltaTime);
-        auto outBoss = m_state->bossFsm.Update(bossId, bossIntent, sBoss, eBoss, deltaTime);
+        std::vector<Combat::CombatEvent> bossEvents;
+        bossEvents.reserve(eBoss.size());
+        for (const auto& ev : eBoss)
+        {
+            if (ev.type == Combat::CombatEventType::OnHit)
+                continue;
+            bossEvents.push_back(ev);
+        }
+        auto outBoss = m_state->bossFsm.Update(bossId, bossIntent, sBoss, bossEvents, deltaTime);
 
         m_state->player.state = outPlayer.state;
         m_state->player.flags = outPlayer.flags;
@@ -325,14 +360,37 @@ namespace Alice
 
         m_state->player.id = playerId;
         m_state->player.team = Combat::Team::Player;
+        m_state->player.canBeHitstunned = true;
         m_state->boss.id = bossId;
         m_state->boss.team = Combat::Team::Enemy;
+        m_state->boss.canBeHitstunned = false;
 
         m_state->bus.ClearFrame();
         if (world.HasFrameCombatHits())
         {
-            for (const auto& hit : world.GetFrameCombatHits())
+            std::vector<Combat::HitEvent> sortedHits = world.GetFrameCombatHits();
+            std::sort(sortedHits.begin(), sortedHits.end(), HitSortLess);
+
+            uint32_t lastAttackInstanceId = 0;
+            EntityId lastAttacker = InvalidEntityId;
+            EntityId lastVictim = InvalidEntityId;
+            bool hasLast = false;
+
+            for (const auto& hit : sortedHits)
+            {
+                const bool sameGroup = hasLast
+                    && hit.attackInstanceId == lastAttackInstanceId
+                    && hit.attackerOwner == lastAttacker
+                    && hit.victimOwner == lastVictim;
+                if (sameGroup)
+                    continue;
+
                 m_state->bus.PushHit(hit);
+                hasLast = true;
+                lastAttackInstanceId = hit.attackInstanceId;
+                lastAttacker = hit.attackerOwner;
+                lastVictim = hit.victimOwner;
+            }
         }
 
         Combat::Sensors sPlayer = m_state->player.BuildSensors(world, bossId, deltaTime);
@@ -342,6 +400,7 @@ namespace Alice
         m_state->player.flags = BuildFlagsFromSensors(sPlayer, m_state->player.state);
         m_state->boss.flags = BuildFlagsFromSensors(sBoss, m_state->boss.state);
 
+        bool bossGroggyTriggered = false;
         for (const auto& hit : m_state->bus.Hits())
         {
             Combat::FighterSnapshot attacker = (hit.attackerOwner == playerId)
@@ -358,6 +417,36 @@ namespace Alice
 
             for (const auto& ev : resolved.deferred)
                 m_state->bus.PushDeferred(ev);
+
+            if (!bossGroggyTriggered && hit.victimOwner == bossId && hit.attackerOwner == playerId)
+            {
+                if (HasDeferredEvent(resolved, Combat::CombatEventType::OnHit))
+                {
+                    if (auto* hc = world.GetComponent<HealthComponent>(bossId))
+                    {
+                        if (hc->groggyMax > 0.0f && m_state->boss.state != Combat::ActionState::Groggy)
+                        {
+                            const float gainScale = (hc->groggyGainScale > 0.0f) ? hc->groggyGainScale : 0.0f;
+                            const float gain = hit.damage * gainScale;
+                            if (gain > 0.0f)
+                                hc->groggy = std::min(hc->groggy + gain, hc->groggyMax);
+
+                            if (hc->groggy >= hc->groggyMax)
+                            {
+                                hc->groggy = 0.0f;
+                                bossGroggyTriggered = true;
+
+                                std::vector<Combat::Command> groggyImmediate;
+                                groggyImmediate.push_back({ Combat::CommandType::ForceCancelAttack, Combat::CmdForceCancelAttack{ bossId } });
+                                groggyImmediate.push_back({ Combat::CommandType::DisableTrace, Combat::CmdDisableTrace{ bossId } });
+                                m_state->apply.ApplyImmediate(world, m_state->fighterMap, m_state->bus, groggyImmediate, true);
+
+                                m_state->bus.PushDeferred({ Combat::CombatEventType::OnGroggy, bossId, hit.attackerOwner, hit.attackInstanceId, 0.0f });
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

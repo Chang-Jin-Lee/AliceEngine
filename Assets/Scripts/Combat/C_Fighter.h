@@ -21,6 +21,7 @@ namespace Alice::Combat
         float hp = 100.0f;
         float stamina = 100.0f;
         bool targetInFront = true;
+        bool canBeHitstunned = true;
     };
 
     class Fighter
@@ -35,6 +36,7 @@ namespace Alice::Combat
 
         ActionState state = ActionState::Idle;
         ActionFlags flags{};
+        bool canBeHitstunned = true;
 
         bool lastTargetInFront = true;
 

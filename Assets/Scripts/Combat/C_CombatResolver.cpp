@@ -27,18 +27,47 @@ namespace Alice::Combat
         if (victim.flags.invulnActive)
             return out;
 
-        if (victim.flags.parryWindowActive && victim.targetInFront)
+        const bool targetInFront = victim.targetInFront;
+
+        if (victim.flags.parryWindowActive && targetInFront)
         {
             out.deferred.push_back({ CombatEventType::OnParried, victim.id, attacker.id, hit.attackInstanceId, 0.0f });
+            out.immediate.push_back({ CommandType::DisableTrace, CmdDisableTrace{ attacker.id } });
+            if (attacker.flags.canBeInterrupted)
+                out.immediate.push_back({ CommandType::ForceCancelAttack, CmdForceCancelAttack{ attacker.id } });
             return out;
         }
 
-        if (victim.flags.guardActive && victim.targetInFront)
+        if (victim.flags.guardActive && targetInFront)
         {
-            out.deferred.push_back({ CombatEventType::OnGuarded, victim.id, attacker.id, hit.attackInstanceId, 0.0f });
+            const float staminaCost = (hit.damage > 0.0f) ? hit.damage : 0.0f;
+            if (staminaCost > 0.0f)
+                out.immediate.push_back({ CommandType::ConsumeStamina, CmdConsumeStamina{ victim.id, staminaCost } });
+
+            if (victim.stamina - staminaCost <= 0.0f)
+            {
+                out.deferred.push_back({ CombatEventType::OnGuardBreak, victim.id, attacker.id, hit.attackInstanceId, 0.0f });
+                out.immediate.push_back({ CommandType::ApplyDamage, CmdApplyDamage{ victim.id, hit.damage } });
+                if (victim.flags.canBeInterrupted && victim.canBeHitstunned)
+                {
+                    out.immediate.push_back({ CommandType::ForceCancelAttack, CmdForceCancelAttack{ victim.id } });
+                    out.immediate.push_back({ CommandType::DisableTrace, CmdDisableTrace{ victim.id } });
+                }
+                out.deferred.push_back({ CombatEventType::OnHit, victim.id, attacker.id, hit.attackInstanceId, hit.damage });
+            }
+            else
+            {
+                out.deferred.push_back({ CombatEventType::OnGuarded, victim.id, attacker.id, hit.attackInstanceId, 0.0f });
+            }
             return out;
         }
 
+        out.immediate.push_back({ CommandType::ApplyDamage, CmdApplyDamage{ victim.id, hit.damage } });
+        if (victim.flags.canBeInterrupted && victim.canBeHitstunned)
+        {
+            out.immediate.push_back({ CommandType::ForceCancelAttack, CmdForceCancelAttack{ victim.id } });
+            out.immediate.push_back({ CommandType::DisableTrace, CmdDisableTrace{ victim.id } });
+        }
         out.deferred.push_back({ CombatEventType::OnHit, victim.id, attacker.id, hit.attackInstanceId, hit.damage });
         return out;
     }

@@ -40,6 +40,7 @@ namespace Alice::Combat
         Dodge,
         Guard,
         Hitstun,
+        Groggy,
         Dead,
     };
 
@@ -75,11 +76,13 @@ namespace Alice::Combat
         float angleToTargetDeg = 0.0f;
         bool targetInFront = true;
 
+        // Anim/driver windows (source of truth; resolver uses flags derived from these).
         bool attackWindowActive = false;
         bool guardWindowActive = false;
         bool dodgeWindowActive = false;
         bool invulnActive = false;
 
+        float groggyDuration = 1.5f;
         float moveSpeed = 5.0f;
     };
 
@@ -91,6 +94,7 @@ namespace Alice::Combat
         OnGuarded,
         OnParried,
         OnGuardBreak,
+        OnGroggy,
         OnDeath
     };
 

@@ -147,6 +147,8 @@ namespace Alice
             // 비활성화 상태면 스킵
             if (!animComp.enabled)
                 continue;
+            if (const auto* tr = world.GetComponent<TransformComponent>(entityId); tr && !tr->enabled)
+                continue;
 
             auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId);
             if (!skinned || skinned->meshAssetPath.empty())

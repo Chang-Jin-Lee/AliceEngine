@@ -12,6 +12,7 @@ namespace Alice {
         DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
         bool enabled = true;
+        bool visible = true; // 렌더링 on/off 전용
         
         // 부모 엔티티 ID (InvalidEntityId면 부모 없음)
         EntityId parent = InvalidEntityId;

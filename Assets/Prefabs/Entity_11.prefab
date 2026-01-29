@@ -2,41 +2,29 @@
     "Collider": {
         "capsuleAlignYAxis": true,
         "capsuleHalfHeight": 0.5,
-        "capsuleRadius": 0.5,
-        "collideMask": 4294967295,
+        "capsuleRadius": 0.30000001192092896,
+        "debugDraw": true,
         "dynamicFriction": 0.5,
         "halfExtents": {
             "x": 1.0,
-            "y": 1.0,
+            "y": 0.10000000149011612,
             "z": 1.0
         },
         "ignoreLayers": 0,
-        "isTrigger": false,
+        "isTrigger": true,
         "layerBits": 1,
-        "queryMask": 4294967295,
-        "radius": 0.5,
+        "radius": 0.20000000298023224,
         "restitution": 0.0,
         "staticFriction": 0.5,
         "type": "Sphere"
-    },
-    "Material": {
-        "albedoTexturePath": "",
-        "assetPath": "",
-        "color": {
-            "x": 0.7019608020782471,
-            "y": 1.0,
-            "z": 0.7019608020782471
-        },
-        "metalness": 0.0,
-        "roughness": 0.5
     },
     "RigidBody": {
         "angularDamping": 0.05000000074505806,
         "density": 1.0,
         "enableCCD": false,
         "enableSpeculativeCCD": false,
-        "gravityEnabled": true,
-        "isKinematic": false,
+        "gravityEnabled": false,
+        "isKinematic": true,
         "linearDamping": 0.0,
         "lockFlags": "None",
         "massOverride": 0.0,
@@ -51,6 +39,7 @@
         "teleport": false
     },
     "Transform": {
+        "enabled": true,
         "position": {
             "x": 0.0,
             "y": 0.0,
@@ -67,6 +56,6 @@
             "z": 1.0
         }
     },
-    "name": "DropSphere",
+    "name": "HitBox",
     "version": 1
 }

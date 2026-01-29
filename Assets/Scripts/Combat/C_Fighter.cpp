@@ -34,6 +34,7 @@ namespace Alice::Combat
             s.guardWindowActive = hc->guardActive;
             s.dodgeWindowActive = hc->dodgeActive;
             s.invulnActive = hc->invulnRemaining > 0.0f;
+            s.groggyDuration = hc->groggyDuration;
         }
 
         if (auto* driver = world.GetComponent<AttackDriverComponent>(id))
@@ -80,6 +81,7 @@ namespace Alice::Combat
         snap.hp = hp;
         snap.stamina = stamina;
         snap.targetInFront = lastTargetInFront;
+        snap.canBeHitstunned = canBeHitstunned;
         return snap;
     }
 }

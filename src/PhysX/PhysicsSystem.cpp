@@ -2966,6 +2966,7 @@ void PhysicsSystem::SyncPhysicsToGame(const ActiveTransform& transform)
 
     auto* transformComp = m_world.GetComponent<TransformComponent>(entityId);
     if (!transformComp) return;
+    if (!transformComp->enabled) return;
 
     transformComp->position = ToXMFLOAT3(transform.position);
     DirectX::XMFLOAT3 euler = ToEulerRadians(transform.rotation);

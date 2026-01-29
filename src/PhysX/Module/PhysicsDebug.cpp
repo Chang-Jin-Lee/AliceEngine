@@ -282,7 +282,7 @@ namespace Alice
             for (const auto& [entityId, collider] : colliders)
             {
                 auto* transform = world.GetComponent<TransformComponent>(entityId);
-                if (!transform) continue;
+                if (!transform || !transform->enabled) continue;
 
                 // Scale 반영
                 XMFLOAT3 scale = transform->scale;

@@ -783,6 +783,17 @@ namespace Alice
             {
                 rttr::instance inst = t;
                 if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
+                if (itT->is_object() && itT->find("visible") == itT->end())
+                {
+                    auto itLegacy = itT->find("renderEnabled");
+                    if (itLegacy != itT->end())
+                    {
+                        if (itLegacy->is_boolean())
+                            t.visible = itLegacy->get<bool>();
+                        else if (itLegacy->is_number())
+                            t.visible = (itLegacy->get<double>() != 0.0);
+                    }
+                }
                 // scale (0,0,0) 방지: 물리/렌더에서 0 나누기 등 오류 방지
                 const float eps = 1e-6f;
                 if (t.scale.x == 0.f && t.scale.y == 0.f && t.scale.z == 0.f)

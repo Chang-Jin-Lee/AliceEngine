@@ -1111,7 +1111,7 @@ namespace Alice
 					if (id == InvalidEntityId) continue;
 
 					auto* tr = pImpl->m_world.GetComponent<TransformComponent>(id);
-					if (!tr) continue;
+					if (!tr || !tr->enabled) continue;
 
 					tr->position = { at.position.x, at.position.y, at.position.z };
 					// 회전도 동기화 (static 메서드이므로 PhysicsSystem 인스턴스 없이도 호출 가능)
