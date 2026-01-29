@@ -289,6 +289,16 @@ namespace Alice
                 scale.x = std::abs(scale.x);
                 scale.y = std::abs(scale.y);
                 scale.z = std::abs(scale.z);
+                XMFLOAT3 offset = collider.offset;
+                offset.x *= scale.x;
+                offset.y *= scale.y;
+                offset.z *= scale.z;
+                XMVECTOR pos = XMLoadFloat3(&transform->position);
+                XMVECTOR rot = EulerToQuaternion(transform->rotation);
+                XMVECTOR off = XMLoadFloat3(&offset);
+                XMVECTOR centerV = XMVectorAdd(pos, RotateVector(off, rot));
+                XMFLOAT3 center{};
+                XMStoreFloat3(&center, centerV);
 
                 // 색상 결정 (Trigger는 다른 색상)
                 XMFLOAT4 color = collider.isTrigger 
@@ -303,14 +313,14 @@ namespace Alice
                     he.x *= scale.x;
                     he.y *= scale.y;
                     he.z *= scale.z;
-                    DrawBox(debugDraw, transform->position, he, transform->rotation, color);
+                    DrawBox(debugDraw, center, he, transform->rotation, color);
                     break;
                 }
                 case ColliderType::Sphere:
                 {
                     float sMax = std::max({ scale.x, scale.y, scale.z });
                     float radius = collider.radius * sMax;
-                    DrawSphere(debugDraw, transform->position, radius, color);
+                    DrawSphere(debugDraw, center, radius, color);
                     break;
                 }
                 case ColliderType::Capsule:
@@ -328,7 +338,7 @@ namespace Alice
                         radius = collider.capsuleRadius * radial;
                         halfHeight = collider.capsuleHalfHeight * scale.x;
                     }
-                    DrawCapsule(debugDraw, transform->position, radius, halfHeight, collider.capsuleAlignYAxis, transform->rotation, color);
+                    DrawCapsule(debugDraw, center, radius, halfHeight, collider.capsuleAlignYAxis, transform->rotation, color);
                     break;
                 }
                 }

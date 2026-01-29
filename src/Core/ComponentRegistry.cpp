@@ -727,6 +727,7 @@ namespace Alice
             .constructor<>()
             .property("type", &Phy_ColliderComponent::type)
             .property("halfExtents", &Phy_ColliderComponent::halfExtents)
+            .property("offset", &Phy_ColliderComponent::offset)
             .property("radius", &Phy_ColliderComponent::radius)
             .property("capsuleRadius", &Phy_ColliderComponent::capsuleRadius)
             .property("capsuleHalfHeight", &Phy_ColliderComponent::capsuleHalfHeight)

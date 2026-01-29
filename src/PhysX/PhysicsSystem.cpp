@@ -1297,6 +1297,7 @@ void PhysicsSystem::Update(float deltaTime)
                 ColliderState state{};
                 state.type = collider.type;
                 state.halfExtents = collider.halfExtents;
+                state.offset = collider.offset;
                 state.radius = collider.radius;
                 state.capsuleRadius = collider.capsuleRadius;
                 state.capsuleHalfHeight = collider.capsuleHalfHeight;
@@ -1342,6 +1343,7 @@ void PhysicsSystem::Update(float deltaTime)
 
                 if (collider.type != last.type ||
                     !FloatEqual(collider.halfExtents.x, last.halfExtents.x) || !FloatEqual(collider.halfExtents.y, last.halfExtents.y) || !FloatEqual(collider.halfExtents.z, last.halfExtents.z) ||
+                    !Float3Equal(collider.offset, last.offset) ||
                     !FloatEqual(collider.radius, last.radius) ||
                     !FloatEqual(collider.capsuleRadius, last.capsuleRadius) ||
                     !FloatEqual(collider.capsuleHalfHeight, last.capsuleHalfHeight) ||
@@ -2117,15 +2119,46 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
 				boxDesc.isTrigger = collider->isTrigger;
 				boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-				auto bodyPtr = m_physicsWorld->CreateDynamicBox(pos, rot, rbDesc, boxDesc);
-                if (bodyPtr)
+                Vec3 localOffset = ToVec3(collider->offset);
+                localOffset.x *= scale.x;
+                localOffset.y *= scale.y;
+                localOffset.z *= scale.z;
+                const bool hasOffset = (std::abs(localOffset.x) > kFloatEpsilon) ||
+                                       (std::abs(localOffset.y) > kFloatEpsilon) ||
+                                       (std::abs(localOffset.z) > kFloatEpsilon);
+
+                if (hasOffset)
                 {
-                    ActorHandle handle(std::move(bodyPtr));
-                    IRigidBody* body = handle.GetRigidBody();
-                    
-                    rb->physicsActorHandle = body;
-                    collider->physicsActorHandle = body;
-                    m_entityToActor[entityId] = std::move(handle);
+                    auto bodyPtr = m_physicsWorld->CreateDynamicEmpty(pos, rot, rbDesc);
+                    if (bodyPtr)
+                    {
+                        ActorHandle handle(std::move(bodyPtr));
+                        IRigidBody* body = handle.GetRigidBody();
+
+                        if (!body->AddBoxShape(boxDesc, localOffset, Quat::Identity))
+                        {
+                            handle.Destroy();
+                            break;
+                        }
+
+                        body->RecomputeMass();
+                        rb->physicsActorHandle = body;
+                        collider->physicsActorHandle = body;
+                        m_entityToActor[entityId] = std::move(handle);
+                    }
+                }
+                else
+                {
+                    auto bodyPtr = m_physicsWorld->CreateDynamicBox(pos, rot, rbDesc, boxDesc);
+                    if (bodyPtr)
+                    {
+                        ActorHandle handle(std::move(bodyPtr));
+                        IRigidBody* body = handle.GetRigidBody();
+                        
+                        rb->physicsActorHandle = body;
+                        collider->physicsActorHandle = body;
+                        m_entityToActor[entityId] = std::move(handle);
+                    }
                 }
                 break;
             }
@@ -2151,15 +2184,46 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
 				sphereDesc.isTrigger = collider->isTrigger;
 				sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-				auto bodyPtr = m_physicsWorld->CreateDynamicSphere(pos, rot, rbDesc, sphereDesc);
-                if (bodyPtr)
+                Vec3 localOffset = ToVec3(collider->offset);
+                localOffset.x *= scale.x;
+                localOffset.y *= scale.y;
+                localOffset.z *= scale.z;
+                const bool hasOffset = (std::abs(localOffset.x) > kFloatEpsilon) ||
+                                       (std::abs(localOffset.y) > kFloatEpsilon) ||
+                                       (std::abs(localOffset.z) > kFloatEpsilon);
+
+                if (hasOffset)
                 {
-                    ActorHandle handle(std::move(bodyPtr));
-                    IRigidBody* body = handle.GetRigidBody();
-                    
-                    rb->physicsActorHandle = body;
-                    collider->physicsActorHandle = body;
-                    m_entityToActor[entityId] = std::move(handle);
+                    auto bodyPtr = m_physicsWorld->CreateDynamicEmpty(pos, rot, rbDesc);
+                    if (bodyPtr)
+                    {
+                        ActorHandle handle(std::move(bodyPtr));
+                        IRigidBody* body = handle.GetRigidBody();
+
+                        if (!body->AddSphereShape(sphereDesc, localOffset, Quat::Identity))
+                        {
+                            handle.Destroy();
+                            break;
+                        }
+
+                        body->RecomputeMass();
+                        rb->physicsActorHandle = body;
+                        collider->physicsActorHandle = body;
+                        m_entityToActor[entityId] = std::move(handle);
+                    }
+                }
+                else
+                {
+                    auto bodyPtr = m_physicsWorld->CreateDynamicSphere(pos, rot, rbDesc, sphereDesc);
+                    if (bodyPtr)
+                    {
+                        ActorHandle handle(std::move(bodyPtr));
+                        IRigidBody* body = handle.GetRigidBody();
+                        
+                        rb->physicsActorHandle = body;
+                        collider->physicsActorHandle = body;
+                        m_entityToActor[entityId] = std::move(handle);
+                    }
                 }
                 break;
             }
@@ -2196,15 +2260,46 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
 				capsuleDesc.isTrigger = collider->isTrigger;
 				capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-				auto bodyPtr = m_physicsWorld->CreateDynamicCapsule(pos, rot, rbDesc, capsuleDesc);
-                if (bodyPtr)
+                Vec3 localOffset = ToVec3(collider->offset);
+                localOffset.x *= scale.x;
+                localOffset.y *= scale.y;
+                localOffset.z *= scale.z;
+                const bool hasOffset = (std::abs(localOffset.x) > kFloatEpsilon) ||
+                                       (std::abs(localOffset.y) > kFloatEpsilon) ||
+                                       (std::abs(localOffset.z) > kFloatEpsilon);
+
+                if (hasOffset)
                 {
-                    ActorHandle handle(std::move(bodyPtr));
-                    IRigidBody* body = handle.GetRigidBody();
-                    
-                    rb->physicsActorHandle = body;
-                    collider->physicsActorHandle = body;
-                    m_entityToActor[entityId] = std::move(handle);
+                    auto bodyPtr = m_physicsWorld->CreateDynamicEmpty(pos, rot, rbDesc);
+                    if (bodyPtr)
+                    {
+                        ActorHandle handle(std::move(bodyPtr));
+                        IRigidBody* body = handle.GetRigidBody();
+
+                        if (!body->AddCapsuleShape(capsuleDesc, localOffset, Quat::Identity))
+                        {
+                            handle.Destroy();
+                            break;
+                        }
+
+                        body->RecomputeMass();
+                        rb->physicsActorHandle = body;
+                        collider->physicsActorHandle = body;
+                        m_entityToActor[entityId] = std::move(handle);
+                    }
+                }
+                else
+                {
+                    auto bodyPtr = m_physicsWorld->CreateDynamicCapsule(pos, rot, rbDesc, capsuleDesc);
+                    if (bodyPtr)
+                    {
+                        ActorHandle handle(std::move(bodyPtr));
+                        IRigidBody* body = handle.GetRigidBody();
+                        
+                        rb->physicsActorHandle = body;
+                        collider->physicsActorHandle = body;
+                        m_entityToActor[entityId] = std::move(handle);
+                    }
                 }
                 break;
             }
@@ -2376,14 +2471,43 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             boxDesc.isTrigger = collider->isTrigger;
             boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-            auto actorPtr = m_physicsWorld->CreateStaticBox(pos, rot, boxDesc);
-            if (actorPtr)
+            Vec3 localOffset = ToVec3(collider->offset);
+            localOffset.x *= scale.x;
+            localOffset.y *= scale.y;
+            localOffset.z *= scale.z;
+            const bool hasOffset = (std::abs(localOffset.x) > kFloatEpsilon) ||
+                                   (std::abs(localOffset.y) > kFloatEpsilon) ||
+                                   (std::abs(localOffset.z) > kFloatEpsilon);
+
+            if (hasOffset)
             {
-                ActorHandle handle(std::move(actorPtr));
-                IPhysicsActor* actor = handle.GetActor();
-                
-                collider->physicsActorHandle = actor;
-                m_entityToActor[entityId] = std::move(handle);
+                auto actorPtr = m_physicsWorld->CreateStaticEmpty(pos, rot, boxDesc.userData);
+                if (actorPtr)
+                {
+                    ActorHandle handle(std::move(actorPtr));
+                    IPhysicsActor* actor = handle.GetActor();
+
+                    if (!actor->AddBoxShape(boxDesc, localOffset, Quat::Identity))
+                    {
+                        handle.Destroy();
+                        break;
+                    }
+
+                    collider->physicsActorHandle = actor;
+                    m_entityToActor[entityId] = std::move(handle);
+                }
+            }
+            else
+            {
+                auto actorPtr = m_physicsWorld->CreateStaticBox(pos, rot, boxDesc);
+                if (actorPtr)
+                {
+                    ActorHandle handle(std::move(actorPtr));
+                    IPhysicsActor* actor = handle.GetActor();
+                    
+                    collider->physicsActorHandle = actor;
+                    m_entityToActor[entityId] = std::move(handle);
+                }
             }
             break;
         }
@@ -2405,17 +2529,46 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             }
             sphereDesc.collideMask = runtime.collideMask;
             sphereDesc.queryMask = runtime.queryMask;
-            sphereDesc.isTrigger = collider->isTrigger;
-            sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+			sphereDesc.isTrigger = collider->isTrigger;
+			sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-            auto actorPtr = m_physicsWorld->CreateStaticSphere(pos, rot, sphereDesc);
-            if (actorPtr)
+            Vec3 localOffset = ToVec3(collider->offset);
+            localOffset.x *= scale.x;
+            localOffset.y *= scale.y;
+            localOffset.z *= scale.z;
+            const bool hasOffset = (std::abs(localOffset.x) > kFloatEpsilon) ||
+                                   (std::abs(localOffset.y) > kFloatEpsilon) ||
+                                   (std::abs(localOffset.z) > kFloatEpsilon);
+
+            if (hasOffset)
             {
-                ActorHandle handle(std::move(actorPtr));
-                IPhysicsActor* actor = handle.GetActor();
-                
-                collider->physicsActorHandle = actor;
-                m_entityToActor[entityId] = std::move(handle);
+                auto actorPtr = m_physicsWorld->CreateStaticEmpty(pos, rot, sphereDesc.userData);
+                if (actorPtr)
+                {
+                    ActorHandle handle(std::move(actorPtr));
+                    IPhysicsActor* actor = handle.GetActor();
+
+                    if (!actor->AddSphereShape(sphereDesc, localOffset, Quat::Identity))
+                    {
+                        handle.Destroy();
+                        break;
+                    }
+
+                    collider->physicsActorHandle = actor;
+                    m_entityToActor[entityId] = std::move(handle);
+                }
+            }
+            else
+            {
+			    auto actorPtr = m_physicsWorld->CreateStaticSphere(pos, rot, sphereDesc);
+                if (actorPtr)
+                {
+                    ActorHandle handle(std::move(actorPtr));
+                    IPhysicsActor* actor = handle.GetActor();
+                    
+                    collider->physicsActorHandle = actor;
+                    m_entityToActor[entityId] = std::move(handle);
+                }
             }
             break;
         }
@@ -2448,17 +2601,46 @@ void PhysicsSystem::CreatePhysicsActor(EntityId entityId)
             }
             capsuleDesc.collideMask = runtime.collideMask;
             capsuleDesc.queryMask = runtime.queryMask;
-            capsuleDesc.isTrigger = collider->isTrigger;
-            capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
+			capsuleDesc.isTrigger = collider->isTrigger;
+			capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-            auto actorPtr = m_physicsWorld->CreateStaticCapsule(pos, rot, capsuleDesc);
-            if (actorPtr)
+            Vec3 localOffset = ToVec3(collider->offset);
+            localOffset.x *= scale.x;
+            localOffset.y *= scale.y;
+            localOffset.z *= scale.z;
+            const bool hasOffset = (std::abs(localOffset.x) > kFloatEpsilon) ||
+                                   (std::abs(localOffset.y) > kFloatEpsilon) ||
+                                   (std::abs(localOffset.z) > kFloatEpsilon);
+
+            if (hasOffset)
             {
-                ActorHandle handle(std::move(actorPtr));
-                IPhysicsActor* actor = handle.GetActor();
-                
-                collider->physicsActorHandle = actor;
-                m_entityToActor[entityId] = std::move(handle);
+                auto actorPtr = m_physicsWorld->CreateStaticEmpty(pos, rot, capsuleDesc.userData);
+                if (actorPtr)
+                {
+                    ActorHandle handle(std::move(actorPtr));
+                    IPhysicsActor* actor = handle.GetActor();
+
+                    if (!actor->AddCapsuleShape(capsuleDesc, localOffset, Quat::Identity))
+                    {
+                        handle.Destroy();
+                        break;
+                    }
+
+                    collider->physicsActorHandle = actor;
+                    m_entityToActor[entityId] = std::move(handle);
+                }
+            }
+            else
+            {
+			    auto actorPtr = m_physicsWorld->CreateStaticCapsule(pos, rot, capsuleDesc);
+                if (actorPtr)
+                {
+                    ActorHandle handle(std::move(actorPtr));
+                    IPhysicsActor* actor = handle.GetActor();
+                    
+                    collider->physicsActorHandle = actor;
+                    m_entityToActor[entityId] = std::move(handle);
+                }
             }
             break;
         }
@@ -2671,6 +2853,10 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
     };
 
     Vec3 scale = AbsScale(transform->scale);
+    Vec3 localOffset = ToVec3(collider->offset);
+    localOffset.x *= scale.x;
+    localOffset.y *= scale.y;
+    localOffset.z *= scale.z;
     actor->ClearShapes();
 
     switch (collider->type)
@@ -2698,7 +2884,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         boxDesc.isTrigger = collider->isTrigger;
         boxDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-        actor->AddBoxShape(boxDesc, Vec3::Zero, Quat::Identity);
+        actor->AddBoxShape(boxDesc, localOffset, Quat::Identity);
         break;
     }
     case ColliderType::Sphere:
@@ -2721,7 +2907,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         sphereDesc.isTrigger = collider->isTrigger;
         sphereDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-        actor->AddSphereShape(sphereDesc, Vec3::Zero, Quat::Identity);
+        actor->AddSphereShape(sphereDesc, localOffset, Quat::Identity);
         break;
     }
     case ColliderType::Capsule:
@@ -2755,7 +2941,7 @@ void PhysicsSystem::RebuildShapes(EntityId entityId)
         capsuleDesc.isTrigger = collider->isTrigger;
         capsuleDesc.userData = MakeUserData(m_world.GetWorldEpoch(), entityId);
 
-        actor->AddCapsuleShape(capsuleDesc, Vec3::Zero, Quat::Identity);
+        actor->AddCapsuleShape(capsuleDesc, localOffset, Quat::Identity);
         break;
     }
     }
