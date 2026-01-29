@@ -178,13 +178,18 @@ namespace Alice
         DirectX::XMFLOAT3 color       { 0.7f, 0.7f, 0.7f };
         float             roughness   { 0.5f };
         float             metalness   { 0.0f };
+        float             ambientOcclusion { 1.0f };
         float             normalStrength { 1.0f }; // 노말맵 강도 조절
-        int               shadingMode { -1 }; // -1: 전역, 0~5: 개별 셰이딩 모드, 6: OnlyTextureWithOutline
+        int               shadingMode { -1 }; // -1: 전역, 0~7: 개별 셰이딩 모드, 6: OnlyTextureWithOutline, 7: ToonPBREditable
         bool              transparent { false };
         
         // 아웃라인 파라미터 (shadingMode == 6일 때 사용)
         DirectX::XMFLOAT3 outlineColor { 0.0f, 0.0f, 0.0f }; // 아웃라인 색상
         float             outlineWidth { 0.0f };             // 아웃라인 두께
+
+        // ToonPBREditable 파라미터 (shadingMode == 7)
+        DirectX::XMFLOAT4 toonPbrCuts   { 0.2f, 0.5f, 0.95f, 1.0f }; // cut1, cut2, cut3, strength
+        DirectX::XMFLOAT4 toonPbrLevels { 0.1f, 0.4f, 0.7f, 0.0f };  // level1, level2, level3, blur(0/1)
 
         // 선택적인 알베도 텍스처 경로 (.alice 단일 포맷 또는 원본 이미지 경로)
         std::string       albedoTexturePath;
@@ -372,7 +377,7 @@ namespace Alice
 		float             metalness;     // 0~1
 		int               useTexture;   // 0: 색만, 1: 디퓨즈 텍스처 사용
 		int               enableNormalMap; // 0/1: 노말맵 사용
-        int               shadingMode;    // -1: 전역, 0~5: 개별 셰이딩 모드, 6: OnlyTextureWithOutline
+        int               shadingMode;    // -1: 전역, 0~7: 개별 셰이딩 모드, 6: OnlyTextureWithOutline, 7: ToonPBREditable
         int               pad0;
         
         // [Fixed] HLSL 패킹 규칙에 맞춰 8바이트 패딩 추가 (float2 or int[2])
@@ -380,16 +385,18 @@ namespace Alice
         
         // 노말맵 강도 조절 (0.0: 평평, 1.0: 원본, >1.0: 과장)
         float             normalStrength; // Offset: 240 -> 244
-        float             pad2;           // Offset: 244 -> 248
+        float             ambientOcclusion; // Offset: 244 -> 248
         
-        // [중요] HLSL에서 float3는 16바이트 경계(240, 256...)를 걸칠 수 없음.
-        // 현재 248번지이므로, 12바이트짜리 outlineColor가 들어갈 수 없어 256번지로 밀림.
-        // 따라서 C++에서도 256번지까지 명시적으로 채워줘야 함.
+        // [중요] float4 정렬을 위해 16바이트 경계(256)로 정렬
         float             pad_align[2];   // Offset: 248 -> 256 (8바이트 패딩)
+
+        // ToonPBREditable 파라미터
+        DirectX::XMFLOAT4 toonPbrCuts;    // Offset: 256 -> 272
+        DirectX::XMFLOAT4 toonPbrLevels;  // Offset: 272 -> 288 (w: blur)
         
         // 아웃라인 파라미터 (모든 쉐이딩 모드에서 사용 가능, 16바이트 경계에서 시작)
-        DirectX::XMFLOAT3 outlineColor;  // 아웃라인 색상 (Offset: 256 -> 268)
-        float             outlineWidth;  // 아웃라인 두께 (월드 단위) (Offset: 268 -> 272)
+        DirectX::XMFLOAT3 outlineColor;  // 아웃라인 색상 (Offset: 288 -> 300)
+        float             outlineWidth;  // 아웃라인 두께 (월드 단위) (Offset: 300 -> 304)
 	};
 
 	/// 단순 Directional Light 2개와 재질 파라미터를 담는 구조체입니다.
@@ -413,7 +420,7 @@ namespace Alice
 		DirectX::XMFLOAT4 materialDiffuse;   // rgb: 색상, a: 사용 안 함
 		DirectX::XMFLOAT4 materialSpecular;  // rgb: 색상, a: shininess
 
-		int               shadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon, 4: PBR, 5: ToonPBR
+		int               shadingMode;       // 0: Lambert, 1: Phong, 2: Blinn-Phong, 3: Toon, 4: PBR, 5: ToonPBR, 6: OnlyTextureWithOutline, 7: ToonPBREditable
 		int               pad2[3];           // 16바이트 정렬
 
 		DirectX::XMMATRIX lightViewProj;     // 섀도우 맵 계산용 라이트 뷰-프로젝션
