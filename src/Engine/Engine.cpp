@@ -931,7 +931,7 @@ namespace Alice
 		// 5. UI 업데이트
 		pImpl->m_uiWorld.Update(pImpl->m_width, pImpl->m_height);
 		pImpl->m_aliceUIRenderer.Update(pImpl->m_world, pImpl->m_inputSystem, pImpl->m_camera,
-			static_cast<float>(pImpl->m_width), static_cast<float>(pImpl->m_height));
+			static_cast<float>(pImpl->m_width), static_cast<float>(pImpl->m_height), pImpl->m_timer.DeltaTime());
 
 	}
 

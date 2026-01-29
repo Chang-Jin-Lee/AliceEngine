@@ -4,10 +4,12 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <filesystem>
 #include <wrl/client.h>
 #include <DirectXMath.h>
 
 #include "AliceUI/UICommon.h"
+#include "AliceUI/UICurveAsset.h"
 #include "AliceUI/UIFont.h"
 #include "Core/Entity.h"
 
@@ -43,7 +45,7 @@ namespace Alice
 		bool Initialize(ID3D11Device* device, ID3D11DeviceContext* context, ResourceManager* resources);
 		void Shutdown();
 
-		void Update(World& world, InputSystem& input, const Camera& camera, float screenW, float screenH);
+		void Update(World& world, InputSystem& input, const Camera& camera, float screenW, float screenH, float deltaTime);
 
 		void RenderScreen(const World& world, const Camera& camera, ID3D11RenderTargetView* targetRTV, float screenW, float screenH);
 		void RenderWorld(const World& world, const Camera& camera, ID3D11RenderTargetView* targetRTV, ID3D11DepthStencilView* dsv);
@@ -85,6 +87,21 @@ namespace Alice
 			DirectX::XMMATRIX viewProj;
 		};
 
+		struct UIPixelConstants
+		{
+			DirectX::XMFLOAT4 outlineColor{ 0.0f, 0.0f, 0.0f, 1.0f };
+			DirectX::XMFLOAT4 glowColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+			DirectX::XMFLOAT4 vitalColor{ 0.1f, 1.0f, 0.2f, 1.0f };
+			DirectX::XMFLOAT4 vitalBgColor{ 0.0f, 0.0f, 0.0f, 0.0f };
+			DirectX::XMFLOAT4 params0{ 0.0f, 0.0f, 0.0f, 1.0f };
+			DirectX::XMFLOAT4 params1{ 0.0f, 0.5f, 0.01f, 1.0f };
+			DirectX::XMFLOAT4 params2{ 0.0f, 0.35f, 0.0f, 0.0f };
+			DirectX::XMFLOAT4 params3{ 0.25f, 1.0f, 0.0f, 0.0f };
+			DirectX::XMFLOAT4 params4{ 0.0f, 0.25f, 2.0f, 1.5f };
+			DirectX::XMFLOAT4 params5{ 0.02f, 0.0f, 0.0f, 0.0f };
+			DirectX::XMFLOAT4 time{ 0.0f, 1.0f, 0.0f, 0.0f };
+		};
+
 		void BuildScreenLayout(const World& world, float screenW, float screenH);
 		void BuildScreenLayoutRecursive(const World& world,
 			EntityId id,
@@ -99,11 +116,14 @@ namespace Alice
 		void RenderText(const World& world, EntityId id, const ScreenLayout& layout);
 		void RenderGauge(const World& world, EntityId id, const ScreenLayout& layout);
 
-		void DrawQuad(const UIVertex* verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps);
-		void DrawGlyphs(const std::vector<UIVertex>& verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps);
+		void DrawQuad(const UIVertex* verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps, const UIPixelConstants& pixel);
+		void DrawGlyphs(const std::vector<UIVertex>& verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps, const UIPixelConstants& pixel);
 
 		DirectX::XMMATRIX BuildScreenLocalMatrix(const UITransformComponent& t, const DirectX::XMFLOAT2& refSize, DirectX::XMFLOAT2& outSize, DirectX::XMFLOAT2& outPivot) const;
 		DirectX::XMFLOAT2 ResolvePivot(const UITransformComponent& t) const;
+
+		UIPixelConstants BuildPixelConstants(const World& world, EntityId id) const;
+		const UICurveAsset* GetCurveAsset(const std::string& path);
 
 		ID3D11ShaderResourceView* GetTexture(const std::string& path);
 		ID3D11PixelShader* GetPixelShader(const std::string& name) const;
@@ -142,6 +162,17 @@ namespace Alice
 		float m_mouseOverrideX{ 0.0f };
 		float m_mouseOverrideY{ 0.0f };
 
+		float m_timeSeconds{ 0.0f };
+		bool m_initialized{ false };
+
+		struct CurveCacheEntry
+		{
+			UICurveAsset asset{};
+			std::filesystem::file_time_type timestamp{};
+			bool valid{ false };
+		};
+		std::unordered_map<std::string, CurveCacheEntry> m_curveCache;
+
 		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_whiteSRV;
 
 		Microsoft::WRL::ComPtr<ID3D11VertexShader> m_vs;
@@ -149,6 +180,8 @@ namespace Alice
 		Microsoft::WRL::ComPtr<ID3D11PixelShader> m_psGray;
 		Microsoft::WRL::ComPtr<ID3D11InputLayout> m_layout;
 		Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbUI;
+
+		Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbUIPixel;
 
 		Microsoft::WRL::ComPtr<ID3D11Buffer> m_vb;
 		Microsoft::WRL::ComPtr<ID3D11Buffer> m_ib;
