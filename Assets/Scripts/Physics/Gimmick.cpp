@@ -321,21 +321,22 @@ namespace Alice
 
         if (phase == Phase::Break)
         {
-            SetVisible(m_tendon, false);
             SetEnabled(m_tendon, true);
+            SetVisible(m_tendon, false);            
             SetVisible(m_core, true);
             SetVisible(m_eye, true);
             SetEnabled(m_weaponCombined, false);
 
             for (auto& shard : m_shards)
             {
+                SetEnabled(shard.id, true);
                 SetVisible(shard.id, true);
                 SetColliderTrigger(shard.id, false);
                 SetIgnoreLayers(shard.id, m_ignoreLayersMask);
                 AddIgnoreSelfLayer(shard.id);
-                SetRigidBodyKinematic(shard.id, false, true);
-                ClearRigidBodyVelocity(shard.id);
-                SetEnabled(shard.id, true);
+                // Break 임펄스가 들어가기 전까지는 잠시 고정
+                SetRigidBodyKinematic(shard.id, true, false);
+                ClearRigidBodyVelocity(shard.id);                
             }
 
             if (m_eye != InvalidEntityId)
@@ -343,7 +344,8 @@ namespace Alice
                 SetColliderTrigger(m_eye, false);
                 SetIgnoreLayers(m_eye, m_ignoreLayersMask);
                 AddIgnoreSelfLayer(m_eye);
-                SetRigidBodyKinematic(m_eye, false, true);
+                // Break 임펄스가 들어가기 전까지는 잠시 고정
+                SetRigidBodyKinematic(m_eye, true, false);
                 ClearRigidBodyVelocity(m_eye);
                 SetEnabled(m_eye, true);
             }
@@ -367,7 +369,7 @@ namespace Alice
                 spawnRot = XMFLOAT3(0.0f, 0.0f, 0.0f);
             }
 
-            std::uniform_real_distribution<float> jitterDist(-0.1f, 0.1f);
+            std::uniform_real_distribution<float> jitterDist(-0.2f, 0.2f);
 
             for (auto& shard : m_shards)
             {

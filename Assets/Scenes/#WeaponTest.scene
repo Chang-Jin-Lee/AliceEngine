@@ -52,7 +52,7 @@
                 "enableCCD": false,
                 "enableSpeculativeCCD": false,
                 "gravityEnabled": false,
-                "isKinematic": false,
+                "isKinematic": true,
                 "linearDamping": 0.0,
                 "lockFlags": "None",
                 "massOverride": 0.0,
@@ -80,14 +80,14 @@
             "Transform": {
                 "enabled": false,
                 "position": {
-                    "x": 0.8620301485061646,
-                    "y": 2.2543721199035645,
-                    "z": 0.2891111373901367
+                    "x": 1.299083948135376,
+                    "y": 0.08214406669139862,
+                    "z": -1.9833588600158691
                 },
                 "rotation": {
-                    "x": -0.05229178071022034,
-                    "y": -0.33211731910705566,
-                    "z": -0.629727303981781
+                    "x": 0.33199748396873474,
+                    "y": 2.4668538570404053,
+                    "z": -2.895388603210449
                 },
                 "scale": {
                     "x": 1.0000001192092896,
@@ -151,7 +151,7 @@
                 "enableCCD": false,
                 "enableSpeculativeCCD": false,
                 "gravityEnabled": false,
-                "isKinematic": false,
+                "isKinematic": true,
                 "linearDamping": 0.0,
                 "lockFlags": "None",
                 "massOverride": 0.0,
@@ -179,14 +179,14 @@
             "Transform": {
                 "enabled": false,
                 "position": {
-                    "x": 0.8620301485061646,
-                    "y": 2.2543721199035645,
-                    "z": 0.2891111373901367
+                    "x": 2.1407294273376465,
+                    "y": 0.08989950269460678,
+                    "z": 0.7789750099182129
                 },
                 "rotation": {
-                    "x": -0.05229178071022034,
-                    "y": -0.33211731910705566,
-                    "z": -0.629727303981781
+                    "x": -0.24677030742168427,
+                    "y": -0.010803572833538055,
+                    "z": -2.670559883117676
                 },
                 "scale": {
                     "x": 1.0000001192092896,
@@ -250,7 +250,7 @@
                 "enableCCD": false,
                 "enableSpeculativeCCD": false,
                 "gravityEnabled": false,
-                "isKinematic": false,
+                "isKinematic": true,
                 "linearDamping": 0.0,
                 "lockFlags": "None",
                 "massOverride": 0.0,
@@ -278,14 +278,14 @@
             "Transform": {
                 "enabled": false,
                 "position": {
-                    "x": 0.8620301485061646,
-                    "y": 2.2543721199035645,
-                    "z": 0.2891111373901367
+                    "x": 2.4950449466705322,
+                    "y": 0.026651812717318535,
+                    "z": -0.13526849448680878
                 },
                 "rotation": {
-                    "x": -0.05229178071022034,
-                    "y": -0.33211731910705566,
-                    "z": -0.629727303981781
+                    "x": -1.3274948596954346,
+                    "y": -2.808882474899292,
+                    "z": -3.095410108566284
                 },
                 "scale": {
                     "x": 1.0000001192092896,
@@ -349,7 +349,7 @@
                 "enableCCD": false,
                 "enableSpeculativeCCD": false,
                 "gravityEnabled": false,
-                "isKinematic": false,
+                "isKinematic": true,
                 "linearDamping": 0.0,
                 "lockFlags": "None",
                 "massOverride": 0.0,
@@ -377,14 +377,14 @@
             "Transform": {
                 "enabled": false,
                 "position": {
-                    "x": 0.8620301485061646,
-                    "y": 2.2543721199035645,
-                    "z": 0.2891111373901367
+                    "x": 1.250349521636963,
+                    "y": 0.00038188695907592773,
+                    "z": -1.4208953380584717
                 },
                 "rotation": {
-                    "x": -0.05229178071022034,
-                    "y": -0.33211731910705566,
-                    "z": -0.629727303981781
+                    "x": -1.4153687953948975,
+                    "y": 0.3975382149219513,
+                    "z": -0.27686378359794617
                 },
                 "scale": {
                     "x": 1.0000001192092896,
@@ -448,7 +448,7 @@
                 "enableCCD": false,
                 "enableSpeculativeCCD": false,
                 "gravityEnabled": false,
-                "isKinematic": false,
+                "isKinematic": true,
                 "linearDamping": 0.0,
                 "lockFlags": "None",
                 "massOverride": 0.0,
@@ -476,14 +476,14 @@
             "Transform": {
                 "enabled": false,
                 "position": {
-                    "x": 0.8620301485061646,
-                    "y": 2.2543721199035645,
-                    "z": 0.2891111373901367
+                    "x": 1.7144451141357422,
+                    "y": -0.01750241219997406,
+                    "z": -0.6601308584213257
                 },
                 "rotation": {
-                    "x": -0.05229178071022034,
-                    "y": -0.33211731910705566,
-                    "z": -0.629727303981781
+                    "x": 1.4242573976516724,
+                    "y": -0.021730592474341393,
+                    "z": -0.5513201951980591
                 },
                 "scale": {
                     "x": 1.0000001192092896,
@@ -547,7 +547,7 @@
                 "enableCCD": false,
                 "enableSpeculativeCCD": false,
                 "gravityEnabled": false,
-                "isKinematic": false,
+                "isKinematic": true,
                 "linearDamping": 0.0,
                 "lockFlags": "None",
                 "massOverride": 0.0,
@@ -575,14 +575,14 @@
             "Transform": {
                 "enabled": false,
                 "position": {
-                    "x": 0.8620301485061646,
-                    "y": 2.2543721199035645,
-                    "z": 0.2891111373901367
+                    "x": 0.7596644759178162,
+                    "y": 0.01723901554942131,
+                    "z": -0.1145830973982811
                 },
                 "rotation": {
-                    "x": -0.05229178071022034,
-                    "y": -0.33211731910705566,
-                    "z": -0.629727303981781
+                    "x": 1.5552783012390137,
+                    "y": 1.2721771001815796,
+                    "z": 0.6346138119697571
                 },
                 "scale": {
                     "x": 1.0000001192092896,
@@ -646,7 +646,7 @@
                 "enableCCD": false,
                 "enableSpeculativeCCD": false,
                 "gravityEnabled": false,
-                "isKinematic": false,
+                "isKinematic": true,
                 "linearDamping": 0.0,
                 "lockFlags": "None",
                 "massOverride": 0.0,
@@ -674,22 +674,23 @@
             "Transform": {
                 "enabled": false,
                 "position": {
-                    "x": 0.8620301485061646,
-                    "y": 2.2543721199035645,
-                    "z": 0.2891111373901367
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
                 },
                 "rotation": {
-                    "x": -0.05229178071022034,
-                    "y": -0.33211731910705566,
-                    "z": -0.629727303981781
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
                 },
                 "scale": {
-                    "x": 1.0000001192092896,
-                    "y": 1.0000001192092896,
-                    "z": 1.0000003576278687
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
                 },
                 "visible": false
             },
+            "_parentGuid": "1935784717911039056",
             "guid": "14190828958690152112",
             "name": "W_EYE"
         },

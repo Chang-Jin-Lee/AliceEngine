@@ -2921,8 +2921,11 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
 
             if (rb->resetVelocityOnTeleport)
             {
-                body->SetLinearVelocity(Vec3::Zero);
-                body->SetAngularVelocity(Vec3::Zero);
+                if (!physIsKinematic)
+                {
+                    body->SetLinearVelocity(Vec3::Zero);
+                    body->SetAngularVelocity(Vec3::Zero);
+                }
             }
 
             rb->teleport = false;
