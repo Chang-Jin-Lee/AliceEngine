@@ -50,11 +50,20 @@
 #include "PhysX/IPhysicsWorld.h"
 #include "Core/Material.h"
 
-// UI 컴포넌트 헤더
+// UI 컴포넌트 헤더 (레거시)
 #include "UI/UITransform.h"
 #include "UI/UI_ImageComponent.h"
 #include "UI/UI_ScriptComponent.h"
 #include "UI/IUIScript.h"
+
+// AliceUI 컴포넌트 헤더 (신규)
+#include "AliceUI/UICommon.h"
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
 
 using namespace DirectX;
 
@@ -993,6 +1002,119 @@ namespace Alice
         // IUIScript 등록 (OwnerID만 저장, Owner 포인터는 저장하지 않음)
         rttr::registration::class_<IUIScript>("IUIScript")
             .property("OwnerID", &IUIScript::OwnerID);
+
+        // === AliceUI 컴포넌트/열거형 등록 ===
+        rttr::registration::enumeration<AliceUI::UISpace>("UISpace")
+            (
+                rttr::value("Screen", AliceUI::UISpace::Screen),
+                rttr::value("World", AliceUI::UISpace::World)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIVisibility>("UIVisibility")
+            (
+                rttr::value("Visible", AliceUI::UIVisibility::Visible),
+                rttr::value("Hidden", AliceUI::UIVisibility::Hidden),
+                rttr::value("Collapsed", AliceUI::UIVisibility::Collapsed)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIAlignH>("UIAlignH")
+            (
+                rttr::value("Left", AliceUI::UIAlignH::Left),
+                rttr::value("Center", AliceUI::UIAlignH::Center),
+                rttr::value("Right", AliceUI::UIAlignH::Right)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIAlignV>("UIAlignV")
+            (
+                rttr::value("Top", AliceUI::UIAlignV::Top),
+                rttr::value("Center", AliceUI::UIAlignV::Center),
+                rttr::value("Bottom", AliceUI::UIAlignV::Bottom)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIButtonState>("UIButtonState")
+            (
+                rttr::value("Normal", AliceUI::UIButtonState::Normal),
+                rttr::value("Hovered", AliceUI::UIButtonState::Hovered),
+                rttr::value("Pressed", AliceUI::UIButtonState::Pressed),
+                rttr::value("Disabled", AliceUI::UIButtonState::Disabled)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIGaugeDirection>("UIGaugeDirection")
+            (
+                rttr::value("LeftToRight", AliceUI::UIGaugeDirection::LeftToRight),
+                rttr::value("RightToLeft", AliceUI::UIGaugeDirection::RightToLeft),
+                rttr::value("BottomToTop", AliceUI::UIGaugeDirection::BottomToTop),
+                rttr::value("TopToBottom", AliceUI::UIGaugeDirection::TopToBottom)
+            );
+
+        rttr::registration::class_<UIWidgetComponent>("UIWidgetComponent")
+            .constructor<>()
+            .property("widgetName", &UIWidgetComponent::widgetName)
+            .property("space", &UIWidgetComponent::space)
+            .property("visibility", &UIWidgetComponent::visibility)
+            .property("raycastTarget", &UIWidgetComponent::raycastTarget)
+            .property("interactable", &UIWidgetComponent::interactable)
+            .property("billboard", &UIWidgetComponent::billboard)
+            .property("shaderName", &UIWidgetComponent::shaderName);
+
+        rttr::registration::class_<UITransformComponent>("UITransformComponent")
+            .constructor<>()
+            .property("anchorMin", &UITransformComponent::anchorMin)
+            .property("anchorMax", &UITransformComponent::anchorMax)
+            .property("position", &UITransformComponent::position)
+            .property("size", &UITransformComponent::size)
+            .property("pivot", &UITransformComponent::pivot)
+            .property("scale", &UITransformComponent::scale)
+            .property("rotationRad", &UITransformComponent::rotationRad)
+            .property("alignH", &UITransformComponent::alignH)
+            .property("alignV", &UITransformComponent::alignV)
+            .property("useAlignment", &UITransformComponent::useAlignment)
+            .property("sortOrder", &UITransformComponent::sortOrder);
+
+        rttr::registration::class_<UIImageComponent>("UIImageComponent")
+            .constructor<>()
+            .property("texturePath", &UIImageComponent::texturePath)
+            .property("color", &UIImageComponent::color)
+            .property("uvRect", &UIImageComponent::uvRect)
+            .property("preserveAspect", &UIImageComponent::preserveAspect);
+
+        rttr::registration::class_<UITextComponent>("UITextComponent")
+            .constructor<>()
+            .property("fontPath", &UITextComponent::fontPath)
+            .property("text", &UITextComponent::text)
+            .property("fontSize", &UITextComponent::fontSize)
+            .property("color", &UITextComponent::color)
+            .property("alignH", &UITextComponent::alignH)
+            .property("alignV", &UITextComponent::alignV)
+            .property("wrap", &UITextComponent::wrap)
+            .property("maxWidth", &UITextComponent::maxWidth)
+            .property("lineSpacing", &UITextComponent::lineSpacing);
+
+        rttr::registration::class_<UIButtonComponent>("UIButtonComponent")
+            .constructor<>()
+            .property("enabled", &UIButtonComponent::enabled)
+            .property("state", &UIButtonComponent::state)
+            .property("normalTint", &UIButtonComponent::normalTint)
+            .property("hoveredTint", &UIButtonComponent::hoveredTint)
+            .property("pressedTint", &UIButtonComponent::pressedTint)
+            .property("disabledTint", &UIButtonComponent::disabledTint)
+            .property("normalTexture", &UIButtonComponent::normalTexture)
+            .property("hoveredTexture", &UIButtonComponent::hoveredTexture)
+            .property("pressedTexture", &UIButtonComponent::pressedTexture)
+            .property("disabledTexture", &UIButtonComponent::disabledTexture);
+
+        rttr::registration::class_<UIGaugeComponent>("UIGaugeComponent")
+            .constructor<>()
+            .property("minValue", &UIGaugeComponent::minValue)
+            .property("maxValue", &UIGaugeComponent::maxValue)
+            .property("value", &UIGaugeComponent::value)
+            .property("normalized", &UIGaugeComponent::normalized)
+            .property("direction", &UIGaugeComponent::direction)
+            .property("fillTexture", &UIGaugeComponent::fillTexture)
+            .property("backgroundTexture", &UIGaugeComponent::backgroundTexture)
+            .property("fillColor", &UIGaugeComponent::fillColor)
+            .property("backgroundColor", &UIGaugeComponent::backgroundColor)
+            .property("smoothing", &UIGaugeComponent::smoothing);
     }
 
     // EditorComponentRegistry에 컴포넌트 등록
@@ -1054,6 +1176,14 @@ namespace Alice
         r.Register<AttackDriverComponent>("Attack Driver", "Combat");
 
         r.Register<DebugDrawBoxComponent>("Debug Draw Box", "Debug");
+
+        // AliceUI
+        r.Register<UIWidgetComponent>("UI Widget", "UI");
+        r.Register<UITransformComponent>("UI Transform", "UI");
+        r.Register<UIImageComponent>("UI Image", "UI");
+        r.Register<UITextComponent>("UI Text", "UI");
+        r.Register<UIButtonComponent>("UI Button", "UI");
+        r.Register<UIGaugeComponent>("UI Gauge", "UI");
 
         r.SortByCategoryThenName();
     }

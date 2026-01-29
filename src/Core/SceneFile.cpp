@@ -14,6 +14,8 @@
 #include <cmath>
 #include <fstream>
 #include <string>
+#include <algorithm>
+#include <unordered_set>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -36,6 +38,12 @@
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
 
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
 
 #include "UI/UIWorldManager.h"
 
@@ -555,6 +563,50 @@ namespace Alice
             if (const auto* attackDriver = world.GetComponent<AttackDriverComponent>(id); attackDriver)
             {
                 outEntity["AttackDriver"] = AttackDriverSerialization::AttackDriverComponentToJson(*attackDriver);
+            }
+
+            // === AliceUI Components ===
+            if (const auto* uiWidget = world.GetComponent<UIWidgetComponent>(id); uiWidget)
+            {
+                rttr::instance inst = const_cast<UIWidgetComponent&>(*uiWidget);
+                outEntity["UIWidget"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiTransform = world.GetComponent<UITransformComponent>(id); uiTransform)
+            {
+                rttr::instance inst = const_cast<UITransformComponent&>(*uiTransform);
+                outEntity["UITransform"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiImage = world.GetComponent<UIImageComponent>(id); uiImage)
+            {
+                UIImageComponent copy = *uiImage;
+                copy.texturePath = NormalizePathToRelative(copy.texturePath);
+                rttr::instance inst = copy;
+                outEntity["UIImage"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiText = world.GetComponent<UITextComponent>(id); uiText)
+            {
+                UITextComponent copy = *uiText;
+                copy.fontPath = NormalizePathToRelative(copy.fontPath);
+                rttr::instance inst = copy;
+                outEntity["UIText"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiButton = world.GetComponent<UIButtonComponent>(id); uiButton)
+            {
+                UIButtonComponent copy = *uiButton;
+                copy.normalTexture = NormalizePathToRelative(copy.normalTexture);
+                copy.hoveredTexture = NormalizePathToRelative(copy.hoveredTexture);
+                copy.pressedTexture = NormalizePathToRelative(copy.pressedTexture);
+                copy.disabledTexture = NormalizePathToRelative(copy.disabledTexture);
+                rttr::instance inst = copy;
+                outEntity["UIButton"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiGauge = world.GetComponent<UIGaugeComponent>(id); uiGauge)
+            {
+                UIGaugeComponent copy = *uiGauge;
+                copy.fillTexture = NormalizePathToRelative(copy.fillTexture);
+                copy.backgroundTexture = NormalizePathToRelative(copy.backgroundTexture);
+                rttr::instance inst = copy;
+                outEntity["UIGauge"] = JsonRttr::ToJsonObject(inst);
             }
 
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
@@ -1132,6 +1184,50 @@ namespace Alice
                     return false;
             }
 
+            // === AliceUI Components ===
+            auto itUIWidget = e.find("UIWidget");
+            if (itUIWidget != e.end() && itUIWidget->is_object())
+            {
+                UIWidgetComponent& comp = world.AddComponent<UIWidgetComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIWidget)) return false;
+            }
+            auto itUITransform = e.find("UITransform");
+            if (itUITransform != e.end() && itUITransform->is_object())
+            {
+                UITransformComponent& comp = world.AddComponent<UITransformComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUITransform)) return false;
+            }
+            auto itUIImage = e.find("UIImage");
+            if (itUIImage != e.end() && itUIImage->is_object())
+            {
+                UIImageComponent& comp = world.AddComponent<UIImageComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIImage)) return false;
+            }
+            auto itUIText = e.find("UIText");
+            if (itUIText != e.end() && itUIText->is_object())
+            {
+                UITextComponent& comp = world.AddComponent<UITextComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIText)) return false;
+            }
+            auto itUIButton = e.find("UIButton");
+            if (itUIButton != e.end() && itUIButton->is_object())
+            {
+                UIButtonComponent& comp = world.AddComponent<UIButtonComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIButton)) return false;
+            }
+            auto itUIGauge = e.find("UIGauge");
+            if (itUIGauge != e.end() && itUIGauge->is_object())
+            {
+                UIGaugeComponent& comp = world.AddComponent<UIGaugeComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIGauge)) return false;
+            }
+
             return true;
         }
 
@@ -1212,10 +1308,25 @@ namespace Alice
             
             root["entities"] = JsonRttr::json::array();
 
+            std::unordered_set<EntityId> entitySet;
             const auto& transforms = world.GetComponents<TransformComponent>();
             for (const auto& [id, transform] : transforms)
             {
                 (void)transform;
+                entitySet.insert(id);
+            }
+
+            const auto& uiWidgets = world.GetComponents<UIWidgetComponent>();
+            for (const auto& [id, widget] : uiWidgets)
+            {
+                (void)widget;
+                entitySet.insert(id);
+            }
+
+            std::vector<EntityId> entityList(entitySet.begin(), entitySet.end());
+            std::sort(entityList.begin(), entityList.end());
+            for (EntityId id : entityList)
+            {
                 JsonRttr::json e;
                 if (!WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);
@@ -1232,10 +1343,25 @@ namespace Alice
             root["version"] = 1;
             root["entities"] = JsonRttr::json::array();
 
+            std::unordered_set<EntityId> entitySet;
             const auto& transforms = world.GetComponents<TransformComponent>();
             for (const auto& [id, transform] : transforms)
             {
                 (void)transform;
+                entitySet.insert(id);
+            }
+
+            const auto& uiWidgets = world.GetComponents<UIWidgetComponent>();
+            for (const auto& [id, widget] : uiWidgets)
+            {
+                (void)widget;
+                entitySet.insert(id);
+            }
+
+            std::vector<EntityId> entityList(entitySet.begin(), entitySet.end());
+            std::sort(entityList.begin(), entityList.end());
+            for (EntityId id : entityList)
+            {
                 JsonRttr::json e;
                 if (!WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);
@@ -1292,6 +1418,7 @@ namespace Alice
 
         bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // (1) 에디터: 실제 파일
             // (2) 게임  : Assets/... 는 Metas/Chunks 로 패킹되어 있으므로, 바이트 로드 후 JSON 파싱
             const std::filesystem::path resolved = resources.Resolve(logicalPath);
@@ -1313,24 +1440,8 @@ namespace Alice
                                logicalPath.generic_string().c_str(),
                                sp->size(),
                                resolvedStr.c_str());
-                // .alice 파일의 경우 World는 바이트에서 로드하고, UI는 별도 파일로 저장되므로 logicalPath를 사용하여 UI 로드
+                // .alice 파일의 경우 World는 바이트에서 로드
                 if (!LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string())) return false;
-                
-                // UI 로드 (있는 경우)
-                if (uiWorldManager)
-                {
-                    ALICE_LOG_INFO("[SceneFile] LoadAuto: Calling LoadUI for scene: %s", logicalPath.generic_string().c_str());
-                    if (!uiWorldManager->LoadUI(logicalPath, &resources))
-                    {
-                        ALICE_LOG_ERRORF("[SceneFile] LoadAuto: LoadUI failed for: %s", logicalPath.generic_string().c_str());
-                        return false;
-                    }
-                }
-                else
-                {
-                    ALICE_LOG_WARN("[SceneFile] LoadAuto: uiWorldManager is null, skipping UI load");
-                }
-                
                 return true;
             }
 
@@ -1338,43 +1449,22 @@ namespace Alice
             ALICE_LOG_INFO("[SceneFile] LoadAuto: file load. logical=\"%s\" resolved=\"%s\"",
                            logicalPath.generic_string().c_str(),
                            resolvedStr.c_str());
-            return Load(world, resolved, uiWorldManager);
+            return Load(world, resolved, nullptr);
         }
         
         bool Save(const World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // World 저장
             if (!Save(world, path)) return false;
-            
-            // UI 저장 (있는 경우)
-            if (uiWorldManager)
-            {
-                if (!uiWorldManager->SaveUI(path)) return false;
-            }
-            
             return true;
         }
         
         bool Load(World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // World 로드
             if (!Load(world, path)) return false;
-            
-            // UI 로드 (있는 경우)
-            if (uiWorldManager)
-            {
-                ALICE_LOG_INFO("[SceneFile] Load: Calling LoadUI for scene: %s", path.generic_string().c_str());
-                if (!uiWorldManager->LoadUI(path, nullptr))
-                {
-                    ALICE_LOG_ERRORF("[SceneFile] Load: LoadUI failed for: %s", path.generic_string().c_str());
-                    return false;
-                }
-            }
-            else
-            {
-                ALICE_LOG_WARN("[SceneFile] Load: uiWorldManager is null, skipping UI load");
-            }
-            
             return true;
         }
     }

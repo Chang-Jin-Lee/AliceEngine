@@ -44,6 +44,9 @@ namespace Alice
             inline UIEditEvent RenderProperty(const rttr::property& prop, rttr::instance& obj, 
                                       const std::string& label = "", World* world = nullptr)
             {
+                if (prop.get_metadata("BindWidget").is_valid())
+                    return UIEditEvent{};
+
                 rttr::type propType = prop.get_type();
                 std::string propName = prop.get_name().to_string();
                 std::string displayName = label.empty() ? propName : label;
@@ -269,6 +272,33 @@ namespace Alice
                         ImGui::EndDragDropTarget();
                     }
                 }
+                else if (propType.is_enumeration())
+                {
+                    auto enumType = propType.get_enumeration();
+                    std::string currentName = enumType.value_to_name(value).to_string();
+                    if (currentName.empty())
+                        currentName = "<None>";
+
+                    if (ImGui::BeginCombo(displayName.c_str(), currentName.c_str()))
+                    {
+                        for (auto& name : enumType.get_names())
+                        {
+                            bool selected = (name.to_string() == currentName);
+                            if (ImGui::Selectable(name.to_string().c_str(), selected))
+                            {
+                                rttr::variant v = enumType.name_to_value(name);
+                                if (v.is_valid())
+                                {
+                                    prop.set_value(obj, v);
+                                    event.changed = true;
+                                }
+                            }
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
                 else if (propType.is_sequential_container())
                 {
                     // std::vector<T> 등: 각 요소를 트리 노드로 표시 (AdvancedAnimSocket 등)
@@ -309,8 +339,20 @@ namespace Alice
                     rttr::type classType = propType;
                     std::string className = classType.get_name().to_string();
 
+                    // XMFLOAT2 타입 렌더링
+                    if (className == "XMFLOAT2")
+                    {
+                        DirectX::XMFLOAT2 v = value.get_value<DirectX::XMFLOAT2>();
+                        event.activated = ImGui::IsItemActivated();
+                        if (ImGui::DragFloat2(displayName.c_str(), &v.x, 0.1f))
+                        {
+                            prop.set_value(obj, v);
+                            event.changed = true;
+                        }
+                        event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                    }
                     // XMFLOAT3 타입 렌더링
-                    if (className == "XMFLOAT3")
+                    else if (className == "XMFLOAT3")
                     {
                         DirectX::XMFLOAT3 v = value.get_value<DirectX::XMFLOAT3>();
                         // "color" 또는 "Color"가 포함된 경우 색상 편집 컨트롤로 렌더링
