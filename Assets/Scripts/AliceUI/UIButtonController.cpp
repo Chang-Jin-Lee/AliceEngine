@@ -52,19 +52,38 @@ namespace Alice
         if (!TargetButton)
             return;
 
+        const EntityId ownerId = GetOwnerId();
+        const std::uint32_t ownerGen = w->GetEntityGeneration(ownerId);
+        const auto isValid = [w, ownerId, ownerGen, self = this]() -> bool
+        {
+            if (!w)
+                return false;
+            if (!w->IsEntityValid(ownerId, ownerGen))
+                return false;
+            const auto* scripts = w->GetScripts(ownerId);
+            if (!scripts)
+                return false;
+            for (const auto& sc : *scripts)
+            {
+                if (sc.instance.get() == self)
+                    return true;
+            }
+            return false;
+        };
+
         // 눌림/호버/뗌 델리게이트 등록
-        TargetButton->AddOnPressed([]()
+        TargetButton->AddOnPressedSafe([]()
         {
             ALICE_LOG_INFO("[UIButtonController] 눌렸음");
-        });
-        TargetButton->AddOnHovered([]()
+        }, isValid);
+        TargetButton->AddOnHoveredSafe([]()
         {
             ALICE_LOG_INFO("[UIButtonController] 호버임");
-        });
-        TargetButton->AddOnReleased([]()
+        }, isValid);
+        TargetButton->AddOnReleasedSafe([]()
         {
             ALICE_LOG_INFO("[UIButtonController] 뗏음");
-        });
+        }, isValid);
     }
 
     void UIButtonController::OnDestroy()
