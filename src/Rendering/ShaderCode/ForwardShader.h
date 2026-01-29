@@ -424,7 +424,8 @@ struct PSInput
 };
 )";
 
-    inline static const char* PBRPS_Part2 = R"(
+	// Part2: 유틸 함수들까지만 (main 시작 전까지)
+	inline static const char* PBRPS_Part2 = R"(
 float ComputeAttenuation(float dist, float range)
 {
     float r = max(range, 0.001f);
@@ -553,6 +554,22 @@ float ToonPbrNdotL(float n)
     return ToonLevel(n);
 }
 
+float Dither4x4(float2 pos)
+{
+    int2 p = int2(pos) & 3;
+    int idx = p.x + p.y * 4;
+    static const float bayer[16] = {
+        0.0f,  8.0f,  2.0f, 10.0f,
+        12.0f, 4.0f, 14.0f, 6.0f,
+        3.0f, 11.0f, 1.0f,  9.0f,
+        15.0f, 7.0f, 13.0f, 5.0f
+    };
+    return (bayer[idx] + 0.5f) / 16.0f;
+}
+)";
+
+	// Part3: main부터 끝까지
+	inline static const char* PBRPS_Part3 = R"(
 float4 main(PSInput input) : SV_TARGET
 {
     // 아웃라인 패스 감지: Width가 0보다 크면 아웃라인용 드로우콜임
@@ -564,8 +581,19 @@ float4 main(PSInput input) : SV_TARGET
     
 	float4 textureColor = gDiffuseMap.Sample(gSampler, input.TexCoord);
     float alphaTex = textureColor.a * gMaterialColor.a;
-    // 알파 블렌딩
-    clip(alphaTex - 0.1f);
+    // 알파 테스트는 텍스처 알파에만 적용 (머티리얼 알파는 블렌딩으로 처리)
+    if (gUseTexture != 0)
+    {
+        clip(textureColor.a - 0.1f);
+    }
+    // NDC 기반 디더링으로 투명도 처리 (알파 블렌딩 대신 화면 도트 컷아웃)
+    float alpha = saturate(alphaTex);
+    if (alpha < 1.0f)
+    {
+        float threshold = Dither4x4(input.Position.xy);
+        clip(alpha - threshold);
+    }
+    float alphaOut = 1.0f;
 
     // shadingMode == 6: TextureOnly (빛의 영향을 받지 않는 텍스처만 반환)
     if (gShadingMode == 6)
@@ -576,7 +604,7 @@ float4 main(PSInput input) : SV_TARGET
             float3 texSample = textureColor.rgb;
             albedo *= texSample;
         }
-        return float4(albedo, alphaTex);
+        return float4(albedo, alphaOut);
     }
 
     float3 N = normalize(input.Normal);
@@ -764,7 +792,7 @@ float4 main(PSInput input) : SV_TARGET
 
         // Toon도 PCF shadow를 반영해야 Phong/Blinn과 동일하게 그림자가 보입니다.
         float3 toonColor = albedo * (level * shadow) + 0.1f * albedo;
-        return float4(toonColor, alphaTex);
+        return float4(toonColor, alphaOut);
     }
 
     // === PBR 경로 (shadingMode == 4, 5, 7) ===
@@ -867,7 +895,7 @@ float4 main(PSInput input) : SV_TARGET
         float shadowIBL = lerp(0.35f, 1.0f, shadow);
         float3 colorPbr = Lo + (diffuseIBL * shadowIBL + specularIBL) * ao;
 
-        return float4(colorPbr, alphaTex);
+        return float4(colorPbr, alphaOut);
     }
 
     // 기본 Phong/Blinn-Phong/Lambert 경로
@@ -876,9 +904,10 @@ float4 main(PSInput input) : SV_TARGET
         totalDiffuse * albedo +
         totalSpecular * specColor;
 
-    return float4(baseColor, alphaTex);
+    return float4(baseColor, alphaOut);
 }
 )";
+
 
         // Tone Mapping Pixel Shader - HDR (포워드 전용)
         inline static const char* ToneMappingPS_HDR = R"(

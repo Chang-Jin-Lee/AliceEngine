@@ -2449,7 +2449,7 @@ namespace Alice
             
             const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id);
             if (mat) {
-                color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
+                color = { mat->color.x, mat->color.y, mat->color.z, mat->alpha };
                 rough = mat->roughness; 
                 metal = mat->metalness;
                 if (mat->shadingMode >= 0)
@@ -2656,7 +2656,7 @@ namespace Alice
                     continue; // 화면에 보이지 않으면 렌더링하지 않음
                 }
 
-                const XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
+                const XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, cmd.alpha);
                 const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
                 const float ao = (cmd.shadingMode >= 0) ? cmd.ambientOcclusion : m_lightingParameters.ambientOcclusion;
 
@@ -3176,7 +3176,7 @@ namespace Alice
                 continue; // 화면에 보이지 않으면 렌더링하지 않음
             }
 
-            const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
+            const DirectX::XMFLOAT4 color(cmd.color.x, cmd.color.y, cmd.color.z, cmd.alpha);
             const int objectShadingMode = (cmd.shadingMode >= 0) ? cmd.shadingMode : shadingMode;
             const float ao = (cmd.shadingMode >= 0) ? cmd.ambientOcclusion : m_lightingParameters.ambientOcclusion;
             const float outlineWidth = cmd.outlineWidth;

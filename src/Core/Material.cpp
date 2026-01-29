@@ -58,6 +58,7 @@ namespace Alice
         bool result = ReflectionSerializer::Load(path, outMaterial);
 
         // roughness, metalness 클램핑 (RTTR로는 기본값 처리만 하므로 여기서 보정)
+        outMaterial.alpha = std::clamp(outMaterial.alpha, 0.0f, 1.0f);
         outMaterial.roughness = std::clamp(outMaterial.roughness, 0.0f, 1.0f);
         outMaterial.metalness = std::clamp(outMaterial.metalness, 0.0f, 1.0f);
         outMaterial.ambientOcclusion = std::clamp(outMaterial.ambientOcclusion, 0.0f, 1.0f);
@@ -66,9 +67,10 @@ namespace Alice
         // 아웃라인 두께는 음수 방지
         outMaterial.outlineWidth = std::max(outMaterial.outlineWidth, 0.0f);
 
-        ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f ao=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
+        ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" color=(%.3f, %.3f, %.3f) alpha=%.3f rough=%.3f metal=%.3f ao=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
             path.string().c_str(),
             outMaterial.color.x, outMaterial.color.y, outMaterial.color.z,
+            outMaterial.alpha,
             outMaterial.roughness,
             outMaterial.metalness,
             outMaterial.ambientOcclusion,
@@ -86,12 +88,19 @@ namespace Alice
         MaterialComponent copy = material;
         copy.assetPath = NormalizePathToLogical(copy.assetPath);
         copy.albedoTexturePath = NormalizePathToLogical(copy.albedoTexturePath);
+        copy.alpha = std::clamp(copy.alpha, 0.0f, 1.0f);
+        copy.roughness = std::clamp(copy.roughness, 0.0f, 1.0f);
+        copy.metalness = std::clamp(copy.metalness, 0.0f, 1.0f);
+        copy.ambientOcclusion = std::clamp(copy.ambientOcclusion, 0.0f, 1.0f);
+        copy.normalStrength = std::max(copy.normalStrength, 0.0f);
+        copy.outlineWidth = std::max(copy.outlineWidth, 0.0f);
 
         bool result = ReflectionSerializer::Save(path, copy);
 
-        ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f ao=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
+        ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) alpha=%.3f rough=%.3f metal=%.3f ao=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
             path.string().c_str(),
             copy.color.x, copy.color.y, copy.color.z,
+            copy.alpha,
             copy.roughness,
             copy.metalness,
             copy.ambientOcclusion,
