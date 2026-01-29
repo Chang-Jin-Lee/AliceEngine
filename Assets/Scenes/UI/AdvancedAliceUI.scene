@@ -84,7 +84,19 @@
             "UIAnimation": {
                 "playOnStart": false,
                 "tracks": [
-                    {}
+                    {
+                        "name": "DropY",
+                        "property": "PositionY",
+                        "curvePath": "Assets/Curves/UI/Drop.uicurve",
+                        "duration": 0.6,
+                        "delay": 0.0,
+                        "from": 200.0,
+                        "to": 0.0,
+                        "loop": false,
+                        "pingPong": false,
+                        "useNormalizedTime": true,
+                        "additive": true
+                    }
                 ]
             },
             "UIImage": {
@@ -169,7 +181,19 @@
             "UIAnimation": {
                 "playOnStart": false,
                 "tracks": [
-                    {}
+                    {
+                        "name": "Cooldown",
+                        "property": "RadialFill",
+                        "curvePath": "Assets/Curves/UI/Cooldown.uicurve",
+                        "duration": 1.0,
+                        "delay": 0.0,
+                        "from": 1.0,
+                        "to": 0.0,
+                        "loop": false,
+                        "pingPong": false,
+                        "useNormalizedTime": true,
+                        "additive": false
+                    }
                 ]
             },
             "UIEffect": {
@@ -392,7 +416,7 @@
                 "fontSize": 40.0,
                 "lineSpacing": 0.0,
                 "maxWidth": 0.0,
-                "text": "버튼",
+                "text": "\ubc84\ud2bc",
                 "wrap": false
             },
             "UITransform": {
@@ -860,7 +884,19 @@
             "UIAnimation": {
                 "playOnStart": false,
                 "tracks": [
-                    {}
+                    {
+                        "name": "FadeInOut",
+                        "property": "TextAlpha",
+                        "curvePath": "Assets/Curves/UI/FadeInOut.uicurve",
+                        "duration": 1.0,
+                        "delay": 0.0,
+                        "from": 0.0,
+                        "to": 1.0,
+                        "loop": false,
+                        "pingPong": false,
+                        "useNormalizedTime": true,
+                        "additive": false
+                    }
                 ]
             },
             "UIText": {
@@ -1037,7 +1073,7 @@
                 "enabled": false,
                 "position": {
                     "x": 3.0669922828674316,
-                    "y": 2.1140518188476563,
+                    "y": 2.1140518188476562,
                     "z": 0.0
                 },
                 "rotation": {
