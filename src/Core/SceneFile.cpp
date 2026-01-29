@@ -41,6 +41,11 @@
 #include "AliceUI/UITextComponent.h"
 #include "AliceUI/UIButtonComponent.h"
 #include "AliceUI/UIGaugeComponent.h"
+#include "AliceUI/UIEffectComponent.h"
+#include "AliceUI/UIAnimationComponent.h"
+#include "AliceUI/UIShakeComponent.h"
+#include "AliceUI/UIHover3DComponent.h"
+#include "AliceUI/UIVitalComponent.h"
 
 #include "UI/UIWorldManager.h"
 
@@ -134,6 +139,78 @@ namespace Alice
                         out.push_back(itName->get<std::string>());
                 }
             }
+        }
+
+        static bool ParseUIAnimProperty(const JsonRttr::json& jval, UIAnimProperty& out)
+        {
+            if (jval.is_number_integer())
+            {
+                const int v = jval.get<int>();
+                if (v < 0 || v > static_cast<int>(UIAnimProperty::VitalAmplitude))
+                    return false;
+                out = static_cast<UIAnimProperty>(v);
+                return true;
+            }
+            if (!jval.is_string())
+                return false;
+
+            const std::string name = jval.get<std::string>();
+            if (name == "PositionX") { out = UIAnimProperty::PositionX; return true; }
+            if (name == "PositionY") { out = UIAnimProperty::PositionY; return true; }
+            if (name == "ScaleX") { out = UIAnimProperty::ScaleX; return true; }
+            if (name == "ScaleY") { out = UIAnimProperty::ScaleY; return true; }
+            if (name == "Rotation") { out = UIAnimProperty::Rotation; return true; }
+            if (name == "ImageAlpha") { out = UIAnimProperty::ImageAlpha; return true; }
+            if (name == "TextAlpha") { out = UIAnimProperty::TextAlpha; return true; }
+            if (name == "GlobalAlpha") { out = UIAnimProperty::GlobalAlpha; return true; }
+            if (name == "OutlineThickness") { out = UIAnimProperty::OutlineThickness; return true; }
+            if (name == "RadialFill") { out = UIAnimProperty::RadialFill; return true; }
+            if (name == "GlowStrength") { out = UIAnimProperty::GlowStrength; return true; }
+            if (name == "VitalAmplitude") { out = UIAnimProperty::VitalAmplitude; return true; }
+            return false;
+        }
+
+        static bool LoadUIAnimationComponent(UIAnimationComponent& comp, const JsonRttr::json& j)
+        {
+            if (!j.is_object())
+                return false;
+
+            comp.playOnStart = j.value("playOnStart", false);
+            comp.tracks.clear();
+
+            auto itTracks = j.find("tracks");
+            if (itTracks == j.end() || !itTracks->is_array())
+                return true;
+
+            for (const auto& jt : *itTracks)
+            {
+                if (!jt.is_object())
+                    continue;
+
+                UIAnimTrack t;
+                t.name = jt.value("name", std::string{});
+                t.curvePath = jt.value("curvePath", std::string{});
+                t.duration = jt.value("duration", t.duration);
+                t.delay = jt.value("delay", t.delay);
+                t.from = jt.value("from", t.from);
+                t.to = jt.value("to", t.to);
+                t.loop = jt.value("loop", t.loop);
+                t.pingPong = jt.value("pingPong", t.pingPong);
+                t.useNormalizedTime = jt.value("useNormalizedTime", t.useNormalizedTime);
+                t.additive = jt.value("additive", t.additive);
+
+                auto itProp = jt.find("property");
+                if (itProp != jt.end())
+                {
+                    UIAnimProperty prop = t.property;
+                    if (ParseUIAnimProperty(*itProp, prop))
+                        t.property = prop;
+                }
+
+                comp.tracks.push_back(t);
+            }
+
+            return true;
         }
 
         template<typename T>
@@ -611,6 +688,35 @@ namespace Alice
                 copy.backgroundTexture = NormalizePathToRelative(copy.backgroundTexture);
                 rttr::instance inst = copy;
                 outEntity["UIGauge"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* uiEffect = world.GetComponent<UIEffectComponent>(id); uiEffect)
+            {
+                rttr::instance inst = const_cast<UIEffectComponent&>(*uiEffect);
+                outEntity["UIEffect"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiAnim = world.GetComponent<UIAnimationComponent>(id); uiAnim)
+            {
+                UIAnimationComponent copy = *uiAnim;
+                for (auto& track : copy.tracks)
+                    track.curvePath = NormalizePathToRelative(track.curvePath);
+                rttr::instance inst = copy;
+                outEntity["UIAnimation"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiShake = world.GetComponent<UIShakeComponent>(id); uiShake)
+            {
+                rttr::instance inst = const_cast<UIShakeComponent&>(*uiShake);
+                outEntity["UIShake"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiHover = world.GetComponent<UIHover3DComponent>(id); uiHover)
+            {
+                rttr::instance inst = const_cast<UIHover3DComponent&>(*uiHover);
+                outEntity["UIHover3D"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiVital = world.GetComponent<UIVitalComponent>(id); uiVital)
+            {
+                rttr::instance inst = const_cast<UIVitalComponent&>(*uiVital);
+                outEntity["UIVital"] = JsonRttr::ToJsonObject(inst);
             }
 
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
@@ -1228,6 +1334,41 @@ namespace Alice
                 UIGaugeComponent& comp = world.AddComponent<UIGaugeComponent>(id);
                 rttr::instance inst = comp;
                 if (!JsonRttr::FromJsonObject(inst, *itUIGauge)) return false;
+            }
+
+            auto itUIEffect = e.find("UIEffect");
+            if (itUIEffect != e.end() && itUIEffect->is_object())
+            {
+                UIEffectComponent& comp = world.AddComponent<UIEffectComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIEffect)) return false;
+            }
+            auto itUIAnimation = e.find("UIAnimation");
+            if (itUIAnimation != e.end() && itUIAnimation->is_object())
+            {
+                UIAnimationComponent& comp = world.AddComponent<UIAnimationComponent>(id);
+                if (!LoadUIAnimationComponent(comp, *itUIAnimation)) return false;
+            }
+            auto itUIShake = e.find("UIShake");
+            if (itUIShake != e.end() && itUIShake->is_object())
+            {
+                UIShakeComponent& comp = world.AddComponent<UIShakeComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIShake)) return false;
+            }
+            auto itUIHover = e.find("UIHover3D");
+            if (itUIHover != e.end() && itUIHover->is_object())
+            {
+                UIHover3DComponent& comp = world.AddComponent<UIHover3DComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIHover)) return false;
+            }
+            auto itUIVital = e.find("UIVital");
+            if (itUIVital != e.end() && itUIVital->is_object())
+            {
+                UIVitalComponent& comp = world.AddComponent<UIVitalComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIVital)) return false;
             }
 
             return true;
