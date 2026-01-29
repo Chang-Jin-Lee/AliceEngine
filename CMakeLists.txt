@@ -1,54 +1,54 @@
 cmake_minimum_required(VERSION 3.20)
 
-# ÇÁ·ÎÁ§Æ® ÀÌ¸§Àº ÀüÃ¼ ¼Ö·ç¼Ç ÀÌ¸§
+# ?„ë¡œ?íŠ¸ ?´ë¦„?€ ?„ì²´ ?”ë£¨???´ë¦„
 project(AliceRenderer LANGUAGES CXX)
 
 
-# /utf-8 ¿É¼Ç Ãß°¡ °æ°í ¾È¶ß°Ô ÇÏ±â À§ÇÔ
+# /utf-8 ?µì…˜ ì¶”ê? ê²½ê³  ?ˆëœ¨ê²??˜ê¸° ?„í•¨
 if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
 # =========================================================================
-# [¼³Á¤] VCPKG °æ·Î (¸Ç À§¿¡¼­ °ü¸®)
-# 1. "AUTO" : È¯°æº¯¼ö -> Dµå¶óÀÌºê -> Cµå¶óÀÌºê ¼ø¼­·Î ÀÚµ¿ Å½»ö
-# 2. Á÷Á¢ ÁöÁ¤ : "E:/MyLibs/vcpkg" Ã³·³ °æ·Î ÀÔ·Â
+# [?¤ì •] VCPKG ê²½ë¡œ (ë§??„ì—??ê´€ë¦?
+# 1. "AUTO" : ?˜ê²½ë³€??-> D?œë¼?´ë¸Œ -> C?œë¼?´ë¸Œ ?œì„œë¡??ë™ ?ìƒ‰
+# 2. ì§ì ‘ ì§€??: "E:/MyLibs/vcpkg" ì²˜ëŸ¼ ê²½ë¡œ ?…ë ¥
 # =========================================================================
 set(ALICE_VCPKG_PATH_OPTION "AUTO")
 
-# --- VCPKG °æ·Î ÀÚµ¿ °¨Áö ·ÎÁ÷ ---
+# --- VCPKG ê²½ë¡œ ?ë™ ê°ì? ë¡œì§ ---
 if(ALICE_VCPKG_PATH_OPTION STREQUAL "AUTO")
     if(DEFINED ENV{VCPKG_ROOT})
         set(VCPKG_ROOT_DETECTED $ENV{VCPKG_ROOT})
-        message(STATUS "[Alice] VCPKG: È¯°æº¯¼ö¿¡¼­ °¨ÁöµÊ -> ${VCPKG_ROOT_DETECTED}")
+        message(STATUS "[Alice] VCPKG: ?˜ê²½ë³€?˜ì—??ê°ì???-> ${VCPKG_ROOT_DETECTED}")
     elseif(EXISTS "D:/vcpkg/vcpkg.exe")
         set(VCPKG_ROOT_DETECTED "D:/vcpkg")
-        message(STATUS "[Alice] VCPKG: Dµå¶óÀÌºê¿¡¼­ °¨ÁöµÊ -> ${VCPKG_ROOT_DETECTED}")
+        message(STATUS "[Alice] VCPKG: D?œë¼?´ë¸Œ?ì„œ ê°ì???-> ${VCPKG_ROOT_DETECTED}")
     elseif(EXISTS "C:/vcpkg/vcpkg.exe")
         set(VCPKG_ROOT_DETECTED "C:/vcpkg")
-        message(STATUS "[Alice] VCPKG: Cµå¶óÀÌºê¿¡¼­ °¨ÁöµÊ -> ${VCPKG_ROOT_DETECTED}")
+        message(STATUS "[Alice] VCPKG: C?œë¼?´ë¸Œ?ì„œ ê°ì???-> ${VCPKG_ROOT_DETECTED}")
     else()
-        message(FATAL_ERROR "[Alice] vcpkg¸¦ Ã£À» ¼ö ¾ø½À´Ï´Ù! ¹èÄ¡ ÆÄÀÏÀ» ¸ÕÀú ½ÇÇàÇÏ°Å³ª °æ·Î¸¦ ÁöÁ¤ÇØÁÖ¼¼¿ä.")
+        message(FATAL_ERROR "[Alice] vcpkgë¥?ì°¾ì„ ???†ìŠµ?ˆë‹¤! ë°°ì¹˜ ?Œì¼??ë¨¼ì? ?¤í–‰?˜ê±°??ê²½ë¡œë¥?ì§€?•í•´ì£¼ì„¸??")
     endif()
 else()
     set(VCPKG_ROOT_DETECTED ${ALICE_VCPKG_PATH_OPTION})
-    message(STATUS "[Alice] VCPKG: »ç¿ëÀÚ ÁöÁ¤ °æ·Î »ç¿ë -> ${VCPKG_ROOT_DETECTED}")
+    message(STATUS "[Alice] VCPKG: ?¬ìš©??ì§€??ê²½ë¡œ ?¬ìš© -> ${VCPKG_ROOT_DETECTED}")
 endif()
 
-# º¯¼ö´Â ¿©±â¼­ È®Á¤µÊ (Ä³½Ã¿¡ ÀúÀåÇÏ¿© GUI¿¡¼­µµ º¸ÀÌ°Ô ÇÔ)
+# ë³€?˜ëŠ” ?¬ê¸°???•ì •??(ìºì‹œ???€?¥í•˜??GUI?ì„œ??ë³´ì´ê²???
 set(VCPKG_ROOT "${VCPKG_ROOT_DETECTED}" CACHE PATH "Path to vcpkg root" FORCE)
 set(VCPKG_TRIPLET_STATIC "x64-windows-static-md" CACHE STRING "vcpkg static triplet")
 set(VCPKG_TRIPLET_DYNAMIC "x64-windows" CACHE STRING "vcpkg dynamic triplet")
 
 
 # ==========================================
-# [¼³Á¤] ±âº» ÄÄÆÄÀÏ ¿É¼Ç
+# [?¤ì •] ê¸°ë³¸ ì»´íŒŒ???µì…˜
 # ==========================================
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Ãâ·Â µğ·ºÅÍ¸® ¼³Á¤ (ºôµå Æú´õ ³»ºÎ bin/)
+# ì¶œë ¥ ?”ë ‰?°ë¦¬ ?¤ì • (ë¹Œë“œ ?´ë” ?´ë? bin/)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -59,40 +59,40 @@ set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
 set(FMOD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/FMOD")
 
 # ==========================================
-# [¼³Á¤] RTTR ¶óÀÌºê·¯¸® (Engine¿¡ ÅëÇÕ)
+# [?¤ì •] RTTR ?¼ì´ë¸ŒëŸ¬ë¦?(Engine???µí•©)
 # ==========================================
-# Boost/Doxygen ÀÇÁ¸¼ºÀ» Á¦°ÅÇÏ°í °¡º±°Ô ºôµåÇÏ±â À§ÇÑ ¿É¼Çµé
+# Boost/Doxygen ?˜ì¡´?±ì„ ?œê±°?˜ê³  ê°€ë³ê²Œ ë¹Œë“œ?˜ê¸° ?„í•œ ?µì…˜??
 set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
 set(BUILD_INSTALLER OFF CACHE BOOL "" FORCE)
 set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-# RTTRÀº shared·Î ºôµåÇØ¾ß Launch.exe, AliceScripts.dll »çÀÌ¿¡¼­
-# µî·ÏµÈ ÇÁ·ÎÆÛÆ¼°¡ °°Àº registry·Î ÇÕÃÄÁı´Ï´Ù.
+# RTTR?€ sharedë¡?ë¹Œë“œ?´ì•¼ Launch.exe, AliceScripts.dll ?¬ì´?ì„œ
+# ?±ë¡???„ë¡œ?¼í‹°ê°€ ê°™ì? registryë¡??©ì³ì§‘ë‹ˆ??
 set(BUILD_STATIC OFF CACHE BOOL "" FORCE)
 set(BUILD_RTTR_DYNAMIC ON CACHE BOOL "" FORCE)
 
-# ·±Å¸ÀÓ ¶óÀÌºê·¯¸® ¼³Á¤ (vcpkg ¹× ¿£Áø°ú ¸ÂÃß±â À§ÇØ Static Runtime ²û -> MD/MDd »ç¿ë)
+# ?°í????¼ì´ë¸ŒëŸ¬ë¦??¤ì • (vcpkg ë°??”ì§„ê³?ë§ì¶”ê¸??„í•´ Static Runtime ??-> MD/MDd ?¬ìš©)
 set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
 
-# RTTR ¼­ºê¸ğµâ Ãß°¡ (°æ·Î: ThirdParty/rttr)
+# RTTR ?œë¸Œëª¨ë“ˆ ì¶”ê? (ê²½ë¡œ: ThirdParty/rttr)
 add_subdirectory(ThirdParty/rttr)
 
-# window, std µÑÀÇ min, max Ãæµ¹»èÁ¦
+# window, std ?˜ì˜ min, max ì¶©ëŒ?? œ
 add_compile_definitions(NOMINMAX)
 
 # ==========================================
-# [Target] Engine (±âÁ¸ AliceEngine)
+# [Target] Engine (ê¸°ì¡´ AliceEngine)
 # ==========================================
 set(ENGINE_SOURCES
-    # ¿£Áø °èÃş
+    # ?”ì§„ ê³„ì¸µ
     ${ALICE_SRC_DIR}/Engine/Engine.cpp
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.cpp
     ${ALICE_SRC_DIR}/Editor/EditorCore.cpp
     ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.cpp
 
-    # ÄÚ¾î(ECS ½ºÅ¸ÀÏ)
+    # ì½”ì–´(ECS ?¤í???
     ${ALICE_SRC_DIR}/Core/World.cpp
     ${ALICE_SRC_DIR}/Core/ThreadSafety.cpp
     ${ALICE_SRC_DIR}/Core/IScript.cpp
@@ -120,7 +120,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Audio/AudioSystem.cpp
     ${ALICE_SRC_DIR}/Audio/SoundManager.cpp
 
-    # FBX/3D ¸ğµ¨ ·Î´õ
+    # FBX/3D ëª¨ë¸ ë¡œë”
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxModel.cpp
     ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.cpp
@@ -136,7 +136,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Game/CombatSystem.cpp
     ${ALICE_SRC_DIR}/Game/AttackDriverSystem.cpp
 
-    # ·»´õ¸µ °èÃş
+    # ?Œë”ë§?ê³„ì¸µ
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.cpp
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.cpp
@@ -145,7 +145,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
-    #${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.cpp
     
     #PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -180,7 +180,7 @@ set(ENGINE_SOURCES
 	${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
 	${ALICE_SRC_DIR}/UI/UIScriptFactory.cpp
 
-    # ½¦ÀÌ´õ ÄÚµå ¹­À½
+    # ?ì´??ì½”ë“œ ë¬¶ìŒ
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
@@ -191,7 +191,7 @@ set(ENGINE_SOURCES
 
 	${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
 
-    # AliceUI (Shader ±â¹İ UI)
+    # AliceUI (Shader ê¸°ë°˜ UI)
     ${ALICE_SRC_DIR}/AliceUI/UIFont.cpp
     ${ALICE_SRC_DIR}/AliceUI/UIRenderer.cpp
     ${ALICE_SRC_DIR}/AliceUI/UIShaderCode.cpp
@@ -199,13 +199,13 @@ set(ENGINE_SOURCES
 )
 
 set(ENGINE_HEADERS
-    # ¿£Áø °èÃş
+    # ?”ì§„ ê³„ì¸µ
     ${ALICE_SRC_DIR}/Engine/Engine.h
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.h
     ${ALICE_SRC_DIR}/Editor/EditorCore.h
     ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.h
 
-    # ÄÚ¾î
+    # ì½”ì–´
     ${ALICE_SRC_DIR}/Core/World.h
     ${ALICE_SRC_DIR}/Core/ThreadSafety.h
     ${ALICE_SRC_DIR}/Core/GameObject.h
@@ -248,7 +248,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Audio/SoundManager.h
 
     
-    #ÄÄÆ÷³ÍÆ®µé
+    #ì»´í¬?ŒíŠ¸??
     ${ALICE_SRC_DIR}/Components/ComponentStorage.h
     ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h
     ${ALICE_SRC_DIR}/Components/CameraComponent.h
@@ -279,9 +279,9 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/WeaponTraceComponent.h
     ${ALICE_SRC_DIR}/Components/HealthComponent.h
     ${ALICE_SRC_DIR}/Components/AttackDriverComponent.h
-    #${ALICE_SRC_DIR}/Components/PostProcessVolumeComponent.h
+    ${ALICE_SRC_DIR}/Components/PostProcessVolumeComponent.h
 
-    # FBX/3D ¸ğµ¨ ·Î´õ Çì´õ
+    # FBX/3D ëª¨ë¸ ë¡œë” ?¤ë”
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
     ${ALICE_SRC_DIR}/3Dmodel/FbxModel.h
     ${ALICE_SRC_DIR}/3Dmodel/FbxSkeleton.h
@@ -289,7 +289,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/3Dmodel/FbxGeometry.h
     ${ALICE_SRC_DIR}/3Dmodel/FbxAnimation.h
 
-    # ·»´õ¸µ °èÃş
+    # ?Œë”ë§?ê³„ì¸µ
     ${ALICE_SRC_DIR}/Rendering/Camera.h
     ${ALICE_SRC_DIR}/Rendering/ForwardRenderSystem.h
     ${ALICE_SRC_DIR}/Rendering/DeferredRenderSystem.h
@@ -301,10 +301,10 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.h
     ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
-    #${ALICE_SRC_DIR}/Rendering/PostProcessSettings.h
-    #${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.h
+    ${ALICE_SRC_DIR}/Rendering/PostProcessSettings.h
+    ${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.h
     
-    # ½¦ÀÌ´õ ÄÚµå ¹­À½
+    # ?ì´??ì½”ë“œ ë¬¶ìŒ
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
@@ -319,7 +319,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Game/CombatHitEvent.h
     ${ALICE_SRC_DIR}/Game/CombatSystem.h
     ${ALICE_SRC_DIR}/Game/AttackDriverSystem.h
-    #PhysX ¹°¸®
+    #PhysX ë¬¼ë¦¬
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
@@ -357,7 +357,7 @@ set(ENGINE_HEADERS
      #UI Object
     ${ALICE_SRC_DIR}/UI/UIBase.h
 
-    # AliceUI (Shader ±â¹İ UI)
+    # AliceUI (Shader ê¸°ë°˜ UI)
     ${ALICE_SRC_DIR}/AliceUI/UICommon.h
     ${ALICE_SRC_DIR}/AliceUI/UIWidgetComponent.h
     ${ALICE_SRC_DIR}/AliceUI/UITransformComponent.h
@@ -408,11 +408,11 @@ add_library(Engine STATIC
     ${ENGINE_HEADERS}
 )
 
-# [¼³Á¤] Engine¿¡ RTTR ¿¬°á (PUBLIC: ¿£ÁøÀ» ¾²´Â ÇÁ·ÎÁ§Æ®µµ RTTR »ç¿ë °¡´É)
+# [?¤ì •] Engine??RTTR ?°ê²° (PUBLIC: ?”ì§„???°ëŠ” ?„ë¡œ?íŠ¸??RTTR ?¬ìš© ê°€??
 target_link_libraries(Engine PUBLIC RTTR::Core)
 
 if(MSVC)
-    # ComponentRegistry.cppÀÇ RTTR µî·ÏÀÌ Ä¿Á®¼­ obj°¡ Ä¿Áü
+    # ComponentRegistry.cpp??RTTR ?±ë¡??ì»¤ì ¸??objê°€ ì»¤ì§
     target_compile_options(Engine PRIVATE /bigobj)
 endif()
 
@@ -421,16 +421,16 @@ source_group(TREE ${ALICE_SRC_DIR} FILES ${ENGINE_SOURCES} ${ENGINE_HEADERS})
 # ==========================================
 # [ThirdParty] FMOD
 # ==========================================
-# FMOD °æ·Î º¯¼ö ¼³Á¤ (±âÁ¸ FMOD_DIR »ç¿ë)
+# FMOD ê²½ë¡œ ë³€???¤ì • (ê¸°ì¡´ FMOD_DIR ?¬ìš©)
 set(FMOD_INC_DIR "${FMOD_DIR}/inc")
 set(FMOD_LIB_DIR "${FMOD_DIR}/64x")
 
-# Engine¿¡ FMOD Çì´õ Æ÷ÇÔ (PUBLIC: ¿£ÁøÀ» ¾²´Â ÇÁ·ÎÁ§Æ®µµ FMOD Çì´õ »ç¿ë °¡´É)
+# Engine??FMOD ?¤ë” ?¬í•¨ (PUBLIC: ?”ì§„???°ëŠ” ?„ë¡œ?íŠ¸??FMOD ?¤ë” ?¬ìš© ê°€??
 if(EXISTS "${FMOD_INC_DIR}")
     target_include_directories(Engine PUBLIC "${FMOD_INC_DIR}")
 endif()
 
-# Engine¿¡ FMOD ¶óÀÌºê·¯¸® ¸µÅ© (Debug´Â fmodL_vc.lib, Release´Â fmod_vc.lib)
+# Engine??FMOD ?¼ì´ë¸ŒëŸ¬ë¦?ë§í¬ (Debug??fmodL_vc.lib, Release??fmod_vc.lib)
 if(EXISTS "${FMOD_LIB_DIR}/fmod_vc.lib" AND EXISTS "${FMOD_LIB_DIR}/fmodL_vc.lib")
     target_link_libraries(Engine PUBLIC
         debug     "${FMOD_LIB_DIR}/fmodL_vc.lib"
@@ -441,7 +441,7 @@ endif()
 # ==========================================
 # [Target] Launch & AlicePlayer
 # ==========================================
-# °øÅë °ÔÀÓ ÄÚµå
+# ê³µí†µ ê²Œì„ ì½”ë“œ
 set(APP_COMMON_SOURCES
     ${ALICE_SRC_DIR}/Scenes/SampleScene.cpp
     ${ALICE_SRC_DIR}/Game/FbxImporter.cpp
@@ -456,24 +456,24 @@ set(APP_HEADERS
     ${ALICE_SRC_DIR}/Core/AdvancedAnimSystem.h
 )
 
-# 1. Launch (¿¡µğÅÍ/Åø ¸ğµå) ¿£Æ®¸® Æ÷ÀÎÆ®
+# 1. Launch (?ë””????ëª¨ë“œ) ?”íŠ¸ë¦??¬ì¸??
 set(LAUNCH_MAIN
     ${ALICE_SRC_DIR}/Sandbox/Main.cpp
 )
 
-# 2. AlicePlayer (¼ø¼ö °ÔÀÓ ¸ğµå) ¿£Æ®¸® Æ÷ÀÎÆ®
+# 2. AlicePlayer (?œìˆ˜ ê²Œì„ ëª¨ë“œ) ?”íŠ¸ë¦??¬ì¸??
 set(PLAYER_MAIN
     ${ALICE_SRC_DIR}/Sandbox/GameMain.cpp
 )
 
-# [Target 1] Launch (±âÁ¸ AliceGame/AliceRenderer)
+# [Target 1] Launch (ê¸°ì¡´ AliceGame/AliceRenderer)
 add_executable(Launch
     ${LAUNCH_MAIN}
     ${APP_COMMON_SOURCES}
     ${APP_HEADERS}
 )
 
-# [Target 2] AlicePlayer (ÃÖÁ¾ ºôµå¿ë ÇÃ·¹ÀÌ¾î)
+# [Target 2] AlicePlayer (ìµœì¢… ë¹Œë“œ???Œë ˆ?´ì–´)
 add_executable(AlicePlayer
     ${PLAYER_MAIN}
     ${APP_COMMON_SOURCES}
@@ -486,18 +486,18 @@ source_group(TREE ${ALICE_SRC_DIR} FILES ${LAUNCH_MAIN} ${PLAYER_MAIN} ${APP_COM
 # [ThirdParty] ImGui
 # ==========================================
 
-# EngineÀÌ ImGui Çì´õ¸¦ Ã£À» ¼ö ÀÖµµ·Ï ¼³Á¤
+# Engine??ImGui ?¤ë”ë¥?ì°¾ì„ ???ˆë„ë¡??¤ì •
 target_include_directories(Engine
     PRIVATE
         ${ALICE_SRC_DIR}
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
         ${IMGUI_NODE_EDITOR_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR Çì´õ °æ·Î
+        ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR ?¤ë” ê²½ë¡œ
 )
 
 
-# ImGui Á¤Àû ¶óÀÌºê·¯¸®
+# ImGui ?•ì  ?¼ì´ë¸ŒëŸ¬ë¦?
 add_library(imgui STATIC
     ${IMGUI_DIR}/imconfig.h
     ${IMGUI_DIR}/imgui.cpp
@@ -522,7 +522,7 @@ target_include_directories(imgui
         ${IMGUI_DIR}/backends
 )
 
-# Launch¿Í AlicePlayer°¡ ImGui Çì´õ¸¦ Ã£À» ¼ö ÀÖµµ·Ï ¼³Á¤
+# Launch?€ AlicePlayerê°€ ImGui ?¤ë”ë¥?ì°¾ì„ ???ˆë„ë¡??¤ì •
 foreach(target Launch AlicePlayer)
     target_include_directories(${target}
         PRIVATE
@@ -540,13 +540,13 @@ endforeach()
 # [ThirdParty] ImGuizmo
 # ==========================================
 
-# EngineÀÌ ImGuizmo Çì´õ¸¦ Ã£À» ¼ö ÀÖµµ·Ï ¼³Á¤
+# Engine??ImGuizmo ?¤ë”ë¥?ì°¾ì„ ???ˆë„ë¡??¤ì •
 target_include_directories(Engine
     PRIVATE
         ${IMGUIZMO_DIR}
 )
 
-# ImGuizmo Á¤Àû ¶óÀÌºê·¯¸®
+# ImGuizmo ?•ì  ?¼ì´ë¸ŒëŸ¬ë¦?
 add_library(imguizmo STATIC
     ${IMGUIZMO_DIR}/ImGuizmo.cpp
     ${IMGUIZMO_DIR}/ImGuizmo.h
@@ -557,25 +557,25 @@ target_include_directories(imguizmo
         ${IMGUIZMO_DIR}
 )
 
-# ImGuizmo¸¦ DirectX ¸ğµå·Î ÄÄÆÄÀÏ (LH ÁÂÇ¥°è, depth 0~1)
+# ImGuizmoë¥?DirectX ëª¨ë“œë¡?ì»´íŒŒ??(LH ì¢Œí‘œê³? depth 0~1)
 target_compile_definitions(imguizmo
     PUBLIC
         IMGUIZMO_USE_DIRECTX
 )
 
-# Engineµµ µ¿ÀÏÇÑ Á¤ÀÇ »ç¿ë
+# Engine???™ì¼???•ì˜ ?¬ìš©
 target_compile_definitions(Engine
     PRIVATE
         IMGUIZMO_USE_DIRECTX
 )
 
-# ImGuizmo´Â ImGui¿¡ ÀÇÁ¸
+# ImGuizmo??ImGui???˜ì¡´
 target_link_libraries(imguizmo
     PUBLIC
         imgui
 )
 
-# ½ÇÇà ÆÄÀÏµéÀÌ ImGuizmo Çì´õ¸¦ Ã£À» ¼ö ÀÖµµ·Ï ¼³Á¤
+# ?¤í–‰ ?Œì¼?¤ì´ ImGuizmo ?¤ë”ë¥?ì°¾ì„ ???ˆë„ë¡??¤ì •
 foreach(target Launch AlicePlayer)
     target_include_directories(${target}
         PRIVATE
@@ -587,15 +587,15 @@ endforeach()
 # [ThirdParty] ImGui Node Editor
 # ==========================================
 
-# °æ·Î ¹İ¿µ
+# ê²½ë¡œ ë°˜ì˜
 #set(IMGUI_NODE_EDITOR_INCLUDE "${IMGUI_NODE_EDITOR_DIR}")
 #set(IMGUI_NODE_EDITOR_SOURCE  "${IMGUI_NODE_EDITOR_DIR}")
 #
 #if(NOT EXISTS "${IMGUI_NODE_EDITOR_SOURCE}/imgui_node_editor.cpp")
 #    message(FATAL_ERROR
-#        "¿À·ù: imgui-node-editor ¼Ò½º¸¦ Ã£À» ¼ö ¾ø½À´Ï´Ù!\n"
-#        "°æ·Î È®ÀÎ: ${IMGUI_NODE_EDITOR_SOURCE}\n"
-#        "cpp/h ÆÄÀÏµéÀÌ ÇÏÀ§ Æú´õ ¾øÀÌ ÇØ´ç À§Ä¡¿¡ ¹Ù·Î ÀÖ´ÂÁö È®ÀÎÇØÁÖ¼¼¿ä."
+#        "?¤ë¥˜: imgui-node-editor ?ŒìŠ¤ë¥?ì°¾ì„ ???†ìŠµ?ˆë‹¤!\n"
+#        "ê²½ë¡œ ?•ì¸: ${IMGUI_NODE_EDITOR_SOURCE}\n"
+#        "cpp/h ?Œì¼?¤ì´ ?˜ìœ„ ?´ë” ?†ì´ ?´ë‹¹ ?„ì¹˜??ë°”ë¡œ ?ˆëŠ”ì§€ ?•ì¸?´ì£¼?¸ìš”."
 #    )
 #endif()
 #
@@ -616,26 +616,26 @@ endforeach()
 #
 #target_compile_definitions(imgui_node_editor PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
 
-# Engine¿¡¼­ ¾²´Â°Ô º¸ÅëÀÌ´Ï Engine¿¡¸¸ ¹°¸²(½ÇÇàÆÄÀÏ¿¡´Â Áßº¹ ¸µÅ© X)
+# Engine?ì„œ ?°ëŠ”ê²?ë³´í†µ?´ë‹ˆ Engine?ë§Œ ë¬¼ë¦¼(?¤í–‰?Œì¼?ëŠ” ì¤‘ë³µ ë§í¬ X)
 #target_link_libraries(Engine PUBLIC imgui_node_editor)
 
 # ==========================================
-# [¼³Á¤] ÄÄÆÄÀÏ ¿É¼Ç ¹× vcpkg Àû¿ë
+# [?¤ì •] ì»´íŒŒ???µì…˜ ë°?vcpkg ?ìš©
 # ==========================================
 if(MSVC)
-    # °æ°í ·¹º§
+    # ê²½ê³  ?ˆë²¨
     target_compile_options(Engine      PRIVATE /W4 /permissive- /bigobj)
     target_compile_options(Launch      PRIVATE /W4 /permissive- /bigobj)
     target_compile_options(AlicePlayer PRIVATE /W4 /permissive- /bigobj)
 
-    # Include °æ·Î Ãß°¡ (»ó´Ü¿¡¼­ ¼³Á¤ÇÑ VCPKG_ROOT »ç¿ë)
+    # Include ê²½ë¡œ ì¶”ê? (?ë‹¨?ì„œ ?¤ì •??VCPKG_ROOT ?¬ìš©)
     target_include_directories(Engine
         PRIVATE
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_STATIC}/include"
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
     )
 
-    # Launch¿Í AlicePlayer¿¡ VCPKG Include/Lib °æ·Î ¼³Á¤
+    # Launch?€ AlicePlayer??VCPKG Include/Lib ê²½ë¡œ ?¤ì •
     foreach(target Launch AlicePlayer)
         target_include_directories(${target}
             PRIVATE
@@ -653,18 +653,18 @@ if(MSVC)
     endforeach()
 endif()
 
-# Win32 ÇÏÀ§ ½Ã½ºÅÛ (ÄÜ¼Ö ¼û±è)
+# Win32 ?˜ìœ„ ?œìŠ¤??(ì½˜ì†” ?¨ê?)
 set_target_properties(Launch PROPERTIES WIN32_EXECUTABLE YES)
 set_target_properties(AlicePlayer PROPERTIES WIN32_EXECUTABLE YES)
 
 # ==========================================
-# [Link] ¶óÀÌºê·¯¸® ¿¬°á
+# [Link] ?¼ì´ë¸ŒëŸ¬ë¦??°ê²°
 # ==========================================
-# µÎ Å¸°Ù ¸ğµÎ µ¿ÀÏÇÑ ¶óÀÌºê·¯¸® ÀÇÁ¸¼ºÀ» °¡Áü
+# ???€ê²?ëª¨ë‘ ?™ì¼???¼ì´ë¸ŒëŸ¬ë¦??˜ì¡´?±ì„ ê°€ì§?
 foreach(target Launch AlicePlayer)
     target_link_libraries(${target}
         PRIVATE
-            Engine          # ÇÙ½É ¿£Áø
+            Engine          # ?µì‹¬ ?”ì§„
             imgui
             imguizmo
             #imgui_node_editor
@@ -680,13 +680,13 @@ foreach(target Launch AlicePlayer)
 endforeach()
 
 # ==========================================
-# [Post-Build] DLL º¹»ç
+# [Post-Build] DLL ë³µì‚¬
 # ==========================================
 
-# Launch¿Í AlicePlayer Å¸°Ù ¸ğµÎ¿¡ DLL º¹»ç ¼öÇà
+# Launch?€ AlicePlayer ?€ê²?ëª¨ë‘??DLL ë³µì‚¬ ?˜í–‰
 foreach(target Launch AlicePlayer)
     add_custom_command(TARGET ${target} POST_BUILD
-        # RTTR shared ½ºÅ©¸³Æ® DLL°ú registry °øÀ¯
+        # RTTR shared ?¤í¬ë¦½íŠ¸ DLLê³?registry ê³µìœ 
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:rttr_core>" "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:rttr_core>"
 
@@ -705,7 +705,7 @@ foreach(target Launch AlicePlayer)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${THIRDPARTY_3DMODEL_DIR}/minizip.dll"      "$<TARGET_FILE_DIR:${target}>/minizip.dll"
 
-        # vcpkg Assimp DLL º¹»ç
+        # vcpkg Assimp DLL ë³µì‚¬
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/bin/assimp-vc143-mtd.dll"
             "$<TARGET_FILE_DIR:${target}>/assimp-vc143-mtd.dll"
@@ -726,24 +726,24 @@ if(MSVC)
     )
   endforeach()
   
-    # vcpkg toolchainÀ» ¾È ¾²´Â ±¸¼ºÀÌ¶ó¸é, find_package°¡ Ã£À» ¼ö ÀÖ°Ô prefix¸¸ Ãß°¡
+    # vcpkg toolchain?????°ëŠ” êµ¬ì„±?´ë¼ë©? find_packageê°€ ì°¾ì„ ???ˆê²Œ prefixë§?ì¶”ê?
     list(PREPEND CMAKE_PREFIX_PATH
         "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}"
     )
 
-    # vcpkg physx Æ÷Æ®°¡ ³»º¸³»´Â ÆĞÅ°Áö/Å¸°Ù
+    # vcpkg physx ?¬íŠ¸ê°€ ?´ë³´?´ëŠ” ?¨í‚¤ì§€/?€ê²?
     find_package(unofficial-omniverse-physx-sdk CONFIG REQUIRED)
 
-    # ¿£Áø¿¡ PhysX ¿¬°á (Debug/Release ¿Ã¹Ù¸¥ lib Á¶ÇÕÀº Å¸°ÙÀÌ ¾Ë¾Æ¼­ Ã³¸®)
+    # ?”ì§„??PhysX ?°ê²° (Debug/Release ?¬ë°”ë¥?lib ì¡°í•©?€ ?€ê²Ÿì´ ?Œì•„??ì²˜ë¦¬)
     target_link_libraries(Engine PUBLIC unofficial::omniverse-physx-sdk::sdk)
 
-    # include º¸°­
+    # include ë³´ê°•
     target_include_directories(Engine PRIVATE
         "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include"
         "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/include/physx"
     )
 
-    # PhysX ·±Å¸ÀÓ DLL º¹»ç (ÇÊ¿äÇÑ °Í¸¸ ÃÖ¼Ò·Î)
+    # PhysX ?°í???DLL ë³µì‚¬ (?„ìš”??ê²ƒë§Œ ìµœì†Œë¡?
     set(PHYSX_BINDIR_DEBUG "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/debug/bin")
     set(PHYSX_BINDIR_REL   "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}/bin")
 
@@ -768,7 +768,7 @@ endif()
 
 
 # ==========================================
-# [Post-Build] FMOD DLL º¹»ç
+# [Post-Build] FMOD DLL ë³µì‚¬
 # ==========================================
 if(WIN32)
     if(NOT EXISTS "${FMOD_LIB_DIR}/fmod.dll")
@@ -778,7 +778,7 @@ if(WIN32)
         message(FATAL_ERROR "[FMOD] not found: ${FMOD_LIB_DIR}/fmodL.dll")
     endif()
 
-    # Launch¿Í AlicePlayer Å¸°Ù¿¡ DLL º¹»ç
+    # Launch?€ AlicePlayer ?€ê²Ÿì— DLL ë³µì‚¬
     foreach(t Launch AlicePlayer)
         add_custom_command(TARGET ${t} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
