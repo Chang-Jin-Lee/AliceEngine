@@ -28,6 +28,9 @@ struct Phy_ColliderComponent
     float capsuleHalfHeight = 0.5f;
     bool capsuleAlignYAxis = true;
 
+    // Debug draw toggle (editor/runtime overlay)
+    bool debugDraw = false;
+
     // Material
     float staticFriction = 0.5f;
     float dynamicFriction = 0.5f;

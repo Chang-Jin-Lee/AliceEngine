@@ -18,7 +18,8 @@
                 },
                 "outlineWidth": 0.0010000000474974513,
                 "roughness": 1.0,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "PhysicsSceneSettings": {
                 "enableGroundPlane": true,
@@ -2304,7 +2305,8 @@
                 },
                 "outlineWidth": -0.9100000262260437,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2356,7 +2358,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2408,7 +2411,8 @@
                 },
                 "outlineWidth": -0.33000001311302185,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2460,7 +2464,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": 5
+                "shadingMode": 5,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2512,7 +2517,8 @@
                 },
                 "outlineWidth": -0.7699999809265137,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -2597,7 +2603,7 @@
                 },
                 "base": {
                     "autoAdvance": false,
-                    "blend01": 0.017948569729924202,
+                    "blend01": 0.0007026225212030113,
                     "clipA": "alice-Apose_arm|Crouch",
                     "clipB": "alice-Apose_arm|Crouch",
                     "enabled": true,
@@ -2633,6 +2639,12 @@
                 "sockets": [
                     {},
                     {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
                     {}
                 ],
                 "upper": {
@@ -2651,9 +2663,15 @@
                 }
             },
             "AttackDriver": {
-                "clipName": "alice-Apose_arm|Swing",
-                "endTimeSec": 0.20000000298023224,
-                "startTimeSec": 0.10000000149011612,
+                "clips": [
+                    {
+                        "clipName": "alice-Apose_arm|Swing",
+                        "enabled": true,
+                        "endTimeSec": 1.0,
+                        "source": "Explicit",
+                        "startTimeSec": 0.10000000149011612
+                    }
+                ],
                 "traceGuid": "10970757830035052100"
             },
             "Health": {
@@ -2681,7 +2699,8 @@
                 },
                 "outlineWidth": 0.0010000000474974513,
                 "roughness": 0.5,
-                "shadingMode": 5
+                "shadingMode": 5,
+                "transparent": false
             },
             "Scripts": [
                 {
@@ -2851,13 +2870,13 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.024741290137171745,
+                    "x": -0.07572366297245026,
                     "y": 0.0,
-                    "z": -0.18753786385059357
+                    "z": 0.8277594447135925
                 },
                 "rotation": {
                     "x": 0.0,
-                    "y": 5.448447227478027,
+                    "y": 4.866851806640625,
                     "z": 0.0
                 },
                 "scale": {
@@ -2917,7 +2936,7 @@
                 "maxDistance": 60.0,
                 "minDistance": 8.0,
                 "mode": 0,
-                "pitchDeg": 1.8777823448181152,
+                "pitchDeg": 1.913642406463623,
                 "pitchMaxDeg": 80.0,
                 "pitchMinDeg": -45.0,
                 "positionDamping": 8.0,
@@ -2926,7 +2945,7 @@
                 "shoulderOffset": 0.30000001192092896,
                 "shoulderSide": 1.0,
                 "targetName": "Player",
-                "yawDeg": 135.26539611816406
+                "yawDeg": -152.9511260986328
             },
             "CameraInput": {
                 "blendTimeKey3": 0.6000000238418579,
@@ -2956,7 +2975,7 @@
                 "frequency": 20.0
             },
             "CameraSpringArm": {
-                "distance": 2.999998092651367,
+                "distance": 2.9999983310699463,
                 "distanceDamping": 6.0,
                 "enableCollision": true,
                 "enableZoom": true,
@@ -2997,14 +3016,14 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": -2.2987096309661865,
-                    "y": 1.5983017683029175,
-                    "z": 1.731293797492981
+                    "x": 1.0205789804458618,
+                    "y": 1.600178599357605,
+                    "z": 3.6345512866973877
                 },
                 "rotation": {
-                    "x": 0.03277348726987839,
-                    "y": 2.3608267307281494,
-                    "z": 3.725290298461914e-09
+                    "x": 0.03339936211705208,
+                    "y": -2.6695008277893066,
+                    "z": -9.31322685637781e-10
                 },
                 "scale": {
                     "x": 1.0,
@@ -3016,42 +3035,45 @@
             "name": "Camera1"
         },
         {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
+            "ComputeEffect": {
                 "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
+                    "x": 1.0,
+                    "y": 0.20000000298023224,
+                    "z": 0.20000000298023224
                 },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
                     "x": 0.0,
                     "y": 0.0,
                     "z": 0.0
                 },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 6.0,
+                "useTransform": true
             },
             "Transform": {
-                "enabled": true,
+                "enabled": false,
                 "position": {
-                    "x": 8.25,
-                    "y": 0.0,
-                    "z": 0.0
+                    "x": -1.0164536237716675,
+                    "y": 1.0,
+                    "z": 2.923975944519043
                 },
                 "rotation": {
                     "x": 0.0,
@@ -3064,65 +3086,39 @@
                     "z": 1.0
                 }
             },
-            "guid": "1000000000001",
-            "name": "Pillar_Center_R_0"
+            "guid": "7327193960318715223",
+            "name": "GameObject59"
         },
         {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 2.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
+            "Collider": {
+                "capsuleAlignYAxis": true,
+                "capsuleHalfHeight": 0.5,
+                "capsuleRadius": 0.5,
+                "debugDraw": true,
+                "dynamicFriction": 0.5,
+                "halfExtents": {
                     "x": 1.0,
                     "y": 1.0,
                     "z": 1.0
-                }
+                },
+                "ignoreLayers": 0,
+                "isTrigger": true,
+                "layerBits": 8,
+                "radius": 1.0,
+                "restitution": 0.0,
+                "staticFriction": 0.5,
+                "type": "Sphere"
             },
-            "guid": "1000000000002",
-            "name": "Pillar_Center_R_1"
-        },
-        {
+            "Hurtbox": {
+                "damageScale": 1.0,
+                "ownerGuid": "5147235598097018399",
+                "ownerNameDebug": "Enemy",
+                "part": 0,
+                "teamId": 1
+            },
             "Material": {
                 "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
+                "assetPath": "Assets/Materials/IcoSphere_0.mat",
                 "color": {
                     "x": 0.699999988079071,
                     "y": 0.699999988079071,
@@ -3137,7 +3133,28 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
+            },
+            "RigidBody": {
+                "angularDamping": 0.05000000074505806,
+                "density": 1.0,
+                "enableCCD": false,
+                "enableSpeculativeCCD": false,
+                "gravityEnabled": false,
+                "isKinematic": true,
+                "linearDamping": 0.0,
+                "lockFlags": "None",
+                "massOverride": 0.0,
+                "maxAngularVelocity": 0.0,
+                "maxLinearVelocity": 0.0,
+                "resetVelocityOnTeleport": true,
+                "sleepThreshold": -1.0,
+                "solverPositionIterations": 4,
+                "solverVelocityIterations": 1,
+                "stabilizationThreshold": -1.0,
+                "startAwake": true,
+                "teleport": true
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -3147,1152 +3164,8 @@
             },
             "SkinnedMesh": {
                 "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 4.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000003",
-            "name": "Pillar_Center_R_2"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 6.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000004",
-            "name": "Pillar_Center_R_3"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000005",
-            "name": "Pillar_Center_L_0"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 2.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000006",
-            "name": "Pillar_Center_L_1"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 4.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000007",
-            "name": "Pillar_Center_L_2"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 6.0,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000008",
-            "name": "Pillar_Center_L_3"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 0.0,
-                    "z": 12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000009",
-            "name": "Pillar_Front_R_0"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 2.0,
-                    "z": 12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000010",
-            "name": "Pillar_Front_R_1"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 4.0,
-                    "z": 12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000011",
-            "name": "Pillar_Front_R_2"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 6.0,
-                    "z": 12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000012",
-            "name": "Pillar_Front_R_3"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 0.0,
-                    "z": 12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000013",
-            "name": "Pillar_Front_L_0"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 2.0,
-                    "z": 12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000014",
-            "name": "Pillar_Front_L_1"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 4.0,
-                    "z": 12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000015",
-            "name": "Pillar_Front_L_2"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 6.0,
-                    "z": 12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000016",
-            "name": "Pillar_Front_L_3"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 0.0,
-                    "z": -12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000017",
-            "name": "Pillar_Back_R_0"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 2.0,
-                    "z": -12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000018",
-            "name": "Pillar_Back_R_1"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 4.0,
-                    "z": -12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000019",
-            "name": "Pillar_Back_R_2"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": 8.25,
-                    "y": 6.0,
-                    "z": -12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000020",
-            "name": "Pillar_Back_R_3"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 0.0,
-                    "z": -12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000021",
-            "name": "Pillar_Back_L_0"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 2.0,
-                    "z": -12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000022",
-            "name": "Pillar_Back_L_1"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 4.0,
-                    "z": -12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000023",
-            "name": "Pillar_Back_L_2"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/pillar_low_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/pillar_low.fbxasset",
-                "meshAssetPath": "pillar_low"
-            },
-            "Transform": {
-                "enabled": true,
-                "position": {
-                    "x": -11.880000114440918,
-                    "y": 6.0,
-                    "z": -12.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                }
-            },
-            "guid": "1000000000024",
-            "name": "Pillar_Back_L_3"
-        },
-        {
-            "Material": {
-                "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/AmazingWonderland_0.mat",
-                "color": {
-                    "x": 0.699999988079071,
-                    "y": 0.699999988079071,
-                    "z": 0.699999988079071
-                },
-                "metalness": 0.0,
-                "normalStrength": 1.0,
-                "outlineColor": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "outlineWidth": 0.009999999776482582,
-                "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "SkinnedAnimation": {
-                "clipIndex": 0,
-                "playing": true,
-                "speed": 1.0,
-                "timeSec": 0.0
-            },
-            "SkinnedMesh": {
-                "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/AmazingWonderland.fbxasset",
-                "meshAssetPath": "AmazingWonderland"
+                "instanceAssetPath": "Assets/Fbx/IcoSphere.fbxasset",
+                "meshAssetPath": "IcoSphere"
             },
             "SocketAttachment": {
                 "extraPos": {
@@ -4310,57 +3183,40 @@
                     "y": 1.0,
                     "z": 1.0
                 },
-                "followScale": true,
-                "ownerGuid": "7962531513969683154",
-                "ownerNameDebug": "Player",
-                "socketName": "RightHand"
+                "followScale": false,
+                "ownerGuid": "5147235598097018399",
+                "ownerNameDebug": "Enemy",
+                "socketName": "Body"
             },
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": -0.05209408700466156,
-                    "y": 0.7583783268928528,
-                    "z": -0.4370630979537964
+                    "x": 0.004289154428988695,
+                    "y": 1.1432263851165771,
+                    "z": -0.10019627213478088
                 },
                 "rotation": {
-                    "x": -0.2566399574279785,
-                    "y": 0.791734516620636,
-                    "z": -1.4747120141983032
+                    "x": -0.4402396082878113,
+                    "y": 0.9982335567474365,
+                    "z": -0.18285898864269257
                 },
                 "scale": {
-                    "x": 0.9999998211860657,
-                    "y": 1.0000005960464478,
-                    "z": 0.9999998211860657
+                    "x": 0.4000000059604645,
+                    "y": 0.4000000059604645,
+                    "z": 0.4000000059604645
                 }
             },
-            "WeaponTrace": {
-                "active": true,
-                "attackInstanceId": 0,
-                "baseDamage": 10.0,
-                "debugDraw": true,
-                "ownerGuid": "7962531513969683154",
-                "ownerNameDebug": "Player",
-                "queryLayerBits": 0,
-                "radius": 10.0,
-                "targetLayerBits": 0,
-                "teamId": 0,
-                "traceSocketNames": [
-                    "RightHand",
-                    "APoint",
-                    "BPoint"
-                ]
-            },
-            "guid": "10970757830035052100",
-            "name": "Weapon"
+            "guid": "11311314126236785267",
+            "name": "HitBox"
         },
         {
             "Health": {
                 "alive": true,
-                "currentHealth": 90.0,
+                "currentHealth": 100.0,
                 "invulnDuration": 0.0,
                 "invulnRemaining": 0.0,
                 "maxHealth": 100.0,
-                "teamId": 1
+                "teamId": 0
             },
             "Material": {
                 "albedoTexturePath": "",
@@ -4379,13 +3235,14 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 2,
                 "playing": true,
                 "speed": 1.0,
-                "timeSec": 1028.6555851174053
+                "timeSec": 963.5327195595019
             },
             "SkinnedMesh": {
                 "boneCount": 248,
@@ -4397,6 +3254,25 @@
                     {
                         "name": "HitPoint",
                         "parentBone": "手捩.R",
+                        "position": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "rotation": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "scale": {
+                            "x": 1.0,
+                            "y": 1.0,
+                            "z": 1.0
+                        }
+                    },
+                    {
+                        "name": "Body",
+                        "parentBone": "首",
                         "position": {
                             "x": 0.0,
                             "y": 0.0,
@@ -4437,34 +3313,9 @@
             "name": "Enemy"
         },
         {
-            "Collider": {
-                "capsuleAlignYAxis": true,
-                "capsuleHalfHeight": 0.5,
-                "capsuleRadius": 0.5,
-                "dynamicFriction": 0.5,
-                "halfExtents": {
-                    "x": 1.0,
-                    "y": 1.0,
-                    "z": 1.0
-                },
-                "ignoreLayers": 0,
-                "isTrigger": true,
-                "layerBits": 8,
-                "radius": 0.5,
-                "restitution": 0.0,
-                "staticFriction": 0.5,
-                "type": "Sphere"
-            },
-            "Hurtbox": {
-                "damageScale": 1.0,
-                "ownerGuid": "5147235598097018399",
-                "ownerNameDebug": "Enemy",
-                "part": 0,
-                "teamId": 1
-            },
             "Material": {
                 "albedoTexturePath": "",
-                "assetPath": "Assets/Materials/IcoSphere_0.mat",
+                "assetPath": "Assets/Materials/AmazingWonderland_0.mat",
                 "color": {
                     "x": 0.699999988079071,
                     "y": 0.699999988079071,
@@ -4479,27 +3330,8 @@
                 },
                 "outlineWidth": 0.009999999776482582,
                 "roughness": 0.5,
-                "shadingMode": -1
-            },
-            "RigidBody": {
-                "angularDamping": 0.05000000074505806,
-                "density": 1.0,
-                "enableCCD": false,
-                "enableSpeculativeCCD": false,
-                "gravityEnabled": false,
-                "isKinematic": true,
-                "linearDamping": 0.0,
-                "lockFlags": "None",
-                "massOverride": 0.0,
-                "maxAngularVelocity": 0.0,
-                "maxLinearVelocity": 0.0,
-                "resetVelocityOnTeleport": true,
-                "sleepThreshold": -1.0,
-                "solverPositionIterations": 4,
-                "solverVelocityIterations": 1,
-                "stabilizationThreshold": -1.0,
-                "startAwake": true,
-                "teleport": false
+                "shadingMode": -1,
+                "transparent": false
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -4509,8 +3341,8 @@
             },
             "SkinnedMesh": {
                 "boneCount": 1,
-                "instanceAssetPath": "Assets/Fbx/IcoSphere.fbxasset",
-                "meshAssetPath": "IcoSphere"
+                "instanceAssetPath": "Assets/Fbx/AmazingWonderland.fbxasset",
+                "meshAssetPath": "AmazingWonderland"
             },
             "SocketAttachment": {
                 "extraPos": {
@@ -4528,31 +3360,332 @@
                     "y": 1.0,
                     "z": 1.0
                 },
-                "followScale": false,
-                "ownerGuid": "5147235598097018399",
-                "ownerNameDebug": "Enemy",
-                "socketName": "HitPoint"
+                "followScale": true,
+                "ownerGuid": "7962531513969683154",
+                "ownerNameDebug": "Player",
+                "socketName": "RightHand"
             },
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": -0.20690059661865234,
-                    "y": 1.203792929649353,
-                    "z": 0.3756835162639618
+                    "x": -0.002847708761692047,
+                    "y": 0.7583783268928528,
+                    "z": 0.5770492553710938
                 },
                 "rotation": {
-                    "x": -1.138427495956421,
-                    "y": 3.0366008281707764,
-                    "z": -0.741120457649231
+                    "x": -0.2566400170326233,
+                    "y": 0.21013912558555603,
+                    "z": -1.4747117757797241
                 },
                 "scale": {
-                    "x": 0.20000000298023224,
-                    "y": 0.20000000298023224,
-                    "z": 0.20000000298023224
+                    "x": 0.9999998211860657,
+                    "y": 1.0000005960464478,
+                    "z": 0.9999998807907104
                 }
             },
-            "guid": "11311314126236785267",
-            "name": "HitBox"
+            "WeaponTrace": {
+                "active": false,
+                "attackInstanceId": 34,
+                "baseDamage": 10.0,
+                "debugDraw": true,
+                "ownerGuid": "7962531513969683154",
+                "ownerNameDebug": "Player",
+                "queryLayerBits": 0,
+                "shapes": [
+                    {
+                        "boxHalfExtents": {
+                            "x": 0.05000000074505806,
+                            "y": 0.05000000074505806,
+                            "z": 0.20000000298023224
+                        },
+                        "capsuleHalfHeight": 0.20000000298023224,
+                        "enabled": true,
+                        "localPos": {
+                            "x": 0.5,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "localRotDeg": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "name": "Shape",
+                        "radius": 0.30000001192092896,
+                        "type": "Sphere"
+                    },
+                    {
+                        "boxHalfExtents": {
+                            "x": 0.05000000074505806,
+                            "y": 0.05000000074505806,
+                            "z": 0.20000000298023224
+                        },
+                        "capsuleHalfHeight": 0.20000000298023224,
+                        "enabled": true,
+                        "localPos": {
+                            "x": -0.5,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "localRotDeg": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "name": "Shape",
+                        "radius": 0.30000001192092896,
+                        "type": "Sphere"
+                    },
+                    {
+                        "boxHalfExtents": {
+                            "x": 0.05000000074505806,
+                            "y": 0.05000000074505806,
+                            "z": 0.20000000298023224
+                        },
+                        "capsuleHalfHeight": 0.20000000298023224,
+                        "enabled": true,
+                        "localPos": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "localRotDeg": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 0.0
+                        },
+                        "name": "Shape",
+                        "radius": 0.30000001192092896,
+                        "type": "Sphere"
+                    }
+                ],
+                "subSteps": 1,
+                "targetLayerBits": 0,
+                "teamId": 0,
+                "traceBasisGuid": "0"
+            },
+            "guid": "10970757830035052100",
+            "name": "Weapon"
+        },
+        {
+            "ComputeEffect": {
+                "color": {
+                    "x": 1.0,
+                    "y": 0.20000000298023224,
+                    "z": 0.20000000298023224
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 6.0,
+                "useTransform": true
+            },
+            "Transform": {
+                "enabled": false,
+                "position": {
+                    "x": 0.055456873029470444,
+                    "y": 1.6027162075042725,
+                    "z": 1.2556483745574951
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "11566260142144995169",
+            "name": "GameObject143"
+        },
+        {
+            "ComputeEffect": {
+                "color": {
+                    "x": 0.800000011920929,
+                    "y": 0.800000011920929,
+                    "z": 0.800000011920929
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 3.0,
+                "useTransform": true
+            },
+            "Transform": {
+                "enabled": false,
+                "position": {
+                    "x": 0.09457390010356903,
+                    "y": 0.10000000149011612,
+                    "z": 0.592096209526062
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "8493895928731147671",
+            "name": "GameObject144"
+        },
+        {
+            "ComputeEffect": {
+                "color": {
+                    "x": 0.800000011920929,
+                    "y": 0.800000011920929,
+                    "z": 0.800000011920929
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 3.0,
+                "useTransform": true
+            },
+            "Transform": {
+                "enabled": false,
+                "position": {
+                    "x": 0.1389625072479248,
+                    "y": 0.10000000149011612,
+                    "z": 1.196610689163208
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "3259157480936176657",
+            "name": "GameObject145"
+        },
+        {
+            "ComputeEffect": {
+                "color": {
+                    "x": 0.800000011920929,
+                    "y": 0.800000011920929,
+                    "z": 0.800000011920929
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 3.0,
+                "useTransform": true
+            },
+            "Transform": {
+                "enabled": false,
+                "position": {
+                    "x": 0.17666217684745789,
+                    "y": 0.10000000149011612,
+                    "z": 1.801016926765442
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "5294114924728819086",
+            "name": "GameObject146"
         }
     ],
     "sceneName": "ProtoCombat",
