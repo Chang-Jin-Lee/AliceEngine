@@ -2913,13 +2913,7 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
     // RigidBody 컴포넌트가 있고, 실제 PxRigidDynamic이 붙어 있을 때만 body 분기
     if (rb && body && body->IsValid())
     {
-        // 키네마틱: 게임 → 물리(target)만 반영. 트랜스폼 역쓰기 없음 (m_lastTransforms는 호출부 루프에서 갱신됨).
-        // body가 아직 scene에 없으면 SetKinematicTarget 내부에서 setGlobalPose로 폴백함.
-        if (rb->isKinematic)
-        {
-            body->SetKinematicTarget(pos, rot);
-            return;
-        }
+        const bool physIsKinematic = body->IsKinematic();
 
         if (rb->teleport)
         {
@@ -2932,6 +2926,16 @@ void PhysicsSystem::SyncGameToPhysics(EntityId entityId, const DirectX::XMFLOAT3
             }
 
             rb->teleport = false;
+            if (physIsKinematic)
+                body->SetKinematicTarget(pos, rot);
+            return;
+        }
+
+        // 키네마틱: 게임 → 물리(target)만 반영. 트랜스폼 역쓰기 없음 (m_lastTransforms는 호출부 루프에서 갱신됨).
+        // body가 아직 scene에 없으면 SetKinematicTarget 내부에서 setGlobalPose로 폴백함.
+        if (physIsKinematic)
+        {
+            body->SetKinematicTarget(pos, rot);
             return;
         }
 

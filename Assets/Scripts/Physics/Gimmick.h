@@ -2,15 +2,18 @@
 
 #include "Core/IScript.h"
 #include "Core/ScriptReflection.h"
+
 #include <string>
 #include <vector>
-#include <memory>
+#include <cstdint>
+#include <random>
+
 #include "Core/Entity.h"
-#include "DirectXMath.h"
+#include <DirectXMath.h>
 
 namespace Alice
 {
-    // 조인트를 이용한 파츠 연결/해제 스크립트
+    // Weapon break/assemble gimmick controller
     class Gimmick : public IScript
     {
         ALICE_BODY(Gimmick);
@@ -19,75 +22,132 @@ namespace Alice
         void Start() override;
         void Update(float deltaTime) override;
 
+        ALICE_PROPERTY(std::string, m_weaponCombinedName, "Weapon(combined)");
+        ALICE_PROPERTY(std::string, m_coreName, "W_Core");
+        ALICE_PROPERTY(std::string, m_tendonName, "W_Tendon");
+        ALICE_PROPERTY(std::string, m_eyeName, "W_EYE");
+        ALICE_PROPERTY(std::string, m_bindTargetName, "W_Target");
+
+        ALICE_PROPERTY(float, m_breakMaxImpulse, 20.0f);
+
+        ALICE_PROPERTY(float, m_magnetizeInterval, 1.0f);
+        ALICE_PROPERTY(float, m_eyeFloatMoveSpeed, 2.0f);
+        ALICE_PROPERTY(float, m_orbitAngularSpeed, 2.0f);
+        ALICE_PROPERTY(float, m_orbitRadiusScale, 1.0f);
+        ALICE_PROPERTY(float, m_orbitMinRadius, 0.2f);
+
+        ALICE_PROPERTY(float, m_assembleInterval, 1.0f);
+        ALICE_PROPERTY(float, m_assembleMoveSpeed, 4.0f);
+        ALICE_PROPERTY(float, m_eyeMoveSpeed, 8.0f);
+        ALICE_PROPERTY(float, m_tendonVisibleDelay, 1.0f);
+
+        ALICE_PROPERTY(float, m_arriveThreshold, 0.02f);
+        ALICE_PROPERTY(uint32_t, m_ignoreLayersMask, 0u);
+
     private:
-        // Legacy 오브젝트 (원본)
-        EntityId m_legacyEntity = InvalidEntityId;
-        
-        // 파츠 엔티티들 (parts_1 ~ parts_5)
-        std::vector<EntityId> m_parts;
-        
-        // 조인트 엔티티들 (각 파츠에 연결된 조인트)
-        std::vector<EntityId> m_jointEntities;
-        
-        // Legacy의 원래 컴포넌트 정보 저장
-        struct LegacyComponentInfo
+        enum class Phase
         {
-            bool hasSkinnedMesh = false;
-            bool hasMaterial = false;
-            bool hasRigidBody = false;
-            bool hasCollider = false;
-            bool hasMeshCollider = false;
-            // 컴포넌트 데이터 저장
-            std::string skinnedMeshAssetPath;
-            std::string materialAssetPath;
-            DirectX::XMFLOAT3 materialColor;
-            float materialRoughness = 0.5f;
-            float materialMetalness = 0.0f;
-            DirectX::XMFLOAT3 legacyPosition;
-            DirectX::XMFLOAT3 legacyRotation;
-            DirectX::XMFLOAT3 legacyScale;
-        } m_legacyInfo;
-        
-        // Parts의 원래 Collider trigger 상태 저장
-        std::vector<bool> m_originalPartTriggerStates;
-        
-        // 조립 상태
-        enum class AssemblyState
-        {
-            Assembled,      // 조립됨 (legacy 활성화, parts 비활성화)
-            Disassembled,   // 해체됨 (legacy 비활성화, parts 활성화, 물리 작용)
-            Assembling      // 조립 시도 중 (parts들이 조인트로 뭉치며 legacy 위치로 이동)
+            Normal = 0,
+            Break,
+            Magnetize,
+            AssembleShards,
+            AssembleEye,
+            Restore
         };
-        AssemblyState m_state = AssemblyState::Assembled;
-        
-        // 조립 시 유지할 거리
-        float m_assemblyDistance = 0.3f;
-        
-        // 폭발 힘 적용 재시도 플래그
-        bool m_pendingExplosion = false;
-        
-        
-        // 파츠 찾기 및 초기화
-        void FindLegacy();
-        void FindParts();
-        void SaveLegacyTransform();
-        
-        // 활성화/비활성화
-        void ActivateLegacy();
-        void DeactivateLegacy();
-        void ActivateParts();
-        void DeactivateParts();
-        
-        // 조인트 관련
-        void RemoveJoints();
-        void StartAssembling();
-        void UpdateAssembling(float deltaTime);
-        
-        // 파츠에 힘을 가해서 튀어나가게 만들기
-        void ApplyExplosionForce();
-        
-        // Parts의 물리 충돌 켜기/끄기
-        void EnablePartsCollision();
-        void DisablePartsCollision();
+
+        struct LocalPose
+        {
+            DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
+        };
+
+        struct ShardState
+        {
+            EntityId id = InvalidEntityId;
+            std::string name;
+            LocalPose bindLocal{};
+            EntityId originalParent = InvalidEntityId;
+            bool captured = false;
+            bool pulling = false;
+            bool assembling = false;
+            bool assembled = false;
+            float orbitAngle = 0.0f;
+            DirectX::XMFLOAT3 orbitAxis{ 0.0f, 1.0f, 0.0f };
+            DirectX::XMFLOAT3 orbitBaseDir{ 1.0f, 0.0f, 0.0f };
+            float orbitRadius = 0.0f;
+            DirectX::XMFLOAT3 pullStartPos{ 0.0f, 0.0f, 0.0f };
+            float pullTimer = 0.0f;
+            float pullDuration = 0.35f;
+        };
+
+        EntityId m_weaponCombined = InvalidEntityId;
+        EntityId m_core = InvalidEntityId;
+        EntityId m_tendon = InvalidEntityId;
+        EntityId m_eye = InvalidEntityId;
+        EntityId m_bindTarget = InvalidEntityId;
+
+        LocalPose m_eyeBindLocal{};
+        EntityId m_eyeOriginalParent = InvalidEntityId;
+
+        std::vector<ShardState> m_shards;
+        std::vector<size_t> m_assembleOrder;
+
+        Phase m_phase = Phase::Normal;
+        bool m_initialized = false;
+
+        float m_phaseTime = 0.0f;
+        float m_captureTimer = 0.0f;
+        float m_assembleTimer = 0.0f;
+        size_t m_nextAssembleIndex = 0;
+
+        bool m_pendingBreakImpulse = false;
+        bool m_eyeArrived = false;
+        float m_tendonTimer = 0.0f;
+        bool m_eyeFloatAnchorValid = false;
+        DirectX::XMFLOAT3 m_eyeFloatAnchor{ 0.0f, 0.0f, 0.0f };
+
+        std::mt19937 m_rng;
+
+        void FindEntities();
+        void CacheBindPoses();
+
+        void AdvancePhase();
+        void EnterPhase(Phase phase);
+
+        void UpdateMagnetize(float dt);
+        void UpdateAssembleShards(float dt);
+        void UpdateAssembleEye(float dt);
+
+        void UpdateEyeFloat(float dt);
+        void UpdateOrbitingShards(float dt);
+
+        void ApplyBreakImpulse();
+        bool CanApplyBreakImpulse() const;
+
+        void ResetShardState();
+
+        void SetEnabled(EntityId id, bool enabled);
+        void SetVisible(EntityId id, bool visible);
+        void SetColliderTrigger(EntityId id, bool trigger);
+        void SetIgnoreLayers(EntityId id, uint32_t mask);
+        void AddIgnoreSelfLayer(EntityId id);
+        void SetRigidBodyKinematic(EntityId id, bool kinematic, bool gravityEnabled);
+        void ClearRigidBodyVelocity(EntityId id);
+        void TeleportRigidBody(EntityId id);
+
+        LocalPose ComputeBindLocal(EntityId partId) const;
+        bool ComputeWorldFromBind(const LocalPose& local, DirectX::XMFLOAT3& outPos,
+                                  DirectX::XMFLOAT3& outRot, DirectX::XMFLOAT3& outScale) const;
+
+        bool MoveTowards(EntityId id, const DirectX::XMFLOAT3& targetPos,
+                         const DirectX::XMFLOAT3& targetRot, const DirectX::XMFLOAT3& targetScale,
+                         float speed, float dt);
+
+        DirectX::XMFLOAT3 GetEyeWorldPosition() const;
+        DirectX::XMFLOAT3 GetCoreWorldPosition() const;
+        bool GetBindTargetWorldPose(DirectX::XMFLOAT3& outPos,
+                                    DirectX::XMFLOAT3& outRot,
+                                    DirectX::XMFLOAT3& outScale) const;
     };
 }
