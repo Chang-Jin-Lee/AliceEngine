@@ -10,6 +10,7 @@
 #include <rttr/variant.h>
 #include <rttr/instance.h>
 #include <rttr/property.h>
+#include <rttr/variant_sequential_view.h>
 #include <imgui.h>
 #include <DirectXMath.h>
 #include <string>
@@ -43,6 +44,9 @@ namespace Alice
             inline UIEditEvent RenderProperty(const rttr::property& prop, rttr::instance& obj, 
                                       const std::string& label = "", World* world = nullptr)
             {
+                if (prop.get_metadata("BindWidget").is_valid())
+                    return UIEditEvent{};
+
                 rttr::type propType = prop.get_type();
                 std::string propName = prop.get_name().to_string();
                 std::string displayName = label.empty() ? propName : label;
@@ -268,14 +272,87 @@ namespace Alice
                         ImGui::EndDragDropTarget();
                     }
                 }
+                else if (propType.is_enumeration())
+                {
+                    auto enumType = propType.get_enumeration();
+                    std::string currentName = enumType.value_to_name(value).to_string();
+                    if (currentName.empty())
+                        currentName = "<None>";
+
+                    if (ImGui::BeginCombo(displayName.c_str(), currentName.c_str()))
+                    {
+                        for (auto& name : enumType.get_names())
+                        {
+                            bool selected = (name.to_string() == currentName);
+                            if (ImGui::Selectable(name.to_string().c_str(), selected))
+                            {
+                                rttr::variant v = enumType.name_to_value(name);
+                                if (v.is_valid())
+                                {
+                                    prop.set_value(obj, v);
+                                    event.changed = true;
+                                }
+                            }
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                else if (propType.is_sequential_container())
+                {
+                    // std::vector<T> 등: 각 요소를 트리 노드로 표시 (AdvancedAnimSocket 등)
+                    rttr::variant_sequential_view view = value.create_sequential_view();
+                    if (view.is_valid())
+                    {
+                        for (size_t i = 0; i < view.get_size(); ++i)
+                        {
+                            rttr::variant itemVal = view.get_value(i);
+                            if (!itemVal.is_valid()) continue;
+                            rttr::type itemType = itemVal.get_type();
+                            std::string nodeLabel = displayName + "[" + std::to_string(i) + "]";
+                            if (itemType.is_class())
+                            {
+                                if (ImGui::TreeNode(nodeLabel.c_str()))
+                                {
+                                    rttr::instance elemInst = itemVal;
+                                    for (auto& subProp : itemType.get_properties())
+                                    {
+                                        UIEditEvent e = RenderProperty(subProp, elemInst, "", world);
+                                        event.changed |= e.changed;
+                                        event.activated |= e.activated;
+                                        event.deactivatedAfterEdit |= e.deactivatedAfterEdit;
+                                    }
+                                    ImGui::TreePop();
+                                }
+                            }
+                            else
+                            {
+                                ImGui::Text("%s: %s", nodeLabel.c_str(), itemVal.to_string().c_str());
+                            }
+                        }
+                    }
+                }
                 else if (propType.is_class())
                 {
                     // 프로퍼티 타입이 클래스인 경우 렌더링
                     rttr::type classType = propType;
                     std::string className = classType.get_name().to_string();
 
+                    // XMFLOAT2 타입 렌더링
+                    if (className == "XMFLOAT2")
+                    {
+                        DirectX::XMFLOAT2 v = value.get_value<DirectX::XMFLOAT2>();
+                        event.activated = ImGui::IsItemActivated();
+                        if (ImGui::DragFloat2(displayName.c_str(), &v.x, 0.1f))
+                        {
+                            prop.set_value(obj, v);
+                            event.changed = true;
+                        }
+                        event.deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
+                    }
                     // XMFLOAT3 타입 렌더링
-                    if (className == "XMFLOAT3")
+                    else if (className == "XMFLOAT3")
                     {
                         DirectX::XMFLOAT3 v = value.get_value<DirectX::XMFLOAT3>();
                         // "color" 또는 "Color"가 포함된 경우 색상 편집 컨트롤로 렌더링
@@ -431,6 +508,15 @@ namespace Alice
                     // 노말맵 강도 조절: 0.0f ~ 5.0f 범위
                     event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 5.0f, "", world);
                 }
+                else if (propName == "toonPbrCut1" || propName == "toonPbrCut2" || propName == "toonPbrCut3" ||
+                         propName == "toonPbrLevel1" || propName == "toonPbrLevel2" || propName == "toonPbrLevel3")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
+                }
+                else if (propName == "toonPbrStrength")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
+                }
                 else
                 {
                     event = Detail::RenderProperty(prop, inst, "", world);
@@ -490,6 +576,19 @@ namespace Alice
                 // roughness, metalness는 자동으로 SliderFloat로 렌더링
                 UIEditEvent event;
                 if (propName == "roughness" || propName == "metalness")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
+                }
+                else if (propName == "normalStrength")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 5.0f, displayLabel, world);
+                }
+                else if (propName == "toonPbrCut1" || propName == "toonPbrCut2" || propName == "toonPbrCut3" ||
+                         propName == "toonPbrLevel1" || propName == "toonPbrLevel2" || propName == "toonPbrLevel3")
+                {
+                    event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
+                }
+                else if (propName == "toonPbrStrength")
                 {
                     event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
                 }

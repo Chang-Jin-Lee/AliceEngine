@@ -147,6 +147,18 @@ namespace Alice {
 		}
 	}
 
+	GameObject World::CreateGameObject()
+	{
+		EntityId id = CreateEmpty();
+		return GameObject(this, id, nullptr);
+	}
+
+	void World::DestroyGameObject(GameObject gameObject)
+	{
+		if (gameObject.IsValid())
+			DestroyEntity(gameObject.id());
+	}
+
 	GameObject World::FindGameObject(const std::string& name)
 	{
 		// 이름으로 엔티티 검색 (선형 검색)
@@ -162,6 +174,19 @@ namespace Alice {
 		}
 		// 찾지 못한 경우 빈 GameObject 반환 (IsValid() == false)
 		return GameObject();
+	}
+
+	EntityId World::FindEntityByGuid(std::uint64_t guid) const
+	{
+		if (guid == 0)
+			return InvalidEntityId;
+
+		for (const auto& [eid, idc] : GetComponents<IDComponent>())
+		{
+			if (idc.guid == guid)
+				return eid;
+		}
+		return InvalidEntityId;
 	}
 
 	void World::SetEntityName(EntityId id, const std::string& name)

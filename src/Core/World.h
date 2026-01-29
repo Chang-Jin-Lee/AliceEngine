@@ -35,9 +35,15 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
 #include "Components/EffectComponent.h"
 #include "Components/TrailEffectComponent.h"
 #include "Components/ComputeEffectComponent.h"
+#include "Components/SocketAttachmentComponent.h"
+#include "Components/HurtboxComponent.h"
+#include "Components/WeaponTraceComponent.h"
+#include "Components/HealthComponent.h"
+#include "Components/AttackDriverComponent.h"
 
 
 // 물리 컴포넌트들
@@ -64,8 +70,12 @@ namespace Alice
         EntityId CreateEntity();
         void DestroyEntity(EntityId id);
 
+        GameObject CreateGameObject();
+        void DestroyGameObject(GameObject gameObject);
+
         // ==== 유틸리티 ====
         GameObject FindGameObject(const std::string& name);
+        EntityId FindEntityByGuid(std::uint64_t guid) const;
         void SetEntityName(EntityId id, const std::string& name);
         std::string GetEntityName(EntityId id) const;
         

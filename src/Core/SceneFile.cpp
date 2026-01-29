@@ -11,8 +11,11 @@
 #include "Components/IDComponent.h"
 #include <random>
 
+#include <cmath>
 #include <fstream>
 #include <string>
+#include <algorithm>
+#include <unordered_set>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -20,10 +23,27 @@
 #include "Core/World.h"
 #include "Components/ScriptComponent.h"
 #include "Components/ComputeEffectComponent.h"
+#include "Components/EffectComponent.h"
+#include "Components/TrailEffectComponent.h"
+#include "Components/DebugDrawBoxComponent.h"
+#include "Components/HealthComponent.h"
+#include "Components/AttackDriverComponent.h"
+#include "Components/AnimBlueprintComponent.h"
+#include "Components/SocketComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
+#include "Core/SocketSerialization.h"
+#include "Core/AttackDriverSerialization.h"
+#include "Core/WeaponTraceSerialization.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
 
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
 
 #include "UI/UIWorldManager.h"
 
@@ -62,6 +82,98 @@ namespace Alice
                 return j.get<std::uint64_t>();
             }
             return NewGuid();
+        }
+
+        // GUID 파싱 (잘못된 값은 0)
+        static std::uint64_t ParseGuidOrZero(const JsonRttr::json& j)
+        {
+            if (j.is_string())
+            {
+                try
+                {
+                    return std::stoull(j.get<std::string>());
+                }
+                catch (...)
+                {
+                    return 0;
+                }
+            }
+            if (j.is_number_unsigned() || j.is_number_integer())
+                return j.get<std::uint64_t>();
+            return 0;
+        }
+
+        static void ReadStringArray(const JsonRttr::json& j, std::vector<std::string>& out)
+        {
+            out.clear();
+
+            if (j.is_string())
+            {
+                out.push_back(j.get<std::string>());
+                return;
+            }
+
+            if (!j.is_array())
+                return;
+
+            for (const auto& item : j)
+            {
+                if (item.is_string())
+                {
+                    out.push_back(item.get<std::string>());
+                    continue;
+                }
+
+                if (item.is_number() || item.is_boolean())
+                {
+                    out.push_back(item.dump());
+                    continue;
+                }
+
+                if (item.is_object())
+                {
+                    auto itName = item.find("name");
+                    if (itName != item.end() && itName->is_string())
+                        out.push_back(itName->get<std::string>());
+                }
+            }
+        }
+
+        template<typename T>
+        static bool ReadRttrArray(const JsonRttr::json& j, std::vector<T>& out)
+        {
+            out.clear();
+
+            if (j.is_null())
+                return true;
+
+            if (j.is_object())
+            {
+                T value{};
+                rttr::instance inst = value;
+                if (!JsonRttr::FromJsonObject(inst, j)) return false;
+                out.push_back(std::move(value));
+                return true;
+            }
+
+            if (!j.is_array())
+                return false;
+
+            for (const auto& item : j)
+            {
+                if (!item.is_object())
+                {
+                    // 잘못된 항목은 스킵 (이전 데이터 호환용)
+                    continue;
+                }
+
+                T value{};
+                rttr::instance inst = value;
+                if (!JsonRttr::FromJsonObject(inst, item)) return false;
+                out.push_back(std::move(value));
+            }
+
+            return true;
         }
 
         // 스키닝 메시가 아직 애니메이션 시스템과 연결되지 않았을 때 사용할
@@ -380,12 +492,25 @@ namespace Alice
                 outEntity["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* animBp = world.GetComponent<AnimBlueprintComponent>(id); animBp)
+            {
+                AnimBlueprintComponent copy = *animBp;
+                copy.blueprintPath = NormalizePathToRelative(copy.blueprintPath);
+                rttr::instance inst = copy;
+                outEntity["AnimBlueprint"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* socketComp = world.GetComponent<SocketComponent>(id); socketComp)
+            {
+                outEntity["Socket"] = SocketSerialization::SocketComponentToJson(*socketComp);
+            }
+
             if (const auto* audio = world.GetComponent<AudioSourceComponent>(id); audio)
             {
                 AudioSourceComponent copy = *audio;
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
                 rttr::instance inst = copy;
                 outEntity["AudioSource"] = JsonRttr::ToJsonObject(inst);
-                copy.soundPath = NormalizePathToRelative(copy.soundPath);
             }
 
             if (const auto* listener = world.GetComponent<AudioListenerComponent>(id); listener)
@@ -397,9 +522,91 @@ namespace Alice
 
             {
                 SoundBoxComponent copy = *sb;
+                copy.soundPath = NormalizePathToRelative(copy.soundPath);
                 rttr::instance inst = copy;
                 outEntity["SoundBox"] = JsonRttr::ToJsonObject(inst);
-                copy.soundPath = NormalizePathToRelative(copy.soundPath);
+            }
+
+            if (const auto* dbgBox = world.GetComponent<DebugDrawBoxComponent>(id); dbgBox)
+            {
+                rttr::instance inst = const_cast<DebugDrawBoxComponent&>(*dbgBox);
+                outEntity["DebugDrawBox"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(id); socketAttach)
+            {
+                rttr::instance inst = const_cast<SocketAttachmentComponent&>(*socketAttach);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["ownerGuid"] = std::to_string(socketAttach->ownerGuid);
+                outEntity["SocketAttachment"] = obj;
+            }
+
+            if (const auto* hurtbox = world.GetComponent<HurtboxComponent>(id); hurtbox)
+            {
+                rttr::instance inst = const_cast<HurtboxComponent&>(*hurtbox);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["ownerGuid"] = std::to_string(hurtbox->ownerGuid);
+                outEntity["Hurtbox"] = obj;
+            }
+
+            if (const auto* weaponTrace = world.GetComponent<WeaponTraceComponent>(id); weaponTrace)
+            {
+                outEntity["WeaponTrace"] = WeaponTraceSerialization::WeaponTraceComponentToJson(*weaponTrace);
+            }
+
+            if (const auto* health = world.GetComponent<HealthComponent>(id); health)
+            {
+                rttr::instance inst = const_cast<HealthComponent&>(*health);
+                outEntity["Health"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* attackDriver = world.GetComponent<AttackDriverComponent>(id); attackDriver)
+            {
+                outEntity["AttackDriver"] = AttackDriverSerialization::AttackDriverComponentToJson(*attackDriver);
+            }
+
+            // === AliceUI Components ===
+            if (const auto* uiWidget = world.GetComponent<UIWidgetComponent>(id); uiWidget)
+            {
+                rttr::instance inst = const_cast<UIWidgetComponent&>(*uiWidget);
+                outEntity["UIWidget"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiTransform = world.GetComponent<UITransformComponent>(id); uiTransform)
+            {
+                rttr::instance inst = const_cast<UITransformComponent&>(*uiTransform);
+                outEntity["UITransform"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiImage = world.GetComponent<UIImageComponent>(id); uiImage)
+            {
+                UIImageComponent copy = *uiImage;
+                copy.texturePath = NormalizePathToRelative(copy.texturePath);
+                rttr::instance inst = copy;
+                outEntity["UIImage"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiText = world.GetComponent<UITextComponent>(id); uiText)
+            {
+                UITextComponent copy = *uiText;
+                copy.fontPath = NormalizePathToRelative(copy.fontPath);
+                rttr::instance inst = copy;
+                outEntity["UIText"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiButton = world.GetComponent<UIButtonComponent>(id); uiButton)
+            {
+                UIButtonComponent copy = *uiButton;
+                copy.normalTexture = NormalizePathToRelative(copy.normalTexture);
+                copy.hoveredTexture = NormalizePathToRelative(copy.hoveredTexture);
+                copy.pressedTexture = NormalizePathToRelative(copy.pressedTexture);
+                copy.disabledTexture = NormalizePathToRelative(copy.disabledTexture);
+                rttr::instance inst = copy;
+                outEntity["UIButton"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiGauge = world.GetComponent<UIGaugeComponent>(id); uiGauge)
+            {
+                UIGaugeComponent copy = *uiGauge;
+                copy.fillTexture = NormalizePathToRelative(copy.fillTexture);
+                copy.backgroundTexture = NormalizePathToRelative(copy.backgroundTexture);
+                rttr::instance inst = copy;
+                outEntity["UIGauge"] = JsonRttr::ToJsonObject(inst);
             }
 
             if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
@@ -466,6 +673,24 @@ namespace Alice
             {
                 rttr::instance inst = const_cast<ComputeEffectComponent&>(*computeEffect);
                 outEntity["ComputeEffect"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* postProcessVolume = world.GetComponent<PostProcessVolumeComponent>(id); postProcessVolume)
+            {
+                rttr::instance inst = const_cast<PostProcessVolumeComponent&>(*postProcessVolume);
+                outEntity["PostProcessVolume"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* effect = world.GetComponent<EffectComponent>(id); effect)
+            {
+                rttr::instance inst = const_cast<EffectComponent&>(*effect);
+                outEntity["Effect"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            if (const auto* trail = world.GetComponent<TrailEffectComponent>(id); trail)
+            {
+                rttr::instance inst = const_cast<TrailEffectComponent&>(*trail);
+                outEntity["TrailEffect"] = JsonRttr::ToJsonObject(inst);
             }
 
             // PhysX Components
@@ -558,6 +783,18 @@ namespace Alice
             {
                 rttr::instance inst = t;
                 if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
+                // scale (0,0,0) 방지: 물리/렌더에서 0 나누기 등 오류 방지
+                const float eps = 1e-6f;
+                if (t.scale.x == 0.f && t.scale.y == 0.f && t.scale.z == 0.f)
+                {
+                    t.scale.x = t.scale.y = t.scale.z = 1.f;
+                }
+                else
+                {
+                    if (std::abs(t.scale.x) < eps) t.scale.x = (t.scale.x >= 0.f) ? eps : -eps;
+                    if (std::abs(t.scale.y) < eps) t.scale.y = (t.scale.y >= 0.f) ? eps : -eps;
+                    if (std::abs(t.scale.z) < eps) t.scale.z = (t.scale.z >= 0.f) ? eps : -eps;
+                }
             }
 
             // Scripts (여러 개)
@@ -639,8 +876,39 @@ namespace Alice
             if (itAA != e.end() && itAA->is_object())
             {
                 AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(id);
+                JsonRttr::json copy = *itAA;
+
+                if (auto itChains = copy.find("ikChains"); itChains != copy.end())
+                {
+                    if (!ReadRttrArray(*itChains, aa.ikChains)) return false;
+                    copy.erase("ikChains");
+                }
+
+                if (auto itSockets = copy.find("sockets"); itSockets != copy.end())
+                {
+                    if (!ReadRttrArray(*itSockets, aa.sockets)) return false;
+                    copy.erase("sockets");
+                }
+
                 rttr::instance inst = aa;
-                if (!JsonRttr::FromJsonObject(inst, *itAA)) return false;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
+            }
+
+            // AnimBlueprint (선택)
+            auto itAnimBp = e.find("AnimBlueprint");
+            if (itAnimBp != e.end() && itAnimBp->is_object())
+            {
+                AnimBlueprintComponent& ab = world.AddComponent<AnimBlueprintComponent>(id);
+                rttr::instance inst = ab;
+                if (!JsonRttr::FromJsonObject(inst, *itAnimBp)) return false;
+            }
+
+            // Socket (선택)
+            auto itSocket = e.find("Socket");
+            if (itSocket != e.end() && itSocket->is_object())
+            {
+                SocketComponent& sc = world.AddComponent<SocketComponent>(id);
+                if (!SocketSerialization::JsonToSocketComponent(*itSocket, sc)) return false;
             }
 
             // Camera (선택)
@@ -742,6 +1010,33 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itCE)) return false;
             }
 
+            // PostProcessVolume 선택
+            auto itPPV = e.find("PostProcessVolume");
+            if (itPPV != e.end() && itPPV->is_object())
+            {
+                PostProcessVolumeComponent& ppv = world.AddComponent<PostProcessVolumeComponent>(id);
+                rttr::instance inst = ppv;
+                if (!JsonRttr::FromJsonObject(inst, *itPPV)) return false;
+            }
+
+            // Effect 선택
+            auto itEffect = e.find("Effect");
+            if (itEffect != e.end() && itEffect->is_object())
+            {
+                EffectComponent& ec = world.AddComponent<EffectComponent>(id);
+                rttr::instance inst = ec;
+                if (!JsonRttr::FromJsonObject(inst, *itEffect)) return false;
+            }
+
+            // TrailEffect 선택
+            auto itTrail = e.find("TrailEffect");
+            if (itTrail != e.end() && itTrail->is_object())
+            {
+                TrailEffectComponent& te = world.AddComponent<TrailEffectComponent>(id);
+                rttr::instance inst = te;
+                if (!JsonRttr::FromJsonObject(inst, *itTrail)) return false;
+            }
+
             // PhysX Components
             auto itRB = e.find("RigidBody");
             if (itRB != e.end() && itRB->is_object())
@@ -826,6 +1121,113 @@ namespace Alice
                 if (!JsonRttr::FromJsonObject(inst, *itSB)) return false;
             }
 
+            // DebugDrawBox (선택)
+            auto itDbg = e.find("DebugDrawBox");
+            if (itDbg != e.end() && itDbg->is_object())
+            {
+                DebugDrawBoxComponent& dd = world.AddComponent<DebugDrawBoxComponent>(id);
+                rttr::instance inst = dd;
+                if (!JsonRttr::FromJsonObject(inst, *itDbg)) return false;
+            }
+
+            // SocketAttachment (선택)
+            auto itSocketAttach = e.find("SocketAttachment");
+            if (itSocketAttach != e.end() && itSocketAttach->is_object())
+            {
+                SocketAttachmentComponent& sa = world.AddComponent<SocketAttachmentComponent>(id);
+                if (auto itGuid = itSocketAttach->find("ownerGuid"); itGuid != itSocketAttach->end())
+                    sa.ownerGuid = ParseGuidOrZero(*itGuid);
+
+                JsonRttr::json copy = *itSocketAttach;
+                copy.erase("ownerGuid");
+                rttr::instance inst = sa;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
+            }
+
+            // Hurtbox (선택)
+            auto itHurtbox = e.find("Hurtbox");
+            if (itHurtbox != e.end() && itHurtbox->is_object())
+            {
+                HurtboxComponent& hb = world.AddComponent<HurtboxComponent>(id);
+                if (auto itGuid = itHurtbox->find("ownerGuid"); itGuid != itHurtbox->end())
+                    hb.ownerGuid = ParseGuidOrZero(*itGuid);
+
+                JsonRttr::json copy = *itHurtbox;
+                copy.erase("ownerGuid");
+                rttr::instance inst = hb;
+                if (!JsonRttr::FromJsonObject(inst, copy)) return false;
+            }
+
+            // WeaponTrace (선택)
+            auto itWeaponTrace = e.find("WeaponTrace");
+            if (itWeaponTrace != e.end() && itWeaponTrace->is_object())
+            {
+                WeaponTraceComponent& wt = world.AddComponent<WeaponTraceComponent>(id);
+                if (!WeaponTraceSerialization::JsonToWeaponTraceComponent(*itWeaponTrace, wt)) return false;
+            }
+
+            // Health (선택)
+            auto itHealth = e.find("Health");
+            if (itHealth != e.end() && itHealth->is_object())
+            {
+                HealthComponent& hc = world.AddComponent<HealthComponent>(id);
+                rttr::instance inst = hc;
+                if (!JsonRttr::FromJsonObject(inst, *itHealth)) return false;
+            }
+
+            // AttackDriver (선택)
+            auto itAttackDriver = e.find("AttackDriver");
+            if (itAttackDriver != e.end() && itAttackDriver->is_object())
+            {
+                AttackDriverComponent& ad = world.AddComponent<AttackDriverComponent>(id);
+                if (!AttackDriverSerialization::JsonToAttackDriverComponent(*itAttackDriver, ad))
+                    return false;
+            }
+
+            // === AliceUI Components ===
+            auto itUIWidget = e.find("UIWidget");
+            if (itUIWidget != e.end() && itUIWidget->is_object())
+            {
+                UIWidgetComponent& comp = world.AddComponent<UIWidgetComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIWidget)) return false;
+            }
+            auto itUITransform = e.find("UITransform");
+            if (itUITransform != e.end() && itUITransform->is_object())
+            {
+                UITransformComponent& comp = world.AddComponent<UITransformComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUITransform)) return false;
+            }
+            auto itUIImage = e.find("UIImage");
+            if (itUIImage != e.end() && itUIImage->is_object())
+            {
+                UIImageComponent& comp = world.AddComponent<UIImageComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIImage)) return false;
+            }
+            auto itUIText = e.find("UIText");
+            if (itUIText != e.end() && itUIText->is_object())
+            {
+                UITextComponent& comp = world.AddComponent<UITextComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIText)) return false;
+            }
+            auto itUIButton = e.find("UIButton");
+            if (itUIButton != e.end() && itUIButton->is_object())
+            {
+                UIButtonComponent& comp = world.AddComponent<UIButtonComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIButton)) return false;
+            }
+            auto itUIGauge = e.find("UIGauge");
+            if (itUIGauge != e.end() && itUIGauge->is_object())
+            {
+                UIGaugeComponent& comp = world.AddComponent<UIGaugeComponent>(id);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIGauge)) return false;
+            }
+
             return true;
         }
 
@@ -842,10 +1244,16 @@ namespace Alice
             std::vector<std::pair<EntityId, std::uint64_t>> pendingParents;
 
             // PASS 1: 엔티티 생성 + 컴포넌트 복원 + GUID 맵 생성
+            size_t entityIndex = 0;
             for (const auto& e : *itEntities)
             {
                 if (!ApplyEntity(world, e, guidToEntity, pendingParents))
+                {
+                    const std::string name = e.value("name", std::string{});
+                    ALICE_LOG_ERRORF("[SceneFile] ApplyEntity FAILED at entity index %zu name=\"%s\"", entityIndex, name.c_str());
                     return false;
+                }
+                ++entityIndex;
             }
 
             // PASS 2: parent 연결 (keepWorld=false, 로드이므로)
@@ -900,10 +1308,25 @@ namespace Alice
             
             root["entities"] = JsonRttr::json::array();
 
+            std::unordered_set<EntityId> entitySet;
             const auto& transforms = world.GetComponents<TransformComponent>();
             for (const auto& [id, transform] : transforms)
             {
                 (void)transform;
+                entitySet.insert(id);
+            }
+
+            const auto& uiWidgets = world.GetComponents<UIWidgetComponent>();
+            for (const auto& [id, widget] : uiWidgets)
+            {
+                (void)widget;
+                entitySet.insert(id);
+            }
+
+            std::vector<EntityId> entityList(entitySet.begin(), entitySet.end());
+            std::sort(entityList.begin(), entityList.end());
+            for (EntityId id : entityList)
+            {
                 JsonRttr::json e;
                 if (!WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);
@@ -920,10 +1343,25 @@ namespace Alice
             root["version"] = 1;
             root["entities"] = JsonRttr::json::array();
 
+            std::unordered_set<EntityId> entitySet;
             const auto& transforms = world.GetComponents<TransformComponent>();
             for (const auto& [id, transform] : transforms)
             {
                 (void)transform;
+                entitySet.insert(id);
+            }
+
+            const auto& uiWidgets = world.GetComponents<UIWidgetComponent>();
+            for (const auto& [id, widget] : uiWidgets)
+            {
+                (void)widget;
+                entitySet.insert(id);
+            }
+
+            std::vector<EntityId> entityList(entitySet.begin(), entitySet.end());
+            std::sort(entityList.begin(), entityList.end());
+            for (EntityId id : entityList)
+            {
                 JsonRttr::json e;
                 if (!WriteEntity(e, world, id)) return false;
                 root["entities"].push_back(e);
@@ -980,6 +1418,7 @@ namespace Alice
 
         bool LoadAuto(World& world, const ResourceManager& resources, const std::filesystem::path& logicalPath, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // (1) 에디터: 실제 파일
             // (2) 게임  : Assets/... 는 Metas/Chunks 로 패킹되어 있으므로, 바이트 로드 후 JSON 파싱
             const std::filesystem::path resolved = resources.Resolve(logicalPath);
@@ -1001,24 +1440,8 @@ namespace Alice
                                logicalPath.generic_string().c_str(),
                                sp->size(),
                                resolvedStr.c_str());
-                // .alice 파일의 경우 World는 바이트에서 로드하고, UI는 별도 파일로 저장되므로 logicalPath를 사용하여 UI 로드
+                // .alice 파일의 경우 World는 바이트에서 로드
                 if (!LoadFromBytes(world, sp->data(), sp->size(), logicalPath.generic_string())) return false;
-                
-                // UI 로드 (있는 경우)
-                if (uiWorldManager)
-                {
-                    ALICE_LOG_INFO("[SceneFile] LoadAuto: Calling LoadUI for scene: %s", logicalPath.generic_string().c_str());
-                    if (!uiWorldManager->LoadUI(logicalPath, &resources))
-                    {
-                        ALICE_LOG_ERRORF("[SceneFile] LoadAuto: LoadUI failed for: %s", logicalPath.generic_string().c_str());
-                        return false;
-                    }
-                }
-                else
-                {
-                    ALICE_LOG_WARN("[SceneFile] LoadAuto: uiWorldManager is null, skipping UI load");
-                }
-                
                 return true;
             }
 
@@ -1026,43 +1449,22 @@ namespace Alice
             ALICE_LOG_INFO("[SceneFile] LoadAuto: file load. logical=\"%s\" resolved=\"%s\"",
                            logicalPath.generic_string().c_str(),
                            resolvedStr.c_str());
-            return Load(world, resolved, uiWorldManager);
+            return Load(world, resolved, nullptr);
         }
         
         bool Save(const World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // World 저장
             if (!Save(world, path)) return false;
-            
-            // UI 저장 (있는 경우)
-            if (uiWorldManager)
-            {
-                if (!uiWorldManager->SaveUI(path)) return false;
-            }
-            
             return true;
         }
         
         bool Load(World& world, const std::filesystem::path& path, UIWorldManager* uiWorldManager)
         {
+            (void)uiWorldManager;
             // World 로드
             if (!Load(world, path)) return false;
-            
-            // UI 로드 (있는 경우)
-            if (uiWorldManager)
-            {
-                ALICE_LOG_INFO("[SceneFile] Load: Calling LoadUI for scene: %s", path.generic_string().c_str());
-                if (!uiWorldManager->LoadUI(path, nullptr))
-                {
-                    ALICE_LOG_ERRORF("[SceneFile] Load: LoadUI failed for: %s", path.generic_string().c_str());
-                    return false;
-                }
-            }
-            else
-            {
-                ALICE_LOG_WARN("[SceneFile] Load: uiWorldManager is null, skipping UI load");
-            }
-            
             return true;
         }
     }

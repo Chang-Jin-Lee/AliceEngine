@@ -87,13 +87,13 @@ namespace
 	}
 }
 
-// pathW占쏙옙 占쏙옙占쏙옙占싸곤옙 占쏙옙占승댐옙.
+/// @brief 파일 경로로부터 FBX 모델을 로드합니다
 bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 {
 	Release();
 	m_->importer = std::make_unique<Assimp::Importer>();
-    // FBX 占실뱄옙/占쏙옙占쏙옙/占쏙옙占쏙옙트 회占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 Assimp占쏙옙 占쏙옙占쏙옙占싹댐옙 _$AssimpFbx$* 占쏙옙占쏙옙 占쏙옙弱?占쏙옙占신되억옙
-    // 占쏙옙/占쏙옙占?占쏙옙占쏙옙 DCC(Blender)占쏙옙 占쏙옙 占쏙옙치占싹곤옙 占싯니댐옙.
+    // FBX 피벗/프리/포스트 회전 처리를 Assimp에 위임합니다
+    // DCC(Blender)에서 내보낸 파일의 변환을 정확히 처리합니다
     m_->importer->SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
 	m_->importer->SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, 4);
 	std::string pathA = Utf8FromWString(pathW);
@@ -112,27 +112,24 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 		m_->globalInverse._41 = (float)I.d1; m_->globalInverse._42 = (float)I.d2; m_->globalInverse._43 = (float)I.d3; m_->globalInverse._44 = (float)I.d4;
 	}
 
-	// Base dir
-	// L"D:\\Project\\Resource\\Models\\player.fbx";
-	// -> L"D:\\Project\\Resource\\Models\\" 
+	// 기본 디렉토리 추출
 	auto baseDir = std::filesystem::path(pathW).parent_path().wstring();
 
-	// Build subsystems
-	// 占쌔댐옙占싹댐옙 占쏙옙占쏙옙占쏙옙 占쌍댐옙 占쏙옙占?占쌔쏙옙占식몌옙 占싻어봄.
+	// 서브시스템 빌드
 	if (!m_->materials.Load(device, m_->scene, baseDir)) return false;
 	if (!m_->geometry.Build(device, m_->scene)) return false;
 	m_->skeleton.BuildFromScene(m_->scene);
 	m_->skeleton.CollectBonesAndOffsets(m_->scene);
 	m_->nodeIndexOfName = m_->skeleton.NodeIndexOfName();
 
-	// Decide animation mode and prepare
+	// 애니메이션 모드 결정 및 준비
 	bool hasBones = m_->skeleton.HasBones();
-	// 占쏙옙占쏙옙 占쏙옙占승듸옙 占쌍니몌옙占싱쇽옙占쏙옙 占쌍는곤옙占? 占쏙옙 占쏙옙占쏙옙占쏙옙 占쌍니몌옙占싱쇽옙占싹띰옙
+	// 본이 없고 애니메이션이 있으면 Rigid 애니메이션 모드로 설정합니다
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{
 		m_->animType = AnimationType::Rigid;
 		m_->skeleton.BuildRigidBones();
-		// Build rigid weights from per-vertex owning nodes so GPU skinning path can be reused
+		// 정점별 소유 노드로부터 Rigid 가중치를 빌드하여 GPU 스키닝 경로를 재사용할 수 있게 합니다
 		{
 			auto& verts = m_->geometry.GetCPUVertices();
 			const auto& owners = m_->geometry.GetVertexOwningNodeNames();
@@ -171,12 +168,12 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			}
 		}
 	}
-	// 占쏙옙占쏙옙 占쌍곤옙 占쌍니몌옙占싱션듸옙 占쌍댐옙 占쏙옙占? Skinned 占쌍니몌옙占싱쇽옙 占싹띰옙.
+	// 본이 있는 경우 Skinned 애니메이션 모드로 설정합니다
 	else if (hasBones)
 	{
 		m_->animType = AnimationType::Skinned;
-		// Build skinning weights and re-upload VB so skinned VS works
-		// IMPORTANT: BLENDINDICES must index into the palette ordered by boneNames (not node index)
+		// 스키닝 가중치를 빌드하고 버텍스 버퍼를 다시 업로드하여 스키닝 버텍스 셰이더가 작동하도록 합니다
+		// 중요: BLENDINDICES는 노드 인덱스가 아닌 boneNames 순서로 정렬된 팔레트를 인덱싱해야 합니다
 		const auto& boneNames = m_->skeleton.GetBoneNames();
 		std::unordered_map<std::string,int> boneIndexOfBoneName;
 		boneIndexOfBoneName.reserve(boneNames.size());
@@ -186,7 +183,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 		{
 			struct Influence4 { unsigned short idx[4] = {0,0,0,0}; float w[4] = {0,0,0,0}; };
 			std::vector<Influence4> inf; inf.assign(verts.size(), {});
-			// Build base vertex table (mesh -> start in aggregated array) using same traversal order as geometry
+			// 지오메트리와 동일한 순회 순서를 사용하여 기본 버텍스 테이블을 빌드합니다
 			std::vector<size_t> baseVertex; baseVertex.resize(m_->scene->mNumMeshes, 0);
 			size_t cursor = 0;
 			std::function<void(const aiNode*)> fillBase = [&](const aiNode* node){
@@ -199,26 +196,19 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 				for (unsigned ci = 0; ci < node->mNumChildren; ++ci) fillBase(node->mChildren[ci]);
 			};
 			fillBase(m_->scene->mRootNode);
+
+			// BFS를 쓰는 방법
 			/*std::queue<const aiNode*> q;
 			q.push(m_->scene->mRootNode);*/
 
 			//while (!q.empty()) {
 			//	const aiNode* node = q.front(); q.pop();
-			//	// 占쌨쏙옙 처占쏙옙
-			//	// NOTE:
-			//	// - node->mMeshes 占쏙옙 "占쌨쏙옙 占싸듸옙占쏙옙 占썼열"占쌉니댐옙.
-			//	// - std::views::counted(node->mMeshes, node->mNumMeshes) 占쏙옙 for-each 占싹몌옙
-			//	//   mi 占쏙옙체占쏙옙 meshIdx 占쏙옙占싸듸옙, 占싣뤄옙占쏙옙占쏙옙 node->mMeshes[mi] 占쏙옙 占쌕쏙옙 占싸듸옙占쏙옙占싹몌옙
-			//	//   占쌩몌옙占쏙옙 占쌨모리몌옙 占쏙옙占쏙옙占싹울옙 baseVertex 占쏙옙占싱븝옙占쏙옙 占쏙옙占쏙옙占쏙옙, 占쏙옙占쏙옙占쏙옙占쏙옙占?占쏙옙키占쏙옙 占쏙옙占쏙옙치占쏙옙
-			//	//   占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙占싸되억옙 占쌨시곤옙 '占쏙옙챗占쏙옙/占쏙옙占쏙옙'처占쏙옙 占쏙옙占쏙옙占쏙옙占싹댐옙.
-			//	// - D3D11-AliceTutorial/31_IBL(App.cpp)占쏙옙 占쏙옙占시놂옙占? 占싸듸옙占쏙옙(0..mNumMeshes-1)占쏙옙 占쏙옙회占쌌니댐옙.
 			//	for (unsigned mi = 0; mi < node->mNumMeshes; ++mi)
 			//	{
 			//		const unsigned meshIdx = node->mMeshes[mi];
 			//		baseVertex[meshIdx] = cursor;
 			//		cursor += m_->scene->mMeshes[meshIdx]->mNumVertices;
 			//	}
-			//	// 占쌘쏙옙 占쏙옙占?큐占쏙옙 占쌩곤옙
 			//	for (const aiNode* child : std::views::counted(node->mChildren, node->mNumChildren)) {
 			//		q.push(child);
 			//	}
@@ -251,7 +241,7 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 					}
 				}
 			}
-			// Normalize and apply to vertices
+			// 가중치를 정규화하고 버텍스에 적용합니다
 			for (size_t i = 0; i < inf.size(); ++i)
 			{
 				float s = inf[i].w[0] + inf[i].w[1] + inf[i].w[2] + inf[i].w[3];
@@ -263,7 +253,6 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 				verts[i].boneWeight = { inf[i].w[0], inf[i].w[1], inf[i].w[2], inf[i].w[3] };
 			}
 
-			// === Debug: 占쏙옙키占쏙옙 占싸듸옙占쏙옙/占쏙옙占쏙옙치占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 확占쏙옙 ===
 			// {
 			// 	const auto& boneNamesDbg = m_->skeleton.GetBoneNames();
 			// 	unsigned short maxIdx = 0;
@@ -295,33 +284,33 @@ bool FbxModel::Load(ID3D11Device* device, const std::wstring& pathW)
 			m_->geometry.RebuildVBFromCPU(device);
 		}
 	}
-	// 占쏙옙占쏙옙 占쏙옙占쏙옙 占쌍니몌옙占싱션듸옙 占쏙옙占쏙옙占쏙옙. 占쏙옙 Static占쏙옙 占쏙옙占싹띰옙.
+	// 본과 애니메이션이 없는 경우 Static 메시로 처리합니다
 	else
 	{
 		m_->animType = AnimationType::None;
-		// 占쏙옙키占쏙옙 占쏙옙占싱댐옙占쏙옙 占쏙옙占쏙옙占싹깍옙 占쏙옙占쏙옙, 占쏙옙占?占쏙옙占쏙옙占쏙옙 0占쏙옙 占쏙옙(Identity)占쏙옙 占쏙옙占쏙옙占쏙옙
-		// 占쏙옙占쏙옙치(Weight)占쏙옙 0占싱몌옙 화占썽에 占쌓뤄옙占쏙옙占쏙옙 占쏙옙占쏙옙占실뤄옙 1.0占쏙옙占쏙옙 占쏙옙占쏙옙占쌔억옙 占쏙옙.
+		// 본 인덱스를 0으로 설정하고 (Identity 본)
+		// 가중치(Weight)는 0으로 화면에 표시되면 안 되므로 첫 번째 가중치에 1.0을 설정합니다
 		auto& verts = m_->geometry.GetCPUVertices();
 		if (!verts.empty())
 		{
 			for (auto& v : verts)
 			{
-				// 0占쏙옙 占쏙옙 占싸듸옙占쏙옙 占쏙옙占?Identity 占쏙옙占?
+				// 0번 본 인덱스는 Identity 본입니다
 				v.boneIdx[0] = 0;
 				v.boneIdx[1] = 0;
 				v.boneIdx[2] = 0;
 				v.boneIdx[3] = 0;
 
-				// 첫 占쏙옙째 占쏙옙占쏙옙 占쏙옙占쏙옙치 100% 占쌀댐옙
+				// 첫 번째 가중치에 100% 할당합니다
 				v.boneWeight = DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
 			}
 		}
 
-		// 占쏙옙占쏙옙占?占쏙옙占쏙옙 占쏙옙占쏙옙占싶몌옙 GPU 占쏙옙占쌜울옙 占쌕쏙옙 占쏙옙占싸듸옙
+		// 가중치를 GPU 버퍼로 다시 업로드합니다
 		m_->geometry.RebuildVBFromCPU(device);
 	}
 
-	// Init animation metadata and ensure CB
+	// 애니메이션 메타데이터 초기화 및 상수 버퍼 보장
 	m_->anim.InitMetadata(m_->scene);
 	m_->anim.SetType((m_->animType == AnimationType::Rigid) ? FbxAnimation::AnimType::Rigid : (m_->animType == AnimationType::Skinned ? FbxAnimation::AnimType::Skinned : FbxAnimation::AnimType::None));
 	m_->anim.EnsureBoneCB(device, 1023);
@@ -352,7 +341,7 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 		aiProcess_GenSmoothNormals | aiProcess_CalcTangentSpace | aiProcess_ConvertToLeftHanded |
 		aiProcess_OptimizeMeshes | aiProcess_OptimizeGraph | aiProcess_LimitBoneWeights;
 
-	// pHint 占쏙옙 확占쏙옙占쏙옙 占쏙옙트(占쏙옙: "fbx")占쏙옙 占쏙옙占쌉니댐옙.
+	// 확장자 추출 (예: "fbx")
 	const char* hint = nullptr;
 	std::string ext;
 	{
@@ -383,7 +372,7 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 	m_->skeleton.CollectBonesAndOffsets(m_->scene);
 	m_->nodeIndexOfName = m_->skeleton.NodeIndexOfName();
 
-	// Decide animation mode and prepare (Load()占쏙옙 占쏙옙占쏙옙)
+	// 애니메이션 모드 결정 및 준비 (Load()와 동일)
 	bool hasBones = m_->skeleton.HasBones();
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{
@@ -492,25 +481,25 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 	{
 		m_->animType = AnimationType::None;
 
-		// 占쏙옙키占쏙옙 占쏙옙占싱댐옙占쏙옙 占쏙옙占쏙옙占싹깍옙 占쏙옙占쏙옙, 占쏙옙占?占쏙옙占쏙옙占쏙옙 0占쏙옙 占쏙옙(Identity)占쏙옙 占쏙옙占쏙옙占쏙옙
-		// 占쏙옙占쏙옙치(Weight)占쏙옙 0占싱몌옙 화占썽에 占쌓뤄옙占쏙옙占쏙옙 占쏙옙占쏙옙占실뤄옙 1.0占쏙옙占쏙옙 占쏙옙占쏙옙占쌔억옙 占쏙옙.
+		// 본키가 없는 경우 본 인덱스를 0으로 설정(Identity 본)
+		// 가중치(Weight)는 0으로 화면에 표시되면 안 되므로 첫 번째 가중치에 1.0을 설정합니다
 		auto& verts = m_->geometry.GetCPUVertices();
 		if (!verts.empty())
 		{
 			for (auto& v : verts)
 			{
-				// 0占쏙옙 占쏙옙 占싸듸옙占쏙옙 占쏙옙占?Identity 占쏙옙占?
+				// 0번 본 인덱스는 Identity 본입니다
 				v.boneIdx[0] = 0;
 				v.boneIdx[1] = 0;
 				v.boneIdx[2] = 0;
 				v.boneIdx[3] = 0;
 
-				// 첫 占쏙옙째 占쏙옙占쏙옙 占쏙옙占쏙옙치 100% 占쌀댐옙
+				// 첫 번째 가중치에 100% 할당합니다
 				v.boneWeight = DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
 			}
 		}
 
-		// 占쏙옙占쏙옙占?占쏙옙占쏙옙 占쏙옙占쏙옙占싶몌옙 GPU 占쏙옙占쌜울옙 占쌕쏙옙 占쏙옙占싸듸옙
+		// 가중치를 GPU 버퍼로 다시 업로드합니다
 		m_->geometry.RebuildVBFromCPU(device);
 	}
 
@@ -518,7 +507,7 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 	m_->anim.SetType((m_->animType == AnimationType::Rigid) ? FbxAnimation::AnimType::Rigid : (m_->animType == AnimationType::Skinned ? FbxAnimation::AnimType::Skinned : FbxAnimation::AnimType::None));
 	m_->anim.EnsureBoneCB(device, 1023);
 
-	// Compute local AABB from CPU vertices (bind pose positions)
+	// CPU 버텍스로부터 로컬 AABB 계산 (바인드 포즈 위치)
 	{
 		const auto& verts = m_->geometry.GetCPUVertices();
 		ComputeLocalBoundsFromVertices(verts, m_->boundsValid, m_->boundsMin, m_->boundsMax);
@@ -579,14 +568,14 @@ bool FbxModel::LoadFromMemory(ID3D11Device* device,
 		m_->globalInverse._41 = (float)I.d1; m_->globalInverse._42 = (float)I.d2; m_->globalInverse._43 = (float)I.d3; m_->globalInverse._44 = (float)I.d4;
 	}
 
-	// Build subsystems - ResourceManager 기반으로 텍스처 로드
+	// 서브시스템 빌드 - ResourceManager 기반으로 텍스처를 로드합니다
 	if (!m_->materials.Load(device, m_->scene, fbxLogicalPath, rm)) return false;
 	if (!m_->geometry.Build(device, m_->scene)) return false;
 	m_->skeleton.BuildFromScene(m_->scene);
 	m_->skeleton.CollectBonesAndOffsets(m_->scene);
 	m_->nodeIndexOfName = m_->skeleton.NodeIndexOfName();
 
-	// Decide animation mode and prepare (기존 LoadFromMemory와 동일한 로직)
+	// 애니메이션 모드 결정 및 준비 (기존 LoadFromMemory와 동일한 로직)
 	bool hasBones = m_->skeleton.HasBones();
 	if (!hasBones && m_->scene->mNumAnimations > 0)
 	{

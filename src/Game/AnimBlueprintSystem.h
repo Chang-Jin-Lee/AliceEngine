@@ -425,17 +425,9 @@ namespace Alice
             if (!sockets || sockets->sockets.empty())
                 return;
 
-            auto* tr = world.GetComponent<TransformComponent>(id);
             DirectX::XMMATRIX worldM = DirectX::XMMatrixIdentity();
-            if (tr)
-            {
-                DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&tr->scale);
-                DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&tr->rotation);
-                DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&tr->position);
-                worldM = DirectX::XMMatrixScalingFromVector(scale)
-                    * DirectX::XMMatrixRotationRollPitchYawFromVector(rotation)
-                    * DirectX::XMMatrixTranslationFromVector(translation);
-            }
+            if (world.GetComponent<TransformComponent>(id))
+                worldM = world.ComputeWorldMatrix(id);
 
             if (rt.currentState < 0) return;
 
@@ -465,8 +457,10 @@ namespace Alice
                     DirectX::XMMatrixRotationRollPitchYawFromVector(rotation) *
                     DirectX::XMMatrixTranslationFromVector(translation);
 
-                DirectX::XMMATRIX boneG = DirectX::XMLoadFloat4x4(&rt.globals[boneIdx]);
-                DirectX::XMMATRIX socketWorld = local * boneG * worldM;
+                // rt.globals is column-major (FBX evaluation); transpose to row-major.
+                DirectX::XMMATRIX boneGRow = DirectX::XMMatrixTranspose(
+                    DirectX::XMLoadFloat4x4(&rt.globals[boneIdx]));
+                DirectX::XMMATRIX socketWorld = local * boneGRow * worldM;
 
                 DirectX::XMStoreFloat4x4(&s.local, local);
                 DirectX::XMStoreFloat4x4(&s.world, socketWorld);

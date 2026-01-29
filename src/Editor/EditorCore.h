@@ -22,6 +22,7 @@
 #include "Core/JsonRttr.h"
 #include "Core/ComponentRegistry.h"
 #include "Core/EditorComponentRegistry.h"
+#include "Rendering/PostProcessSettings.h"
 #include "imgui.h"
 #include <functional>
 #include <string>
@@ -29,6 +30,7 @@
 
 // Forward declaration
 class UIWorldManager;
+class UIRenderer;
 class UISceneManager;
 
 namespace Alice
@@ -149,7 +151,9 @@ namespace Alice
                           bool& pvdEnabled,
                           std::string& pvdHost,
                           int& pvdPort,
-                          class UIWorldManager* uiWorldManager = nullptr);
+                          class UIWorldManager* uiWorldManager,
+						  bool& isDebugDraw
+						  );
 
 		template<typename T>
 		void DrawEngineComponent(const char* label, T* comp, std::function<void()> removeFn, const EntityId& _selectedEntity, const std::string& compTypeName)
@@ -248,6 +252,20 @@ namespace Alice
         void DrawInspectorPointLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity);
         void DrawInspectorRectLight(World& world, const EntityId& _selectedEntity);
+        void DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity);
+		
+		// Default Post Process Settings UI
+		void DrawDefaultPostProcessSettings();
+		void SaveDefaultPostProcessSettings();
+		void LoadDefaultPostProcessSettings();
+		
+		// Camera 컴포넌트 인스펙터
+		void DrawInspectorCameraSpringArm(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraLookAt(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraFollow(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraShake(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraInput(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorCameraBlend(World& world, const EntityId& _selectedEntity);
 
 		// 물리
 		bool DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames);
@@ -259,6 +277,11 @@ namespace Alice
 		void DrawInspectorPhysicsSceneSettings(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity);
 		void DrawInspectorJoint(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorAttackDriver(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorHurtbox(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorWeaponTrace(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorSocketAttachment(World& world, const EntityId& _selectedEntity);
+		void DrawInspectorSocketComponent(World& world, const EntityId& _selectedEntity);
 
         /// 프로젝트 뷰에서 사용할 간단한 디렉터리 트리 그리기 함수입니다.
         void DrawDirectoryNode(World& world,
@@ -274,6 +297,10 @@ namespace Alice
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_skinnedRegistry = registry; }
         void SetInputSystem(InputSystem* inputSystem) { m_inputSystem = inputSystem; }
         void SetUIWorldManager(class UIWorldManager* uiWorldManager) { m_uiWorldManager = uiWorldManager; }
+		void SetAliceUIRenderer(UIRenderer* renderer);
+
+        /// Default PostProcess Settings를 가져옵니다 (PostProcessVolumeSystem에서 사용)
+        const PostProcessSettings& GetDefaultPostProcessSettings() const { return m_defaultPostProcessSettings; }
 
     private:
         /// 씬을 로드한 뒤, World 에 존재하는 SkinnedMeshComponent 들이
@@ -286,6 +313,12 @@ namespace Alice
 
 		// UI
         void CreateUIImage();
+		EntityId CreateAliceUIRoot(World& world, std::string_view name);
+		EntityId CreateAliceUIImage(World& world);
+		EntityId CreateAliceUIText(World& world);
+		EntityId CreateAliceUIButton(World& world);
+		EntityId CreateAliceUIGauge(World& world);
+		EntityId CreateAliceUIWorldImage(World& world);
 		void RenderUIHeirarcy();
 		void DrawUIInspector(UISceneManager& manager, UIWorld& uiWorld, unsigned long uiEntityID);
 
@@ -299,13 +332,16 @@ namespace Alice
 		SkinnedMeshRegistry* m_skinnedRegistry = nullptr;
 		InputSystem* m_inputSystem = nullptr;
 		UIWorldManager* m_uiWorldManager = nullptr;
+		UIRenderer* m_aliceUIRenderer = nullptr;
 		
 		// UI 엔티티 선택 상태 (0이면 선택되지 않음)
 		unsigned long m_selectedUIEntity = 0;
 
         bool               m_scriptBuilded = false;
+
+        // Default PostProcess Settings (Inspector에서 설정하고 저장)
+        PostProcessSettings m_defaultPostProcessSettings;
     };
 }
-
 
 

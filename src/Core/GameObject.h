@@ -13,6 +13,7 @@
 #include "3Dmodel/FbxModel.h"
 #include "Components/AnimBlueprintComponent.h"
 #include "Components/SocketComponent.h"
+#include "Components/SocketPoseOutputComponent.h"
 
 namespace Alice
 {
@@ -375,6 +376,17 @@ namespace Alice
             bool TryGetSocketWorld(const char* name, DirectX::XMFLOAT4X4& outWorld) const
             {
                 if (!IsValid() || !name) return false;
+                if (auto* poses = m_world->GetComponent<SocketPoseOutputComponent>(m_id))
+                {
+                    for (const auto& p : poses->poses)
+                    {
+                        if (p.name == name)
+                        {
+                            outWorld = p.world;
+                            return true;
+                        }
+                    }
+                }
                 auto* sc = m_world->GetComponent<SocketComponent>(m_id);
                 if (!sc) return false;
                 for (const auto& s : sc->sockets)

@@ -30,6 +30,9 @@ struct Phy_MeshColliderComponent
     // Trigger 여부
     bool isTrigger = false;
 
+    // Debug draw toggle (editor/runtime overlay)
+    bool debugDraw = false;
+
     // Mesh Asset (SkinnedMeshRegistry 키). 비어있으면 동일 엔티티의 SkinnedMeshComponent를 사용.
     std::string meshAssetPath;
 

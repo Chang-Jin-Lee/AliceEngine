@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // RTTR <-> nlohmann::json 변환 유틸
 // - 목적: 컴포넌트의 프로퍼티를 RTTR로 열거해서 JSON으로 저장/로드
@@ -98,6 +98,8 @@ namespace Alice
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
                     continue;
+                if (prop.get_metadata("BindWidget").is_valid())
+                    continue;
 
                 rttr::variant value = prop.get_value(obj);
                 if (!value.is_valid()) continue;
@@ -122,6 +124,8 @@ namespace Alice
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
                     continue;
+                if (prop.get_metadata("BindWidget").is_valid())
+                    continue;
 
                 rttr::variant value = prop.get_value(obj);
                 if (!value.is_valid()) continue;
@@ -140,13 +144,22 @@ namespace Alice
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
                     continue;
+                if (prop.get_metadata("BindWidget").is_valid())
+                    continue;
 
                 const std::string key = prop.get_name().to_string();
                 auto it = j.find(key);
                 if (it == j.end())
                     continue;
 
-                if (!FromJsonToProperty(obj, prop, *it)) return false;
+                if (!FromJsonToProperty(obj, prop, *it))
+                {
+                    ALICE_LOG_ERRORF("[JsonRttr] Failed to set property \"%s\" on type \"%s\" (json type: %s)",
+                                     key.c_str(),
+                                     t.get_name().to_string().c_str(),
+                                     it->type_name());
+                    return false;
+                }
             }
 
             return true;
@@ -162,13 +175,22 @@ namespace Alice
                 if (prop.get_access_level() != rttr::access_levels::public_access &&
                     !prop.get_metadata("SerializeField").is_valid())
                     continue;
+                if (prop.get_metadata("BindWidget").is_valid())
+                    continue;
 
                 const std::string key = prop.get_name().to_string();
                 auto it = j.find(key);
                 if (it == j.end())
                     continue;
 
-                if (!FromJsonToProperty(obj, prop, *it)) return false;
+                if (!FromJsonToProperty(obj, prop, *it))
+                {
+                    ALICE_LOG_ERRORF("[JsonRttr] Failed to set property \"%s\" on type \"%s\" (json type: %s)",
+                                     key.c_str(),
+                                     t.get_name().to_string().c_str(),
+                                     it->type_name());
+                    return false;
+                }
             }
             return true;
         }
@@ -266,23 +288,25 @@ namespace Alice
 
             if (t == rttr::type::get<bool>())
             {
-                if (!jval.is_boolean() && !jval.is_number_integer()) return false;
-                const bool b = jval.is_boolean() ? jval.get<bool>() : (jval.get<int>() != 0);
+                if (!jval.is_boolean() && !jval.is_number()) return false;
+                const bool b = jval.is_boolean() ? jval.get<bool>() : (jval.get<double>() != 0.0);
                 prop.set_value(obj, b);
                 return true;
             }
 
             if (t == rttr::type::get<int>())
             {
-                if (!jval.is_number_integer()) return false;
-                prop.set_value(obj, jval.get<int>());
+                if (!jval.is_number()) return false;
+                prop.set_value(obj, static_cast<int>(jval.get<double>()));
                 return true;
             }
 
             if (t == rttr::type::get<std::uint32_t>())
             {
-                if (!jval.is_number_unsigned() && !jval.is_number_integer()) return false;
-                prop.set_value(obj, static_cast<std::uint32_t>(jval.get<std::uint64_t>()));
+                if (!jval.is_number()) return false;
+                const double v = jval.get<double>();
+                if (v < 0.0) return false;
+                prop.set_value(obj, static_cast<std::uint32_t>(v));
                 return true;
             }
 
@@ -302,15 +326,17 @@ namespace Alice
 
             if (t == rttr::type::get<std::int64_t>())
             {
-                if (!jval.is_number_integer()) return false;
-                prop.set_value(obj, static_cast<std::int64_t>(jval.get<std::int64_t>()));
+                if (!jval.is_number()) return false;
+                prop.set_value(obj, static_cast<std::int64_t>(jval.get<double>()));
                 return true;
             }
 
             if (t == rttr::type::get<std::uint64_t>())
             {
-                if (!jval.is_number_unsigned() && !jval.is_number_integer()) return false;
-                prop.set_value(obj, static_cast<std::uint64_t>(jval.get<std::uint64_t>()));
+                if (!jval.is_number()) return false;
+                const double v = jval.get<double>();
+                if (v < 0.0) return false;
+                prop.set_value(obj, static_cast<std::uint64_t>(v));
                 return true;
             }
 
@@ -321,10 +347,33 @@ namespace Alice
 
         inline bool SetString(rttr::instance obj, const rttr::property& prop, const json& jval)
         {
-            if (!jval.is_string()) return false;
-
-            prop.set_value(obj, jval.get<std::string>());
-            return true;
+            if (jval.is_string())
+            {
+                prop.set_value(obj, jval.get<std::string>());
+                return true;
+            }
+            if (jval.is_number() || jval.is_boolean())
+            {
+                prop.set_value(obj, jval.dump());
+                return true;
+            }
+            if (jval.is_object())
+            {
+                auto itName = jval.find("name");
+                if (itName != jval.end() && itName->is_string())
+                {
+                    prop.set_value(obj, itName->get<std::string>());
+                    return true;
+                }
+                prop.set_value(obj, std::string{});
+                return true;
+            }
+            if (jval.is_array() || jval.is_null())
+            {
+                prop.set_value(obj, std::string{});
+                return true;
+            }
+            return false;
         }
 
         inline bool SetEnum(rttr::instance obj, const rttr::property& prop, const json& jval)
@@ -408,23 +457,17 @@ namespace Alice
             {
                 bool value = false;
                 if (jitem.is_boolean())
-                {
                     value = jitem.get<bool>();
-                }
-                else if (jitem.is_number_integer())
-                {
-                    value = (jitem.get<int>() != 0);
-                }
+                else if (jitem.is_number())
+                    value = (jitem.get<double>() != 0.0);
                 else
-                {
-                    return false; // bool 또는 정수가 아니면 실패
-                }
+                    return false; // bool 또는 숫자가 아니면 실패
                 if (!view.set_value(index, value)) return false;
                 return true;
             }
-            if (itemType == rttr::type::get<int>() && jitem.is_number_integer())
+            if (itemType == rttr::type::get<int>() && jitem.is_number())
             {
-                if (!view.set_value(index, jitem.get<int>())) return false;
+                if (!view.set_value(index, static_cast<int>(jitem.get<double>()))) return false;
                 return true;
             }
             if (itemType == rttr::type::get<float>() && jitem.is_number())
@@ -432,9 +475,45 @@ namespace Alice
                 if (!view.set_value(index, static_cast<float>(jitem.get<double>()))) return false;
                 return true;
             }
-            if (itemType == rttr::type::get<std::string>() && jitem.is_string())
+            if (itemType == rttr::type::get<std::string>())
             {
-                if (!view.set_value(index, jitem.get<std::string>())) return false;
+                if (jitem.is_string())
+                {
+                    if (!view.set_value(index, jitem.get<std::string>())) return false;
+                    return true;
+                }
+                if (jitem.is_number() || jitem.is_boolean())
+                {
+                    if (!view.set_value(index, jitem.dump())) return false;
+                    return true;
+                }
+                if (jitem.is_object())
+                {
+                    auto itName = jitem.find("name");
+                    if (itName != jitem.end() && itName->is_string())
+                    {
+                        if (!view.set_value(index, itName->get<std::string>())) return false;
+                        return true;
+                    }
+                    if (!view.set_value(index, std::string{})) return false;
+                    return true;
+                }
+                if (jitem.is_array() || jitem.is_null())
+                {
+                    if (!view.set_value(index, std::string{})) return false;
+                    return true;
+                }
+            }
+
+            // 클래스 타입(예: AdvancedAnimSocket): JSON 객체로 역직렬화
+            // 새 인스턴스를 생성해 채운 뒤 set_value로 넣어야 저장된 필드가 제대로 반영됨
+            if (itemType.is_class() && jitem.is_object())
+            {
+                rttr::variant newElem = itemType.create();
+                if (!newElem.is_valid()) return false;
+                rttr::instance inst = newElem;
+                if (!FromJsonObject(inst, jitem)) return false;
+                if (!view.set_value(index, newElem)) return false;
                 return true;
             }
 
@@ -450,6 +529,13 @@ namespace Alice
 
             rttr::variant_sequential_view view = var.create_sequential_view();
             if (!view.is_valid()) return false;
+
+            // 동적 컨테이너(std::vector 등): JSON 배열 크기만큼 확장 후 채움 (소켓 등 저장 복원용)
+            if (view.is_dynamic() && view.get_size() < jval.size())
+            {
+                if (!view.set_size(jval.size()))
+                    return false;
+            }
 
             // JSON 배열의 각 요소를 컨테이너에 설정
             size_t index = 0;

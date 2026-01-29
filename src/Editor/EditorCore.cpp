@@ -21,9 +21,25 @@
 #include "Core/ComponentRegistry.h"  // RTTR 등록 코드 포함
 #include "Core/EditorComponentRegistry.h"
 #include "Core/JsonRttr.h"
-#include "Components/AdvancedAnimationComponent.h"
+#include "Core/SocketSerialization.h"
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
+#include "Components/AttackDriverComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
+#include "Components/HurtboxComponent.h"
+#include "Components/WeaponTraceComponent.h"
+#include "Components/SocketAttachmentComponent.h"
+#include "Components/IDComponent.h"
+#include "Components/SocketComponent.h"
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
+#include "AliceUI/UIRenderer.h"
+#include <cstdint>
+#include <cstdio>
 #include <set>
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
@@ -32,7 +48,10 @@
 #include "Components/CameraShakeComponent.h"
 #include "Components/CameraBlendComponent.h"
 #include "Components/CameraInputComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
+#include "Rendering/PostProcessSettings.h"
 #include "Editor/Blueprint/AnimBlueprintEditor.h"
+#include "Game/CombatPhysicsLayers.h"
 
 // ImGui
 #include "imgui.h"
@@ -334,6 +353,21 @@ namespace Alice
 					outEntity["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
 				}
 
+				// Socket
+				if (const auto* socketComp = world.GetComponent<SocketComponent>(id); socketComp)
+				{
+					outEntity["Socket"] = SocketSerialization::SocketComponentToJson(*socketComp);
+				}
+
+				// SocketAttachment
+				if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(id); socketAttach)
+				{
+					rttr::instance inst = const_cast<SocketAttachmentComponent&>(*socketAttach);
+					JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+					obj["ownerGuid"] = std::to_string(socketAttach->ownerGuid);
+					outEntity["SocketAttachment"] = obj;
+				}
+
 				// Camera components
 				if (const auto* cam = world.GetComponent<CameraComponent>(id); cam)
 				{
@@ -549,6 +583,28 @@ namespace Alice
 					SkinnedAnimationComponent& sa = world.AddComponent<SkinnedAnimationComponent>(id);
 					rttr::instance inst = sa;
 					if (!JsonRttr::FromJsonObject(inst, *itSA)) return false;
+				}
+
+				// Socket
+				auto itSocket = e.find("Socket");
+				if (itSocket != e.end() && itSocket->is_object())
+				{
+					SocketComponent& sc = world.AddComponent<SocketComponent>(id);
+					if (!SocketSerialization::JsonToSocketComponent(*itSocket, sc)) return false;
+				}
+
+				// SocketAttachment
+				auto itSAc = e.find("SocketAttachment");
+				if (itSAc != e.end() && itSAc->is_object())
+				{
+					SocketAttachmentComponent& sa = world.AddComponent<SocketAttachmentComponent>(id);
+					if (auto itGuid = itSAc->find("ownerGuid"); itGuid != itSAc->end())
+						sa.ownerGuid = ParseGuid(*itGuid);
+
+					JsonRttr::json copy = *itSAc;
+					copy.erase("ownerGuid");
+					rttr::instance inst = sa;
+					if (!JsonRttr::FromJsonObject(inst, copy)) return false;
 				}
 
 				// Camera components
@@ -1789,14 +1845,48 @@ namespace Alice
 
 		ImGui_ImplWin32_Init(hwnd);
 		ImGui_ImplDX11_Init(d3dDevice, d3dContext);
+		ImGui_ImplDX11_CreateDeviceObjects();
+
+		if (m_aliceUIRenderer && io.FontDefault && io.Fonts)
+		{
+			const ImTextureID texId = io.Fonts->TexID.GetTexID();
+			if (texId != ImTextureID_Invalid)
+			{
+				m_aliceUIRenderer->SetDefaultImGuiFont(io.FontDefault,
+					reinterpret_cast<ID3D11ShaderResourceView*>(static_cast<uintptr_t>(texId)));
+			}
+		}
 
 		// ImGuizmo 스타일 설정
 		ImGuizmo::Style& style = ImGuizmo::GetStyle();
 		style.RotationLineThickness = 3.0f;
 		style.RotationOuterLineThickness = 2.0f;
 
+		// Default PostProcess Settings 초기화 및 로드
+		m_defaultPostProcessSettings = PostProcessSettings::FromDefaults();
+		LoadDefaultPostProcessSettings();
+
 		m_initialized = true;
 		return true;
+	}
+
+	void EditorCore::SetAliceUIRenderer(UIRenderer* renderer)
+	{
+		m_aliceUIRenderer = renderer;
+		if (!m_initialized || !m_aliceUIRenderer)
+			return;
+
+		ImGuiIO& io = ImGui::GetIO();
+
+		if (io.FontDefault && io.Fonts)
+		{
+			const ImTextureID texId = io.Fonts->TexID.GetTexID();
+			if (texId != ImTextureID_Invalid)
+			{
+				m_aliceUIRenderer->SetDefaultImGuiFont(io.FontDefault,
+					reinterpret_cast<ID3D11ShaderResourceView*>(static_cast<uintptr_t>(texId)));
+			}
+		}
 	}
 
 	void EditorCore::Shutdown()
@@ -1851,10 +1941,16 @@ namespace Alice
 		bool& pvdEnabled,
 		std::string& pvdHost,
 		int& pvdPort,
-		UIWorldManager* uiWorldManager)
+		UIWorldManager* uiWorldManager,
+		bool& isDebugDraw)
 	{
 		// UIWorldManager 저장
 		m_uiWorldManager = uiWorldManager;
+		
+		// 매 프레임 Default PostProcess Settings를 RenderSystem에 전달
+		deferred.SetDefaultPostProcessSettings(m_defaultPostProcessSettings);
+		// ForwardRenderSystem에도 동일한 함수가 필요하면 추가
+		// forward.SetDefaultPostProcessSettings(m_defaultPostProcessSettings);
 		
 		// SceneManager에서 현재 씬 파일 경로를 조회하여 g_CurrentScenePath 업데이트
 		if (sceneManager)
@@ -2061,6 +2157,9 @@ namespace Alice
 						{"Monkey",    "../Assets/Fbx/Monkey.fbxasset"},
 						//{"Box",       "../Assets/Fbx/Box.fbxasset"},
 						{"Cube(FBX)", "../Assets/Fbx/Cube.fbxasset"},
+						{"Sphere(FBX)", "../Assets/Fbx/Sphere.fbxasset"},
+						{"Quad(FBX)", "../Assets/Fbx/Quad.fbxasset"},
+						{"Corn(FBX)", "../Assets/Fbx/Corn.fbxasset"}
 					};
 
 					// 고정 목록 표시
@@ -2146,6 +2245,65 @@ namespace Alice
                     g_SceneDirty = true;
                     ImGui::CloseCurrentPopup();
                 }
+				if (ImGui::BeginMenu("AliceUI"))
+				{
+					if (ImGui::MenuItem("Screen Image"))
+					{
+						EntityId e = CreateAliceUIImage(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Image"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Text"))
+					{
+						EntityId e = CreateAliceUIText(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Text"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Button"))
+					{
+						EntityId e = CreateAliceUIButton(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Button"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Screen Gauge"))
+					{
+						EntityId e = CreateAliceUIGauge(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "UI Gauge"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("World Image"))
+					{
+						EntityId e = CreateAliceUIWorldImage(world);
+						if (e != InvalidEntityId)
+						{
+							PushCommand(std::make_unique<CreateEntityCommand>(e, "World UI Image"));
+							selectedEntity = e;
+							g_SceneDirty = true;
+						}
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndMenu();
+				}
                 if (ImGui::MenuItem("UI_Image"))
                 {
                     CreateUIImage();
@@ -2265,6 +2423,14 @@ namespace Alice
 
 			ImGui::Separator();
 			ImGui::Text("DeltaTime: %.3f  FPS: %.1f", deltaTime, fps);
+
+			ImGui::Separator();
+			// 렌더링 시스템 선택 체크박스
+			ImGui::Checkbox("Show DebugDraw", &isDebugDraw);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("체크: 디버그 라인 켜기\n해제: 디버그 라인 끄기");
+			}
 
 			ImGui::Separator();
 			// 렌더링 시스템 선택 체크박스
@@ -2682,8 +2848,19 @@ namespace Alice
 				if (children.empty())
 					nodeFlags |= ImGuiTreeNodeFlags_Leaf;
 
-				// 트리 노드 열기
-				bool nodeOpen = ImGui::TreeNodeEx(label.c_str(), nodeFlags);
+			const bool isAliceUI = (world.GetComponent<UIWidgetComponent>(entityId) != nullptr);
+			if (isAliceUI)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.7f, 1.0f));
+			}
+
+			// 트리 노드 열기
+			bool nodeOpen = ImGui::TreeNodeEx(label.c_str(), nodeFlags);
+
+			if (isAliceUI)
+			{
+				ImGui::PopStyleColor();
+			}
 
 				// 선택 처리 (더블클릭으로만 인스펙터 변경 - 드래그앤드롭을 위해)
 				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -2828,6 +3005,14 @@ namespace Alice
 
 			// 루트 엔티티들 가져오기
 			std::vector<EntityId> rootEntities = world.GetRootEntities();
+
+			// AliceUI 엔티티들도 Hierarchy에 포함 (TransformComponent 없는 경우 대비)
+			std::set<EntityId> rootSet(rootEntities.begin(), rootEntities.end());
+			for (auto [id, widget] : world.GetComponents<UIWidgetComponent>())
+			{
+				if (rootSet.insert(id).second)
+					rootEntities.push_back(id);
+			}
 
 			if (rootEntities.empty())
 			{
@@ -3080,6 +3265,13 @@ namespace Alice
 				}
 				else if (selectedEntity == InvalidEntityId) {
 					Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
+					
+					// Default Post Process Settings UI
+					ImGui::Separator();
+					if (ImGui::CollapsingHeader("Default Post Process Settings", ImGuiTreeNodeFlags_DefaultOpen))
+					{
+						DrawDefaultPostProcessSettings();
+					}
 				}
 				else {
 					// World 엔티티 Inspector 표시 (기존 로직)
@@ -3114,9 +3306,21 @@ namespace Alice
 				DrawInspectorPointLight(world, selectedEntity);
 				DrawInspectorSpotLight(world, selectedEntity);
 				DrawInspectorRectLight(world, selectedEntity);
+				
+				// 3-3. Post Process Volume
+				DrawInspectorPostProcessVolume(world, selectedEntity);
 
 				// 3-3. Compute Effect
 				DrawInspectorComputeEffect(world, selectedEntity);
+				
+				// 3-4. Camera 컴포넌트들
+				DrawInspectorCameraSpringArm(world, selectedEntity);
+				DrawInspectorCameraLookAt(world, selectedEntity);
+				DrawInspectorCameraFollow(world, selectedEntity);
+				DrawInspectorCameraShake(world, selectedEntity);
+				DrawInspectorCameraInput(world, selectedEntity);
+				DrawInspectorCameraBlend(world, selectedEntity);
+				
 				// 4. Skinned Mesh / 소켓 프리뷰 (간단 뷰)
 				if (auto* skinned =
 					world.GetComponent<SkinnedMeshComponent>(selectedEntity)) {
@@ -3406,6 +3610,26 @@ namespace Alice
 				ImVec2 imgMin = ImGui::GetItemRectMin();
 				ImVec2 imgMax = ImGui::GetItemRectMax();
 				ImVec2 imgSize = ImGui::GetItemRectSize();
+
+				if (m_aliceUIRenderer && m_hwnd && imgSize.x > 0.0f && imgSize.y > 0.0f && sceneWidth > 0.0f && sceneHeight > 0.0f)
+				{
+					POINT p = { static_cast<LONG>(imgMin.x), static_cast<LONG>(imgMin.y) };
+					::ScreenToClient(m_hwnd, &p);
+					m_aliceUIRenderer->SetScreenInputRect(
+						static_cast<float>(p.x),
+						static_cast<float>(p.y),
+						imgSize.x,
+						imgSize.y,
+						sceneWidth,
+						sceneHeight);
+
+					ImVec2 mousePos = ImGui::GetMousePos();
+					const float u = (mousePos.x - imgMin.x) / imgSize.x;
+					const float v = (mousePos.y - imgMin.y) / imgSize.y;
+					const float mx = u * sceneWidth;
+					const float my = v * sceneHeight;
+					m_aliceUIRenderer->SetScreenMouseOverride(mx, my);
+				}
 
 				// 프리팹 드래그앤드롭: 뷰포트 이미지 위에 드롭 타겟 추가
 				if (ImGui::BeginDragDropTarget())
@@ -3789,9 +4013,18 @@ namespace Alice
 							XMFLOAT3 newPosition, newRotation, newScale;
 							if (DecomposeLocalMatrix(localMatrix, newPosition, newRotation, newScale))
 							{
-								transform->position = newPosition;
-								transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
-								transform->scale = newScale;
+								if (gizmoOp == ImGuizmo::TRANSLATE)
+								{
+									transform->position = newPosition;
+								}
+								else if (gizmoOp == ImGuizmo::ROTATE)
+								{
+									transform->rotation = newRotation;  // (x=pitch, y=yaw, z=roll) 라디안
+								}
+								else if (gizmoOp == ImGuizmo::SCALE)
+								{
+									transform->scale = newScale;
+								}
 							}
 
 							// ImGuizmo로 Transform이 변경되었고 물리 컴포넌트가 있으면 텔레포트 자동 활성화
@@ -3864,7 +4097,6 @@ namespace Alice
 
 				// 엔티티 선택 (Gizmo 위에 있지 않을 때만)
 				// 최종 빌드(Release)에서는 뷰포트 피커가 작동하지 않도록 함
-#ifdef _DEBUG
 				if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 				{
 					// Gizmo 위에 있지 않고 사용 중이 아닐 때만 선택 처리
@@ -3894,7 +4126,6 @@ namespace Alice
 							}
 						}
 					}
-#endif // _DEBUG
 			}
 			else
 			{
@@ -4094,6 +4325,8 @@ namespace Alice
 			if (ImGui::RadioButton("PBR", mode == 4))       mode = 4;
 			ImGui::SameLine();
 			if (ImGui::RadioButton("ToonPBR", mode == 5))   mode = 5;
+			ImGui::SameLine();
+			if (ImGui::RadioButton("ToonPBREditable", mode == 7)) mode = 7;
 			shadingMode = mode;
 
 			Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
@@ -4104,7 +4337,7 @@ namespace Alice
 			auto& lighting = deferred.GetLightingParameters();
 
 			// PBR 모드일 때 PBR 파라미터 표시
-			if (mode == 4 || mode == 5)
+			if (mode == 4 || mode == 5 || mode == 7)
 			{
 				ImGui::Separator();
 				ImGui::Text("PBR Material Parameters");
@@ -4146,11 +4379,11 @@ namespace Alice
 			ImGui::Separator();
 			ImGui::TextUnformatted("Skybox");
 
-			static int  skyboxChoice = 3; // 0 Off, 1 Bridge, 2 Indoor, 3 Baker
+			static int  skyboxChoice = 3; // 0 Off, 1 Bridge, 2 Indoor, 3 Baker, 4 darkenv
 			static int  lastSkyboxChoice = -1;
 			static bool lastForward = false;
 
-			const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker" };
+			const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker", "darkenv"};
 
 			auto ApplySkybox = [&](auto& renderer)
 			{
@@ -4166,6 +4399,7 @@ namespace Alice
 				case 1: renderer.SetIblSet("Bridge", "bridge");       break;
 				case 2: renderer.SetIblSet("Indoor", "indoor");       break;
 				case 3: renderer.SetIblSet("Sample", "BakerSample");  break;
+				case 4: renderer.SetIblSet("darkenv", "darkenvDiffuseHDR");  break;
 				default: break;
 				}
 			};
@@ -4203,10 +4437,17 @@ namespace Alice
 
 			float exposure = 0.0f;
 			float maxHDRNits = 1000.0f;
+			DirectX::XMFLOAT4 saturation = { 1.0f, 1.0f, 1.0f, 1.0f };
+			DirectX::XMFLOAT4 contrast = { 1.0f, 1.0f, 1.0f, 1.0f };
+			DirectX::XMFLOAT4 gamma = { 1.0f, 1.0f, 1.0f, 1.0f };
+			DirectX::XMFLOAT4 gain = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 			auto DrawPostProcess = [&](auto& renderer)
 			{
+				// Exposure와 MaxHDRNits는 기존 함수로 가져오기
 				renderer.GetPostProcessParams(exposure, maxHDRNits);
+				// Color Grading은 Vector4로 가져오기
+				renderer.GetColorGrading(saturation, contrast, gamma, gain);
 
 				bool changed = false;
 
@@ -4218,13 +4459,109 @@ namespace Alice
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("HDR 모니터 최대 밝기 (nits)\n일반 모니터: 100-300 nits\nHDR 모니터: 1000-10000 nits");
 
+				ImGui::Separator();
+				ImGui::TextUnformatted("Color Grading (RGB 채널별 제어)");
+				
+				// ImGui::ColorEdit4는 float[4] 배열을 받지만, XMFLOAT4는 구조체이므로 배열로 변환 필요
+				// ImGuiFlags 설정: Alpha 슬라이더 숨김, Inputs 표시
+				ImGui::PushItemWidth(-1);
+
+				ImGui::Text("Saturation (RGB)");
+				changed |= ImGui::ColorEdit4("Saturation (RGB)", reinterpret_cast<float*>(&saturation),
+					ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("채도 (R,G,B 채널별): 0.0 = 흑백, 1.0 = 원본, 2.0+ = 과포화\nW 채널은 항상 1.0으로 유지됩니다.");
+
+				ImGui::Text("Contrast (RGB)");
+				changed |= ImGui::ColorEdit4("Contrast (RGB)", reinterpret_cast<float*>(&contrast),
+					ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("대비 (R,G,B 채널별): 0.0 = 회색, 1.0 = 원본, 2.0 = 고대비\nW 채널은 항상 1.0으로 유지됩니다.");
+				
+				ImGui::Text("Gamma (RGB)");
+				changed |= ImGui::ColorEdit4("Gamma (RGB)", reinterpret_cast<float*>(&gamma),
+					ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("감마 보정 (R,G,B 채널별): 1.0 = 원본, <1.0 = 밝게, >1.0 = 어둡게\nW 채널은 항상 1.0으로 유지됩니다.");
+
+				ImGui::Text("Gain (RGB)");
+				changed |= ImGui::ColorEdit4("Gain (RGB)", reinterpret_cast<float*>(&gain),
+					ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Gain Multiply 스케일 (R,G,B 채널별): 0.0 = 검정, 1.0 = 원본, >1.0 = 밝게\nW 채널은 항상 1.0으로 유지됩니다.");
+				ImGui::PopItemWidth();
+
+				// W 채널은 항상 1.0으로 유지
+				saturation.w = 1.0f;
+				contrast.w = 1.0f;
+				gamma.w = 1.0f;
+				gain.w = 1.0f;
+
 				if (changed)
+				{
+					// Exposure와 MaxHDRNits는 기존 함수로 설정
 					renderer.SetPostProcessParams(exposure, maxHDRNits);
+					// Color Grading은 Vector4로 설정
+					renderer.ApplyColorGrading(saturation, contrast, gamma, gain);
+				}
 			};
 
 			if (useForwardRendering) DrawPostProcess(forward);
 			else                     DrawPostProcess(deferred);
 
+			// === Post Process Volume Reference Object ===
+			if (!useForwardRendering)
+			{
+				ImGui::Separator();
+				ImGui::TextUnformatted("Post Process Volume Reference");
+				ImGui::Separator();
+
+				static char refObjectNameBuf[256] = "";
+				std::string currentRefName = deferred.GetPPVReferenceObjectName();
+				if (strcmp(refObjectNameBuf, currentRefName.c_str()) != 0)
+				{
+					strncpy_s(refObjectNameBuf, currentRefName.c_str(), sizeof(refObjectNameBuf) - 1);
+					refObjectNameBuf[sizeof(refObjectNameBuf) - 1] = '\0';
+				}
+
+				if (ImGui::InputText("PPV Reference GameObject Name", refObjectNameBuf, sizeof(refObjectNameBuf)))
+				{
+					deferred.SetPPVReferenceObjectName(refObjectNameBuf);
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("PostProcessVolume 보간 기준이 될 GameObject 이름\n비어있으면 카메라 위치 사용");
+
+				// 현재 바인딩 상태 표시
+				if (!currentRefName.empty())
+				{
+					GameObject refObj = world.FindGameObject(currentRefName);
+					if (refObj.IsValid())
+					{
+						auto* transform = world.GetComponent<TransformComponent>(refObj.id());
+						if (transform && transform->enabled)
+						{
+							ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), 
+								"Bound to: %s (Position: %.2f, %.2f, %.2f)", 
+								currentRefName.c_str(), 
+								transform->position.x, transform->position.y, transform->position.z);
+						}
+						else
+						{
+							ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), 
+								"Bound to: %s (Transform not found or disabled)", currentRefName.c_str());
+						}
+					}
+					else
+					{
+						ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.3f, 1.0f), 
+							"Object not found: %s (using camera position)", currentRefName.c_str());
+					}
+				}
+				else
+				{
+					ImGui::TextDisabled("Using camera position as reference");
+				}
+			}
 
 			// === Bloom (Deferred 전용) ===
 			if (!useForwardRendering)
@@ -4244,10 +4581,15 @@ namespace Alice
 
 				if (bloomSettings.enabled)
 				{
-					if (ImGui::SliderFloat("Intensity", &bloomSettings.intensity, 0.0f, 5.0f, "%.2f"))
+					if (ImGui::SliderFloat("Bloom Intensity", &bloomSettings.intensity, 0.0f, 5.0f, "%.2f"))
 						bloomChanged = true;
 					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("Bloom 합성 강도 (0.0 ~ 5.0)\n값이 클수록 더 밝게 합성됩니다");
+						ImGui::SetTooltip("Bloom 합성 강도 (0.0 ~ 5.0)\n최종 합성 단계에서 적용되는 강도\n값이 클수록 더 밝게 합성됩니다");
+
+					if (ImGui::SliderFloat("Gaussian Intensity", &bloomSettings.gaussianIntensity, 0.0f, 5.0f, "%.2f"))
+						bloomChanged = true;
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("Gaussian 블러 강도 (0.0 ~ 5.0)\n블러 단계에서 적용되는 강도\n값이 클수록 블러 결과가 더 밝아집니다");
 
 					if (ImGui::SliderFloat("Threshold", &bloomSettings.threshold, 0.0f, 5.0f, "%.2f"))
 						bloomChanged = true;
@@ -4374,6 +4716,14 @@ namespace Alice
 					}
 
 					g_SceneDirty = true;
+				}
+			}
+			else
+			{
+				if (m_aliceUIRenderer)
+				{
+					m_aliceUIRenderer->ClearScreenInputRect();
+					m_aliceUIRenderer->ClearScreenMouseOverride();
 				}
 			}
 			ImGui::End();
@@ -4757,8 +5107,23 @@ namespace Alice
 
 				// ---- Rotation
 				{
-					auto r = ReflectionUI::RenderProperty(*transform, "rotation", "Rotation");
-					changed |= r.changed;
+					// 라디안(Radian) -> 디그리(Degree) 변환하여 표시
+					DirectX::XMFLOAT3 rotDeg;
+					rotDeg.x = DirectX::XMConvertToDegrees(transform->rotation.x);
+					rotDeg.y = DirectX::XMConvertToDegrees(transform->rotation.y);
+					rotDeg.z = DirectX::XMConvertToDegrees(transform->rotation.z);
+
+					// ImGui로 직접 그림 (ReflectionUI 대신 사용)
+					if (ImGui::DragFloat3("Rotation", &rotDeg.x, 0.1f))
+					{
+						// 변경된 디그리 값을 다시 라디안으로 변환하여 저장
+						transform->rotation.x = DirectX::XMConvertToRadians(rotDeg.x);
+						transform->rotation.y = DirectX::XMConvertToRadians(rotDeg.y);
+						transform->rotation.z = DirectX::XMConvertToRadians(rotDeg.z);
+						changed = true;
+					}
+
+					// Undo/Redo 로직 유지를 위한 상태 플래그 갱신
 					anyTransformItemActive |= ImGui::IsItemActive();
 					anyTransformItemActivated |= ImGui::IsItemActivated();
 				}
@@ -4990,6 +5355,7 @@ namespace Alice
 				typeName == "PointLightComponent" ||
 				typeName == "SpotLightComponent" ||
 				typeName == "RectLightComponent" ||
+				typeName == "PostProcessVolumeComponent" ||
 				typeName == "SkinnedMeshComponent" ||
 				typeName == "SkinnedAnimationComponent")  // Animation Status 섹션에서 처리됨
 				continue;
@@ -5025,7 +5391,31 @@ namespace Alice
 				DrawInspectorJoint(world, _selectedEntity);
 				continue;
 			}
-
+			else if (typeName == "AttackDriverComponent")
+			{
+				DrawInspectorAttackDriver(world, _selectedEntity);
+				continue;
+			}
+			else if (typeName == "HurtboxComponent")
+			{
+				DrawInspectorHurtbox(world, _selectedEntity);
+				continue;
+			}
+			else if (typeName == "WeaponTraceComponent")
+			{
+				DrawInspectorWeaponTrace(world, _selectedEntity);
+				continue;
+			}
+			else if (typeName == "SocketAttachmentComponent")
+			{
+				DrawInspectorSocketAttachment(world, _selectedEntity);
+				continue;
+			}
+			else if (typeName == "SocketComponent")
+			{
+				DrawInspectorSocketComponent(world, _selectedEntity);
+				continue;
+			}
 			// 일반 컴포넌트: 레지스트리 기반 렌더링
 			if (!d.has(world, _selectedEntity)) continue;
 
@@ -5264,21 +5654,38 @@ namespace Alice
 			}
 			changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter).changed;
 
-			const char* shadingItems[] = {
-				"Global",
-				"Lambert",
-				"Phong",
-				"Blinn-Phong",
-				"Toon",
-				"PBR",
-				"ToonPBR",
-				"OnlyTextureWithOutline"
-			};
-			int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
-			shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
-			if (ImGui::Combo("Shading", &shadingIndex, shadingItems, (int)std::size(shadingItems)))
+			struct ShadingItem
 			{
-				mat->shadingMode = shadingIndex - 1;
+				const char* label;
+				int value;
+			};
+			const ShadingItem shadingItems[] = {
+				{ "Global", -1 },
+				{ "Lambert", 0 },
+				{ "Phong", 1 },
+				{ "Blinn-Phong", 2 },
+				{ "Toon", 3 },
+				{ "PBR", 4 },
+				{ "ToonPBR", 5 },
+				{ "ToonPBREditable", 7 },
+				{ "OnlyTextureWithOutline", 6 }
+			};
+			int shadingIndex = 0;
+			for (int i = 0; i < (int)std::size(shadingItems); ++i)
+			{
+				if (shadingItems[i].value == mat->shadingMode)
+				{
+					shadingIndex = i;
+					break;
+				}
+			}
+			if (ImGui::Combo("Shading", &shadingIndex, [](void* data, int idx, const char** out_text) {
+				auto* items = static_cast<const ShadingItem*>(data);
+				*out_text = items[idx].label;
+				return true;
+			}, (void*)shadingItems, (int)std::size(shadingItems)))
+			{
+				mat->shadingMode = shadingItems[shadingIndex].value;
 				changed = true;
 			}
 
@@ -5421,6 +5828,558 @@ namespace Alice
 
 				if (ImGui::Button("Remove Rect Light")) {
 					world.RemoveComponent<RectLightComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
+
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawDefaultPostProcessSettings()
+	{
+		PostProcessSettings& settings = m_defaultPostProcessSettings;
+		bool changed = false;
+
+		// 저장/로드 버튼
+		ImGui::Text("Default Post Process Settings");
+		if (ImGui::Button("Save to EngineSettings.json"))
+		{
+			SaveDefaultPostProcessSettings();
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("현재 설정을 EngineSettings.json에 저장합니다.");
+		
+		ImGui::SameLine();
+		if (ImGui::Button("Load from EngineSettings.json"))
+		{
+			LoadDefaultPostProcessSettings();
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("EngineSettings.json에서 설정을 불러옵니다.");
+
+		ImGui::Separator();
+
+		// Exposure
+		if (ImGui::TreeNode("Exposure##DefaultPostProcess"))
+		{
+			changed |= ImGui::SliderFloat("Exposure##DefaultPostProcess", &settings.exposure, -3.0f, 3.0f, "%.2f");
+			ImGui::TreePop();
+		}
+
+		// Max HDR Nits
+		if (ImGui::TreeNode("Max HDR Nits##DefaultPostProcess"))
+		{
+			changed |= ImGui::SliderFloat("Max HDR Nits##DefaultPostProcess", &settings.maxHDRNits, 100.0f, 10000.0f, "%.0f nits");
+			ImGui::TreePop();
+		}
+
+		// Color Grading
+		if (ImGui::TreeNode("Color Grading##DefaultPostProcess"))
+		{
+			ImGui::Text("Saturation (RGB)");
+			changed |= ImGui::ColorEdit3("Saturation (RGB)##DefaultPostProcess", &settings.saturation.x,
+				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+
+			ImGui::Text("Contrast (RGB)");
+			changed |= ImGui::ColorEdit3("Contrast (RGB)##DefaultPostProcess", &settings.contrast.x,
+				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+
+			ImGui::Text("Gamma (RGB)");
+			changed |= ImGui::ColorEdit3("Gamma (RGB)##DefaultPostProcess", &settings.gamma.x,
+				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+
+			ImGui::Text("Gain (RGB)");
+			changed |= ImGui::ColorEdit3("Gain (RGB)##DefaultPostProcess", &settings.gain.x,
+				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+
+			ImGui::TreePop();
+		}
+
+		// Bloom
+		if (ImGui::TreeNode("Bloom##DefaultPostProcess"))
+		{
+			changed |= ImGui::SliderFloat("Bloom Threshold##DefaultPostProcess", &settings.bloomThreshold, 0.0f, 5.0f);
+			changed |= ImGui::SliderFloat("Bloom Knee##DefaultPostProcess", &settings.bloomKnee, 0.0f, 1.0f);
+			changed |= ImGui::SliderFloat("Bloom Intensity##DefaultPostProcess", &settings.bloomIntensity, 0.0f, 5.0f);
+			changed |= ImGui::SliderFloat("Bloom Gaussian Intensity##DefaultPostProcess", &settings.bloomGaussianIntensity, 0.0f, 5.0f);
+			changed |= ImGui::SliderFloat("Bloom Radius##DefaultPostProcess", &settings.bloomRadius, 0.0f, 10.0f);
+			changed |= ImGui::SliderInt("Bloom Downsample##DefaultPostProcess", &settings.bloomDownsample, 1, 8);
+			ImGui::TreePop();
+		}
+
+		if (changed)
+		{
+			// 변경사항이 있으면 자동 저장 (선택사항)
+			// SaveDefaultPostProcessSettings();
+		}
+	}
+
+	void EditorCore::SaveDefaultPostProcessSettings()
+	{
+		namespace fs = std::filesystem;
+		
+		// 프로젝트 루트 경로 계산
+		wchar_t exePathW[MAX_PATH] = {};
+		GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+		fs::path exePath = exePathW;
+		fs::path exeDir = exePath.parent_path();
+		fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+		fs::path settingsPath = projectRoot / "EngineSettings.json";
+
+		try
+		{
+			nlohmann::json j;
+			
+			// 기존 파일이 있으면 읽기
+			if (fs::exists(settingsPath))
+			{
+				std::ifstream ifs(settingsPath);
+				if (ifs.is_open())
+				{
+					ifs >> j;
+					ifs.close();
+				}
+			}
+
+			// Default PostProcess Settings 저장
+			nlohmann::json ppSettings;
+			ppSettings["exposure"] = m_defaultPostProcessSettings.exposure;
+			ppSettings["maxHDRNits"] = m_defaultPostProcessSettings.maxHDRNits;
+			ppSettings["saturation"] = { m_defaultPostProcessSettings.saturation.x, m_defaultPostProcessSettings.saturation.y, m_defaultPostProcessSettings.saturation.z };
+			ppSettings["contrast"] = { m_defaultPostProcessSettings.contrast.x, m_defaultPostProcessSettings.contrast.y, m_defaultPostProcessSettings.contrast.z };
+			ppSettings["gamma"] = { m_defaultPostProcessSettings.gamma.x, m_defaultPostProcessSettings.gamma.y, m_defaultPostProcessSettings.gamma.z };
+			ppSettings["gain"] = { m_defaultPostProcessSettings.gain.x, m_defaultPostProcessSettings.gain.y, m_defaultPostProcessSettings.gain.z };
+			ppSettings["bloomThreshold"] = m_defaultPostProcessSettings.bloomThreshold;
+			ppSettings["bloomKnee"] = m_defaultPostProcessSettings.bloomKnee;
+			ppSettings["bloomIntensity"] = m_defaultPostProcessSettings.bloomIntensity;
+			ppSettings["bloomGaussianIntensity"] = m_defaultPostProcessSettings.bloomGaussianIntensity;
+			ppSettings["bloomRadius"] = m_defaultPostProcessSettings.bloomRadius;
+			ppSettings["bloomDownsample"] = m_defaultPostProcessSettings.bloomDownsample;
+
+			j["defaultPostProcess"] = ppSettings;
+
+			// 파일 저장
+			std::ofstream ofs(settingsPath);
+			if (ofs.is_open())
+			{
+				ofs << j.dump(4);
+				ofs.close();
+				ALICE_LOG_INFO("Default PostProcess Settings saved to EngineSettings.json");
+			}
+			else
+			{
+				ALICE_LOG_ERRORF("Failed to save Default PostProcess Settings to %s", settingsPath.string().c_str());
+			}
+		}
+		catch (const std::exception& e)
+		{
+			ALICE_LOG_ERRORF("Exception while saving Default PostProcess Settings: %s", e.what());
+		}
+	}
+
+	void EditorCore::LoadDefaultPostProcessSettings()
+	{
+		namespace fs = std::filesystem;
+		
+		// 프로젝트 루트 경로 계산
+		wchar_t exePathW[MAX_PATH] = {};
+		GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+		fs::path exePath = exePathW;
+		fs::path exeDir = exePath.parent_path();
+		fs::path projectRoot = exeDir.parent_path().parent_path().parent_path(); // build/bin/Debug → 프로젝트 루트
+		fs::path settingsPath = projectRoot / "EngineSettings.json";
+
+		try
+		{
+			if (!fs::exists(settingsPath))
+			{
+				// 파일이 없으면 기본값 유지
+				return;
+			}
+
+			std::ifstream ifs(settingsPath);
+			if (!ifs.is_open())
+			{
+				return;
+			}
+
+			nlohmann::json j;
+			ifs >> j;
+			ifs.close();
+
+			// Default PostProcess Settings 로드
+			if (j.contains("defaultPostProcess"))
+			{
+				const auto& ppSettings = j["defaultPostProcess"];
+				
+				if (ppSettings.contains("exposure"))
+					m_defaultPostProcessSettings.exposure = ppSettings["exposure"].get<float>();
+				if (ppSettings.contains("maxHDRNits"))
+					m_defaultPostProcessSettings.maxHDRNits = ppSettings["maxHDRNits"].get<float>();
+				
+				if (ppSettings.contains("saturation") && ppSettings["saturation"].is_array() && ppSettings["saturation"].size() >= 3)
+				{
+					m_defaultPostProcessSettings.saturation.x = ppSettings["saturation"][0].get<float>();
+					m_defaultPostProcessSettings.saturation.y = ppSettings["saturation"][1].get<float>();
+					m_defaultPostProcessSettings.saturation.z = ppSettings["saturation"][2].get<float>();
+				}
+				
+				if (ppSettings.contains("contrast") && ppSettings["contrast"].is_array() && ppSettings["contrast"].size() >= 3)
+				{
+					m_defaultPostProcessSettings.contrast.x = ppSettings["contrast"][0].get<float>();
+					m_defaultPostProcessSettings.contrast.y = ppSettings["contrast"][1].get<float>();
+					m_defaultPostProcessSettings.contrast.z = ppSettings["contrast"][2].get<float>();
+				}
+				
+				if (ppSettings.contains("gamma") && ppSettings["gamma"].is_array() && ppSettings["gamma"].size() >= 3)
+				{
+					m_defaultPostProcessSettings.gamma.x = ppSettings["gamma"][0].get<float>();
+					m_defaultPostProcessSettings.gamma.y = ppSettings["gamma"][1].get<float>();
+					m_defaultPostProcessSettings.gamma.z = ppSettings["gamma"][2].get<float>();
+				}
+				
+				if (ppSettings.contains("gain") && ppSettings["gain"].is_array() && ppSettings["gain"].size() >= 3)
+				{
+					m_defaultPostProcessSettings.gain.x = ppSettings["gain"][0].get<float>();
+					m_defaultPostProcessSettings.gain.y = ppSettings["gain"][1].get<float>();
+					m_defaultPostProcessSettings.gain.z = ppSettings["gain"][2].get<float>();
+				}
+				
+				if (ppSettings.contains("bloomThreshold"))
+					m_defaultPostProcessSettings.bloomThreshold = ppSettings["bloomThreshold"].get<float>();
+				if (ppSettings.contains("bloomKnee"))
+					m_defaultPostProcessSettings.bloomKnee = ppSettings["bloomKnee"].get<float>();
+				if (ppSettings.contains("bloomIntensity"))
+					m_defaultPostProcessSettings.bloomIntensity = ppSettings["bloomIntensity"].get<float>();
+				if (ppSettings.contains("bloomGaussianIntensity"))
+					m_defaultPostProcessSettings.bloomGaussianIntensity = ppSettings["bloomGaussianIntensity"].get<float>();
+				if (ppSettings.contains("bloomRadius"))
+					m_defaultPostProcessSettings.bloomRadius = ppSettings["bloomRadius"].get<float>();
+				if (ppSettings.contains("bloomDownsample"))
+					m_defaultPostProcessSettings.bloomDownsample = ppSettings["bloomDownsample"].get<int>();
+
+				ALICE_LOG_INFO("Default PostProcess Settings loaded from EngineSettings.json");
+			}
+		}
+		catch (const std::exception& e)
+		{
+			ALICE_LOG_ERRORF("Exception while loading Default PostProcess Settings: %s", e.what());
+		}
+	}
+
+	void EditorCore::DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* volume = world.GetComponent<PostProcessVolumeComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Post Process Volume", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				// ==== Unbound 설정 (최상단) ====
+				ImGui::Text("Volume Type");
+				changed |= ImGui::Checkbox("Unbound (전역 적용)##PostProcessVolume", &volume->unbound);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Unbound: ON이면 항상 전역 적용 (무한 범위)\nOFF이면 Shape + BlendRadius 기반 공간 적용");
+				
+				if (volume->unbound)
+				{
+					ImGui::SameLine();
+					ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "[전역 적용 중]");
+				}
+				else
+				{
+					ImGui::SameLine();
+					ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.3f, 1.0f), "[공간 기반 적용]");
+				}
+
+				ImGui::Separator();
+
+				// ==== Bound 설정 (Unbound OFF일 때만 의미 있음) ====
+				if (volume->unbound)
+				{
+					// Unbound ON: Shape/BlendRadius 비활성화
+					ImGui::BeginDisabled();
+				}
+
+				// ==== Shape 설정 ====
+				ImGui::Text("Shape");
+				const char* shapeNames[] = { "Box", "Sphere" };
+				int currentShape = static_cast<int>(volume->shape);
+				if (ImGui::Combo("Shape##PostProcessVolume", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames)))
+				{
+					volume->SetShape(static_cast<PostProcessVolumeShape>(currentShape));
+					changed = true;
+				}
+				if (volume->unbound && ImGui::IsItemHovered())
+					ImGui::SetTooltip("Unbound가 켜져 있어 Shape는 적용되지 않습니다.");
+
+				if (volume->shape == PostProcessVolumeShape::Box)
+				{
+					DirectX::XMFLOAT3 boxSize = volume->GetBoxSize();
+					if (ImGui::SliderFloat3("Box Size##PostProcessVolume", &boxSize.x, 0.1f, 100.0f))
+					{
+						volume->SetBoxSize(boxSize);
+						changed = true;
+					}
+				}
+				else if (volume->shape == PostProcessVolumeShape::Sphere)
+				{
+					float radius = volume->GetSphereRadius();
+					if (ImGui::SliderFloat("Sphere Radius##PostProcessVolume", &radius, 0.1f, 50.0f))
+					{
+						volume->SetSphereRadius(radius);
+						changed = true;
+					}
+				}
+
+				ImGui::Separator();
+
+				// ==== 블렌딩 파라미터 ====
+				ImGui::Text("Blending");
+				float blendRadius = volume->GetBlendRadius();
+				if (ImGui::SliderFloat("Blend Radius##PostProcessVolume", &blendRadius, 0.0f, 50.0f))
+				{
+					volume->SetBlendRadius(blendRadius);
+					changed = true;
+				}
+				if (ImGui::IsItemHovered())
+				{
+					if (volume->unbound)
+						ImGui::SetTooltip("Unbound가 켜져 있어 BlendRadius는 적용되지 않습니다.");
+					else
+						ImGui::SetTooltip("볼륨 외부에서도 블렌딩되는 거리 (0이면 내부에서만 적용)");
+				}
+
+				if (volume->unbound)
+				{
+					ImGui::EndDisabled();
+				}
+
+				float blendWeight = volume->GetBlendWeight();
+				if (ImGui::SliderFloat("Blend Weight##PostProcessVolume", &blendWeight, 0.0f, 1.0f))
+				{
+					volume->SetBlendWeight(blendWeight);
+					changed = true;
+				}
+
+				int priority = volume->GetPriority();
+				if (ImGui::InputInt("Priority##PostProcessVolume", &priority))
+				{
+					volume->SetPriority(priority);
+					changed = true;
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("우선순위: 높을수록 나중에 블렌딩되어 영향이 큼");
+
+				ImGui::Separator();
+
+				// ==== Post Process Settings ====
+				ImGui::Text("Post Process Settings");
+				PostProcessSettings& settings = volume->settings;
+
+				// Exposure
+				if (ImGui::TreeNode("Exposure##PostProcessVolume"))
+				{
+					changed |= ImGui::Checkbox("Override Exposure##PostProcessVolume", &settings.bOverride_Exposure);
+					if (settings.bOverride_Exposure)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Exposure##PostProcessVolume", &settings.exposure, -3.0f, 3.0f, "%.2f");
+						ImGui::Unindent();
+					}
+					ImGui::TreePop();
+				}
+
+				// Max HDR Nits
+				if (ImGui::TreeNode("Max HDR Nits##PostProcessVolume"))
+				{
+					changed |= ImGui::Checkbox("Override Max HDR Nits##PostProcessVolume", &settings.bOverride_MaxHDRNits);
+					if (settings.bOverride_MaxHDRNits)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Max HDR Nits##PostProcessVolume", &settings.maxHDRNits, 100.0f, 10000.0f, "%.0f nits");
+						ImGui::Unindent();
+					}
+					ImGui::TreePop();
+				}
+
+				// Color Grading
+				if (ImGui::TreeNode("Color Grading##PostProcessVolume"))
+				{
+					// Saturation
+					changed |= ImGui::Checkbox("Override Saturation##PostProcessVolume", &settings.bOverride_ColorGradingSaturation);
+					if (settings.bOverride_ColorGradingSaturation)
+					{
+						ImGui::Indent();
+						changed |= ImGui::ColorEdit3("Saturation (RGB)##PostProcessVolume", &settings.saturation.x,
+							ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+						ImGui::Unindent();
+					}
+
+					// Contrast
+					changed |= ImGui::Checkbox("Override Contrast##PostProcessVolume", &settings.bOverride_ColorGradingContrast);
+					if (settings.bOverride_ColorGradingContrast)
+					{
+						ImGui::Indent();
+						changed |= ImGui::ColorEdit3("Contrast (RGB)##PostProcessVolume", &settings.contrast.x,
+							ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+						ImGui::Unindent();
+					}
+
+					// Gamma
+					changed |= ImGui::Checkbox("Override Gamma##PostProcessVolume", &settings.bOverride_ColorGradingGamma);
+					if (settings.bOverride_ColorGradingGamma)
+					{
+						ImGui::Indent();
+						changed |= ImGui::ColorEdit3("Gamma (RGB)##PostProcessVolume", &settings.gamma.x,
+							ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+						ImGui::Unindent();
+					}
+
+					// Gain
+					changed |= ImGui::Checkbox("Override Gain##PostProcessVolume", &settings.bOverride_ColorGradingGain);
+					if (settings.bOverride_ColorGradingGain)
+					{
+						ImGui::Indent();
+						changed |= ImGui::ColorEdit3("Gain (RGB)##PostProcessVolume", &settings.gain.x,
+							ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
+						ImGui::Unindent();
+					}
+
+					ImGui::TreePop();
+				}
+
+				// Bloom
+				if (ImGui::TreeNode("Bloom##PostProcessVolume"))
+				{
+					changed |= ImGui::Checkbox("Override Threshold##PostProcessVolume", &settings.bOverride_BloomThreshold);
+					if (settings.bOverride_BloomThreshold)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Threshold##PostProcessVolume", &settings.bloomThreshold, 0.0f, 5.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Knee##PostProcessVolume", &settings.bOverride_BloomKnee);
+					if (settings.bOverride_BloomKnee)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Knee##PostProcessVolume", &settings.bloomKnee, 0.0f, 1.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Intensity##PostProcessVolume", &settings.bOverride_BloomIntensity);
+					if (settings.bOverride_BloomIntensity)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Intensity##PostProcessVolume", &settings.bloomIntensity, 0.0f, 5.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Gaussian Intensity##PostProcessVolume", &settings.bOverride_BloomGaussianIntensity);
+					if (settings.bOverride_BloomGaussianIntensity)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Gaussian Intensity##PostProcessVolume", &settings.bloomGaussianIntensity, 0.0f, 5.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Radius##PostProcessVolume", &settings.bOverride_BloomRadius);
+					if (settings.bOverride_BloomRadius)
+					{
+						ImGui::Indent();
+						changed |= ImGui::SliderFloat("Radius##PostProcessVolume", &settings.bloomRadius, 0.1f, 10.0f);
+						ImGui::Unindent();
+					}
+
+					changed |= ImGui::Checkbox("Override Downsample##PostProcessVolume", &settings.bOverride_BloomDownsample);
+					if (settings.bOverride_BloomDownsample)
+					{
+						ImGui::Indent();
+						const char* downsampleNames[] = { "1x", "2x", "4x" };
+						int downsampleValues[] = { 1, 2, 4 };
+						int currentDownsample = settings.bloomDownsample;
+						int currentIndex = 0;
+						for (int i = 0; i < IM_ARRAYSIZE(downsampleValues); ++i)
+						{
+							if (downsampleValues[i] == currentDownsample)
+							{
+								currentIndex = i;
+								break;
+							}
+						}
+						if (ImGui::Combo("Downsample##PostProcessVolume", &currentIndex, downsampleNames, IM_ARRAYSIZE(downsampleNames)))
+						{
+							settings.bloomDownsample = downsampleValues[currentIndex];
+							changed = true;
+						}
+						ImGui::Unindent();
+					}
+
+					ImGui::TreePop();
+				}
+
+				ImGui::Separator();
+
+				// ==== 참조 오브젝트 설정 ====
+				if (ImGui::TreeNode("Reference Object##PostProcessVolume"))
+				{
+					changed |= ImGui::Checkbox("Use Reference Object##PostProcessVolume", &volume->useReferenceObject);
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("PostProcessVolume 보간 기준을 참조 오브젝트로 사용할지 여부\n비활성화하면 카메라 위치 사용");
+
+					if (volume->useReferenceObject)
+					{
+						ImGui::Indent();
+						char nameBuf[256] = {};
+						strncpy_s(nameBuf, volume->referenceObjectName.c_str(), sizeof(nameBuf) - 1);
+						if (ImGui::InputText("Reference GameObject Name##PostProcessVolume", nameBuf, sizeof(nameBuf)))
+						{
+							volume->SetReferenceObjectName(nameBuf);
+							changed = true;
+						}
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("PostProcessVolume 보간 기준이 될 GameObject 이름\n비어있으면 카메라 위치 사용");
+
+						if (!volume->referenceObjectName.empty())
+						{
+							GameObject refObj = world.FindGameObject(volume->referenceObjectName);
+							if (refObj.IsValid())
+							{
+								auto* transform = world.GetComponent<TransformComponent>(refObj.id());
+								if (transform && transform->enabled)
+								{
+									ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f),
+										"Bound to: %s (Position: %.2f, %.2f, %.2f)",
+										volume->referenceObjectName.c_str(),
+										transform->position.x, transform->position.y, transform->position.z);
+								}
+								else
+								{
+									ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+										"Bound to: %s (Transform not found or disabled)", volume->referenceObjectName.c_str());
+								}
+							}
+							else
+							{
+								ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.3f, 1.0f),
+									"Object not found: %s (using camera position)", volume->referenceObjectName.c_str());
+							}
+						}
+						else
+						{
+							ImGui::TextDisabled("No reference object set (using camera position)");
+						}
+						ImGui::Unindent();
+					}
+					ImGui::TreePop();
+				}
+
+				if (ImGui::Button("Remove Post Process Volume"))
+				{
+					world.RemoveComponent<PostProcessVolumeComponent>(_selectedEntity);
 					g_SceneDirty = true;
 					return;
 				}
@@ -5724,6 +6683,8 @@ namespace Alice
 					return;
 				}
 
+				changed |= ImGui::Checkbox("Debug Draw", &collider->debugDraw);
+
 				// Collider Type 선택
 				ImGui::Text("Collider Type");
 				ImGui::Indent();
@@ -5874,6 +6835,8 @@ namespace Alice
 					g_SceneDirty = true;
 					return;
 				}
+
+				changed |= ImGui::Checkbox("Debug Draw", &meshCollider->debugDraw);
 
 				// Mesh Collider Type 선택
 				ImGui::Text("Mesh Collider Type");
@@ -6256,6 +7219,14 @@ namespace Alice
 					world.RemoveComponent<Phy_SettingsComponent>(_selectedEntity);
 					g_SceneDirty = true;
 					return;
+				}
+
+				if (ImGui::Button("Apply Combat Defaults"))
+				{
+					CombatPhysicsLayers::ApplyDefaultCombatLayerMatrix(*settings);
+					settings->filterRevision++;
+					changed = true;
+					g_SceneDirty = true;
 				}
 
 				// 기본 프로퍼티는 ReflectionUI로
@@ -6942,6 +7913,127 @@ namespace Alice
 		}
 	}
 
+	// =========================================================================================
+	// Camera 컴포넌트 인스펙터 함수들
+	// =========================================================================================
+
+	void EditorCore::DrawInspectorCameraSpringArm(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraSpringArmComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Spring Arm", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderProperty(*comp, "enabled", "Enabled", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "enableCollision", "Enable Collision", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "enableZoom", "Enable Zoom", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "distance", "Distance", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "minDistance", "Min Distance", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "maxDistance", "Max Distance", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "zoomSpeed", "Zoom Speed", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "distanceDamping", "Distance Damping", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "probeRadius", "Probe Radius", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "probePadding", "Probe Padding", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "minHeight", "Min Height", &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraLookAt(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraLookAtComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Look At", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderProperty(*comp, "enabled", "Enabled", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "targetName", "Target Name", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "rotationDamping", "Rotation Damping", &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraFollow(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraFollowComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Follow", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				
+				// 런타임 상태 필터 (직렬화/편집 대상 아님)
+				auto filter = [](const std::string& propName) -> bool {
+					// 런타임 상태 필드들은 인스펙터에서 제외
+					return propName != "lockOnTargetId" && 
+					       propName != "lockOnActive" && 
+					       propName != "initialized" &&
+					       propName != "smoothedPosition" &&
+					       propName != "smoothedRotation";
+				};
+				
+				changed |= ReflectionUI::RenderInspector(*comp, filter, &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraShake(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraShakeComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Shake", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderProperty(*comp, "enabled", "Enabled", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "amplitude", "Amplitude", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "frequency", "Frequency", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "duration", "Duration", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "decay", "Decay", &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraInput(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraInputComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Input", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderInspector(*comp, nullptr, &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorCameraBlend(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* comp = world.GetComponent<CameraBlendComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Camera Blend", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+				changed |= ReflectionUI::RenderProperty(*comp, "active", "Active", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "targetName", "Target Name", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "duration", "Duration", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "useSmoothStep", "Use Smooth Step", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "slowTriggerT", "Slow Trigger T", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "slowDuration", "Slow Duration", &world).changed;
+				changed |= ReflectionUI::RenderProperty(*comp, "slowTimeScale", "Slow Time Scale", &world).changed;
+				
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
 	void EditorCore::DrawDirectoryNode(World& world,
 		EntityId& selectedEntity,
 		const std::filesystem::path& path)
@@ -7177,25 +8269,6 @@ namespace Alice
 						ofs << j.dump(4);
 				}
 
-				if (ImGui::MenuItem("Create Material"))
-				{
-					fs::path newPath = path / "NewMaterial.mat";
-					int index = 1;
-					while (fs::exists(newPath))
-					{
-						newPath = path / ("NewMaterial" + std::to_string(index) + ".mat");
-						++index;
-					}
-
-					// JSON(.mat)로 저장 (RTTR + ReflectionSerializer 내부 사용)
-					MaterialComponent mat;
-					mat.color = DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f);
-					mat.roughness = 0.5f;
-					mat.metalness = 0.0f;
-					mat.assetPath = newPath.string();
-					mat.albedoTexturePath.clear();
-					MaterialFile::Save(newPath, mat);
-				}
 
 				if (ImGui::MenuItem("Create Scene"))
 				{
@@ -7210,9 +8283,15 @@ namespace Alice
 					// 기본 씬: 큐브(Transform 1개) + 기본 Material 1개
 					// ForwardRenderSystem은 Transform만 있어도 기본 큐브를 그립니다.
 					World temp;
-					const EntityId e = temp.CreateEntity();
-					temp.AddComponent<TransformComponent>(e);
-					temp.AddComponent<MaterialComponent>(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
+					std::string cubeAssetPath = "Assets/Fbx/Cube.fbxasset";
+					EntityId e = InstantiateFbxAssetToWorld(temp, cubeAssetPath, "Cube");
+					if (e == InvalidEntityId)
+					{
+						e = temp.CreateEntity();
+						temp.AddComponent<TransformComponent>(e);
+						temp.AddComponent<MaterialComponent>(e, DirectX::XMFLOAT3(0.7f, 0.7f, 0.7f));
+					}
+
 					SceneFile::Save(temp, newPath);
 				}
 
@@ -7778,6 +8857,98 @@ namespace Alice
 		}
 	}
 
+	EntityId EditorCore::CreateAliceUIRoot(World& world, std::string_view name)
+	{
+		EntityId e = world.CreateEntity();
+		world.SetEntityName(e, std::string(name));
+
+		UIWidgetComponent& widget = world.AddComponent<UIWidgetComponent>(e);
+		widget.widgetName = std::string(name);
+		widget.space = AliceUI::UISpace::Screen;
+
+		UITransformComponent& t = world.AddComponent<UITransformComponent>(e);
+		t.anchorMin = DirectX::XMFLOAT2(0.5f, 0.5f);
+		t.anchorMax = DirectX::XMFLOAT2(0.5f, 0.5f);
+		t.position = DirectX::XMFLOAT2(0.0f, 0.0f);
+		t.size = DirectX::XMFLOAT2(200.0f, 80.0f);
+		t.pivot = DirectX::XMFLOAT2(0.5f, 0.5f);
+
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIImage(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Image");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIImageComponent>(e);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIText(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Text");
+		if (e != InvalidEntityId)
+		{
+			UITextComponent& text = world.AddComponent<UITextComponent>(e);
+			text.text = "Text";
+			text.fontPath = "Resource/Fonts/NotoSansKR-Regular.ttf";
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIButton(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Button");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIButtonComponent>(e);
+			world.AddComponent<UIImageComponent>(e);
+			UITextComponent& text = world.AddComponent<UITextComponent>(e);
+			text.text = "Button";
+			text.fontPath = "Resource/Fonts/NotoSansKR-Regular.ttf";
+			UITransformComponent* t = world.GetComponent<UITransformComponent>(e);
+			if (t)
+				t->size = DirectX::XMFLOAT2(220.0f, 60.0f);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIGauge(World& world)
+	{
+		EntityId e = CreateAliceUIRoot(world, "UI_Gauge");
+		if (e != InvalidEntityId)
+		{
+			world.AddComponent<UIGaugeComponent>(e);
+			UITransformComponent* t = world.GetComponent<UITransformComponent>(e);
+			if (t)
+				t->size = DirectX::XMFLOAT2(260.0f, 24.0f);
+		}
+		return e;
+	}
+
+	EntityId EditorCore::CreateAliceUIWorldImage(World& world)
+	{
+		EntityId e = world.CreateEntity();
+		world.SetEntityName(e, "World_UI_Image");
+
+		auto& widget = world.AddComponent<UIWidgetComponent>(e);
+		widget.widgetName = "World_UI_Image";
+		widget.space = AliceUI::UISpace::World;
+		widget.billboard = true;
+
+		auto& uiTransform = world.AddComponent<UITransformComponent>(e);
+		uiTransform.size = DirectX::XMFLOAT2(0.6f, 0.6f);
+
+		world.AddComponent<UIImageComponent>(e);
+
+		TransformComponent& t = world.AddComponent<TransformComponent>(e);
+		t.position = DirectX::XMFLOAT3(0.0f, 2.0f, 0.0f);
+
+		return e;
+	}
+
 
 	void EditorCore::RenderUIHeirarcy()
 {
@@ -8138,6 +9309,851 @@ namespace Alice
 		}
 	}
 
-} 
+	void EditorCore::DrawInspectorAttackDriver(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* driver = world.GetComponent<AttackDriverComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Attack Driver", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
 
+				if (ImGui::Button("Remove##AttackDriverRemove"))
+				{
+					world.RemoveComponent<AttackDriverComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
 
+				std::uint64_t traceGuid = driver->traceGuid;
+				if (ImGui::InputScalar("Trace GUID", ImGuiDataType_U64, &traceGuid))
+				{
+					driver->traceGuid = traceGuid;
+					driver->traceCached = InvalidEntityId;
+					changed = true;
+				}
+
+				// Trace entity picker (WeaponTrace 보유 엔티티 위주)
+				{
+					EntityId resolved = (driver->traceGuid != 0) ? world.FindEntityByGuid(driver->traceGuid) : InvalidEntityId;
+					std::string preview = "(self)";
+					if (driver->traceGuid != 0)
+					{
+						if (resolved != InvalidEntityId)
+						{
+							std::string name = world.GetEntityName(resolved);
+							if (name.empty()) name = "Entity " + std::to_string(resolved);
+							preview = name + " (" + std::to_string(driver->traceGuid) + ")";
+						}
+						else
+						{
+							preview = std::to_string(driver->traceGuid);
+						}
+					}
+
+					if (ImGui::BeginCombo("Trace (pick entity)", preview.c_str()))
+					{
+						const bool selSelf = (driver->traceGuid == 0);
+						if (ImGui::Selectable("(self)", selSelf))
+						{
+							driver->traceGuid = 0;
+							driver->traceCached = InvalidEntityId;
+							changed = true;
+						}
+						if (selSelf)
+							ImGui::SetItemDefaultFocus();
+
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							if (!world.GetComponent<WeaponTraceComponent>(eid))
+								continue;
+
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == driver->traceGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								driver->traceGuid = idc.guid;
+								driver->traceCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+
+				// Clip picker (SkinnedMesh animation list)
+				{
+					std::vector<std::string> clipNames;
+					const auto* animComp = world.GetComponent<AdvancedAnimationComponent>(_selectedEntity);
+					if (m_skinnedRegistry)
+					{
+						if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(_selectedEntity))
+						{
+							if (!skinned->meshAssetPath.empty())
+							{
+								std::shared_ptr<SkinnedMeshGPU> mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+								if (mesh && mesh->sourceModel)
+									clipNames = mesh->sourceModel->GetAnimationNames();
+							}
+						}
+					}
+
+					ImGui::Separator();
+					ImGui::Text("Clip Timings");
+					if (ImGui::Button("+ Add Clip"))
+					{
+						driver->clips.emplace_back();
+						changed = true;
+					}
+
+					auto ResolveClipNameForUI = [&](const AttackDriverClip& clip) -> std::string {
+						if (!animComp)
+							return clip.clipName;
+
+						switch (clip.source)
+						{
+						case AttackDriverClipSource::BaseA: return animComp->base.clipA;
+						case AttackDriverClipSource::BaseB: return animComp->base.clipB;
+						case AttackDriverClipSource::UpperA: return animComp->upper.clipA;
+						case AttackDriverClipSource::UpperB: return animComp->upper.clipB;
+						case AttackDriverClipSource::Additive: return animComp->additive.clip;
+						case AttackDriverClipSource::Explicit:
+						default: return clip.clipName;
+						}
+					};
+
+					for (size_t i = 0; i < driver->clips.size(); ++i)
+					{
+						AttackDriverClip& clip = driver->clips[i];
+						ImGui::PushID(static_cast<int>(i));
+
+						const std::string resolvedName = ResolveClipNameForUI(clip);
+						const char* clipPreview = resolvedName.empty() ? "(none)" : resolvedName.c_str();
+						bool open = ImGui::TreeNode("Clip", "%s [%.2f - %.2f]", clipPreview, clip.startTimeSec, clip.endTimeSec);
+
+						ImGui::SameLine();
+						bool moveUp = ImGui::SmallButton("^");
+						ImGui::SameLine();
+						bool moveDown = ImGui::SmallButton("v");
+						ImGui::SameLine();
+						bool duplicate = ImGui::SmallButton("Dup");
+						ImGui::SameLine();
+						bool remove = ImGui::SmallButton("Remove");
+
+						if (moveUp && i > 0)
+						{
+							std::swap(driver->clips[i - 1], driver->clips[i]);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (moveDown && (i + 1) < driver->clips.size())
+						{
+							std::swap(driver->clips[i + 1], driver->clips[i]);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (duplicate)
+						{
+							driver->clips.insert(driver->clips.begin() + static_cast<ptrdiff_t>(i + 1), clip);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (remove)
+						{
+							driver->clips.erase(driver->clips.begin() + static_cast<ptrdiff_t>(i));
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+
+						if (open)
+						{
+							changed |= ImGui::Checkbox("Enabled", &clip.enabled);
+
+							const char* sourceLabels[] = { "Explicit", "Base A", "Base B", "Upper A", "Upper B", "Additive" };
+							int sourceIndex = static_cast<int>(clip.source);
+							if (ImGui::Combo("Source", &sourceIndex, sourceLabels, IM_ARRAYSIZE(sourceLabels)))
+							{
+								clip.source = static_cast<AttackDriverClipSource>(sourceIndex);
+								changed = true;
+							}
+
+							if (clip.source == AttackDriverClipSource::Explicit)
+							{
+								if (!clipNames.empty())
+								{
+									if (ImGui::BeginCombo("Clip", clip.clipName.empty() ? "(none)" : clip.clipName.c_str()))
+									{
+										const bool selNone = clip.clipName.empty();
+										if (ImGui::Selectable("(none)", selNone))
+										{
+											clip.clipName.clear();
+											changed = true;
+										}
+										if (selNone)
+											ImGui::SetItemDefaultFocus();
+
+										for (const auto& name : clipNames)
+										{
+											const bool sel = (clip.clipName == name);
+											if (ImGui::Selectable(name.c_str(), sel))
+											{
+												clip.clipName = name;
+												changed = true;
+											}
+											if (sel)
+												ImGui::SetItemDefaultFocus();
+										}
+										ImGui::EndCombo();
+									}
+								}
+								else
+								{
+									ImGui::TextDisabled("No animation clips available (SkinnedMesh/FBX not ready).");
+								}
+							}
+							else
+							{
+								ImGui::Text("Clip: %s", resolvedName.empty() ? "(none)" : resolvedName.c_str());
+							}
+
+							changed |= ImGui::DragFloat("Start Time (sec)", &clip.startTimeSec, 0.01f, 0.0f, 60.0f);
+							changed |= ImGui::DragFloat("End Time (sec)", &clip.endTimeSec, 0.01f, 0.0f, 60.0f);
+
+							if (clip.endTimeSec < clip.startTimeSec)
+							{
+								clip.endTimeSec = clip.startTimeSec;
+								changed = true;
+								ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "Warning: End < Start");
+							}
+
+							ImGui::TreePop();
+						}
+
+						ImGui::PopID();
+					}
+				}
+
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorHurtbox(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* hb = world.GetComponent<HurtboxComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Hurtbox", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				if (ImGui::Button("Remove##HurtboxRemove"))
+				{
+					world.RemoveComponent<HurtboxComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
+
+				std::uint64_t ownerGuid = hb->ownerGuid;
+				if (ImGui::InputScalar("Owner GUID", ImGuiDataType_U64, &ownerGuid))
+				{
+					hb->ownerGuid = ownerGuid;
+					hb->ownerCached = InvalidEntityId;
+
+					EntityId resolved = (ownerGuid != 0) ? world.FindEntityByGuid(ownerGuid) : InvalidEntityId;
+					if (resolved != InvalidEntityId)
+						hb->ownerNameDebug = world.GetEntityName(resolved);
+					changed = true;
+				}
+
+				if (hb->ownerGuid == 0)
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Owner GUID is 0 -> hurtbox will not resolve");
+
+				// Owner picker
+				{
+					std::string preview = hb->ownerNameDebug.empty()
+						? (hb->ownerGuid != 0 ? std::to_string(hb->ownerGuid) : "(none)")
+						: hb->ownerNameDebug;
+					if (ImGui::BeginCombo("Owner (pick entity)", preview.c_str()))
+					{
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == hb->ownerGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								hb->ownerGuid = idc.guid;
+								hb->ownerNameDebug = world.GetEntityName(eid);
+								hb->ownerCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+
+				ImGui::Text("Owner Name: %s", hb->ownerNameDebug.empty() ? "(none)" : hb->ownerNameDebug.c_str());
+
+				uint32_t teamId = hb->teamId;
+				if (ImGui::InputScalar("Team Id", ImGuiDataType_U32, &teamId))
+				{
+					hb->teamId = teamId;
+					changed = true;
+				}
+
+				uint32_t part = hb->part;
+				if (ImGui::InputScalar("Part", ImGuiDataType_U32, &part))
+				{
+					hb->part = part;
+					changed = true;
+				}
+
+				changed |= ImGui::DragFloat("Damage Scale", &hb->damageScale, 0.01f, 0.0f, 100.0f);
+
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorWeaponTrace(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* trace = world.GetComponent<WeaponTraceComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Weapon Trace", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				if (ImGui::Button("Remove##WeaponTraceRemove"))
+				{
+					world.RemoveComponent<WeaponTraceComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
+
+				std::uint64_t ownerGuid = trace->ownerGuid;
+				if (ImGui::InputScalar("Owner GUID", ImGuiDataType_U64, &ownerGuid))
+				{
+					trace->ownerGuid = ownerGuid;
+					trace->ownerCached = InvalidEntityId;
+					EntityId resolved = (ownerGuid != 0) ? world.FindEntityByGuid(ownerGuid) : InvalidEntityId;
+					if (resolved != InvalidEntityId)
+						trace->ownerNameDebug = world.GetEntityName(resolved);
+					changed = true;
+				}
+
+				if (trace->ownerGuid == 0)
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Owner GUID is 0 -> trace will not run");
+
+				if (ImGui::Button("Pick from selected entity"))
+				{
+					if (const auto* idc = world.GetComponent<IDComponent>(_selectedEntity))
+					{
+						trace->ownerGuid = idc->guid;
+						trace->ownerCached = _selectedEntity;
+						trace->ownerNameDebug = world.GetEntityName(_selectedEntity);
+						changed = true;
+					}
+				}
+
+				// Owner picker
+				{
+					std::string preview = trace->ownerNameDebug.empty()
+						? (trace->ownerGuid != 0 ? std::to_string(trace->ownerGuid) : "(none)")
+						: trace->ownerNameDebug;
+					if (ImGui::BeginCombo("Owner (pick entity)", preview.c_str()))
+					{
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == trace->ownerGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								trace->ownerGuid = idc.guid;
+								trace->ownerNameDebug = world.GetEntityName(eid);
+								trace->ownerCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+
+				ImGui::Text("Owner Name: %s", trace->ownerNameDebug.empty() ? "(none)" : trace->ownerNameDebug.c_str());
+
+				std::uint64_t basisGuid = trace->traceBasisGuid;
+				if (ImGui::InputScalar("Trace Basis GUID", ImGuiDataType_U64, &basisGuid))
+				{
+					trace->traceBasisGuid = basisGuid;
+					trace->traceBasisCached = InvalidEntityId;
+					changed = true;
+				}
+
+				if (trace->traceBasisGuid == 0)
+					ImGui::TextDisabled("Trace Basis GUID is 0 -> uses self");
+
+				// Trace basis picker
+				{
+					std::string preview;
+					if (trace->traceBasisGuid == 0)
+					{
+						preview = "(self)";
+					}
+					else
+					{
+						EntityId resolved = world.FindEntityByGuid(trace->traceBasisGuid);
+						preview = (resolved != InvalidEntityId)
+							? world.GetEntityName(resolved)
+							: std::to_string(trace->traceBasisGuid);
+						if (preview.empty())
+							preview = std::to_string(trace->traceBasisGuid);
+					}
+
+					if (ImGui::BeginCombo("Trace Basis (pick entity)", preview.c_str()))
+					{
+						const bool selfSel = (trace->traceBasisGuid == 0);
+						if (ImGui::Selectable("(self)", selfSel))
+						{
+							trace->traceBasisGuid = 0;
+							trace->traceBasisCached = InvalidEntityId;
+							changed = true;
+						}
+						if (selfSel)
+							ImGui::SetItemDefaultFocus();
+
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == trace->traceBasisGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								trace->traceBasisGuid = idc.guid;
+								trace->traceBasisCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+
+				changed |= ImGui::Checkbox("Active", &trace->active);
+				changed |= ImGui::Checkbox("Debug Draw", &trace->debugDraw);
+				changed |= ImGui::DragFloat("Base Damage", &trace->baseDamage, 0.1f, 0.0f, 100000.0f);
+
+				uint32_t teamId = trace->teamId;
+				if (ImGui::InputScalar("Team Id", ImGuiDataType_U32, &teamId))
+				{
+					trace->teamId = teamId;
+					changed = true;
+				}
+
+				uint32_t attackId = trace->attackInstanceId;
+				if (ImGui::InputScalar("Attack Instance Id", ImGuiDataType_U32, &attackId))
+				{
+					trace->attackInstanceId = attackId;
+					changed = true;
+				}
+
+				uint32_t targetBits = trace->targetLayerBits;
+				if (ImGui::InputScalar("Target Layer Bits", ImGuiDataType_U32, &targetBits))
+				{
+					trace->targetLayerBits = targetBits;
+					changed = true;
+				}
+
+				uint32_t queryBits = trace->queryLayerBits;
+				if (ImGui::InputScalar("Query Layer Bits", ImGuiDataType_U32, &queryBits))
+				{
+					trace->queryLayerBits = queryBits;
+					changed = true;
+				}
+
+				uint32_t subSteps = trace->subSteps;
+				if (ImGui::InputScalar("Sub Steps", ImGuiDataType_U32, &subSteps))
+				{
+					trace->subSteps = std::max(1u, subSteps);
+					changed = true;
+				}
+
+				ImGui::Separator();
+				ImGui::Text("Trace Shapes");
+				if (ImGui::Button("Add Shape"))
+				{
+					trace->shapes.emplace_back();
+					changed = true;
+				}
+
+				for (size_t i = 0; i < trace->shapes.size(); ++i)
+				{
+					WeaponTraceShape& shape = trace->shapes[i];
+					ImGui::PushID(static_cast<int>(i));
+
+					const char* typeName = (shape.type == WeaponTraceShapeType::Sphere)
+						? "Sphere"
+						: (shape.type == WeaponTraceShapeType::Capsule ? "Capsule" : "Box");
+					const char* namePreview = shape.name.empty() ? "(unnamed)" : shape.name.c_str();
+					bool open = ImGui::TreeNode("Shape", "%s [%s]", namePreview, typeName);
+
+					ImGui::SameLine();
+					bool moveUp = ImGui::SmallButton("^");
+					ImGui::SameLine();
+					bool moveDown = ImGui::SmallButton("v");
+					ImGui::SameLine();
+					bool duplicate = ImGui::SmallButton("Dup");
+					ImGui::SameLine();
+					bool remove = ImGui::SmallButton("Remove");
+
+					if (moveUp && i > 0)
+					{
+						std::swap(trace->shapes[i - 1], trace->shapes[i]);
+						changed = true;
+						ImGui::PopID();
+						if (open) ImGui::TreePop();
+						continue;
+					}
+					if (moveDown && (i + 1) < trace->shapes.size())
+					{
+						std::swap(trace->shapes[i + 1], trace->shapes[i]);
+						changed = true;
+						ImGui::PopID();
+						if (open) ImGui::TreePop();
+						continue;
+					}
+					if (duplicate)
+					{
+						trace->shapes.insert(trace->shapes.begin() + static_cast<ptrdiff_t>(i + 1), shape);
+						changed = true;
+						ImGui::PopID();
+						if (open) ImGui::TreePop();
+						continue;
+					}
+					if (remove)
+					{
+						trace->shapes.erase(trace->shapes.begin() + static_cast<ptrdiff_t>(i));
+						changed = true;
+						ImGui::PopID();
+						if (open) ImGui::TreePop();
+						continue;
+					}
+
+					if (open)
+					{
+						char nameBuf[256];
+						std::snprintf(nameBuf, sizeof(nameBuf), "%.255s", shape.name.c_str());
+						if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+						{
+							shape.name = nameBuf;
+							changed = true;
+						}
+
+						changed |= ImGui::Checkbox("Enabled", &shape.enabled);
+
+						const char* typeItems[] = { "Sphere", "Capsule", "Box" };
+						int typeIdx = static_cast<int>(shape.type);
+						if (ImGui::Combo("Type", &typeIdx, typeItems, IM_ARRAYSIZE(typeItems)))
+						{
+							shape.type = static_cast<WeaponTraceShapeType>(typeIdx);
+							changed = true;
+						}
+
+						changed |= ImGui::DragFloat3("Local Pos", &shape.localPos.x, 0.01f);
+						changed |= ImGui::DragFloat3("Local Rot (deg)", &shape.localRotDeg.x, 0.5f);
+
+						if (shape.type == WeaponTraceShapeType::Sphere)
+						{
+							changed |= ImGui::DragFloat("Radius", &shape.radius, 0.01f, 0.0f, 100.0f);
+						}
+						else if (shape.type == WeaponTraceShapeType::Capsule)
+						{
+							changed |= ImGui::DragFloat("Radius", &shape.radius, 0.01f, 0.0f, 100.0f);
+							changed |= ImGui::DragFloat("Half Height", &shape.capsuleHalfHeight, 0.01f, 0.0f, 100.0f);
+						}
+						else if (shape.type == WeaponTraceShapeType::Box)
+						{
+							changed |= ImGui::DragFloat3("Half Extents", &shape.boxHalfExtents.x, 0.01f, 0.0f, 100.0f);
+						}
+
+						ImGui::TreePop();
+					}
+
+					ImGui::PopID();
+				}
+
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorSocketAttachment(World& world, const EntityId& _selectedEntity)
+	{
+		if (auto* att = world.GetComponent<SocketAttachmentComponent>(_selectedEntity))
+		{
+			if (ImGui::CollapsingHeader("Socket Attachment", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				bool changed = false;
+
+				if (ImGui::Button("Remove##SocketAttachmentRemove"))
+				{
+					world.RemoveComponent<SocketAttachmentComponent>(_selectedEntity);
+					g_SceneDirty = true;
+					return;
+				}
+
+				// Owner GUID
+				std::uint64_t ownerGuid = att->ownerGuid;
+				if (ImGui::InputScalar("Owner GUID", ImGuiDataType_U64, &ownerGuid))
+				{
+					att->ownerGuid = ownerGuid;
+					att->ownerCached = InvalidEntityId;
+					changed = true;
+				}
+
+				if (att->ownerGuid == 0)
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Owner GUID is 0 -> attachment will not run");
+
+				// Set owner from list (dropdown of all entities with IDComponent)
+				{
+					std::string preview = att->ownerNameDebug.empty()
+						? (att->ownerGuid != 0 ? std::to_string(att->ownerGuid) : "(none)")
+						: att->ownerNameDebug;
+					if (ImGui::BeginCombo("Owner (pick entity)", preview.c_str()))
+					{
+						for (auto&& [eid, idc] : world.GetComponents<IDComponent>())
+						{
+							std::string label = world.GetEntityName(eid);
+							if (label.empty()) label = "Entity " + std::to_string(eid);
+							label += " (";
+							label += std::to_string(idc.guid);
+							label += ")";
+							const bool sel = (idc.guid == att->ownerGuid);
+							if (ImGui::Selectable(label.c_str(), sel))
+							{
+								att->ownerGuid = idc.guid;
+								att->ownerNameDebug = world.GetEntityName(eid);
+								att->ownerCached = InvalidEntityId;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+
+				// Resolve owner and build socket option list (name + parentBone for fallback match)
+				EntityId resolvedOwner = (att->ownerGuid != 0) ? world.FindEntityByGuid(att->ownerGuid) : InvalidEntityId;
+				std::vector<std::string> socketOptions;
+				if (resolvedOwner != InvalidEntityId)
+				{
+					auto addOption = [&socketOptions](const std::string& value) {
+						if (value.empty()) return;
+						if (std::find(socketOptions.begin(), socketOptions.end(), value) == socketOptions.end())
+							socketOptions.push_back(value);
+					};
+					if (const auto* sc = world.GetComponent<SocketComponent>(resolvedOwner))
+					{
+						for (const auto& s : sc->sockets)
+						{
+							addOption(s.name);
+							if (!s.parentBone.empty() && s.parentBone != s.name)
+								addOption(s.parentBone);
+						}
+					}
+					// Auto-select: if socket name is empty and owner has sockets, set to first option
+					if (att->socketName.empty() && !socketOptions.empty())
+					{
+						att->socketName = socketOptions[0];
+						changed = true;
+					}
+				}
+
+				// Socket: 목록에서 선택만 (문자열 직접 입력 제거)
+				if (!socketOptions.empty())
+				{
+					const char* preview = att->socketName.c_str();
+					if (preview[0] == '\0') preview = "(선택)";
+					if (ImGui::BeginCombo("Socket", preview))
+					{
+						for (const auto& opt : socketOptions)
+						{
+							const bool sel = (att->socketName == opt);
+							if (ImGui::Selectable(opt.c_str(), sel))
+							{
+								att->socketName = opt;
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("오너 소켓 목록에서 선택 (이름 또는 parentBone)");
+				}
+				else if (resolvedOwner != InvalidEntityId)
+				{
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Owner has no sockets (SocketComponent.sockets 추가)");
+					// 목록 없을 때만 현재값 표시 (읽기 전용)
+					ImGui::Text("Socket Name: %s", att->socketName.empty() ? "(none)" : att->socketName.c_str());
+				}
+				else
+				{
+					// Owner 미지정 시: 안내 + 현재값 표시
+					ImGui::TextDisabled("Owner를 먼저 선택하면 Socket 목록에서 고를 수 있습니다.");
+					ImGui::Text("Socket Name: %s", att->socketName.empty() ? "(none)" : att->socketName.c_str());
+				}
+
+				changed |= ImGui::Checkbox("Follow Scale", &att->followScale);
+				changed |= ImGui::DragFloat3("Extra Pos", &att->extraPos.x, 0.01f);
+				changed |= ImGui::DragFloat3("Extra Rot (rad)", &att->extraRotRad.x, 0.01f);
+				changed |= ImGui::DragFloat3("Extra Scale", &att->extraScale.x, 0.01f);
+
+				ImGui::Separator();
+				ImGui::Text("Debug: Resolved Owner EntityId = %llu", static_cast<unsigned long long>(resolvedOwner == InvalidEntityId ? 0 : resolvedOwner));
+
+				if (changed) g_SceneDirty = true;
+			}
+		}
+	}
+
+	void EditorCore::DrawInspectorSocketComponent(World& world, const EntityId& _selectedEntity)
+	{
+		auto* comp = world.GetComponent<SocketComponent>(_selectedEntity);
+		if (!comp)
+			return;
+
+		if (!ImGui::CollapsingHeader("Sockets", ImGuiTreeNodeFlags_DefaultOpen))
+			return;
+
+		bool changed = false;
+
+		// 본 이름 목록 (동일 엔티티의 SkinnedMesh에서)
+		std::vector<std::string> boneNames;
+		if (m_skinnedRegistry)
+		{
+			if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(_selectedEntity))
+			{
+				if (!skinned->meshAssetPath.empty())
+				{
+					std::shared_ptr<SkinnedMeshGPU> mesh = m_skinnedRegistry->Find(skinned->meshAssetPath);
+					if (mesh && mesh->sourceModel)
+						boneNames = mesh->sourceModel->GetBoneNames();
+				}
+			}
+		}
+
+		// 소켓 전용 UI: 본 드롭다운, 이름/위치/회전/스케일, + 추가 / 항목별 삭제
+		const size_t size = comp->sockets.size();
+		for (size_t i = 0; i < size; ++i)
+		{
+			SocketDef& s = comp->sockets[i];
+			ImGui::PushID(static_cast<int>(i));
+
+			bool open = ImGui::TreeNode("Socket", "%s [%s]", s.name.empty() ? "(unnamed)" : s.name.c_str(), s.parentBone.empty() ? "?" : s.parentBone.c_str());
+			ImGui::SameLine();
+			if (ImGui::SmallButton("-"))
+			{
+				comp->sockets.erase(comp->sockets.begin() + static_cast<ptrdiff_t>(i));
+				changed = true;
+				ImGui::PopID();
+				if (open) ImGui::TreePop();
+				break;
+			}
+			if (open)
+			{
+				// Name
+				char nameBuf[256];
+				std::snprintf(nameBuf, sizeof(nameBuf), "%.255s", s.name.c_str());
+				if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+				{
+					s.name = nameBuf;
+					changed = true;
+				}
+
+				// Parent Bone: 드롭다운 (본 목록)
+				int currentBoneIndex = -1;
+				if (!boneNames.empty())
+				{
+					for (size_t k = 0; k < boneNames.size(); ++k)
+						if (boneNames[k] == s.parentBone) { currentBoneIndex = static_cast<int>(k); break; }
+
+					const char* preview = (currentBoneIndex >= 0 && currentBoneIndex < static_cast<int>(boneNames.size()))
+						? boneNames[static_cast<size_t>(currentBoneIndex)].c_str()
+						: (s.parentBone.empty() ? "(선택)" : s.parentBone.c_str());
+					if (ImGui::BeginCombo("Parent Bone", preview))
+					{
+						for (size_t k = 0; k < boneNames.size(); ++k)
+						{
+							const bool sel = (currentBoneIndex == static_cast<int>(k));
+							if (ImGui::Selectable(boneNames[k].c_str(), sel))
+							{
+								s.parentBone = boneNames[k];
+								changed = true;
+							}
+							if (sel)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+				}
+				else
+				{
+					char boneBuf[256];
+					std::snprintf(boneBuf, sizeof(boneBuf), "%.255s", s.parentBone.c_str());
+					if (ImGui::InputText("Parent Bone", boneBuf, sizeof(boneBuf)))
+					{
+						s.parentBone = boneBuf;
+						changed = true;
+					}
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("SkinnedMesh가 없으면 본 이름을 직접 입력");
+				}
+
+				changed |= ImGui::DragFloat3("Position", &s.position.x, 0.01f);
+				changed |= ImGui::DragFloat3("Rotation (deg)", &s.rotation.x, 1.0f);
+				changed |= ImGui::DragFloat3("Scale", &s.scale.x, 0.01f);
+				ImGui::TreePop();
+			}
+			ImGui::PopID();
+		}
+		if (ImGui::Button("+ Add Socket"))
+		{
+			comp->sockets.push_back(SocketDef{});
+			changed = true;
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("이 오브젝트에 소켓을 추가합니다.");
+
+		if (changed)
+			g_SceneDirty = true;
+	}
+}

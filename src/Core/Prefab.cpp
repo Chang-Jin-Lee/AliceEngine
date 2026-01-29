@@ -1,4 +1,4 @@
-﻿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -20,6 +20,16 @@
 #include "Components/CameraShakeComponent.h"
 #include "Components/CameraBlendComponent.h"
 #include "Components/CameraInputComponent.h"
+#include "Components/SocketAttachmentComponent.h"
+#include "Components/HurtboxComponent.h"
+#include "Components/WeaponTraceComponent.h"
+#include "Components/HealthComponent.h"
+#include "Components/AttackDriverComponent.h"
+#include "Components/SocketComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
+#include "Core/SocketSerialization.h"
+#include "Core/AttackDriverSerialization.h"
+#include "Core/WeaponTraceSerialization.h"
 
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
@@ -28,6 +38,13 @@
 #include "PhysX/Components/Phy_TerrainHeightFieldComponent.h"
 #include "PhysX/Components/Phy_SettingsComponent.h"
 #include "PhysX/Components/Phy_JointComponent.h"
+
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -96,6 +113,24 @@ namespace Alice
                 }
 
                 return path;
+            }
+
+            static std::uint64_t ParseGuidOrZero(const JsonRttr::json& j)
+            {
+                if (j.is_string())
+                {
+                    try
+                    {
+                        return std::stoull(j.get<std::string>());
+                    }
+                    catch (...)
+                    {
+                        return 0;
+                    }
+                }
+                if (j.is_number_unsigned() || j.is_number_integer())
+                    return j.get<std::uint64_t>();
+                return 0;
             }
 
             // Phy_SettingsComponent 수동 직렬화
@@ -351,6 +386,16 @@ namespace Alice
                     return InvalidEntityId;
             }
 
+            // AdvancedAnimation
+            auto itAA = root.find("AdvancedAnimation");
+            if (itAA != root.end() && itAA->is_object())
+            {
+                AdvancedAnimationComponent& aa = world.AddComponent<AdvancedAnimationComponent>(entity);
+                rttr::instance inst = aa;
+                if (!JsonRttr::FromJsonObject(inst, *itAA))
+                    return InvalidEntityId;
+            }
+
             // Camera
             auto itC = root.find("Camera");
             if (itC != root.end() && itC->is_object())
@@ -418,6 +463,123 @@ namespace Alice
                 CameraInputComponent& ci = world.AddComponent<CameraInputComponent>(entity);
                 rttr::instance inst = ci;
                 if (!JsonRttr::FromJsonObject(inst, *itCI))
+                    return InvalidEntityId;
+            }
+
+            // Socket (소켓 정의 목록)
+            auto itSocket = root.find("Socket");
+            if (itSocket != root.end() && itSocket->is_object())
+            {
+                SocketComponent& sc = world.AddComponent<SocketComponent>(entity);
+                if (!SocketSerialization::JsonToSocketComponent(*itSocket, sc))
+                    return InvalidEntityId;
+            }
+
+            // SocketAttachment
+            auto itSAc = root.find("SocketAttachment");
+            if (itSAc != root.end() && itSAc->is_object())
+            {
+                SocketAttachmentComponent& sa = world.AddComponent<SocketAttachmentComponent>(entity);
+                if (auto itGuid = itSAc->find("ownerGuid"); itGuid != itSAc->end())
+                    sa.ownerGuid = ParseGuidOrZero(*itGuid);
+
+                JsonRttr::json copy = *itSAc;
+                copy.erase("ownerGuid");
+                rttr::instance inst = sa;
+                if (!JsonRttr::FromJsonObject(inst, copy))
+                    return InvalidEntityId;
+            }
+
+            // Hurtbox
+            auto itHB = root.find("Hurtbox");
+            if (itHB != root.end() && itHB->is_object())
+            {
+                HurtboxComponent& hb = world.AddComponent<HurtboxComponent>(entity);
+                if (auto itGuid = itHB->find("ownerGuid"); itGuid != itHB->end())
+                    hb.ownerGuid = ParseGuidOrZero(*itGuid);
+
+                JsonRttr::json copy = *itHB;
+                copy.erase("ownerGuid");
+                rttr::instance inst = hb;
+                if (!JsonRttr::FromJsonObject(inst, copy))
+                    return InvalidEntityId;
+            }
+
+            // WeaponTrace
+            auto itWT = root.find("WeaponTrace");
+            if (itWT != root.end() && itWT->is_object())
+            {
+                WeaponTraceComponent& wt = world.AddComponent<WeaponTraceComponent>(entity);
+                if (!WeaponTraceSerialization::JsonToWeaponTraceComponent(*itWT, wt))
+                    return InvalidEntityId;
+            }
+
+            // Health
+            auto itHealth = root.find("Health");
+            if (itHealth != root.end() && itHealth->is_object())
+            {
+                HealthComponent& hc = world.AddComponent<HealthComponent>(entity);
+                rttr::instance inst = hc;
+                if (!JsonRttr::FromJsonObject(inst, *itHealth))
+                    return InvalidEntityId;
+            }
+
+            // AttackDriver
+            auto itAttackDriver = root.find("AttackDriver");
+            if (itAttackDriver != root.end() && itAttackDriver->is_object())
+            {
+                AttackDriverComponent& ad = world.AddComponent<AttackDriverComponent>(entity);
+                if (!AttackDriverSerialization::JsonToAttackDriverComponent(*itAttackDriver, ad))
+                    return InvalidEntityId;
+            }
+
+            // AliceUI Components
+            auto itUIWidget = root.find("UIWidget");
+            if (itUIWidget != root.end() && itUIWidget->is_object())
+            {
+                UIWidgetComponent& comp = world.AddComponent<UIWidgetComponent>(entity);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIWidget))
+                    return InvalidEntityId;
+            }
+            auto itUITransform = root.find("UITransform");
+            if (itUITransform != root.end() && itUITransform->is_object())
+            {
+                UITransformComponent& comp = world.AddComponent<UITransformComponent>(entity);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUITransform))
+                    return InvalidEntityId;
+            }
+            auto itUIImage = root.find("UIImage");
+            if (itUIImage != root.end() && itUIImage->is_object())
+            {
+                UIImageComponent& comp = world.AddComponent<UIImageComponent>(entity);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIImage))
+                    return InvalidEntityId;
+            }
+            auto itUIText = root.find("UIText");
+            if (itUIText != root.end() && itUIText->is_object())
+            {
+                UITextComponent& comp = world.AddComponent<UITextComponent>(entity);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIText))
+                    return InvalidEntityId;
+            }
+            auto itUIButton = root.find("UIButton");
+            if (itUIButton != root.end() && itUIButton->is_object())
+            {
+                UIButtonComponent& comp = world.AddComponent<UIButtonComponent>(entity);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIButton))
+                    return InvalidEntityId;
+            }
+            auto itUIGauge = root.find("UIGauge");
+            if (itUIGauge != root.end() && itUIGauge->is_object())
+            {
+                UIGaugeComponent& comp = world.AddComponent<UIGaugeComponent>(entity);
+                rttr::instance inst = comp;
+                if (!JsonRttr::FromJsonObject(inst, *itUIGauge))
                     return InvalidEntityId;
             }
 
@@ -594,6 +756,13 @@ namespace Alice
                 root["SkinnedAnimation"] = JsonRttr::ToJsonObject(inst);
             }
 
+            // AdvancedAnimation
+            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(entity); advAnim)
+            {
+                rttr::instance inst = const_cast<AdvancedAnimationComponent&>(*advAnim);
+                root["AdvancedAnimation"] = JsonRttr::ToJsonObject(inst);
+            }
+
             // Camera
             if (const auto* cam = world.GetComponent<CameraComponent>(entity); cam)
             {
@@ -641,6 +810,93 @@ namespace Alice
             {
                 rttr::instance inst = const_cast<CameraInputComponent&>(*input);
                 root["CameraInput"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            // Socket
+            if (const auto* socketComp = world.GetComponent<SocketComponent>(entity); socketComp)
+            {
+                root["Socket"] = SocketSerialization::SocketComponentToJson(*socketComp);
+            }
+
+            // SocketAttachment
+            if (const auto* socketAttach = world.GetComponent<SocketAttachmentComponent>(entity); socketAttach)
+            {
+                rttr::instance inst = const_cast<SocketAttachmentComponent&>(*socketAttach);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["ownerGuid"] = std::to_string(socketAttach->ownerGuid);
+                root["SocketAttachment"] = obj;
+            }
+
+            // Hurtbox
+            if (const auto* hurtbox = world.GetComponent<HurtboxComponent>(entity); hurtbox)
+            {
+                rttr::instance inst = const_cast<HurtboxComponent&>(*hurtbox);
+                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
+                obj["ownerGuid"] = std::to_string(hurtbox->ownerGuid);
+                root["Hurtbox"] = obj;
+            }
+
+            // WeaponTrace
+            if (const auto* weaponTrace = world.GetComponent<WeaponTraceComponent>(entity); weaponTrace)
+            {
+                root["WeaponTrace"] = WeaponTraceSerialization::WeaponTraceComponentToJson(*weaponTrace);
+            }
+
+            // Health
+            if (const auto* health = world.GetComponent<HealthComponent>(entity); health)
+            {
+                rttr::instance inst = const_cast<HealthComponent&>(*health);
+                root["Health"] = JsonRttr::ToJsonObject(inst);
+            }
+
+            // AttackDriver
+            if (const auto* attackDriver = world.GetComponent<AttackDriverComponent>(entity); attackDriver)
+            {
+                root["AttackDriver"] = AttackDriverSerialization::AttackDriverComponentToJson(*attackDriver);
+            }
+
+            // AliceUI Components
+            if (const auto* uiWidget = world.GetComponent<UIWidgetComponent>(entity); uiWidget)
+            {
+                rttr::instance inst = const_cast<UIWidgetComponent&>(*uiWidget);
+                root["UIWidget"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiTransform = world.GetComponent<UITransformComponent>(entity); uiTransform)
+            {
+                rttr::instance inst = const_cast<UITransformComponent&>(*uiTransform);
+                root["UITransform"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiImage = world.GetComponent<UIImageComponent>(entity); uiImage)
+            {
+                UIImageComponent copy = *uiImage;
+                copy.texturePath = NormalizePathToRelative(copy.texturePath);
+                rttr::instance inst = copy;
+                root["UIImage"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiText = world.GetComponent<UITextComponent>(entity); uiText)
+            {
+                UITextComponent copy = *uiText;
+                copy.fontPath = NormalizePathToRelative(copy.fontPath);
+                rttr::instance inst = copy;
+                root["UIText"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiButton = world.GetComponent<UIButtonComponent>(entity); uiButton)
+            {
+                UIButtonComponent copy = *uiButton;
+                copy.normalTexture = NormalizePathToRelative(copy.normalTexture);
+                copy.hoveredTexture = NormalizePathToRelative(copy.hoveredTexture);
+                copy.pressedTexture = NormalizePathToRelative(copy.pressedTexture);
+                copy.disabledTexture = NormalizePathToRelative(copy.disabledTexture);
+                rttr::instance inst = copy;
+                root["UIButton"] = JsonRttr::ToJsonObject(inst);
+            }
+            if (const auto* uiGauge = world.GetComponent<UIGaugeComponent>(entity); uiGauge)
+            {
+                UIGaugeComponent copy = *uiGauge;
+                copy.fillTexture = NormalizePathToRelative(copy.fillTexture);
+                copy.backgroundTexture = NormalizePathToRelative(copy.backgroundTexture);
+                rttr::instance inst = copy;
+                root["UIGauge"] = JsonRttr::ToJsonObject(inst);
             }
 
             // Point Light

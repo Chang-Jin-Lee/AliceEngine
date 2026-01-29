@@ -129,6 +129,12 @@ set(ENGINE_SOURCES
 
     # AnimBlueprint
     ${ALICE_SRC_DIR}/Game/AnimBlueprintAsset.cpp
+    ${ALICE_SRC_DIR}/Game/SocketAttachmentSystem.cpp
+    ${ALICE_SRC_DIR}/Game/SocketWorldUpdateSystem.cpp
+    ${ALICE_SRC_DIR}/Game/HurtboxFactory.cpp
+    ${ALICE_SRC_DIR}/Game/WeaponTraceSystem.cpp
+    ${ALICE_SRC_DIR}/Game/CombatSystem.cpp
+    ${ALICE_SRC_DIR}/Game/AttackDriverSystem.cpp
 
     # 렌더링 계층
     ${ALICE_SRC_DIR}/Rendering/Camera.cpp
@@ -139,6 +145,7 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
+    ${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.cpp
     
     #PhysX
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.cpp
@@ -180,8 +187,14 @@ set(ENGINE_SOURCES
 	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
 	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
+	${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.cpp
 
 	${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
+
+    # AliceUI (Shader 기반 UI)
+    ${ALICE_SRC_DIR}/AliceUI/UIFont.cpp
+    ${ALICE_SRC_DIR}/AliceUI/UIRenderer.cpp
+    ${ALICE_SRC_DIR}/AliceUI/UIShaderCode.cpp
 )
 
 set(ENGINE_HEADERS
@@ -244,6 +257,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/CameraShakeComponent.h
     ${ALICE_SRC_DIR}/Components/CameraSpringArmComponent.h
     ${ALICE_SRC_DIR}/Components/AdvancedAnimationComponent.h
+    ${ALICE_SRC_DIR}/Components/DebugDrawBoxComponent.h
     ${ALICE_SRC_DIR}/Components/AdvancedAnimator.h
     ${ALICE_SRC_DIR}/Components/SoundBoxComponent.h
     ${ALICE_SRC_DIR}/Components/AudioListenerComponent.h
@@ -258,6 +272,13 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Components/TransformComponent.h
     ${ALICE_SRC_DIR}/Components/TrailEffectComponent.h
     ${ALICE_SRC_DIR}/Components/EffectComponent.h
+    ${ALICE_SRC_DIR}/Components/SocketAttachmentComponent.h
+    ${ALICE_SRC_DIR}/Components/SocketPoseOutputComponent.h
+    ${ALICE_SRC_DIR}/Components/HurtboxComponent.h
+    ${ALICE_SRC_DIR}/Components/WeaponTraceComponent.h
+    ${ALICE_SRC_DIR}/Components/HealthComponent.h
+    ${ALICE_SRC_DIR}/Components/AttackDriverComponent.h
+    ${ALICE_SRC_DIR}/Components/PostProcessVolumeComponent.h
 
     # FBX/3D 모델 로더 헤더
     ${ALICE_SRC_DIR}/3Dmodel/FbxMaterial.h
@@ -276,8 +297,11 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/D3D11/D3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/D3D11/ID3D11RenderDevice.h
     ${ALICE_SRC_DIR}/Rendering/DebugDrawSystem.h
+    ${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.h
     ${ALICE_SRC_DIR}/Rendering/RenderTypes.h
     ${ALICE_SRC_DIR}/Rendering/TrailEffectRenderSystem.h
+    ${ALICE_SRC_DIR}/Rendering/PostProcessSettings.h
+    ${ALICE_SRC_DIR}/Rendering/PostProcessVolumeSystem.h
     
     # 쉐이더 코드 묶음
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.h
@@ -286,6 +310,14 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
 	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
     ${ALICE_SRC_DIR}/Game/AdvancedAnimSystem.h
+    ${ALICE_SRC_DIR}/Game/SocketAttachmentSystem.h
+    ${ALICE_SRC_DIR}/Game/SocketWorldUpdateSystem.h
+    ${ALICE_SRC_DIR}/Game/HurtboxFactory.h
+    ${ALICE_SRC_DIR}/Game/WeaponTraceSystem.h
+    ${ALICE_SRC_DIR}/Game/CombatPhysicsLayers.h
+    ${ALICE_SRC_DIR}/Game/CombatHitEvent.h
+    ${ALICE_SRC_DIR}/Game/CombatSystem.h
+    ${ALICE_SRC_DIR}/Game/AttackDriverSystem.h
     #PhysX 물리
     ${ALICE_SRC_DIR}/PhysX/IPhysicsWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysicsMath.h
@@ -324,6 +356,19 @@ set(ENGINE_HEADERS
      #UI Object
     ${ALICE_SRC_DIR}/UI/UIBase.h
 
+    # AliceUI (Shader 기반 UI)
+    ${ALICE_SRC_DIR}/AliceUI/UICommon.h
+    ${ALICE_SRC_DIR}/AliceUI/UIWidgetComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UITransformComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UIImageComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UITextComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UIButtonComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UIGaugeComponent.h
+    ${ALICE_SRC_DIR}/AliceUI/UIFont.h
+    ${ALICE_SRC_DIR}/AliceUI/UIRenderer.h
+    ${ALICE_SRC_DIR}/AliceUI/UIShaderCode.h
+    ${ALICE_SRC_DIR}/AliceUI/BindWidget.h
+
     # json
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
@@ -339,6 +384,7 @@ set(ENGINE_HEADERS
 	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
 	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
 	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
+    ${ALICE_SRC_DIR}/Core/SocketSerialization.h
 
 
 	${ALICE_SRC_DIR}/UI/UI_ImageComponent.h

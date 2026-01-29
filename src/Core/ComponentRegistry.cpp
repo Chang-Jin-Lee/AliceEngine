@@ -11,6 +11,8 @@
 #include "Components/MaterialComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/SkinnedAnimationComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
+#include "Components/AnimBlueprintComponent.h"
 #include "Components/CameraComponent.h"
 #include "Components/CameraFollowComponent.h"
 #include "Components/CameraSpringArmComponent.h"
@@ -27,6 +29,15 @@
 #include "Components/AudioListenerComponent.h"
 #include "Components/AudioSourceComponent.h"
 #include "Components/SoundBoxComponent.h"
+#include "Components/DebugDrawBoxComponent.h"
+#include "Components/SocketAttachmentComponent.h"
+#include "Components/HurtboxComponent.h"
+#include "Components/WeaponTraceComponent.h"
+#include "Components/HealthComponent.h"
+#include "Components/AttackDriverComponent.h"
+#include "Components/SocketComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
+#include "Rendering/PostProcessSettings.h"
 
 // 물리 컴포넌트 헤더
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
@@ -39,11 +50,20 @@
 #include "PhysX/IPhysicsWorld.h"
 #include "Core/Material.h"
 
-// UI 컴포넌트 헤더
+// UI 컴포넌트 헤더 (레거시)
 #include "UI/UITransform.h"
 #include "UI/UI_ImageComponent.h"
 #include "UI/UI_ScriptComponent.h"
 #include "UI/IUIScript.h"
+
+// AliceUI 컴포넌트 헤더 (신규)
+#include "AliceUI/UICommon.h"
+#include "AliceUI/UIWidgetComponent.h"
+#include "AliceUI/UITransformComponent.h"
+#include "AliceUI/UIImageComponent.h"
+#include "AliceUI/UITextComponent.h"
+#include "AliceUI/UIButtonComponent.h"
+#include "AliceUI/UIGaugeComponent.h"
 
 using namespace DirectX;
 
@@ -66,6 +86,13 @@ namespace Alice
             .property("x", &XMFLOAT3::x)
             .property("y", &XMFLOAT3::y)
             .property("z", &XMFLOAT3::z);
+
+        rttr::registration::class_<XMFLOAT4>("XMFLOAT4")
+            .constructor<>()
+            .property("x", &XMFLOAT4::x)
+            .property("y", &XMFLOAT4::y)
+            .property("z", &XMFLOAT4::z)
+            .property("w", &XMFLOAT4::w);
 
         // XMFLOAT4X4는 4x4 행렬을 나타내는 타입
         // 렌더링할 때 4x4 행렬을 렌더링하기 위해 등록
@@ -114,12 +141,22 @@ namespace Alice
             .property("color", &MaterialComponent::color)
             .property("roughness", &MaterialComponent::roughness)
             .property("metalness", &MaterialComponent::metalness)
+            .property("ambientOcclusion", &MaterialComponent::ambientOcclusion)
             .property("shadingMode", &MaterialComponent::shadingMode)
             .property("assetPath", &MaterialComponent::assetPath)
             .property("albedoTexturePath", &MaterialComponent::albedoTexturePath)
+            .property("transparent", &MaterialComponent::transparent)
             .property("normalStrength", &MaterialComponent::normalStrength)
             .property("outlineColor", &MaterialComponent::outlineColor)
-            .property("outlineWidth", &MaterialComponent::outlineWidth);
+            .property("outlineWidth", &MaterialComponent::outlineWidth)
+            .property("toonPbrCut1", &MaterialComponent::toonPbrCut1)
+            .property("toonPbrCut2", &MaterialComponent::toonPbrCut2)
+            .property("toonPbrCut3", &MaterialComponent::toonPbrCut3)
+            .property("toonPbrLevel1", &MaterialComponent::toonPbrLevel1)
+            .property("toonPbrLevel2", &MaterialComponent::toonPbrLevel2)
+            .property("toonPbrLevel3", &MaterialComponent::toonPbrLevel3)
+            .property("toonPbrStrength", &MaterialComponent::toonPbrStrength)
+            .property("toonPbrBlur", &MaterialComponent::toonPbrBlur);
 
         // === SkinnedMeshComponent 등록 ===
         // boneMatrices는 뼈 행렬을 나타내는 프로퍼티
@@ -186,17 +223,52 @@ namespace Alice
             .property("yawRad", &AdvancedAnimAim::yawRad)
             .property("weight", &AdvancedAnimAim::weight);
 
+        rttr::registration::class_<AdvancedAnimSocket>("AdvancedAnimSocket")
+            .constructor<>()
+            .property("name", &AdvancedAnimSocket::name)
+            .property("parentBone", &AdvancedAnimSocket::parentBone)
+            .property("pos", &AdvancedAnimSocket::pos)
+            .property("rotDeg", &AdvancedAnimSocket::rotDeg)
+            .property("scale", &AdvancedAnimSocket::scale);
+
         rttr::registration::class_<AdvancedAnimationComponent>("AdvancedAnimationComponent")
             .constructor<>()
             .property("enabled", &AdvancedAnimationComponent::enabled)
             .property("playing", &AdvancedAnimationComponent::playing)
-            .property("base", &AdvancedAnimationComponent::base)
+            .property("base", &AdvancedAnimationComponent::base)    
             .property("upper", &AdvancedAnimationComponent::upper)
             .property("additive", &AdvancedAnimationComponent::additive)
             .property("procedural", &AdvancedAnimationComponent::procedural)
             .property("ik", &AdvancedAnimationComponent::ik)
-            .property("aim", &AdvancedAnimationComponent::aim);
+            .property("ikChains", &AdvancedAnimationComponent::ikChains)
+            .property("aim", &AdvancedAnimationComponent::aim)
+            .property("sockets", &AdvancedAnimationComponent::sockets);
 
+        // AnimParamType enum 등록
+        rttr::registration::enumeration<AnimParamType>("AnimParamType")
+            (
+                rttr::value("Bool", AnimParamType::Bool),
+                rttr::value("Int", AnimParamType::Int),
+                rttr::value("Float", AnimParamType::Float),
+                rttr::value("Trigger", AnimParamType::Trigger)
+            );
+
+        // AnimParamValue 등록
+        rttr::registration::class_<AnimParamValue>("AnimParamValue")
+            .constructor<>()
+            .property("type", &AnimParamValue::type)
+            .property("b", &AnimParamValue::b)
+            .property("i", &AnimParamValue::i)
+            .property("f", &AnimParamValue::f)
+            .property("trigger", &AnimParamValue::trigger);
+
+        // AnimBlueprintComponent 등록
+        rttr::registration::class_<AnimBlueprintComponent>("AnimBlueprintComponent")
+            .constructor<>()
+            .property("blueprintPath", &AnimBlueprintComponent::blueprintPath)
+            .property("playing", &AnimBlueprintComponent::playing)
+            .property("speed", &AnimBlueprintComponent::speed)
+            .property("params", &AnimBlueprintComponent::params);
 
 		//  Enum 등록
 		rttr::registration::enumeration<SoundBoxType>("alice_SoundBoxType")
@@ -229,6 +301,116 @@ namespace Alice
 			.property("maxDistance", &SoundBoxComponent::maxDistance)
 			.property("debugDraw", &SoundBoxComponent::debugDraw)
 			.property("targetEntity", &SoundBoxComponent::targetEntity);
+
+        // DebugDrawBoxComponent 등록
+        rttr::registration::class_<DebugDrawBoxComponent>("DebugDrawBoxComponent")
+            .constructor<>()
+            .property("boundsMin", &DebugDrawBoxComponent::boundsMin)
+            .property("boundsMax", &DebugDrawBoxComponent::boundsMax)
+            .property("color", &DebugDrawBoxComponent::color)
+            .property("enabled", &DebugDrawBoxComponent::enabled)
+            .property("depthTest", &DebugDrawBoxComponent::depthTest);
+
+		// SocketAttachmentComponent 등록
+		rttr::registration::class_<SocketAttachmentComponent>("SocketAttachmentComponent")
+			.constructor<>()
+			.property("ownerGuid", &SocketAttachmentComponent::ownerGuid)
+			.property("ownerNameDebug", &SocketAttachmentComponent::ownerNameDebug)
+			.property("socketName", &SocketAttachmentComponent::socketName)
+			.property("followScale", &SocketAttachmentComponent::followScale)
+			.property("extraPos", &SocketAttachmentComponent::extraPos)
+			.property("extraRotRad", &SocketAttachmentComponent::extraRotRad)
+			.property("extraScale", &SocketAttachmentComponent::extraScale);
+
+		// HurtboxComponent 등록
+		rttr::registration::class_<HurtboxComponent>("HurtboxComponent")
+			.constructor<>()
+			.property("ownerGuid", &HurtboxComponent::ownerGuid)
+			.property("ownerNameDebug", &HurtboxComponent::ownerNameDebug)
+			.property("teamId", &HurtboxComponent::teamId)
+			.property("part", &HurtboxComponent::part)
+			.property("damageScale", &HurtboxComponent::damageScale);
+
+		rttr::registration::enumeration<WeaponTraceShapeType>("WeaponTraceShapeType")
+			(
+				rttr::value("Sphere", WeaponTraceShapeType::Sphere),
+				rttr::value("Capsule", WeaponTraceShapeType::Capsule),
+				rttr::value("Box", WeaponTraceShapeType::Box)
+				);
+
+		rttr::registration::class_<WeaponTraceShape>("WeaponTraceShape")
+			.constructor<>()
+			.property("name", &WeaponTraceShape::name)
+			.property("enabled", &WeaponTraceShape::enabled)
+			.property("type", &WeaponTraceShape::type)
+			.property("localPos", &WeaponTraceShape::localPos)
+			.property("localRotDeg", &WeaponTraceShape::localRotDeg)
+			.property("radius", &WeaponTraceShape::radius)
+			.property("capsuleHalfHeight", &WeaponTraceShape::capsuleHalfHeight)
+			.property("boxHalfExtents", &WeaponTraceShape::boxHalfExtents);
+
+		// WeaponTraceComponent 등록
+		rttr::registration::class_<WeaponTraceComponent>("WeaponTraceComponent")
+			.constructor<>()
+			.property("ownerGuid", &WeaponTraceComponent::ownerGuid)
+			.property("ownerNameDebug", &WeaponTraceComponent::ownerNameDebug)
+			.property("traceBasisGuid", &WeaponTraceComponent::traceBasisGuid)
+			.property("shapes", &WeaponTraceComponent::shapes)
+			.property("active", &WeaponTraceComponent::active)
+			.property("debugDraw", &WeaponTraceComponent::debugDraw)
+			.property("baseDamage", &WeaponTraceComponent::baseDamage)
+			.property("teamId", &WeaponTraceComponent::teamId)
+			.property("attackInstanceId", &WeaponTraceComponent::attackInstanceId)
+			.property("targetLayerBits", &WeaponTraceComponent::targetLayerBits)
+			.property("queryLayerBits", &WeaponTraceComponent::queryLayerBits)
+			.property("subSteps", &WeaponTraceComponent::subSteps);
+
+		// HealthComponent 등록
+		rttr::registration::class_<HealthComponent>("HealthComponent")
+			.constructor<>()
+			.property("maxHealth", &HealthComponent::maxHealth)
+			.property("currentHealth", &HealthComponent::currentHealth)
+			.property("invulnDuration", &HealthComponent::invulnDuration)
+			.property("invulnRemaining", &HealthComponent::invulnRemaining)
+			.property("alive", &HealthComponent::alive)
+			.property("teamId", &HealthComponent::teamId);
+
+		// AttackDriverComponent 등록
+		rttr::registration::enumeration<AttackDriverClipSource>("AttackDriverClipSource")
+			(
+				rttr::value("Explicit", AttackDriverClipSource::Explicit),
+				rttr::value("BaseA", AttackDriverClipSource::BaseA),
+				rttr::value("BaseB", AttackDriverClipSource::BaseB),
+				rttr::value("UpperA", AttackDriverClipSource::UpperA),
+				rttr::value("UpperB", AttackDriverClipSource::UpperB),
+				rttr::value("Additive", AttackDriverClipSource::Additive)
+				);
+
+		rttr::registration::class_<AttackDriverClip>("AttackDriverClip")
+			.constructor<>()
+			.property("source", &AttackDriverClip::source)
+			.property("clipName", &AttackDriverClip::clipName)
+			.property("startTimeSec", &AttackDriverClip::startTimeSec)
+			.property("endTimeSec", &AttackDriverClip::endTimeSec)
+			.property("enabled", &AttackDriverClip::enabled);
+
+		rttr::registration::class_<AttackDriverComponent>("AttackDriverComponent")
+			.constructor<>()
+			.property("traceGuid", &AttackDriverComponent::traceGuid)
+			.property("clips", &AttackDriverComponent::clips);
+
+		// SocketDef / SocketComponent 등록 (씬 저장/로드 및 인스펙터)
+		rttr::registration::class_<SocketDef>("SocketDef")
+			.constructor<>()
+			.property("name", &SocketDef::name)
+			.property("parentBone", &SocketDef::parentBone)
+			.property("position", &SocketDef::position)
+			.property("rotation", &SocketDef::rotation)
+			.property("scale", &SocketDef::scale);
+
+		rttr::registration::class_<SocketComponent>("SocketComponent")
+			.constructor<>()
+			.property("sockets", &SocketComponent::sockets);
 
 		//  AudioListenerComponent 등록
 		rttr::registration::class_<AudioListenerComponent>("AudioListenerComponent")
@@ -396,6 +578,58 @@ namespace Alice
             .property("range", &RectLightComponent::range)
             .property("enabled", &RectLightComponent::enabled);
 
+        // === PostProcessVolumeComponent 등록 ===
+        rttr::registration::enumeration<PostProcessVolumeShape>("PostProcessVolumeShape")
+            (
+                rttr::value("Box", PostProcessVolumeShape::Box),
+                rttr::value("Sphere", PostProcessVolumeShape::Sphere)
+            );
+        rttr::registration::class_<PostProcessVolumeComponent>("PostProcessVolumeComponent")
+            .constructor<>()
+            .property("shape", &PostProcessVolumeComponent::GetShape, &PostProcessVolumeComponent::SetShape)
+            .property("unbound", &PostProcessVolumeComponent::GetUnbound, &PostProcessVolumeComponent::SetUnbound)
+            .property("boxSize", &PostProcessVolumeComponent::GetBoxSize, &PostProcessVolumeComponent::SetBoxSize)
+            .property("sphereRadius", &PostProcessVolumeComponent::GetSphereRadius, &PostProcessVolumeComponent::SetSphereRadius)
+            .property("blendRadius", &PostProcessVolumeComponent::GetBlendRadius, &PostProcessVolumeComponent::SetBlendRadius)
+                (rttr::metadata("Min", 0.0f))
+            .property("blendWeight", &PostProcessVolumeComponent::GetBlendWeight, &PostProcessVolumeComponent::SetBlendWeight)
+                (rttr::metadata("Min", 0.0f), rttr::metadata("Max", 1.0f))
+            .property("priority", &PostProcessVolumeComponent::GetPriority, &PostProcessVolumeComponent::SetPriority)
+            .property("referenceObjectName", &PostProcessVolumeComponent::GetReferenceObjectName, &PostProcessVolumeComponent::SetReferenceObjectName)
+            .property("useReferenceObject", &PostProcessVolumeComponent::GetUseReferenceObject, &PostProcessVolumeComponent::SetUseReferenceObject)
+            .property("settings", &PostProcessVolumeComponent::settings);
+
+        // === PostProcessSettings 등록 ===
+        rttr::registration::class_<PostProcessSettings>("PostProcessSettings")
+            .constructor<>()
+            // Exposure
+            .property("bOverride_Exposure", &PostProcessSettings::bOverride_Exposure)
+            .property("exposure", &PostProcessSettings::exposure)
+            .property("bOverride_MaxHDRNits", &PostProcessSettings::bOverride_MaxHDRNits)
+            .property("maxHDRNits", &PostProcessSettings::maxHDRNits)
+            // Color Grading
+            .property("bOverride_ColorGradingSaturation", &PostProcessSettings::bOverride_ColorGradingSaturation)
+            .property("saturation", &PostProcessSettings::saturation)
+            .property("bOverride_ColorGradingContrast", &PostProcessSettings::bOverride_ColorGradingContrast)
+            .property("contrast", &PostProcessSettings::contrast)
+            .property("bOverride_ColorGradingGamma", &PostProcessSettings::bOverride_ColorGradingGamma)
+            .property("gamma", &PostProcessSettings::gamma)
+            .property("bOverride_ColorGradingGain", &PostProcessSettings::bOverride_ColorGradingGain)
+            .property("gain", &PostProcessSettings::gain)
+            // Bloom
+            .property("bOverride_BloomThreshold", &PostProcessSettings::bOverride_BloomThreshold)
+            .property("bloomThreshold", &PostProcessSettings::bloomThreshold)
+            .property("bOverride_BloomKnee", &PostProcessSettings::bOverride_BloomKnee)
+            .property("bloomKnee", &PostProcessSettings::bloomKnee)
+            .property("bOverride_BloomIntensity", &PostProcessSettings::bOverride_BloomIntensity)
+            .property("bloomIntensity", &PostProcessSettings::bloomIntensity)
+            .property("bOverride_BloomGaussianIntensity", &PostProcessSettings::bOverride_BloomGaussianIntensity)
+            .property("bloomGaussianIntensity", &PostProcessSettings::bloomGaussianIntensity)
+            .property("bOverride_BloomRadius", &PostProcessSettings::bOverride_BloomRadius)
+            .property("bloomRadius", &PostProcessSettings::bloomRadius)
+            .property("bOverride_BloomDownsample", &PostProcessSettings::bOverride_BloomDownsample)
+            .property("bloomDownsample", &PostProcessSettings::bloomDownsample);
+
         // === ComputeEffectComponent 등록 ===
         rttr::registration::class_<ComputeEffectComponent>("ComputeEffectComponent")
             .constructor<>()
@@ -477,7 +711,8 @@ namespace Alice
             .property("restitution", &Phy_ColliderComponent::restitution)
             .property("layerBits", &Phy_ColliderComponent::layerBits)
             .property("ignoreLayers", &Phy_ColliderComponent::ignoreLayers)
-            .property("isTrigger", &Phy_ColliderComponent::isTrigger);
+            .property("isTrigger", &Phy_ColliderComponent::isTrigger)
+            .property("debugDraw", &Phy_ColliderComponent::debugDraw);
 
         // === Phy_MeshColliderComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
         rttr::registration::class_<Phy_MeshColliderComponent>("Phy_MeshColliderComponent")
@@ -494,7 +729,8 @@ namespace Alice
             .property("doubleSidedQueries", &Phy_MeshColliderComponent::doubleSidedQueries)
             .property("validate", &Phy_MeshColliderComponent::validate)
             .property("shiftVertices", &Phy_MeshColliderComponent::shiftVertices)
-            .property("vertexLimit", &Phy_MeshColliderComponent::vertexLimit);
+            .property("vertexLimit", &Phy_MeshColliderComponent::vertexLimit)
+            .property("debugDraw", &Phy_MeshColliderComponent::debugDraw);
 
         // === Phy_TerrainHeightFieldComponent 등록 (physicsActorHandle는 내부용이므로 등록하지 않음) ===
         rttr::registration::class_<Phy_TerrainHeightFieldComponent>("Phy_TerrainHeightFieldComponent")
@@ -766,6 +1002,119 @@ namespace Alice
         // IUIScript 등록 (OwnerID만 저장, Owner 포인터는 저장하지 않음)
         rttr::registration::class_<IUIScript>("IUIScript")
             .property("OwnerID", &IUIScript::OwnerID);
+
+        // === AliceUI 컴포넌트/열거형 등록 ===
+        rttr::registration::enumeration<AliceUI::UISpace>("UISpace")
+            (
+                rttr::value("Screen", AliceUI::UISpace::Screen),
+                rttr::value("World", AliceUI::UISpace::World)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIVisibility>("UIVisibility")
+            (
+                rttr::value("Visible", AliceUI::UIVisibility::Visible),
+                rttr::value("Hidden", AliceUI::UIVisibility::Hidden),
+                rttr::value("Collapsed", AliceUI::UIVisibility::Collapsed)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIAlignH>("UIAlignH")
+            (
+                rttr::value("Left", AliceUI::UIAlignH::Left),
+                rttr::value("Center", AliceUI::UIAlignH::Center),
+                rttr::value("Right", AliceUI::UIAlignH::Right)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIAlignV>("UIAlignV")
+            (
+                rttr::value("Top", AliceUI::UIAlignV::Top),
+                rttr::value("Center", AliceUI::UIAlignV::Center),
+                rttr::value("Bottom", AliceUI::UIAlignV::Bottom)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIButtonState>("UIButtonState")
+            (
+                rttr::value("Normal", AliceUI::UIButtonState::Normal),
+                rttr::value("Hovered", AliceUI::UIButtonState::Hovered),
+                rttr::value("Pressed", AliceUI::UIButtonState::Pressed),
+                rttr::value("Disabled", AliceUI::UIButtonState::Disabled)
+            );
+
+        rttr::registration::enumeration<AliceUI::UIGaugeDirection>("UIGaugeDirection")
+            (
+                rttr::value("LeftToRight", AliceUI::UIGaugeDirection::LeftToRight),
+                rttr::value("RightToLeft", AliceUI::UIGaugeDirection::RightToLeft),
+                rttr::value("BottomToTop", AliceUI::UIGaugeDirection::BottomToTop),
+                rttr::value("TopToBottom", AliceUI::UIGaugeDirection::TopToBottom)
+            );
+
+        rttr::registration::class_<UIWidgetComponent>("UIWidgetComponent")
+            .constructor<>()
+            .property("widgetName", &UIWidgetComponent::widgetName)
+            .property("space", &UIWidgetComponent::space)
+            .property("visibility", &UIWidgetComponent::visibility)
+            .property("raycastTarget", &UIWidgetComponent::raycastTarget)
+            .property("interactable", &UIWidgetComponent::interactable)
+            .property("billboard", &UIWidgetComponent::billboard)
+            .property("shaderName", &UIWidgetComponent::shaderName);
+
+        rttr::registration::class_<UITransformComponent>("UITransformComponent")
+            .constructor<>()
+            .property("anchorMin", &UITransformComponent::anchorMin)
+            .property("anchorMax", &UITransformComponent::anchorMax)
+            .property("position", &UITransformComponent::position)
+            .property("size", &UITransformComponent::size)
+            .property("pivot", &UITransformComponent::pivot)
+            .property("scale", &UITransformComponent::scale)
+            .property("rotationRad", &UITransformComponent::rotationRad)
+            .property("alignH", &UITransformComponent::alignH)
+            .property("alignV", &UITransformComponent::alignV)
+            .property("useAlignment", &UITransformComponent::useAlignment)
+            .property("sortOrder", &UITransformComponent::sortOrder);
+
+        rttr::registration::class_<UIImageComponent>("UIImageComponent")
+            .constructor<>()
+            .property("texturePath", &UIImageComponent::texturePath)
+            .property("color", &UIImageComponent::color)
+            .property("uvRect", &UIImageComponent::uvRect)
+            .property("preserveAspect", &UIImageComponent::preserveAspect);
+
+        rttr::registration::class_<UITextComponent>("UITextComponent")
+            .constructor<>()
+            .property("fontPath", &UITextComponent::fontPath)
+            .property("text", &UITextComponent::text)
+            .property("fontSize", &UITextComponent::fontSize)
+            .property("color", &UITextComponent::color)
+            .property("alignH", &UITextComponent::alignH)
+            .property("alignV", &UITextComponent::alignV)
+            .property("wrap", &UITextComponent::wrap)
+            .property("maxWidth", &UITextComponent::maxWidth)
+            .property("lineSpacing", &UITextComponent::lineSpacing);
+
+        rttr::registration::class_<UIButtonComponent>("UIButtonComponent")
+            .constructor<>()
+            .property("enabled", &UIButtonComponent::enabled)
+            .property("state", &UIButtonComponent::state)
+            .property("normalTint", &UIButtonComponent::normalTint)
+            .property("hoveredTint", &UIButtonComponent::hoveredTint)
+            .property("pressedTint", &UIButtonComponent::pressedTint)
+            .property("disabledTint", &UIButtonComponent::disabledTint)
+            .property("normalTexture", &UIButtonComponent::normalTexture)
+            .property("hoveredTexture", &UIButtonComponent::hoveredTexture)
+            .property("pressedTexture", &UIButtonComponent::pressedTexture)
+            .property("disabledTexture", &UIButtonComponent::disabledTexture);
+
+        rttr::registration::class_<UIGaugeComponent>("UIGaugeComponent")
+            .constructor<>()
+            .property("minValue", &UIGaugeComponent::minValue)
+            .property("maxValue", &UIGaugeComponent::maxValue)
+            .property("value", &UIGaugeComponent::value)
+            .property("normalized", &UIGaugeComponent::normalized)
+            .property("direction", &UIGaugeComponent::direction)
+            .property("fillTexture", &UIGaugeComponent::fillTexture)
+            .property("backgroundTexture", &UIGaugeComponent::backgroundTexture)
+            .property("fillColor", &UIGaugeComponent::fillColor)
+            .property("backgroundColor", &UIGaugeComponent::backgroundColor)
+            .property("smoothing", &UIGaugeComponent::smoothing);
     }
 
     // EditorComponentRegistry에 컴포넌트 등록
@@ -789,6 +1138,9 @@ namespace Alice
             });
 
         r.Register<SkinnedAnimationComponent>("Skinned Animation", "Rendering");
+        r.Register<AdvancedAnimationComponent>("Advanced Animation", "Rendering");
+        r.Register<AnimBlueprintComponent>("Anim Blueprint", "Rendering");
+        r.Register<SocketComponent>("Socket", "Rendering");
 
         r.Register<CameraComponent>("Camera", "Camera");
         r.Register<CameraFollowComponent>("Camera Follow", "Camera");
@@ -802,6 +1154,8 @@ namespace Alice
         r.Register<SpotLightComponent>("Spot Light", "Lighting");
         r.Register<RectLightComponent>("Rect Light", "Lighting");
 
+        r.Register<PostProcessVolumeComponent>("Post Process Volume", "Rendering");
+
         r.Register<ComputeEffectComponent>("Compute Effect", "VFX");
         r.Register<EffectComponent>("Effect", "VFX");
         r.Register<TrailEffectComponent>("Trail Effect", "VFX");
@@ -814,6 +1168,22 @@ namespace Alice
         r.Register<Phy_JointComponent>("Joint", "Physics");
         r.Register<Phy_SettingsComponent>("Physics Settings", "Physics",
             /*addFn*/{}, /*addable*/true, /*removable*/false);
+
+        r.Register<SocketAttachmentComponent>("Socket Attachment", "Combat");
+        r.Register<HurtboxComponent>("Hurtbox", "Combat");
+        r.Register<WeaponTraceComponent>("Weapon Trace", "Combat");
+        r.Register<HealthComponent>("Health", "Combat");
+        r.Register<AttackDriverComponent>("Attack Driver", "Combat");
+
+        r.Register<DebugDrawBoxComponent>("Debug Draw Box", "Debug");
+
+        // AliceUI
+        r.Register<UIWidgetComponent>("UI Widget", "UI");
+        r.Register<UITransformComponent>("UI Transform", "UI");
+        r.Register<UIImageComponent>("UI Image", "UI");
+        r.Register<UITextComponent>("UI Text", "UI");
+        r.Register<UIButtonComponent>("UI Button", "UI");
+        r.Register<UIGaugeComponent>("UI Gauge", "UI");
 
         r.SortByCategoryThenName();
     }

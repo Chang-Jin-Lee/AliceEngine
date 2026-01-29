@@ -1,6 +1,8 @@
 # AliceRenderer
 DirectX 11 기반 3D 게임 엔진
 
+<img width="2002" height="1165" alt="image" src="https://github.com/user-attachments/assets/2ec812be-f0e4-4de7-b85b-bbf3489d0afc" />
+
 <img width="2002" height="1165" alt="image" src="https://github.com/user-attachments/assets/9dea4cd7-dee2-47c6-bca4-e2ed3411c6a6" />
 
 <img width="2002" height="1165" alt="image" src="https://github.com/user-attachments/assets/96aa2ebd-ce62-415b-9a54-1d8cec722aec" />
@@ -10,6 +12,16 @@ DirectX 11 기반 3D 게임 엔진
 
 - 엔진 구조
 <img width="2961" height="857" alt="다이어그램" src="https://github.com/user-attachments/assets/53ca1e2a-85f8-4628-a621-f424545b0f2c" />
+
+- 엔진 루프
+  - 메인 루프
+    <img width="1648" height="385" alt="Run메인루프" src="https://github.com/user-attachments/assets/e5c31321-52c3-4c47-94a1-2a6fdf6aff42" />
+
+  - Update 루프
+    <img width="4128" height="492" alt="Update루프" src="https://github.com/user-attachments/assets/4747c04f-1579-4302-9fff-7e9512f312e0" />
+
+  - Render 루프
+    <img width="5172" height="493" alt="Render루프" src="https://github.com/user-attachments/assets/e5f5ae3b-c6a7-48cf-91e0-8e646f85a70a" />
 
 
 - 빌드 과정

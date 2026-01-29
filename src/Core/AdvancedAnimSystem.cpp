@@ -13,6 +13,7 @@
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/TransformComponent.h"
+#include "Components/SocketComponent.h"
 #include "Core/World.h"
 #include "Rendering/SkinnedMeshRegistry.h"
 #include "3Dmodel/FbxModel.h"
@@ -21,14 +22,15 @@ namespace Alice
 {
     namespace
     {
-        DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& t)
-        {
-            using namespace DirectX;
-            XMMATRIX S = XMMatrixScaling(t.scale.x, t.scale.y, t.scale.z);
-            XMMATRIX R = XMMatrixRotationRollPitchYaw(t.rotation.x, t.rotation.y, t.rotation.z);
-            XMMATRIX T = XMMatrixTranslation(t.position.x, t.position.y, t.position.z);
-            return S * R * T;
-        }
+
+		DirectX::XMMATRIX BuildWorldMatrix(const TransformComponent& t)
+		{
+			using namespace DirectX;
+			XMMATRIX S = XMMatrixScaling(t.scale.x, t.scale.y, t.scale.z);
+			XMMATRIX R = XMMatrixRotationRollPitchYaw(t.rotation.x, t.rotation.y, t.rotation.z);
+			XMMATRIX T = XMMatrixTranslation(t.position.x, t.position.y, t.position.z);
+			return S * R * T;
+		}
 
         bool TryParseIndex(const std::string& key, int& outIdx)
         {
@@ -40,6 +42,55 @@ namespace Alice
             }
             outIdx = std::atoi(key.c_str());
             return true;
+        }
+
+        void FireAnimNotifiesForAdvance(AdvancedAnimationComponent& animComp,
+            const std::string& clipName,
+            float prevTime,
+            float currTime,
+            float durationSec,
+            bool loop,
+            float deltaTime)
+        {
+            if (clipName.empty() || durationSec <= 0.0f)
+                return;
+
+            if (prevTime == currTime)
+                return;
+
+            if (!loop || deltaTime == 0.0f)
+            {
+                animComp.CheckAndFireNotifiesClamped(clipName, prevTime, currTime, durationSec);
+                return;
+            }
+
+            // Handle wrap-around for looping clips (forward/backward).
+            if (deltaTime > 0.0f)
+            {
+                if (prevTime <= currTime)
+                {
+                    animComp.CheckAndFireNotifiesClamped(clipName, prevTime, currTime, durationSec);
+                }
+                else
+                {
+                    // Wrapped forward: [prev -> end], then [0 -> curr]
+                    animComp.CheckAndFireNotifiesClamped(clipName, prevTime, durationSec, durationSec);
+                    animComp.CheckAndFireNotifiesClamped(clipName, 0.0f, currTime, durationSec);
+                }
+            }
+            else
+            {
+                if (prevTime >= currTime)
+                {
+                    animComp.CheckAndFireNotifiesClamped(clipName, prevTime, currTime, durationSec);
+                }
+                else
+                {
+                    // Wrapped backward: [prev -> 0], then [end -> curr]
+                    animComp.CheckAndFireNotifiesClamped(clipName, prevTime, 0.0f, durationSec);
+                    animComp.CheckAndFireNotifiesClamped(clipName, durationSec, currTime, durationSec);
+                }
+            }
         }
     }
 
@@ -91,7 +142,7 @@ namespace Alice
         // ------------------------------
         // 고급 애니메이션 컴포넌트가 있는 엔티티만 처리합니다.
         // 일반 애니메이션(SkinnedAnimationComponent)은 엔진의 기본 시스템이 담당합니다.
-        for (auto [entityId, animComp] : world.GetComponents<AdvancedAnimationComponent>())
+        for (auto&& [entityId, animComp] : world.GetComponents<AdvancedAnimationComponent>())
         {
             // 비활성화 상태면 스킵
             if (!animComp.enabled)
@@ -108,28 +159,6 @@ namespace Alice
             ProcessAdvanced(entityId, world, animComp, *skinned, mesh, dtSec);
         }
 
-        // ------------------------------
-        // 2) Simple animation fallback
-        // ------------------------------
-        for (auto [entityId, animComp] : world.GetComponents<SkinnedAnimationComponent>())
-        {
-            // AdvancedAnimationComponent가 있고 enabled이면 건너뛰기
-            if (const auto* advAnim = world.GetComponent<AdvancedAnimationComponent>(entityId))
-            {
-                if (advAnim->enabled)
-                    continue;
-            }
-
-            auto* skinned = world.GetComponent<SkinnedMeshComponent>(entityId);
-            if (!skinned || skinned->meshAssetPath.empty())
-                continue;
-
-            auto mesh = m_registry.Find(skinned->meshAssetPath);
-            if (!mesh || !mesh->sourceModel)
-                continue;
-
-            ProcessSimple(entityId, world, animComp, *skinned, mesh, dtSec);
-        }
     }
 
     bool AdvancedAnimSystem::EnsureRuntime(Runtime& rt,
@@ -253,6 +282,67 @@ namespace Alice
         if (!EnsureRuntime(rt, skinned, mesh))
             return;
 
+        // ------------------------------------------------------
+        // 본 정보 캐싱 (최초 1회 혹은 변경 시)
+        // ------------------------------------------------------
+        if (mesh->sourceModel)
+        {
+            // 1. 이름 -> 인덱스 맵
+            if (animComp.boneToIndex.empty())
+            {
+                animComp.boneToIndex = mesh->sourceModel->GetNodeIndexOfName();
+            }
+
+            // 2. 역 바인드 행렬 (Inverse Bind Matrices)
+            if (animComp.inverseBindMatrices.empty())
+            {
+                const auto& offsets = mesh->sourceModel->GetBoneOffsets();
+                animComp.inverseBindMatrices = offsets;
+            }
+
+            // 3. 부모 인덱스 (Hierarchy)
+            if (animComp.parentIndices.empty())
+            {
+                const auto& skeleton = mesh->sourceModel->GetSkeleton();
+                const auto& boneNames = mesh->sourceModel->GetBoneNames();
+                
+                // 본 이름 -> 인덱스 맵 생성 (본만 필터링)
+                std::unordered_map<std::string, int> boneNameToIndex;
+                for (size_t i = 0; i < boneNames.size(); ++i)
+                {
+                    boneNameToIndex[boneNames[i]] = static_cast<int>(i);
+                }
+
+                // 스켈레톤 노드에서 본의 부모 인덱스 찾기
+                animComp.parentIndices.resize(boneNames.size(), -1);
+                for (size_t i = 0; i < skeleton.size(); ++i)
+                {
+                    const auto& node = skeleton[i];
+                    if (!node.isBone) continue;
+
+                    // 본 이름으로 본 인덱스 찾기
+                    auto it = boneNameToIndex.find(node.name);
+                    if (it == boneNameToIndex.end()) continue;
+
+                    int boneIdx = it->second;
+                    
+                    // 부모가 본인 경우에만 부모 인덱스 설정
+                    if (node.parent >= 0 && node.parent < (int)skeleton.size())
+                    {
+                        const auto& parentNode = skeleton[node.parent];
+                        if (parentNode.isBone)
+                        {
+                            auto parentIt = boneNameToIndex.find(parentNode.name);
+                            if (parentIt != boneNameToIndex.end())
+                            {
+                                animComp.parentIndices[boneIdx] = parentIt->second;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         const aiAnimation* baseA = ResolveClip(rt, animComp.base.clipA);
         const aiAnimation* baseB = ResolveClip(rt, animComp.base.clipB);
         const aiAnimation* upperA = ResolveClip(rt, animComp.upper.clipA);
@@ -275,35 +365,80 @@ namespace Alice
                 AdvanceTime(animComp.base.timeA, (float)dtSec, animComp.base.speedA, dur, animComp.base.loopA);
                 
                 // 노티파이 실행 (현재 시간이 바뀌었으므로 체크)
-                // 루프가 되어 시간이 0으로 돌아간 경우는 몽타주에서 잘 안쓰이므로 단순 범위 체크만 적용
-                if (prevTime < animComp.base.timeA) 
-                {
-                    animComp.CheckAndFireNotifies(animComp.base.clipA, prevTime, animComp.base.timeA);
-                }
+                FireAnimNotifiesForAdvance(
+                    animComp,
+                    animComp.base.clipA,
+                    prevTime,
+                    animComp.base.timeA,
+                    dur,
+                    animComp.base.loopA,
+                    static_cast<float>(dtSec) * animComp.base.speedA);
             }
 
             if (animComp.base.autoAdvance && baseB)
             {
+                float prevTime = animComp.base.timeB;
                 const float dur = GetClipDurationSec(baseB);
                 AdvanceTime(animComp.base.timeB, (float)dtSec, animComp.base.speedB, dur, animComp.base.loopB);
+                if (!animComp.base.clipB.empty() && animComp.base.clipB != animComp.base.clipA)
+                {
+                    FireAnimNotifiesForAdvance(
+                        animComp,
+                        animComp.base.clipB,
+                        prevTime,
+                        animComp.base.timeB,
+                        dur,
+                        animComp.base.loopB,
+                        static_cast<float>(dtSec) * animComp.base.speedB);
+                }
             }
 
             if (animComp.upper.autoAdvance && upperA)
             {
+                float prevTime = animComp.upper.timeA;
                 const float dur = GetClipDurationSec(upperA);
                 AdvanceTime(animComp.upper.timeA, (float)dtSec, animComp.upper.speedA, dur, animComp.upper.loopA);
+                FireAnimNotifiesForAdvance(
+                    animComp,
+                    animComp.upper.clipA,
+                    prevTime,
+                    animComp.upper.timeA,
+                    dur,
+                    animComp.upper.loopA,
+                    static_cast<float>(dtSec) * animComp.upper.speedA);
             }
 
             if (animComp.upper.autoAdvance && upperB)
             {
+                float prevTime = animComp.upper.timeB;
                 const float dur = GetClipDurationSec(upperB);
                 AdvanceTime(animComp.upper.timeB, (float)dtSec, animComp.upper.speedB, dur, animComp.upper.loopB);
+                if (!animComp.upper.clipB.empty() && animComp.upper.clipB != animComp.upper.clipA)
+                {
+                    FireAnimNotifiesForAdvance(
+                        animComp,
+                        animComp.upper.clipB,
+                        prevTime,
+                        animComp.upper.timeB,
+                        dur,
+                        animComp.upper.loopB,
+                        static_cast<float>(dtSec) * animComp.upper.speedB);
+                }
             }
 
             if (animComp.additive.autoAdvance && additiveA)
             {
+                float prevTime = animComp.additive.time;
                 const float dur = GetClipDurationSec(additiveA);
                 AdvanceTime(animComp.additive.time, (float)dtSec, animComp.additive.speed, dur, animComp.additive.loop);
+                FireAnimNotifiesForAdvance(
+                    animComp,
+                    animComp.additive.clip,
+                    prevTime,
+                    animComp.additive.time,
+                    dur,
+                    animComp.additive.loop,
+                    static_cast<float>(dtSec) * animComp.additive.speed);
             }
 
             if (animComp.procedural.strength > 0.0f)
@@ -425,16 +560,59 @@ namespace Alice
         skinned.boneCount = static_cast<std::uint32_t>(animComp.palette.size());
 
         // ------------------------------
-        // Socket world outputs
+        // Socket world outputs (엔진 로우 컨벤션)
         // ------------------------------
         DirectX::XMMATRIX charWorld = DirectX::XMMatrixIdentity();
-        if (const auto* t = world.GetComponent<TransformComponent>(id))
-            charWorld = BuildWorldMatrix(*t);
+		if (const auto* t = world.GetComponent<TransformComponent>(id))
+			charWorld = BuildWorldMatrix(*t);
+        DirectX::XMMATRIX charWorldRow = charWorld;
 
         for (auto& s : animComp.sockets)
         {
-            DirectX::XMMATRIX socketWorld = rt.animator->GetSocketWorldMatrix(s.name, charWorld);
+            DirectX::XMMATRIX localRow =
+                DirectX::XMMatrixScaling(s.scale.x, s.scale.y, s.scale.z) *
+                DirectX::XMMatrixRotationRollPitchYaw(
+                    DirectX::XMConvertToRadians(s.rotDeg.x),
+                    DirectX::XMConvertToRadians(s.rotDeg.y),
+                    DirectX::XMConvertToRadians(s.rotDeg.z)) *
+                DirectX::XMMatrixTranslation(s.pos.x, s.pos.y, s.pos.z);
+
+            DirectX::XMMATRIX socketWorld = localRow * charWorldRow;
+            if (!s.parentBone.empty())
+            {
+                DirectX::XMMATRIX boneGlobalRow;
+                if (rt.animator->GetBoneGlobalMatrix(s.parentBone, boneGlobalRow))
+                {
+                    socketWorld = localRow * boneGlobalRow * charWorldRow;
+                }
+            }
+
             DirectX::XMStoreFloat4x4(&s.worldMatrix, socketWorld);
+        }
+
+        // ------------------------------
+        // SocketComponent.sockets[].world 갱신 (스크립트/에디터로 추가한 소켓, 로우 컨벤션)
+        // ------------------------------
+        if (auto* socketComp = world.GetComponent<SocketComponent>(id))
+        {
+            for (auto& s : socketComp->sockets)
+            {
+                DirectX::XMMATRIX boneGlobalRow;
+                if (!rt.animator->GetBoneGlobalMatrix(s.parentBone, boneGlobalRow))
+                    continue;
+
+                DirectX::XMVECTOR scale = DirectX::XMLoadFloat3(&s.scale);
+                DirectX::XMVECTOR rotation = DirectX::XMLoadFloat3(&s.rotation);
+                DirectX::XMVECTOR translation = DirectX::XMLoadFloat3(&s.position);
+                DirectX::XMMATRIX localRow =
+                    DirectX::XMMatrixScalingFromVector(scale) *
+                    DirectX::XMMatrixRotationRollPitchYawFromVector(rotation) *
+                    DirectX::XMMatrixTranslationFromVector(translation);
+
+                DirectX::XMMATRIX socketWorld = localRow * boneGlobalRow * charWorldRow;
+                DirectX::XMStoreFloat4x4(&s.local, localRow);
+                DirectX::XMStoreFloat4x4(&s.world, socketWorld);
+            }
         }
     }
 

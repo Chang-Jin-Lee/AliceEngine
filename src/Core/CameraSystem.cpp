@@ -243,19 +243,36 @@ namespace Alice
         // --- 입력 처리 (System에서 담당) ---
         if (followComp && followComp->enabled && followComp->enableInput)
         {
+            // Ctrl 키로 마우스 잠금 토글
+            if (input.IsKeyPressed(DirectX::Keyboard::Keys::LeftControl) || 
+                input.IsKeyPressed(DirectX::Keyboard::Keys::RightControl))
+            {
+                followComp->mouseLocked = !followComp->mouseLocked;
+                
+                if (followComp->mouseLocked)
+                {
+                    // 게임 모드: 커서 숨김 + 가둠
+                    input.SetCursorVisible(false);
+                    input.SetCursorLocked(true);
+                }
+                else
+                {
+                    // UI 모드: 커서 보임 + 풀기
+                    input.SetCursorVisible(true);
+                    input.SetCursorLocked(false);
+                }
+            }
+
             // LockOn 상태이고 매뉴얼 조작 불가능하면 스킵
             bool skipInput = (followComp->lockOnActive && !followComp->allowManualOrbitInLockOn);
-            if (!skipInput)
+            if (!skipInput && followComp->mouseLocked)
             {
-                // 마우스 드래그로 회전
-                if (input.IsLeftButtonDown() || input.IsRightButtonDown())
-                {
-                    float dx = static_cast<float>(input.GetMouseDelta().x);
-                    float dy = static_cast<float>(input.GetMouseDelta().y);
-                    followComp->yawDeg -= dx * followComp->sensitivity;
-                    followComp->pitchDeg -= dy * followComp->sensitivity;
-                    followComp->pitchDeg = std::clamp(followComp->pitchDeg, followComp->pitchMinDeg, followComp->pitchMaxDeg);
-                }
+                // 마우스 잠금 상태에서 바로 회전 (드래그 조건 제거)
+                float dx = static_cast<float>(input.GetMouseDelta().x);
+                float dy = static_cast<float>(input.GetMouseDelta().y);
+                followComp->yawDeg -= dx * followComp->sensitivity;
+                followComp->pitchDeg -= dy * followComp->sensitivity;
+                followComp->pitchDeg = std::clamp(followComp->pitchDeg, followComp->pitchMinDeg, followComp->pitchMaxDeg);
             }
         }
         
@@ -444,6 +461,13 @@ namespace Alice
                 followComp->smoothedPosition = outputTr->position;
                 followComp->smoothedRotation = outputTr->rotation;
                 followComp->initialized = true;
+                
+                // 초기화 시 마우스 잠금 및 커서 숨김
+                if (followComp->mouseLocked)
+                {
+                    input.SetCursorVisible(false);
+                    input.SetCursorLocked(true);
+                }
             }
 
             DirectX::XMFLOAT3 pivot = {
