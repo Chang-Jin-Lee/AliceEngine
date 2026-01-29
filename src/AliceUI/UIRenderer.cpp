@@ -503,19 +503,29 @@ namespace Alice
 		cfg.MergeMode = false;
 		cfg.FontDataOwnedByAtlas = true;
 
-		void* ownedData = IM_ALLOC(fontBytes.size());
-		if (!ownedData)
+		struct ImOwnedData
+		{
+			void* ptr{ nullptr };
+			explicit ImOwnedData(size_t size) { ptr = IM_ALLOC(size); }
+			~ImOwnedData() { if (ptr) IM_FREE(ptr); }
+			void* get() const { return ptr; }
+			void release() { ptr = nullptr; }
+		};
+
+		ImOwnedData owned(fontBytes.size());
+		if (!owned.get())
 			return false;
-		memcpy(ownedData, fontBytes.data(), fontBytes.size());
+		memcpy(owned.get(), fontBytes.data(), fontBytes.size());
 
 		ImFont* font = runtime.atlas->AddFontFromMemoryTTF(
-			ownedData,
+			owned.get(),
 			static_cast<int>(fontBytes.size()),
 			runtime.baseSize,
 			&cfg,
 			runtime.atlas->GetGlyphRangesKorean());
 		if (!font)
 			return false;
+		owned.release();
 
 		unsigned char* pixels = nullptr;
 		int width = 0, height = 0;
@@ -1185,6 +1195,29 @@ namespace Alice
 		const bool leftPressed = input.IsMouseButtonPressed(0);
 		const bool leftReleased = input.IsMouseButtonReleased(0);
 
+		auto InvokeDelegates = [&](auto& list, const char* label)
+		{
+			for (auto& entry : list)
+			{
+				if (entry.invalid)
+					continue;
+				if (entry.isValid && !entry.isValid())
+				{
+					entry.invalid = true;
+					continue;
+				}
+				try
+				{
+					if (entry.fn)
+						entry.fn();
+				}
+				catch (...)
+				{
+					ALICE_LOG_ERRORF("[AliceUI] Button delegate threw exception (%s).", label);
+				}
+			}
+		};
+
 		for (auto&& [id, button] : world.GetComponents<UIButtonComponent>())
 		{
 			button.clicked = false;
@@ -1220,15 +1253,13 @@ namespace Alice
 
 			if (hovered && !prevHovered)
 			{
-				for (auto& fn : button.onHovered)
-					fn();
+				InvokeDelegates(button.onHovered, "Hovered");
 			}
 
 			if (hovered && leftPressed)
 			{
 				button.wasPressed = true;
-				for (auto& fn : button.onPressed)
-					fn();
+				InvokeDelegates(button.onPressed, "Pressed");
 			}
 
 			if (leftReleased)
@@ -1237,8 +1268,7 @@ namespace Alice
 					button.clicked = true;
 				if (button.wasPressed)
 				{
-					for (auto& fn : button.onReleased)
-						fn();
+					InvokeDelegates(button.onReleased, "Released");
 				}
 				button.wasPressed = false;
 			}
@@ -1249,6 +1279,8 @@ namespace Alice
 				button.state = AliceUI::UIButtonState::Hovered;
 			else
 				button.state = AliceUI::UIButtonState::Normal;
+
+			button.CullInvalidDelegates();
 		}
 	}
 
