@@ -47,6 +47,7 @@ namespace Alice
 
         std::vector<WeaponTraceShape> shapes;
 
+        float radius = 0.05f;
         bool active = false;
         bool debugDraw = false;
         float baseDamage = 10.0f;

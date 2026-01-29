@@ -132,13 +132,22 @@ namespace Alice
             .property("color", &MaterialComponent::color)
             .property("roughness", &MaterialComponent::roughness)
             .property("metalness", &MaterialComponent::metalness)
+            .property("ambientOcclusion", &MaterialComponent::ambientOcclusion)
             .property("shadingMode", &MaterialComponent::shadingMode)
             .property("assetPath", &MaterialComponent::assetPath)
             .property("albedoTexturePath", &MaterialComponent::albedoTexturePath)
             .property("transparent", &MaterialComponent::transparent)
             .property("normalStrength", &MaterialComponent::normalStrength)
             .property("outlineColor", &MaterialComponent::outlineColor)
-            .property("outlineWidth", &MaterialComponent::outlineWidth);
+            .property("outlineWidth", &MaterialComponent::outlineWidth)
+            .property("toonPbrCut1", &MaterialComponent::toonPbrCut1)
+            .property("toonPbrCut2", &MaterialComponent::toonPbrCut2)
+            .property("toonPbrCut3", &MaterialComponent::toonPbrCut3)
+            .property("toonPbrLevel1", &MaterialComponent::toonPbrLevel1)
+            .property("toonPbrLevel2", &MaterialComponent::toonPbrLevel2)
+            .property("toonPbrLevel3", &MaterialComponent::toonPbrLevel3)
+            .property("toonPbrStrength", &MaterialComponent::toonPbrStrength)
+            .property("toonPbrBlur", &MaterialComponent::toonPbrBlur);
 
         // === SkinnedMeshComponent 등록 ===
         // boneMatrices는 뼈 행렬을 나타내는 프로퍼티

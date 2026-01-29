@@ -2299,6 +2299,7 @@
                     "tipBone": "Hand_L",
                     "weight": 1.0
                 },
+                "ikChains": [],
                 "playing": false,
                 "procedural": {
                     "seed": 0,
@@ -2324,11 +2325,98 @@
             "Scripts": [
                 {
                     "enabled": true,
-                    "name": "CharacterAnimatorComponent"
+                    "name": "CharacterAnimatorComponent",
+                    "props": {
+                        "m_additiveClip": "Recoil",
+                        "m_additiveDuration": 0.25,
+                        "m_additiveRefClip": "Idle",
+                        "m_aimWeight": 1.0,
+                        "m_aimYawDeg": 0.0,
+                        "m_attackClip": "Attack01",
+                        "m_attackComputeColor": {
+                            "x": 1.0,
+                            "y": 0.20000000298023224,
+                            "z": 0.20000000298023224
+                        },
+                        "m_attackComputeDuration": 3.0,
+                        "m_attackComputeOffset": {
+                            "x": 0.0,
+                            "y": 1.0,
+                            "z": 1.0
+                        },
+                        "m_attackComputeSize": 6.0,
+                        "m_attackDuration": 1.5,
+                        "m_attackHitTime": 0.699999988079071,
+                        "m_attackPlaySpeed": 1.0,
+                        "m_blendSpeed": 8.0,
+                        "m_crouchClip": "CrouchDown",
+                        "m_crouchDuration": 1.0,
+                        "m_enableAdditive": false,
+                        "m_enableAim": false,
+                        "m_enableFootIK": true,
+                        "m_enableIK": false,
+                        "m_enableUpperLayer": false,
+                        "m_gravity": 18.0,
+                        "m_idleClip": "Idle",
+                        "m_ikChainLength": 3,
+                        "m_ikLiftSpeed": 5.0,
+                        "m_ikTargetLocal": {
+                            "x": 0.0,
+                            "y": 1.2000000476837158,
+                            "z": 0.20000000298023224
+                        },
+                        "m_ikTipBone": "Hand_L",
+                        "m_ikWeight": 1.0,
+                        "m_jumpSpeed": 6.5,
+                        "m_leftFootBasePos": {
+                            "x": -0.20000000298023224,
+                            "y": 0.0,
+                            "z": 0.10000000149011612
+                        },
+                        "m_leftFootBone": "Ball_L",
+                        "m_maxLiftHeight": 0.5,
+                        "m_moveSpeed": 10.0,
+                        "m_runClip": "Run",
+                        "m_runMultiplier": 1.600000023841858,
+                        "m_socketName": "WeaponPoint",
+                        "m_socketParentBone": "Hand_R",
+                        "m_socketPos": {
+                            "x": 0.10000000149011612,
+                            "y": 0.05000000074505806,
+                            "z": 0.0
+                        },
+                        "m_socketRotDeg": {
+                            "x": 0.0,
+                            "y": 90.0,
+                            "z": 0.0
+                        },
+                        "m_socketScale": {
+                            "x": 1.0,
+                            "y": 1.0,
+                            "z": 1.0
+                        },
+                        "m_transitionDuration": 0.20000000298023224,
+                        "m_upperClip": "Aim",
+                        "m_walkClip": "Walk",
+                        "m_walkComputeColor": {
+                            "x": 0.800000011920929,
+                            "y": 0.800000011920929,
+                            "z": 0.800000011920929
+                        },
+                        "m_walkComputeDuration": 1.0,
+                        "m_walkComputeOffset": {
+                            "x": 0.0,
+                            "y": 0.10000000149011612,
+                            "z": 0.0
+                        },
+                        "m_walkComputeSize": 3.0,
+                        "m_walkSpawnInterval": 0.30000001192092896,
+                        "m_weaponObjName": "Weapon"
+                    }
                 }
             ],
             "SkinnedAnimation": {
-                "clipIndex": 0,
+                "clipIndex": 4,
                 "playing": true,
                 "speed": 0.0,
                 "timeSec": 0.0
@@ -2341,7 +2429,7 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.30000001192092896,
+                    "x": 1.2426371574401855,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -2358,6 +2446,128 @@
             },
             "guid": "1001",
             "name": "Alice"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "ambientOcclusion": 1.0,
+                "assetPath": "Assets/Materials/Tia_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.0007999999797903001,
+                "roughness": 0.5,
+                "shadingMode": 7,
+                "toonPbrBlur": true,
+                "toonPbrCut1": 0.04399999976158142,
+                "toonPbrCut2": 0.2879999876022339,
+                "toonPbrCut3": 0.9380000233650208,
+                "toonPbrLevel1": 0.5009999871253967,
+                "toonPbrLevel2": 0.7360000014305115,
+                "toonPbrLevel3": 1.0,
+                "toonPbrStrength": 1.0,
+                "transparent": true
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 0,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 0.0
+            },
+            "SkinnedMesh": {
+                "boneCount": 1,
+                "instanceAssetPath": "Assets/Fbx/Tia.fbxasset",
+                "meshAssetPath": "Tia"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -1.363078236579895,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "3986837190396631135"
+        },
+        {
+            "Material": {
+                "albedoTexturePath": "",
+                "ambientOcclusion": 1.0,
+                "assetPath": "Assets/Materials/Alice_0.mat",
+                "color": {
+                    "x": 0.699999988079071,
+                    "y": 0.699999988079071,
+                    "z": 0.699999988079071
+                },
+                "metalness": 0.0,
+                "normalStrength": 1.0,
+                "outlineColor": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "outlineWidth": 0.0007999999797903001,
+                "roughness": 0.5,
+                "shadingMode": 5,
+                "toonPbrBlur": false,
+                "toonPbrCut1": 0.20000000298023224,
+                "toonPbrCut2": 0.5,
+                "toonPbrCut3": 0.949999988079071,
+                "toonPbrLevel1": 0.10000000149011612,
+                "toonPbrLevel2": 0.4000000059604645,
+                "toonPbrLevel3": 0.699999988079071,
+                "toonPbrStrength": 1.0,
+                "transparent": false
+            },
+            "SkinnedAnimation": {
+                "clipIndex": 4,
+                "playing": true,
+                "speed": 1.0,
+                "timeSec": 901.8318279492669
+            },
+            "SkinnedMesh": {
+                "boneCount": 248,
+                "instanceAssetPath": "Assets/Fbx/Alice.fbxasset",
+                "meshAssetPath": "Alice"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -0.20875386893749237,
+                    "y": 1.5497207641601563e-06,
+                    "z": 0.0001633167266845703
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "11839114112648542375"
         }
     ],
     "sceneName": "AnimTest",

@@ -4189,6 +4189,8 @@ namespace Alice
 			if (ImGui::RadioButton("PBR", mode == 4))       mode = 4;
 			ImGui::SameLine();
 			if (ImGui::RadioButton("ToonPBR", mode == 5))   mode = 5;
+			ImGui::SameLine();
+			if (ImGui::RadioButton("ToonPBREditable", mode == 7)) mode = 7;
 			shadingMode = mode;
 
 			Alice::ImGuiCheckbox(L"Fill Light (보조광)", &useFillLight);
@@ -4199,7 +4201,7 @@ namespace Alice
 			auto& lighting = deferred.GetLightingParameters();
 
 			// PBR 모드일 때 PBR 파라미터 표시
-			if (mode == 4 || mode == 5)
+			if (mode == 4 || mode == 5 || mode == 7)
 			{
 				ImGui::Separator();
 				ImGui::Text("PBR Material Parameters");
@@ -4241,11 +4243,11 @@ namespace Alice
 			ImGui::Separator();
 			ImGui::TextUnformatted("Skybox");
 
-			static int  skyboxChoice = 3; // 0 Off, 1 Bridge, 2 Indoor, 3 Baker
+			static int  skyboxChoice = 3; // 0 Off, 1 Bridge, 2 Indoor, 3 Baker, 4 darkenv
 			static int  lastSkyboxChoice = -1;
 			static bool lastForward = false;
 
-			const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker" };
+			const char* skyboxItems[] = { "Off", "Bridge", "Indoor", "Baker", "darkenv"};
 
 			auto ApplySkybox = [&](auto& renderer)
 			{
@@ -4261,6 +4263,7 @@ namespace Alice
 				case 1: renderer.SetIblSet("Bridge", "bridge");       break;
 				case 2: renderer.SetIblSet("Indoor", "indoor");       break;
 				case 3: renderer.SetIblSet("Sample", "BakerSample");  break;
+				case 4: renderer.SetIblSet("darkenv", "darkenvDiffuseHDR");  break;
 				default: break;
 				}
 			};
@@ -5507,21 +5510,38 @@ namespace Alice
 			}
 			changed |= ReflectionUI::RenderInspector(*mat, MaterialInspectorFilter).changed;
 
-			const char* shadingItems[] = {
-				"Global",
-				"Lambert",
-				"Phong",
-				"Blinn-Phong",
-				"Toon",
-				"PBR",
-				"ToonPBR",
-				"OnlyTextureWithOutline"
-			};
-			int shadingIndex = mat->shadingMode + 1; // -1 -> 0 (Global)
-			shadingIndex = std::clamp(shadingIndex, 0, (int)(std::size(shadingItems) - 1));
-			if (ImGui::Combo("Shading", &shadingIndex, shadingItems, (int)std::size(shadingItems)))
+			struct ShadingItem
 			{
-				mat->shadingMode = shadingIndex - 1;
+				const char* label;
+				int value;
+			};
+			const ShadingItem shadingItems[] = {
+				{ "Global", -1 },
+				{ "Lambert", 0 },
+				{ "Phong", 1 },
+				{ "Blinn-Phong", 2 },
+				{ "Toon", 3 },
+				{ "PBR", 4 },
+				{ "ToonPBR", 5 },
+				{ "ToonPBREditable", 7 },
+				{ "OnlyTextureWithOutline", 6 }
+			};
+			int shadingIndex = 0;
+			for (int i = 0; i < (int)std::size(shadingItems); ++i)
+			{
+				if (shadingItems[i].value == mat->shadingMode)
+				{
+					shadingIndex = i;
+					break;
+				}
+			}
+			if (ImGui::Combo("Shading", &shadingIndex, [](void* data, int idx, const char** out_text) {
+				auto* items = static_cast<const ShadingItem*>(data);
+				*out_text = items[idx].label;
+				return true;
+			}, (void*)shadingItems, (int)std::size(shadingItems)))
+			{
+				mat->shadingMode = shadingItems[shadingIndex].value;
 				changed = true;
 			}
 

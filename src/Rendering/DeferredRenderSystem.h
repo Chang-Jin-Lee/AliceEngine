@@ -194,8 +194,8 @@ namespace Alice
 
         /// 백버퍼로 렌더 타겟을 복귀시킵니다 (ImGui 등 후처리를 위해).
         void RestoreBackBuffer();
-        // G-Buffer 개수 (Normal+Roughness, Metalness, BaseColor)
-        static constexpr int GBufferCount = 3;
+        // G-Buffer 개수 (Normal+Roughness, Metalness+ToonCuts, BaseColor, ToonParams)
+        static constexpr int GBufferCount = 4;
 
         // G-Buffer 생성
         bool CreateGBuffer(std::uint32_t width, std::uint32_t height);
@@ -254,10 +254,13 @@ namespace Alice
                                const DirectX::XMFLOAT4& color,
                                float roughness,
                                float metalness,
+                               float ambientOcclusion,
                                bool useTexture,
                                bool enableNormalMap,
                                int shadingMode,
-                               float normalStrength = 1.0f,
+                               float normalStrength,
+                               const DirectX::XMFLOAT4& toonPbrCuts,
+                               const DirectX::XMFLOAT4& toonPbrLevels,
                                const DirectX::XMFLOAT3& outlineColor = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
                                float outlineWidth = 0.00f);
         void UpdateLightingCB(const Camera& camera,
