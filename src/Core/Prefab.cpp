@@ -28,6 +28,8 @@
 #include "Components/SocketComponent.h"
 #include "Components/AdvancedAnimationComponent.h"
 #include "Core/SocketSerialization.h"
+#include "Core/AttackDriverSerialization.h"
+#include "Core/WeaponTraceSerialization.h"
 
 #include "PhysX/Components/Phy_RigidBodyComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
@@ -508,16 +510,7 @@ namespace Alice
             if (itWT != root.end() && itWT->is_object())
             {
                 WeaponTraceComponent& wt = world.AddComponent<WeaponTraceComponent>(entity);
-                if (auto itGuid = itWT->find("ownerGuid"); itGuid != itWT->end())
-                    wt.ownerGuid = ParseGuidOrZero(*itGuid);
-                if (auto itGuid = itWT->find("traceBasisGuid"); itGuid != itWT->end())
-                    wt.traceBasisGuid = ParseGuidOrZero(*itGuid);
-
-                JsonRttr::json copy = *itWT;
-                copy.erase("ownerGuid");
-                copy.erase("traceBasisGuid");
-                rttr::instance inst = wt;
-                if (!JsonRttr::FromJsonObject(inst, copy))
+                if (!WeaponTraceSerialization::JsonToWeaponTraceComponent(*itWT, wt))
                     return InvalidEntityId;
             }
 
@@ -536,12 +529,7 @@ namespace Alice
             if (itAttackDriver != root.end() && itAttackDriver->is_object())
             {
                 AttackDriverComponent& ad = world.AddComponent<AttackDriverComponent>(entity);
-                if (auto itGuid = itAttackDriver->find("traceGuid"); itGuid != itAttackDriver->end())
-                    ad.traceGuid = ParseGuidOrZero(*itGuid);
-                JsonRttr::json copy = *itAttackDriver;
-                copy.erase("traceGuid");
-                rttr::instance inst = ad;
-                if (!JsonRttr::FromJsonObject(inst, copy))
+                if (!AttackDriverSerialization::JsonToAttackDriverComponent(*itAttackDriver, ad))
                     return InvalidEntityId;
             }
 
@@ -851,11 +839,7 @@ namespace Alice
             // WeaponTrace
             if (const auto* weaponTrace = world.GetComponent<WeaponTraceComponent>(entity); weaponTrace)
             {
-                rttr::instance inst = const_cast<WeaponTraceComponent&>(*weaponTrace);
-                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
-                obj["ownerGuid"] = std::to_string(weaponTrace->ownerGuid);
-                obj["traceBasisGuid"] = std::to_string(weaponTrace->traceBasisGuid);
-                root["WeaponTrace"] = obj;
+                root["WeaponTrace"] = WeaponTraceSerialization::WeaponTraceComponentToJson(*weaponTrace);
             }
 
             // Health
@@ -868,10 +852,7 @@ namespace Alice
             // AttackDriver
             if (const auto* attackDriver = world.GetComponent<AttackDriverComponent>(entity); attackDriver)
             {
-                rttr::instance inst = const_cast<AttackDriverComponent&>(*attackDriver);
-                JsonRttr::json obj = JsonRttr::ToJsonObject(inst);
-                obj["traceGuid"] = std::to_string(attackDriver->traceGuid);
-                root["AttackDriver"] = obj;
+                root["AttackDriver"] = AttackDriverSerialization::AttackDriverComponentToJson(*attackDriver);
             }
 
             // AliceUI Components

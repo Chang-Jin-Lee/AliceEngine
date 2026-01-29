@@ -60,16 +60,18 @@ namespace Alice
         // roughness, metalness 클램핑 (RTTR로는 기본값 처리만 하므로 여기서 보정)
         outMaterial.roughness = std::clamp(outMaterial.roughness, 0.0f, 1.0f);
         outMaterial.metalness = std::clamp(outMaterial.metalness, 0.0f, 1.0f);
+        outMaterial.ambientOcclusion = std::clamp(outMaterial.ambientOcclusion, 0.0f, 1.0f);
         // 노말맵 강도는 0.0f 이상으로 제한
         outMaterial.normalStrength = std::max(outMaterial.normalStrength, 0.0f);
         // 아웃라인 두께는 음수 방지
         outMaterial.outlineWidth = std::max(outMaterial.outlineWidth, 0.0f);
 
-        ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
+        ALICE_LOG_INFO("[MaterialFile] Load: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f ao=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
             path.string().c_str(),
             outMaterial.color.x, outMaterial.color.y, outMaterial.color.z,
             outMaterial.roughness,
             outMaterial.metalness,
+            outMaterial.ambientOcclusion,
             outMaterial.normalStrength,
             outMaterial.outlineColor.x, outMaterial.outlineColor.y, outMaterial.outlineColor.z,
             outMaterial.outlineWidth,
@@ -87,11 +89,12 @@ namespace Alice
 
         bool result = ReflectionSerializer::Save(path, copy);
 
-        ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
+        ALICE_LOG_INFO("[MaterialFile] Save: \"%s\" color=(%.3f, %.3f, %.3f) rough=%.3f metal=%.3f ao=%.3f normalStrength=%.3f | outline=(%.3f, %.3f, %.3f) width=%.3f tex=\"%s\"",
             path.string().c_str(),
             copy.color.x, copy.color.y, copy.color.z,
             copy.roughness,
             copy.metalness,
+            copy.ambientOcclusion,
             copy.normalStrength,
             copy.outlineColor.x, copy.outlineColor.y, copy.outlineColor.z,
             copy.outlineWidth,

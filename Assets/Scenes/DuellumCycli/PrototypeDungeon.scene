@@ -15,7 +15,7 @@
                     "z": -35.0
                 },
                 "rotation": {
-                    "x": 35.0,
+                    "x": 0.6108652381980153,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -18661,6 +18661,6243 @@
         {
             "SkinnedMesh": {
                 "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10692",
+            "name": "Wall_Front_L0_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -10.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10693",
+            "name": "Wall_Front_L0_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -8.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10694",
+            "name": "Wall_Front_L0_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -6.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10695",
+            "name": "Wall_Front_L0_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -4.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10696",
+            "name": "Wall_Front_L0_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -2.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10697",
+            "name": "Wall_Front_L0_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 2.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10698",
+            "name": "Wall_Front_L0_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 4.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10699",
+            "name": "Wall_Front_L0_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 6.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10700",
+            "name": "Wall_Front_L0_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 8.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10701",
+            "name": "Wall_Front_L0_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 10.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10702",
+            "name": "Wall_Front_L0_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 12.0,
+                    "y": 3.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10703",
+            "name": "Wall_Front_L0_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10704",
+            "name": "Wall_Front_L1_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -10.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10705",
+            "name": "Wall_Front_L1_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -8.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10706",
+            "name": "Wall_Front_L1_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -6.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10707",
+            "name": "Wall_Front_L1_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -4.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10708",
+            "name": "Wall_Front_L1_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -2.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10709",
+            "name": "Wall_Front_L1_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 2.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10710",
+            "name": "Wall_Front_L1_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 4.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10711",
+            "name": "Wall_Front_L1_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 6.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10712",
+            "name": "Wall_Front_L1_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 8.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10713",
+            "name": "Wall_Front_L1_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 10.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10714",
+            "name": "Wall_Front_L1_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 12.0,
+                    "y": 1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10715",
+            "name": "Wall_Front_L1_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10716",
+            "name": "Wall_Front_L2_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -10.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10717",
+            "name": "Wall_Front_L2_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -8.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10718",
+            "name": "Wall_Front_L2_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -6.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10719",
+            "name": "Wall_Front_L2_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -4.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10720",
+            "name": "Wall_Front_L2_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -2.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10721",
+            "name": "Wall_Front_L2_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 2.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10722",
+            "name": "Wall_Front_L2_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 4.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10723",
+            "name": "Wall_Front_L2_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 6.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10724",
+            "name": "Wall_Front_L2_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 8.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10725",
+            "name": "Wall_Front_L2_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 10.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10726",
+            "name": "Wall_Front_L2_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 12.0,
+                    "y": -1.0,
+                    "z": -26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10727",
+            "name": "Wall_Front_L2_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10728",
+            "name": "Wall_Back_L0_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -10.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10729",
+            "name": "Wall_Back_L0_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -8.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10730",
+            "name": "Wall_Back_L0_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -6.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10731",
+            "name": "Wall_Back_L0_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -4.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10732",
+            "name": "Wall_Back_L0_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -2.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10733",
+            "name": "Wall_Back_L0_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 0.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10734",
+            "name": "Wall_Back_L0_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 2.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10735",
+            "name": "Wall_Back_L0_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 4.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10736",
+            "name": "Wall_Back_L0_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 6.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10737",
+            "name": "Wall_Back_L0_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 8.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10738",
+            "name": "Wall_Back_L0_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 10.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10739",
+            "name": "Wall_Back_L0_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 12.0,
+                    "y": 3.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10740",
+            "name": "Wall_Back_L0_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10741",
+            "name": "Wall_Back_L1_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -10.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10742",
+            "name": "Wall_Back_L1_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -8.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10743",
+            "name": "Wall_Back_L1_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -6.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10744",
+            "name": "Wall_Back_L1_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -4.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10745",
+            "name": "Wall_Back_L1_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -2.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10746",
+            "name": "Wall_Back_L1_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10747",
+            "name": "Wall_Back_L1_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 2.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10748",
+            "name": "Wall_Back_L1_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 4.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10749",
+            "name": "Wall_Back_L1_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 6.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10750",
+            "name": "Wall_Back_L1_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 8.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10751",
+            "name": "Wall_Back_L1_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 10.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10752",
+            "name": "Wall_Back_L1_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 12.0,
+                    "y": 1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10753",
+            "name": "Wall_Back_L1_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10754",
+            "name": "Wall_Back_L2_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -10.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10755",
+            "name": "Wall_Back_L2_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -8.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10756",
+            "name": "Wall_Back_L2_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -6.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10757",
+            "name": "Wall_Back_L2_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -4.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10758",
+            "name": "Wall_Back_L2_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -2.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10759",
+            "name": "Wall_Back_L2_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 0.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10760",
+            "name": "Wall_Back_L2_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 2.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10761",
+            "name": "Wall_Back_L2_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 4.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10762",
+            "name": "Wall_Back_L2_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 6.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10763",
+            "name": "Wall_Back_L2_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 8.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10764",
+            "name": "Wall_Back_L2_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 10.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10765",
+            "name": "Wall_Back_L2_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 12.0,
+                    "y": -1.0,
+                    "z": 26.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 3.141592653589793,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10766",
+            "name": "Wall_Back_L2_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10767",
+            "name": "Wall_Left_L0_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10768",
+            "name": "Wall_Left_L0_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10769",
+            "name": "Wall_Left_L0_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10770",
+            "name": "Wall_Left_L0_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10771",
+            "name": "Wall_Left_L0_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10772",
+            "name": "Wall_Left_L0_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10773",
+            "name": "Wall_Left_L0_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10774",
+            "name": "Wall_Left_L0_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10775",
+            "name": "Wall_Left_L0_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10776",
+            "name": "Wall_Left_L0_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10777",
+            "name": "Wall_Left_L0_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10778",
+            "name": "Wall_Left_L0_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": -1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10779",
+            "name": "Wall_Left_L0_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10780",
+            "name": "Wall_Left_L0_13"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10781",
+            "name": "Wall_Left_L0_14"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10782",
+            "name": "Wall_Left_L0_15"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10783",
+            "name": "Wall_Left_L0_16"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10784",
+            "name": "Wall_Left_L0_17"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10785",
+            "name": "Wall_Left_L0_18"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10786",
+            "name": "Wall_Left_L0_19"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10787",
+            "name": "Wall_Left_L0_20"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10788",
+            "name": "Wall_Left_L0_21"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10789",
+            "name": "Wall_Left_L0_22"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10790",
+            "name": "Wall_Left_L0_23"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10791",
+            "name": "Wall_Left_L0_24"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 3.0,
+                    "z": 25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10792",
+            "name": "Wall_Left_L0_25"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10793",
+            "name": "Wall_Left_L1_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10794",
+            "name": "Wall_Left_L1_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10795",
+            "name": "Wall_Left_L1_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10796",
+            "name": "Wall_Left_L1_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10797",
+            "name": "Wall_Left_L1_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10798",
+            "name": "Wall_Left_L1_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10799",
+            "name": "Wall_Left_L1_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10800",
+            "name": "Wall_Left_L1_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10801",
+            "name": "Wall_Left_L1_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10802",
+            "name": "Wall_Left_L1_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10803",
+            "name": "Wall_Left_L1_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10804",
+            "name": "Wall_Left_L1_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": -1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10805",
+            "name": "Wall_Left_L1_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10806",
+            "name": "Wall_Left_L1_13"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10807",
+            "name": "Wall_Left_L1_14"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10808",
+            "name": "Wall_Left_L1_15"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10809",
+            "name": "Wall_Left_L1_16"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10810",
+            "name": "Wall_Left_L1_17"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10811",
+            "name": "Wall_Left_L1_18"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10812",
+            "name": "Wall_Left_L1_19"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10813",
+            "name": "Wall_Left_L1_20"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10814",
+            "name": "Wall_Left_L1_21"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10815",
+            "name": "Wall_Left_L1_22"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10816",
+            "name": "Wall_Left_L1_23"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10817",
+            "name": "Wall_Left_L1_24"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": 1.0,
+                    "z": 25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10818",
+            "name": "Wall_Left_L1_25"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10819",
+            "name": "Wall_Left_L2_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10820",
+            "name": "Wall_Left_L2_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10821",
+            "name": "Wall_Left_L2_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10822",
+            "name": "Wall_Left_L2_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10823",
+            "name": "Wall_Left_L2_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10824",
+            "name": "Wall_Left_L2_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10825",
+            "name": "Wall_Left_L2_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10826",
+            "name": "Wall_Left_L2_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10827",
+            "name": "Wall_Left_L2_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10828",
+            "name": "Wall_Left_L2_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10829",
+            "name": "Wall_Left_L2_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10830",
+            "name": "Wall_Left_L2_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": -1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10831",
+            "name": "Wall_Left_L2_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10832",
+            "name": "Wall_Left_L2_13"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10833",
+            "name": "Wall_Left_L2_14"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10834",
+            "name": "Wall_Left_L2_15"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10835",
+            "name": "Wall_Left_L2_16"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10836",
+            "name": "Wall_Left_L2_17"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10837",
+            "name": "Wall_Left_L2_18"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10838",
+            "name": "Wall_Left_L2_19"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10839",
+            "name": "Wall_Left_L2_20"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10840",
+            "name": "Wall_Left_L2_21"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10841",
+            "name": "Wall_Left_L2_22"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10842",
+            "name": "Wall_Left_L2_23"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10843",
+            "name": "Wall_Left_L2_24"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": -12.0,
+                    "y": -1.0,
+                    "z": 25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": 1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10844",
+            "name": "Wall_Left_L2_25"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10845",
+            "name": "Wall_Right_L0_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10846",
+            "name": "Wall_Right_L0_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10847",
+            "name": "Wall_Right_L0_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10848",
+            "name": "Wall_Right_L0_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10849",
+            "name": "Wall_Right_L0_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10850",
+            "name": "Wall_Right_L0_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10851",
+            "name": "Wall_Right_L0_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10852",
+            "name": "Wall_Right_L0_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10853",
+            "name": "Wall_Right_L0_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10854",
+            "name": "Wall_Right_L0_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10855",
+            "name": "Wall_Right_L0_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10856",
+            "name": "Wall_Right_L0_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": -1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10857",
+            "name": "Wall_Right_L0_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10858",
+            "name": "Wall_Right_L0_13"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10859",
+            "name": "Wall_Right_L0_14"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10860",
+            "name": "Wall_Right_L0_15"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10861",
+            "name": "Wall_Right_L0_16"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10862",
+            "name": "Wall_Right_L0_17"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10863",
+            "name": "Wall_Right_L0_18"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10864",
+            "name": "Wall_Right_L0_19"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10865",
+            "name": "Wall_Right_L0_20"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10866",
+            "name": "Wall_Right_L0_21"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10867",
+            "name": "Wall_Right_L0_22"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10868",
+            "name": "Wall_Right_L0_23"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10869",
+            "name": "Wall_Right_L0_24"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 3.0,
+                    "z": 25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10870",
+            "name": "Wall_Right_L0_25"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10871",
+            "name": "Wall_Right_L1_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10872",
+            "name": "Wall_Right_L1_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10873",
+            "name": "Wall_Right_L1_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10874",
+            "name": "Wall_Right_L1_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10875",
+            "name": "Wall_Right_L1_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10876",
+            "name": "Wall_Right_L1_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10877",
+            "name": "Wall_Right_L1_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10878",
+            "name": "Wall_Right_L1_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10879",
+            "name": "Wall_Right_L1_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10880",
+            "name": "Wall_Right_L1_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10881",
+            "name": "Wall_Right_L1_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10882",
+            "name": "Wall_Right_L1_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": -1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10883",
+            "name": "Wall_Right_L1_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10884",
+            "name": "Wall_Right_L1_13"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10885",
+            "name": "Wall_Right_L1_14"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10886",
+            "name": "Wall_Right_L1_15"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10887",
+            "name": "Wall_Right_L1_16"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10888",
+            "name": "Wall_Right_L1_17"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10889",
+            "name": "Wall_Right_L1_18"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10890",
+            "name": "Wall_Right_L1_19"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10891",
+            "name": "Wall_Right_L1_20"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10892",
+            "name": "Wall_Right_L1_21"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10893",
+            "name": "Wall_Right_L1_22"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10894",
+            "name": "Wall_Right_L1_23"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10895",
+            "name": "Wall_Right_L1_24"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": 1.0,
+                    "z": 25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10896",
+            "name": "Wall_Right_L1_25"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10897",
+            "name": "Wall_Right_L2_0"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10898",
+            "name": "Wall_Right_L2_1"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10899",
+            "name": "Wall_Right_L2_2"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10900",
+            "name": "Wall_Right_L2_3"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10901",
+            "name": "Wall_Right_L2_4"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10902",
+            "name": "Wall_Right_L2_5"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10903",
+            "name": "Wall_Right_L2_6"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10904",
+            "name": "Wall_Right_L2_7"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10905",
+            "name": "Wall_Right_L2_8"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10906",
+            "name": "Wall_Right_L2_9"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10907",
+            "name": "Wall_Right_L2_10"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10908",
+            "name": "Wall_Right_L2_11"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": -1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10909",
+            "name": "Wall_Right_L2_12"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 1.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10910",
+            "name": "Wall_Right_L2_13"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 3.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10911",
+            "name": "Wall_Right_L2_14"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 5.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10912",
+            "name": "Wall_Right_L2_15"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 7.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10913",
+            "name": "Wall_Right_L2_16"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 9.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10914",
+            "name": "Wall_Right_L2_17"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 11.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10915",
+            "name": "Wall_Right_L2_18"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 13.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10916",
+            "name": "Wall_Right_L2_19"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 15.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10917",
+            "name": "Wall_Right_L2_20"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 17.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10918",
+            "name": "Wall_Right_L2_21"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 19.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10919",
+            "name": "Wall_Right_L2_22"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 21.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10920",
+            "name": "Wall_Right_L2_23"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 23.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10921",
+            "name": "Wall_Right_L2_24"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
+                "instanceAssetPath": "Assets/Fbx/tile_mix.fbxasset",
+                "meshAssetPath": "tile_mix"
+            },
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 14.0,
+                    "y": -1.0,
+                    "z": 25.0
+                },
+                "rotation": {
+                    "x": 1.5707963267948966,
+                    "y": -1.5707963267948966,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "10922",
+            "name": "Wall_Right_L2_25"
+        },
+        {
+            "SkinnedMesh": {
+                "boneCount": 0,
                 "instanceAssetPath": "Assets/Fbx/doorframe.fbxasset",
                 "meshAssetPath": "doorframe_low"
             },
@@ -18682,7 +24919,7 @@
                     "z": 1.0
                 }
             },
-            "guid": "10692",
+            "guid": "10923",
             "name": "DoorFrame"
         },
         {
@@ -18709,7 +24946,7 @@
                     "z": 1.0
                 }
             },
-            "guid": "10693",
+            "guid": "10924",
             "name": "Door"
         },
         {
@@ -18727,7 +24964,7 @@
                 },
                 "rotation": {
                     "x": 0.0,
-                    "y": 180.0,
+                    "y": 3.141592653589793,
                     "z": 0.0
                 },
                 "scale": {
@@ -18736,7 +24973,7 @@
                     "z": 1.0
                 }
             },
-            "guid": "10694",
+            "guid": "10925",
             "name": "Boss"
         }
     ],
