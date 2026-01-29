@@ -412,109 +412,158 @@ namespace Alice
 
 	bool Engine::Initialize(HINSTANCE hInstance, int nCmdShow)
 	{
-		// 메인 스레드 ID 설정 (스레드 안전성 검증용)
-		ThreadSafety::SetMainThreadId(std::this_thread::get_id());
-
-		LinkComponentRegistry();
-		ALICE_LOG_INFO("Engine::Initialize: Begin (EditorMode=%d)", pImpl->m_editorMode);
-
 		pImpl->m_hInstance = hInstance;
 
-		// ============================================= 경로 설정하는 부분 =============================================
-		// 실행 파일 위치를 구하여 리소스 로드 및 빌드 설정의 기준점으로 사용
+		InitializeMainThreadAndRegistry();
+
+		const std::filesystem::path exeDir = InitializeResolveExeDir();
+
+		if (!InitializeConfigureResourceManagers(exeDir)) return false;
+		if (!InitializeValidateGameDataIfNeeded()) return false;
+
+		InitializeLoadPvdSettings(exeDir);
+		if (!InitializePhysicsContext()) return false;
+
+		if (!InitializeWindowAndInput(nCmdShow)) return false;
+		if (!InitializeRenderDevice()) return false;
+
+		if (!InitializeEditorCoreIfNeeded()) return false;
+
+		InitializeAudio();
+
+		if (!InitializeRenderSystems()) return false;
+		if (!InitializeUI()) return false;
+		if (!InitializeComputeEffectSystem()) return false;
+
+		InitializeCameraAndScriptHotReload();
+
+		if (!InitializeScene(exeDir)) return false;
+		if (!InitializePhysicsSystemAndWorldCallbacks()) return false;
+
+		InitializePostLoadBindings();
+		InitializeEnsureUIResourcesAfterSceneLoad();
+
+		ALICE_LOG_INFO("Engine::Initialize: Success (Entities: %zu)",
+			pImpl->m_world.GetComponents<TransformComponent>().size());
+
+		return true;
+	}
+
+	// =========================
+	// Initialize helpers
+	void Engine::InitializeMainThreadAndRegistry()
+	{
+		ThreadSafety::SetMainThreadId(std::this_thread::get_id());
+		LinkComponentRegistry();
+		ALICE_LOG_INFO("Engine::Initialize: Begin (EditorMode=%d)", pImpl->m_editorMode);
+	}
+
+	std::filesystem::path Engine::InitializeResolveExeDir()
+	{
 		wchar_t pathBuf[MAX_PATH] = {};
 		GetModuleFileNameW(nullptr, pathBuf, MAX_PATH);
-		const std::filesystem::path exeDir = std::filesystem::path(pathBuf).parent_path();
+		return std::filesystem::path(pathBuf).parent_path();
+	}
 
-		// Editor: 프로젝트 루트 기준, Game: 실행 파일 기준
+	bool Engine::InitializeConfigureResourceManagers(const std::filesystem::path& exeDir)
+	{
 		pImpl->m_resourceManager.Configure(!pImpl->m_editorMode, exeDir);
-		
-		// 에디터 모드에서는 EditorCore가 싱글톤을 사용하므로 싱글톤도 Configure
+
 		if (pImpl->m_editorMode)
-		{
 			ResourceManager::Get().Configure(false, exeDir);
-		}
 
-		// 게임 모드일 때 데이터 무결성 검증 수행
-		if (!pImpl->m_editorMode)
+		return true;
+	}
+
+	bool Engine::InitializeValidateGameDataIfNeeded()
+	{
+		if (pImpl->m_editorMode) return true;
+
+		if (!pImpl->m_resourceManager.ValidateGameData())
 		{
-			if (!pImpl->m_resourceManager.ValidateGameData())
-			{
-				MessageBoxW(nullptr,
-					L"Critical Error: Game Data is corrupted or missing.\nPlease reinstall the game.",
-					L"Integrity Check Failed",
-					MB_OK | MB_ICONERROR);
-				ALICE_LOG_ERRORF("[Engine] Initialize FAILED: Data integrity check failed.");
-				return false; // 초기화 실패 -> 앱 종료
-			}
+			MessageBoxW(nullptr,
+				L"Critical Error: Game Data is corrupted or missing.\nPlease reinstall the game.",
+				L"Integrity Check Failed",
+				MB_OK | MB_ICONERROR);
+			ALICE_LOG_ERRORF("[Engine] Initialize FAILED: Data integrity check failed.");
+			return false;
 		}
+		return true;
+	}
 
-		//===============================================================
-		// PVD 설정 로드 (물리 초기화 전에 실행)
+	void Engine::InitializeLoadPvdSettings(const std::filesystem::path& exeDir)
+	{
 		LoadPvdSettings(exeDir, pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort);
 		if (pImpl->m_pvdEnabled)
 		{
-			ALICE_LOG_INFO("PVD settings loaded from EngineSettings.json: %s:%d", pImpl->m_pvdHost.c_str(), pImpl->m_pvdPort);
+			ALICE_LOG_INFO("PVD settings loaded from EngineSettings.json: %s:%d",
+				pImpl->m_pvdHost.c_str(), pImpl->m_pvdPort);
 		}
+	}
 
-		//===============================================================
-		// 물리 초기화(씬 초기화보다 선행되어야함 - 중요함)
+	bool Engine::InitializePhysicsContext()
+	{
 		PhysicsModule::ContextInitDesc ctx{};
 		ctx.enablePvd = pImpl->m_pvdEnabled;
 		ctx.pvdHost = pImpl->m_pvdHost.c_str();
 		ctx.pvdPort = pImpl->m_pvdPort;
-		ctx.pvdTimeoutMs = 1000;  // 1초 타임아웃 (PVD 서버 연결에 충분한 시간)
+		ctx.pvdTimeoutMs = 1000;
 
 		if (!pImpl->m_physics.InitializeContext(ctx))
 		{
-			// PhysX 초기화 실패는 치명적 오류 (PVD 연결 실패는 여기까지 오지 않음)
 			const std::string& error = pImpl->m_physics.GetLastError();
 			ALICE_LOG_ERRORF("PhysicsModule::InitializeContext failed: %s", error.c_str());
 			return false;
 		}
 
-		// PVD 연결 상태 확인 및 로깅
 		if (pImpl->m_pvdEnabled)
 		{
-			// PhysXContext가 성공적으로 생성되었지만, 실제 PVD 연결 여부는
-			// GetPvd()로 확인 가능 (하지만 여기서는 PhysicsModule을 통해 접근 불가)
-			// 연결 실패 시 PVD 없이 계속 진행됨을 로그에 표시
 			ALICE_LOG_INFO("PVD enabled: %s:%d (connection may fail silently if PVD server is not running)",
 				pImpl->m_pvdHost.c_str(), pImpl->m_pvdPort);
 		}
 
-		// ============================================= 시스템 초기화 =============================================
-		// 윈도우, 입력, 렌더 디바이스 생성
+		return true;
+	}
+
+	bool Engine::InitializeWindowAndInput(int nCmdShow)
+	{
 		if (!CreateMainWindow(nCmdShow)) return false;
-
 		pImpl->m_inputSystem.Initialize(pImpl->m_hWnd);
+		return true;
+	}
 
+	bool Engine::InitializeRenderDevice()
+	{
 		pImpl->m_renderDevice = std::make_unique<D3D11RenderDevice>();
 		if (!pImpl->m_renderDevice->Initialize(pImpl->m_hWnd, pImpl->m_width, pImpl->m_height))
 		{
 			ALICE_LOG_ERRORF("Engine::Initialize: RenderDevice failed.");
 			return false;
 		}
+		return true;
+	}
 
-		//============================================= 에디터 코어 =============================================
-		// 에디터 모드일 경우에만 초기화 및 의존성 주입
-		if (pImpl->m_editorMode)
-		{
-			// EditorCore는 ResourceManager 싱글톤(ResourceManager::Get())을 사용하므로 SetResourceManager 호출 불필요
-			pImpl->m_editorCore.SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
-			pImpl->m_editorCore.SetInputSystem(&pImpl->m_inputSystem);
+	bool Engine::InitializeEditorCoreIfNeeded()
+	{
+		if (!pImpl->m_editorMode) return true;
 
-			if (!pImpl->m_editorCore.Initialize(pImpl->m_hWnd, *pImpl->m_renderDevice)) return false;
-		}
+		pImpl->m_editorCore.SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
+		pImpl->m_editorCore.SetInputSystem(&pImpl->m_inputSystem);
 
-		// 시스템에 ResourceManager 바인딩
+		if (!pImpl->m_editorCore.Initialize(pImpl->m_hWnd, *pImpl->m_renderDevice))
+			return false;
+
+		return true;
+	}
+
+	void Engine::InitializeAudio()
+	{
 		pImpl->m_audioSystem.SetResourceManager(&pImpl->m_resourceManager);
-
-		// 사운드 초기화
 		Sound::Initialize();
+	}
 
-		// ============================================= 렌더 시스템 =============================================
-		// Forward 렌더러 및 디버그 드로우 설정
+	bool Engine::InitializeRenderSystems()
+	{
 		pImpl->m_forwardRenderSystem = std::make_unique<ForwardRenderSystem>(*pImpl->m_renderDevice);
 		pImpl->m_forwardRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		pImpl->m_forwardRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
@@ -527,7 +576,6 @@ namespace Alice
 			return false;
 		}
 
-		// Deferred 렌더러 설정
 		pImpl->m_deferredRenderSystem = std::make_unique<DeferredRenderSystem>(*pImpl->m_renderDevice);
 		pImpl->m_deferredRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		pImpl->m_deferredRenderSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
@@ -537,8 +585,6 @@ namespace Alice
 			ALICE_LOG_ERRORF("pImpl->m_deferredRenderSystem->Initialize: fail...");
 			return false;
 		}
-
-		ALICE_LOG_ERRORF("pImpl->m_deferredRenderSystem->Initialize: next...");
 
 		pImpl->m_debugDrawSystem = std::make_unique<DebugDrawSystem>(*pImpl->m_renderDevice);
 		if (!pImpl->m_debugDrawSystem->Initialize())
@@ -564,140 +610,115 @@ namespace Alice
 		pImpl->m_trailRenderSystem = std::make_unique<TrailEffectRenderSystem>(*pImpl->m_renderDevice);
 		pImpl->m_trailRenderSystem->SetResourceManager(&pImpl->m_resourceManager);
 		if (!pImpl->m_trailRenderSystem->Initialize()) return false;
-		
-		// DeferredRenderSystem에 TrailEffectRenderSystem 주입
+
 		if (pImpl->m_deferredRenderSystem && pImpl->m_trailRenderSystem)
-		{
 			pImpl->m_deferredRenderSystem->SetSwordRenderSystem(pImpl->m_trailRenderSystem.get());
-		}
 
-		ALICE_LOG_INFO("[Debug] EffectSystem Init Success. Next: UIWorldManager...");
+		return true;
+	}
 
-		// ============================================= UI 시스템 초기화 =============================================
+	bool Engine::InitializeUI()
+	{
+		auto* device = pImpl->m_renderDevice->GetDevice();
+		auto* context = pImpl->m_renderDevice->GetImmediateContext();
+		if (!device || !context)
 		{
-			auto* device = pImpl->m_renderDevice->GetDevice();
-			auto* context = pImpl->m_renderDevice->GetImmediateContext();
-			if (device && context)
-			{
-				// UI 초기화 시작 로그
-				ALICE_LOG_INFO("[Debug] Calling UIWorldManager::Initalize...");
-
-				pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
-
-				// UI 초기화 완료 로그
-				ALICE_LOG_INFO("[Debug] UIWorldManager initialized (before scene load).");
-
-				// AliceUI 초기화 (D2D 없이 셰이더 기반)
-				if (!pImpl->m_aliceUIRenderer.Initialize(device, context, &pImpl->m_resourceManager))
-				{
-					ALICE_LOG_ERRORF("[AliceUI] UIRenderer Initialize failed.");
-				}
-				if (pImpl->m_forwardRenderSystem)
-					pImpl->m_forwardRenderSystem->SetUIRenderer(&pImpl->m_aliceUIRenderer);
-				if (pImpl->m_deferredRenderSystem)
-					pImpl->m_deferredRenderSystem->SetUIRenderer(&pImpl->m_aliceUIRenderer);
-
-				if (pImpl->m_editorMode)
-					pImpl->m_editorCore.SetAliceUIRenderer(&pImpl->m_aliceUIRenderer);
-			}
-			else
-			{
-				ALICE_LOG_ERRORF("[Debug] Device or Context is NULL inside UI Block!");
-			}
+			ALICE_LOG_ERRORF("[Debug] Device or Context is NULL inside UI Block!");
+			return false;
 		}
 
-		ALICE_LOG_INFO("[Debug] Next: ComputeEffectSystem...");
+		pImpl->m_uiWorld.Initalize(device, context, pImpl->m_width, pImpl->m_height, pImpl->m_inputSystem);
 
-		// ============================================= Compute Effect System =============================================
+		if (!pImpl->m_aliceUIRenderer.Initialize(device, context, &pImpl->m_resourceManager))
+			ALICE_LOG_ERRORF("[AliceUI] UIRenderer Initialize failed.");
+
+		if (pImpl->m_forwardRenderSystem)  pImpl->m_forwardRenderSystem->SetUIRenderer(&pImpl->m_aliceUIRenderer);
+		if (pImpl->m_deferredRenderSystem) pImpl->m_deferredRenderSystem->SetUIRenderer(&pImpl->m_aliceUIRenderer);
+		if (pImpl->m_editorMode)          pImpl->m_editorCore.SetAliceUIRenderer(&pImpl->m_aliceUIRenderer);
+
+		return true;
+	}
+
+	bool Engine::InitializeComputeEffectSystem()
+	{
 		pImpl->m_computeEffectSystem = std::make_unique<ComputeEffectSystem>(*pImpl->m_renderDevice);
-
-		// ComputeEffectSystem 초기화 시작 로그
-		ALICE_LOG_INFO("[Debug] Calling ComputeEffectSystem::Initialize...");
-
 		if (!pImpl->m_computeEffectSystem->Initialize(pImpl->m_width, pImpl->m_height))
 		{
 			ALICE_LOG_ERRORF("[Debug] ComputeEffectSystem Init Failed!");
 			return false;
 		}
+		return true;
+	}
 
-		ALICE_LOG_INFO("[Debug] ComputeEffectSystem Init Success. Next: Scene Loading...");
-
-		// ============================================= 카메라 & 스크립트 =============================================
+	void Engine::InitializeCameraAndScriptHotReload()
+	{
 		pImpl->m_cameraPosition = { 0.0f, 2.0f, -5.0f };
 		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
-		pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4, static_cast<float>(pImpl->m_width) / pImpl->m_height, 0.1f, 5000.0f);
+		pImpl->m_camera.SetPerspective(DirectX::XM_PIDIV4,
+			static_cast<float>(pImpl->m_width) / pImpl->m_height, 0.1f, 5000.0f);
 
-		ALICE_LOG_INFO("[Debug] Calling ScriptHotReload_Load...");
 		ScriptHotReload_Load();
+	}
 
-		// ============================================= 씬 관리 =============================================
+	bool Engine::InitializeScene(const std::filesystem::path& exeDir)
+	{
 		pImpl->m_resourceManager.Clear();
 		pImpl->m_sceneManager = std::make_unique<SceneManager>(pImpl->m_world, pImpl->m_resourceManager);
 
 		bool isSceneLoaded = false;
-		ALICE_LOG_INFO("[Debug] Loading Scene...");
 
 		if (!pImpl->m_editorMode)
 		{
-			// 여기서 죽을 수도 있음 (리소스 로딩)
-			isSceneLoaded = LoadStartupSceneFromBuildSettings(pImpl->m_world, pImpl->m_resourceManager, exeDir, &pImpl->m_uiWorld);
+			isSceneLoaded = LoadStartupSceneFromBuildSettings(
+				pImpl->m_world, pImpl->m_resourceManager, exeDir, &pImpl->m_uiWorld);
 		}
 
-		if (!isSceneLoaded) // 에디터 모드거나 로드 실패 시 샘플 씬 사용
+		if (!isSceneLoaded)
 		{
 			pImpl->m_sceneManager->SwitchToImmediate("SampleScene");
 			ALICE_LOG_INFO("Engine::Initialize: Loaded SampleScene (Fallback or Editor).");
 		}
-		ALICE_LOG_INFO("[Debug] Scene Loaded. Next: PhysicsSystem...");
 
-		// ============================================= 물리 시스템 생성 =============================================
-		// PhysicsSystem 생성 (ECS 브릿지) - 씬 로드 이후, RefreshPhysicsForCurrentWorld 호출 전
+		return true;
+	}
+
+	bool Engine::InitializePhysicsSystemAndWorldCallbacks()
+	{
 		pImpl->m_physicsSystem = std::make_unique<PhysicsSystem>(pImpl->m_world);
 		pImpl->m_physicsSystem->SetSkinnedMeshRegistry(&pImpl->m_skinnedMeshRegistry);
-		ALICE_LOG_INFO("Engine::Initialize: PhysicsSystem created.");
 
-		// World::Clear() 호출 전 콜백 설정 (물리 시스템 정리 강제)
 		pImpl->m_world.SetOnBeforeClearCallback([this]() {
-			// World::Clear()가 호출되기 전에 물리 시스템을 먼저 정리
 			if (pImpl->m_physicsSystem)
 			{
-				// 물리 월드가 있으면 Flush 후 정리
 				if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
-				{
-					pwShared->Flush(); // pending add/remove/release 처리
-				}
+					pwShared->Flush();
 
-				// PhysicsSystem의 raw pointer 해제 (dangling pointer 방지)
 				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
 			}
 
-			// 물리 이벤트 큐 및 accum 초기화
 			pImpl->m_physAccum = 0.0f;
 			pImpl->m_physicsEventQueue.clear();
-			});
+		});
 
-		RefreshPhysicsForCurrentWorld(); // 물리 1회 수동호출 (씬 로드 이후 1회)
+		RefreshPhysicsForCurrentWorld();
+		return true;
+	}
 
-		// ============================================= 후처리 =============================================
-		// 스키닝 레지스트리 확인 및 스크립트 서비스 바인딩
-		// 씬 전환할 때 실행될 TrimVideoMemory 바인딩
+	void Engine::InitializePostLoadBindings()
+	{
 		EnsureSkinnedMeshesRegisteredForWorld();
 
-		pImpl->m_scriptSystem.SetServices(&pImpl->m_inputSystem, pImpl->m_sceneManager.get(), &pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
+		pImpl->m_scriptSystem.SetServices(&pImpl->m_inputSystem, pImpl->m_sceneManager.get(),
+			&pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
+
 		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::EnsureSkinnedMeshesRegisteredForWorld);
 		pImpl->m_scriptSystem.onTrimVideoMemory.BindObject(this, &Engine::TrimVideoMemory);
-		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::RefreshPhysicsForCurrentWorld); // 씬 로드 직후 추가작업 등록하는거 같음
+		pImpl->m_scriptSystem.onAfterSceneLoaded.BindObject(this, &Engine::RefreshPhysicsForCurrentWorld);
+	}
 
-		// ============================================= UI 리소스 복구 (씬 로드 후) =============================================
-		// UIWorldManager는 이미 씬 로드 전에 초기화되었으므로, 씬 로드 후 리소스만 복구하면 됨
-		// LoadUI에서 Post-load fixup이 정상 작동했지만, 추가로 리소스 복구를 보장
-		{
-			ALICE_LOG_INFO("Engine::Initialize: Ensuring all UI resources after scene load...");
-			pImpl->m_uiWorld.EnsureAllUIResources();
-		}
-
-		ALICE_LOG_INFO("Engine::Initialize: Success (Entities: %zu)", pImpl->m_world.GetComponents<TransformComponent>().size());
-		return true;
+	void Engine::InitializeEnsureUIResourcesAfterSceneLoad()
+	{
+		pImpl->m_uiWorld.EnsureAllUIResources();
 	}
 
 	int Engine::Run()
@@ -737,204 +758,232 @@ namespace Alice
 
 	void Engine::Update()
 	{
-		// 1. 타이머 및 입력 갱신
-		pImpl->m_timer.Tick();
-		const float dt = pImpl->m_timer.DeltaTime();
-		pImpl->m_inputSystem.Update(dt);
-		pImpl->m_animUpdatedThisFrame = false;
+		float dt = 0.0f;
+		UpdateTimerAndInput(dt);
 
-		using namespace DirectX;
-
-		// 2. 카메라 데이터 갱신 (위치/회전)
-		bool updateFromScene = (!pImpl->m_editorMode || pImpl->m_isPlaying);
-
-		// 씬이 바뀐 프레임에는 "월드에 접근하는 코드"를 전부 스킵하기 위한 플래그
+		const bool updateFromScene = UpdateShouldUpdateFromScene();
 		bool sceneChangedThisFrame = false;
 
 		if (updateFromScene)
 		{
-			// 2-1. 로직 업데이트 (씬/스크립트)
-			if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
-			pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
+			UpdateSceneAndScript(dt);
+			sceneChangedThisFrame = UpdateCommitPendingSceneChanges(dt);
 
-			// ===================================================================
-			// SAFE POINT: 씬 변경/로드는 여기서만 커밋한다 (물리/카메라 돌리기 전에!)
-			// ScriptSystem과 SceneManager 모두의 pending 요청을 체크
-			if (pImpl->m_scriptSystem.HasPendingSceneRequests() ||
-				(pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange()))
-			{
-				// 1) PhysX 쪽부터 안전하게 떼어내기: Flush + 액터 정리 경로 확보
-				if (pImpl->m_physicsSystem)
-				{
-					// PhysicsSystem::SetPhysicsWorld(nullptr) 내부에서 m_physicsWorld->Flush()까지 수행함
-					pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
-				}
-
-				// 물리 월드가 있으면 Flush
-				if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
-					pwShared->Flush();
-
-				// 이벤트/고정스텝 누적치도 초기화 (이전 씬 찌꺼기 방지)
-				pImpl->m_physAccum = 0.0f;
-				pImpl->m_physicsEventQueue.clear();
-
-				// 2) ScriptSystem의 씬 요청 커밋 (LoadAuto/SwitchTo 실행)
-				if (pImpl->m_scriptSystem.HasPendingSceneRequests())
-				{
-					pImpl->m_scriptSystem.CommitSceneRequests(pImpl->m_world, &pImpl->m_uiWorld);
-				}
-
-				// 3) SceneManager의 씬 요청 커밋
-				if (pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange())
-				{
-					pImpl->m_sceneManager->CommitPendingSceneChange(pImpl->m_world, &pImpl->m_uiWorld);
-				}
-
-				// 4) 이 프레임은 더 이상 월드에 접근하면 안 됨 (방금 갈아엎었을 수 있으니까)
-				sceneChangedThisFrame = true;
-			}
-			// ===================================================================
-
-				// 씬 바뀐 프레임이면 물리/카메라(월드 접근)를 스킵하고, 아래 "카메라 최종 적용"만 수행
 			if (!sceneChangedThisFrame)
 			{
-			// 2-2. 공격 드라이버(노티 등록)
-			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+				UpdateAttackDriver();
 
-			// 2-3. 물리 업데이트
-				// ===================================================================
-				// Phy_SettingsComponent가 있는데 물리 월드가 없으면 생성 시도
-				if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
-				{
-					const auto& settingsMap = pImpl->m_world.GetComponents<Phy_SettingsComponent>();
-					if (!settingsMap.empty())
-					{
-						const auto& settings = settingsMap.begin()->second;
-						if (settings.enablePhysics)
-						{
-							RefreshPhysicsForCurrentWorld();
-						}
-					}
-				}
+				UpdateEnsurePhysicsWorldIfNeeded();
+				UpdatePhysicsBridge(dt);
+				UpdatePhysicsSim(dt);
 
-				// PhysicsSystem 업데이트 (Game → Physics 동기화)
-				if (pImpl->m_physicsSystem)
-				{
-					pImpl->m_physicsSystem->Update(dt);
-				}
+				UpdateAnimationAndSockets(dt);
+				UpdateCombat(dt);
 
-			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
-
-			// 2-4. 애니메이션/소켓 업데이트 (물리 이후: 최신 Transform 반영)
-			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
-			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
-			pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
-			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
-			pImpl->m_animUpdatedThisFrame = true;
-
-			// 소켓 기반 무기 스윕 판정
-			pImpl->m_weaponTraceSystem.Update(pImpl->m_world, dt, &pImpl->m_combatHitQueue);
-
-				// 물리 이벤트 처리
-				ProcessPhysicsEvents();
-				ProcessCombatHits();
-				pImpl->m_combatSystem.Update(pImpl->m_world, dt);
-				// ===================================================================
-
-			// 2-5. 카메라 시스템 (컴포넌트 기반)
-				pImpl->m_cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
-
-			// 2-6. 최종 카메라 동기화 (스크립트/물리/카메라 시스템 이후)
-				// CameraSystem에서 이미 Camera 객체가 업데이트되었으므로, primary 카메라의 Camera 객체를 가져옴
-				EntityId camId = InvalidEntityId;
-				for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
-				{
-					if (cam.GetPrimary()) { camId = id; break; }
-					if (camId == InvalidEntityId) camId = id;
-				}
-
-				if (camId != InvalidEntityId)
-				{
-					auto* camComp = pImpl->m_world.GetComponent<CameraComponent>(camId);
-					if (camComp)
-					{
-						// CameraComponent의 Camera 객체를 Engine의 m_camera에 복사
-						const Camera& sourceCamera = camComp->GetCamera();
-						
-						// Aspect Ratio 설정
-						const float defaultAspect = static_cast<float>(pImpl->m_width) / pImpl->m_height;
-						const float aspect = (camComp->useAspectOverride && camComp->aspectOverride > 0.0f)
-							? camComp->aspectOverride : defaultAspect;
-						
-						// Perspective 설정
-						pImpl->m_camera.SetPerspective(
-							sourceCamera.GetFovYRadians(),
-							aspect,
-							sourceCamera.GetNearPlane(),
-							sourceCamera.GetFarPlane()
-						);
-						
-						// Position, Rotation, Scale 복사
-						pImpl->m_camera.SetPosition(sourceCamera.GetPosition());
-						pImpl->m_camera.SetRotation(sourceCamera.GetRotationQuat());
-						pImpl->m_camera.SetScale(sourceCamera.GetScale());
-						
-						// 내부 상태 동기화 (에디터 프리캠용)
-						pImpl->m_cameraPosition = sourceCamera.GetPosition();
-						const DirectX::XMFLOAT3 rot = sourceCamera.GetRotation();
-						pImpl->m_cameraYawRadians = rot.y;
-						pImpl->m_cameraPitchRadians = rot.x;
-					}
-				}
+				UpdateCameraSystems(dt);
+				UpdateSyncPrimaryCameraFromWorld();
 			}
 		}
-		else if (pImpl->m_inputSystem.IsRightButtonDown()) // 에디터 프리캠
+		else
 		{
-			XMVECTOR moveDir = XMVectorZero();
-			auto& input = pImpl->m_inputSystem;
-
-			if (input.IsKeyDown(Keyboard::W)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::S)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::D)) moveDir = XMVectorAdd(moveDir, XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::A)) moveDir = XMVectorAdd(moveDir, XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::E)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
-			if (input.IsKeyDown(Keyboard::Q)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f));
-
-			if (!XMVector3Equal(moveDir, XMVectorZero()))
-			{
-				const XMMATRIX rotMat = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
-				const XMVECTOR worldDir = XMVector3Normalize(XMVector3TransformNormal(moveDir, rotMat));
-				const XMVECTOR currentPos = XMLoadFloat3(&pImpl->m_cameraPosition);
-
-				XMStoreFloat3(&pImpl->m_cameraPosition,
-					XMVectorAdd(currentPos, XMVectorScale(worldDir, pImpl->m_cameraMoveSpeed * dt)));
-			}
-
-			const POINT mouseDelta = input.GetMouseDelta();
-			pImpl->m_cameraYawRadians += mouseDelta.x * pImpl->m_cameraMouseSensitivity;
-			pImpl->m_cameraPitchRadians += mouseDelta.y * pImpl->m_cameraMouseSensitivity;
+			UpdateEditorFreeCam(dt);
 		}
 
-		// 3. 카메라 최종 적용 (월드 접근 없음 -> 씬 변경 프레임에도 안전)
+		UpdateApplyFinalCameraLookAt();
+		UpdateUI(dt);
+	}
+
+	// =========================
+	// Update helpers
+	void Engine::UpdateTimerAndInput(float& outDt)
+	{
+		pImpl->m_timer.Tick();
+		outDt = pImpl->m_timer.DeltaTime();
+		pImpl->m_inputSystem.Update(outDt);
+		pImpl->m_animUpdatedThisFrame = false;
+	}
+
+	bool Engine::UpdateShouldUpdateFromScene() const
+	{
+		return (!pImpl->m_editorMode || pImpl->m_isPlaying);
+	}
+
+	void Engine::UpdateSceneAndScript(float dt)
+	{
+		if (pImpl->m_sceneManager) pImpl->m_sceneManager->Update(dt);
+		pImpl->m_scriptSystem.Tick(pImpl->m_world, dt);
+	}
+
+	bool Engine::UpdateCommitPendingSceneChanges(float /*dt*/)
+	{
+		bool sceneChangedThisFrame = false;
+
+		if (pImpl->m_scriptSystem.HasPendingSceneRequests() ||
+			(pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange()))
+		{
+			if (pImpl->m_physicsSystem)
+				pImpl->m_physicsSystem->SetPhysicsWorld(nullptr);
+
+			if (auto pwShared = pImpl->m_world.GetPhysicsWorldShared())
+				pwShared->Flush();
+
+			pImpl->m_physAccum = 0.0f;
+			pImpl->m_physicsEventQueue.clear();
+
+			if (pImpl->m_scriptSystem.HasPendingSceneRequests())
+				pImpl->m_scriptSystem.CommitSceneRequests(pImpl->m_world, &pImpl->m_uiWorld);
+
+			if (pImpl->m_sceneManager && pImpl->m_sceneManager->HasPendingSceneChange())
+				pImpl->m_sceneManager->CommitPendingSceneChange(pImpl->m_world, &pImpl->m_uiWorld);
+
+			sceneChangedThisFrame = true;
+		}
+
+		return sceneChangedThisFrame;
+	}
+
+	void Engine::UpdateAttackDriver()
+	{
+		pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+	}
+
+	void Engine::UpdateEnsurePhysicsWorldIfNeeded()
+	{
+		if (pImpl->m_physicsSystem && !pImpl->m_world.GetPhysicsWorld())
+		{
+			const auto& settingsMap = pImpl->m_world.GetComponents<Phy_SettingsComponent>();
+			if (!settingsMap.empty())
+			{
+				const auto& settings = settingsMap.begin()->second;
+				if (settings.enablePhysics)
+					RefreshPhysicsForCurrentWorld();
+			}
+		}
+	}
+
+	void Engine::UpdatePhysicsBridge(float dt)
+	{
+		if (pImpl->m_physicsSystem)
+			pImpl->m_physicsSystem->Update(dt);
+	}
+
+	void Engine::UpdatePhysicsSim(float dt)
+	{
+		TickPhysics(dt);
+	}
+
+	void Engine::UpdateAnimationAndSockets(float dt)
+	{
+		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
+		pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
+		pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
+		pImpl->m_animUpdatedThisFrame = true;
+
+		pImpl->m_weaponTraceSystem.Update(pImpl->m_world, dt, &pImpl->m_combatHitQueue);
+	}
+
+	void Engine::UpdateCombat(float dt)
+	{
+		ProcessPhysicsEvents();
+		ProcessCombatHits();
+		pImpl->m_combatSystem.Update(pImpl->m_world, dt);
+	}
+
+	void Engine::UpdateCameraSystems(float dt)
+	{
+		pImpl->m_cameraSystem.Update(pImpl->m_world, pImpl->m_inputSystem, dt);
+	}
+
+	void Engine::UpdateSyncPrimaryCameraFromWorld()
+	{
+		EntityId camId = InvalidEntityId;
+		for (const auto& [id, cam] : pImpl->m_world.GetComponents<CameraComponent>())
+		{
+			if (cam.GetPrimary()) { camId = id; break; }
+			if (camId == InvalidEntityId) camId = id;
+		}
+
+		if (camId == InvalidEntityId) return;
+
+		auto* camComp = pImpl->m_world.GetComponent<CameraComponent>(camId);
+		if (!camComp) return;
+
+		const Camera& sourceCamera = camComp->GetCamera();
+
+		const float defaultAspect = static_cast<float>(pImpl->m_width) / pImpl->m_height;
+		const float aspect = (camComp->useAspectOverride && camComp->aspectOverride > 0.0f)
+			? camComp->aspectOverride : defaultAspect;
+
+		pImpl->m_camera.SetPerspective(
+			sourceCamera.GetFovYRadians(), aspect,
+			sourceCamera.GetNearPlane(), sourceCamera.GetFarPlane());
+
+		pImpl->m_camera.SetPosition(sourceCamera.GetPosition());
+		pImpl->m_camera.SetRotation(sourceCamera.GetRotationQuat());
+		pImpl->m_camera.SetScale(sourceCamera.GetScale());
+
+		pImpl->m_cameraPosition = sourceCamera.GetPosition();
+		const DirectX::XMFLOAT3 rot = sourceCamera.GetRotation();
+		pImpl->m_cameraYawRadians = rot.y;
+		pImpl->m_cameraPitchRadians = rot.x;
+	}
+
+	void Engine::UpdateEditorFreeCam(float dt)
+	{
+		using namespace DirectX;
+
+		if (!pImpl->m_inputSystem.IsRightButtonDown())
+			return;
+
+		XMVECTOR moveDir = XMVectorZero();
+		auto& input = pImpl->m_inputSystem;
+
+		if (input.IsKeyDown(Keyboard::W)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0, 0, 1, 0));
+		if (input.IsKeyDown(Keyboard::S)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0, 0, -1, 0));
+		if (input.IsKeyDown(Keyboard::D)) moveDir = XMVectorAdd(moveDir, XMVectorSet(1, 0, 0, 0));
+		if (input.IsKeyDown(Keyboard::A)) moveDir = XMVectorAdd(moveDir, XMVectorSet(-1, 0, 0, 0));
+		if (input.IsKeyDown(Keyboard::E)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0, 1, 0, 0));
+		if (input.IsKeyDown(Keyboard::Q)) moveDir = XMVectorAdd(moveDir, XMVectorSet(0, -1, 0, 0));
+
+		if (!XMVector3Equal(moveDir, XMVectorZero()))
+		{
+			const XMMATRIX rotMat = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0);
+			const XMVECTOR worldDir = XMVector3Normalize(XMVector3TransformNormal(moveDir, rotMat));
+			const XMVECTOR currentPos = XMLoadFloat3(&pImpl->m_cameraPosition);
+
+			XMStoreFloat3(&pImpl->m_cameraPosition,
+				XMVectorAdd(currentPos, XMVectorScale(worldDir, pImpl->m_cameraMoveSpeed * dt)));
+		}
+
+		const POINT mouseDelta = input.GetMouseDelta();
+		pImpl->m_cameraYawRadians += mouseDelta.x * pImpl->m_cameraMouseSensitivity;
+		pImpl->m_cameraPitchRadians += mouseDelta.y * pImpl->m_cameraMouseSensitivity;
+	}
+
+	void Engine::UpdateApplyFinalCameraLookAt()
+	{
+		using namespace DirectX;
+
 		const float pitchLimit = XMConvertToRadians(89.0f);
 		pImpl->m_cameraPitchRadians = std::clamp(pImpl->m_cameraPitchRadians, -pitchLimit, pitchLimit);
 
-		const XMMATRIX camRot = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0.0f);
-		const XMVECTOR camForward = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), camRot);
+		const XMMATRIX camRot = XMMatrixRotationRollPitchYaw(pImpl->m_cameraPitchRadians, pImpl->m_cameraYawRadians, 0);
+		const XMVECTOR camForward = XMVector3TransformNormal(XMVectorSet(0, 0, 1, 0), camRot);
 		const XMVECTOR camPos = XMLoadFloat3(&pImpl->m_cameraPosition);
 
 		XMFLOAT3 targetPos;
 		XMStoreFloat3(&targetPos, XMVectorAdd(camPos, camForward));
-		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
 
-		// 4. 로직 업데이트 (씬/스크립트)
-		// - updateFromScene에서는 위에서 처리
-		
-		// 5. UI 업데이트
+		pImpl->m_camera.SetLookAt(pImpl->m_cameraPosition, targetPos, XMFLOAT3(0, 1, 0));
+	}
+
+	void Engine::UpdateUI(float /*dt*/)
+	{
 		pImpl->m_uiWorld.Update(pImpl->m_width, pImpl->m_height);
-		pImpl->m_aliceUIRenderer.Update(pImpl->m_world, pImpl->m_inputSystem, pImpl->m_camera,
+		pImpl->m_aliceUIRenderer.Update(
+			pImpl->m_world, pImpl->m_inputSystem, pImpl->m_camera,
 			static_cast<float>(pImpl->m_width), static_cast<float>(pImpl->m_height));
-
 	}
 
 	//=========================================================
@@ -1241,384 +1290,423 @@ namespace Alice
 	{
 		if (!pImpl->m_renderDevice) return;
 
-		// Transform 월드행렬 캐시 일괄 갱신 (렌더/피킹 직전 — 물리·스크립트 등 변경이 끝난 뒤)
-		pImpl->m_world.UpdateTransformMatrices();
+		RenderUpdateWorldTransformCache();
+		RenderHandlePendingRenderSystemChange();
 
-		// ============================================= 렌더링 시스템 전환 처리 =============================================
-		// 렌더링 시작 전에 전환 요청이 있으면 안전하게 전환합니다.
-		if (pImpl->m_pendingRenderSystemChange)
-		{
-			// GPU 컨텍스트의 모든 리소스 바인딩 해제 (안전한 전환을 위해)
-			auto* context = pImpl->m_renderDevice->GetImmediateContext();
-			if (context)
-			{
-				// 모든 렌더 타겟 해제
-				ID3D11RenderTargetView* nullRTVs[8] = { nullptr };
-				context->OMSetRenderTargets(8, nullRTVs, nullptr);
+		if (!RenderValidateRenderSystems()) return;
 
-				// 모든 셰이더 리소스 해제
-				ID3D11ShaderResourceView* nullSRVs[16] = { nullptr };
-				context->VSSetShaderResources(0, 16, nullSRVs);
-				context->PSSetShaderResources(0, 16, nullSRVs);
+		RenderBeginFrame();
 
-				// 모든 상수 버퍼 해제
-				ID3D11Buffer* nullCBs[16] = { nullptr };
-				context->VSSetConstantBuffers(0, 16, nullCBs);
-				context->PSSetConstantBuffers(0, 16, nullCBs);
-
-				// 모든 셰이더 해제
-				context->VSSetShader(nullptr, nullptr, 0);
-				context->PSSetShader(nullptr, nullptr, 0);
-				context->GSSetShader(nullptr, nullptr, 0);
-				context->HSSetShader(nullptr, nullptr, 0);
-				context->DSSetShader(nullptr, nullptr, 0);
-				context->CSSetShader(nullptr, nullptr, 0);
-
-				// Flush (모든 명령이 완료될 때까지 대기)
-				context->Flush();
-			}
-
-			// 렌더링 시스템 전환
-			pImpl->m_useForwardRendering = pImpl->m_pendingUseForwardRendering;
-			pImpl->m_pendingRenderSystemChange = false;
-
-			ALICE_LOG_INFO("Engine::Render: 렌더링 시스템 전환 완료 (Forward: %s)",
-				pImpl->m_useForwardRendering ? "true" : "false");
-		}
-
-		if (pImpl->m_useForwardRendering && !pImpl->m_forwardRenderSystem) return;
-		if (!pImpl->m_useForwardRendering && !pImpl->m_deferredRenderSystem) return;
-
-		float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
-		pImpl->m_renderDevice->BeginFrame(clearColor); // Clear Color: Dark Blue
-
-		// ============================================= 에디터 =============================================
-		// UI 및 디버그 축 그리기
 		if (pImpl->m_editorMode)
 		{
-			pImpl->m_editorCore.BeginFrame();
+			RenderEditorUI();
+			RenderEditorDebugBuild();
+		}
 
-			// 에디터 UI 그리기 (인자 전달 간소화)
-			int shadingMode = static_cast<int>(pImpl->m_shadingMode);
-			pImpl->m_editorCore.DrawEditorUI(
-				pImpl->m_world, pImpl->m_camera, *pImpl->m_forwardRenderSystem, *pImpl->m_deferredRenderSystem, pImpl->m_sceneManager.get(),
-				pImpl->m_timer.DeltaTime(), (pImpl->m_timer.DeltaTime() > 0) ? (1.0f / pImpl->m_timer.DeltaTime()) : 0.0f,
-				pImpl->m_isPlaying, shadingMode, pImpl->m_useFillLight,
-				pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
-				pImpl->m_useForwardRendering,
-				pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort,
-				&pImpl->m_uiWorld,
-				pImpl->m_debugDraw
-			);
-			if (static_cast<Impl::ShadingMode>(shadingMode) != pImpl->m_shadingMode)
+		RenderEnsureAnimationIfNotUpdated();
+		RenderBuildSkinnedDrawList();
+		RenderOnDemandSkinnedMeshLoading();
+
+		// Update에서 애니메이션이 안 돈 프레임을 Render에서 보정하므로, 오디오 위치도 그 이후가 안전
+		RenderAudioUpdate();
+
+		RenderMainPass();
+		RenderUnbindDepthOnly();
+
+		RenderComputeEffects();
+		RenderParticleOverlayComposite();
+		RenderDebugOverlayComposite();
+		RenderGameModeToneMappingAndUI();
+
+		RenderOverlayEffects();
+		if (pImpl->m_editorMode)
+			RenderEditorDraw();
+
+		RenderEndFrame();
+	}
+
+	// =========================
+	// Render helpers
+	void Engine::RenderUpdateWorldTransformCache()
+	{
+		pImpl->m_world.UpdateTransformMatrices();
+	}
+
+	void Engine::RenderHandlePendingRenderSystemChange()
+	{
+		if (!pImpl->m_pendingRenderSystemChange) return;
+
+		auto* context = pImpl->m_renderDevice->GetImmediateContext();
+		if (context)
+		{
+			ID3D11RenderTargetView* nullRTVs[8] = { nullptr };
+			context->OMSetRenderTargets(8, nullRTVs, nullptr);
+
+			ID3D11ShaderResourceView* nullSRVs[16] = { nullptr };
+			context->VSSetShaderResources(0, 16, nullSRVs);
+			context->PSSetShaderResources(0, 16, nullSRVs);
+
+			ID3D11Buffer* nullCBs[16] = { nullptr };
+			context->VSSetConstantBuffers(0, 16, nullCBs);
+			context->PSSetConstantBuffers(0, 16, nullCBs);
+
+			context->VSSetShader(nullptr, nullptr, 0);
+			context->PSSetShader(nullptr, nullptr, 0);
+			context->GSSetShader(nullptr, nullptr, 0);
+			context->HSSetShader(nullptr, nullptr, 0);
+			context->DSSetShader(nullptr, nullptr, 0);
+			context->CSSetShader(nullptr, nullptr, 0);
+
+			context->Flush();
+		}
+
+		pImpl->m_useForwardRendering = pImpl->m_pendingUseForwardRendering;
+		pImpl->m_pendingRenderSystemChange = false;
+
+		ALICE_LOG_INFO("Engine::Render: 렌더링 시스템 전환 완료 (Forward: %s)",
+			pImpl->m_useForwardRendering ? "true" : "false");
+	}
+
+	bool Engine::RenderValidateRenderSystems() const
+	{
+		if (pImpl->m_useForwardRendering && !pImpl->m_forwardRenderSystem) return false;
+		if (!pImpl->m_useForwardRendering && !pImpl->m_deferredRenderSystem) return false;
+		return true;
+	}
+
+	void Engine::RenderBeginFrame()
+	{
+		float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
+		pImpl->m_renderDevice->BeginFrame(clearColor);
+	}
+
+	void Engine::RenderEditorUI()
+	{
+		if (!pImpl->m_editorMode) return;
+
+		pImpl->m_editorCore.BeginFrame();
+
+		int shadingMode = static_cast<int>(pImpl->m_shadingMode);
+		pImpl->m_editorCore.DrawEditorUI(
+			pImpl->m_world, pImpl->m_camera, *pImpl->m_forwardRenderSystem, *pImpl->m_deferredRenderSystem, pImpl->m_sceneManager.get(),
+			pImpl->m_timer.DeltaTime(), (pImpl->m_timer.DeltaTime() > 0) ? (1.0f / pImpl->m_timer.DeltaTime()) : 0.0f,
+			pImpl->m_isPlaying, shadingMode, pImpl->m_useFillLight,
+			pImpl->m_selectedEntity, pImpl->m_viewportPicker, pImpl->m_cameraMoveSpeed,
+			pImpl->m_useForwardRendering,
+			pImpl->m_pvdEnabled, pImpl->m_pvdHost, pImpl->m_pvdPort,
+			&pImpl->m_uiWorld,
+			pImpl->m_debugDraw
+		);
+
+		if (static_cast<Impl::ShadingMode>(shadingMode) != pImpl->m_shadingMode)
+		{
+			pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
+		}
+	}
+
+	void Engine::RenderEditorDebugBuild()
+	{
+		if (!pImpl->m_editorMode) return;
+
+		DebugDrawSystem* gizmo = pImpl->m_gizmoDrawSystem.get();
+		DebugDrawSystem* dbg = pImpl->m_debugDrawSystem.get();
+		if (gizmo) gizmo->Clear();
+		if (dbg) dbg->Clear();
+
+		// 디버그 축(XYZ) + 그리드 (깊이 테스트용)
+		if (gizmo && pImpl->m_debugDraw)
+		{
+			const float axisLen = 300.0f;
+			const float axisRadius = 0.08f;
+
+			// X축: 약간 다홍빛이 도는 레드 (순수 빨강보다 세련됨)
+			const DirectX::XMFLOAT4 colorX = { 0.9f, 0.2f, 0.2f, 1.0f };
+			// Y축: 형광 연두색 느낌을 약간 섞은 그린 (가시성 확보)
+			const DirectX::XMFLOAT4 colorY = { 0.2f, 0.8f, 0.2f, 1.0f };
+			// Z축: 깊이감 있는 스카이 블루/아주르 블루
+			const DirectX::XMFLOAT4 colorZ = { 0.2f, 0.4f, 0.9f, 1.0f };
+
+			gizmo->AddCylinder({ -axisLen, 0.f, 0.f }, { axisLen, 0.f, 0.f }, axisRadius, colorX); // X
+			gizmo->AddCylinder({ 0.f, -axisLen, 0.f }, { 0.f, axisLen, 0.f }, axisRadius, colorY); // Y
+			gizmo->AddCylinder({ 0.f, 0.0f, -axisLen }, { 0.f, 0.f, axisLen }, axisRadius, colorZ); // Z
+
+			// 에디터 격자 (XZ 평면) - 카메라 높이에 따라 셀 크기를 키워 멀어질수록 합쳐 보이게 처리
+			auto AddGridXZ = [&](float baseStep, int halfLines, float y,
+				const DirectX::XMFLOAT4& minorCol, const DirectX::XMFLOAT4& majorCol)
 			{
-				pImpl->m_shadingMode = static_cast<Impl::ShadingMode>(shadingMode);
-			}
+				const DirectX::XMFLOAT3 camPos = pImpl->m_camera.GetPosition();
+				float step = baseStep;
+				const float height = std::fabsf(camPos.y);
 
-			DebugDrawSystem* gizmo = pImpl->m_gizmoDrawSystem.get();
-			DebugDrawSystem* dbg = pImpl->m_debugDrawSystem.get();
-			if (gizmo) gizmo->Clear();
-			if (dbg) dbg->Clear();
-
-			// 디버그 축(XYZ) + 그리드 (깊이 테스트용)
-			if (gizmo && pImpl->m_debugDraw)
-			{
-				const float axisLen = 300.0f;
-				const float axisRadius = 0.08f;
-
-				// X축: 약간 다홍빛이 도는 레드 (순수 빨강보다 세련됨)
-				const DirectX::XMFLOAT4 colorX = { 0.9f, 0.2f, 0.2f, 1.0f };
-				// Y축: 형광 연두색 느낌을 약간 섞은 그린 (가시성 확보)
-				const DirectX::XMFLOAT4 colorY = { 0.2f, 0.8f, 0.2f, 1.0f };
-				// Z축: 깊이감 있는 스카이 블루/아주르 블루
-				const DirectX::XMFLOAT4 colorZ = { 0.2f, 0.4f, 0.9f, 1.0f };
-
-				gizmo->AddCylinder({ -axisLen, 0.f, 0.f }, { axisLen, 0.f, 0.f }, axisRadius, colorX); // X
-				gizmo->AddCylinder({ 0.f, -axisLen, 0.f }, { 0.f, axisLen, 0.f }, axisRadius, colorY); // Y
-				gizmo->AddCylinder({ 0.f, 0.0f, -axisLen }, { 0.f, 0.f, axisLen }, axisRadius, colorZ); // Z
-
-				// 에디터 격자 (XZ 평면) - 카메라 높이에 따라 셀 크기를 키워 멀어질수록 합쳐 보이게 처리
-				auto AddGridXZ = [&](float baseStep, int halfLines, float y,
-					const DirectX::XMFLOAT4& minorCol, const DirectX::XMFLOAT4& majorCol)
+				// 높이에 따라 셀 크기를 키움 (멀수록 덜 촘촘하게)
+				while (height > step * 5.0f && step < baseStep * 128.0f)
 				{
-					const DirectX::XMFLOAT3 camPos = pImpl->m_camera.GetPosition();
-					float step = baseStep;
-					const float height = std::fabsf(camPos.y);
+					step *= 2.0f;
+				}
 
-					// 높이에 따라 셀 크기를 키움 (멀수록 덜 촘촘하게)
-					while (height > step * 5.0f && step < baseStep * 128.0f)
-					{
-						step *= 2.0f;
-					}
+				const int majorEvery = 5;
+				const float extent = step * static_cast<float>(halfLines);
 
-					const int majorEvery = 5;
-					const float extent = step * static_cast<float>(halfLines);
+				const float centerX = std::round(camPos.x / step) * step;
+				const float centerZ = std::round(camPos.z / step) * step;
 
-					const float centerX = std::round(camPos.x / step) * step;
-					const float centerZ = std::round(camPos.z / step) * step;
+				for (int i = -halfLines; i <= halfLines; ++i)
+				{
+					const float x = centerX + static_cast<float>(i) * step;
+					const float z = centerZ + static_cast<float>(i) * step;
+					const DirectX::XMFLOAT4 col = (i % majorEvery == 0) ? majorCol : minorCol;
 
-					for (int i = -halfLines; i <= halfLines; ++i)
-					{
-						const float x = centerX + static_cast<float>(i) * step;
-						const float z = centerZ + static_cast<float>(i) * step;
-						const DirectX::XMFLOAT4 col = (i % majorEvery == 0) ? majorCol : minorCol;
+					gizmo->AddLine({ x, y, centerZ - extent }, { x, y, centerZ + extent }, col);
+					gizmo->AddLine({ centerX - extent, y, z }, { centerX + extent, y, z }, col);
+				}
+			};
 
-						gizmo->AddLine({ x, y, centerZ - extent }, { x, y, centerZ + extent }, col);
-						gizmo->AddLine({ centerX - extent, y, z }, { centerX + extent, y, z }, col);
-					}
+			AddGridXZ(
+				1.0f, 20, 0.0f,
+				{ 0.25f, 0.25f, 0.25f, 1.0f },
+				{ 0.35f, 0.35f, 0.35f, 1.0f }
+			);
+		}
+
+		pImpl->m_debugDrawComponentSystem.Build(
+			pImpl->m_world,
+			dbg,
+			gizmo,
+			pImpl->m_selectedEntity,
+			pImpl->m_debugDraw,
+			true
+		);
+
+		// 나머지 디버그 요소 (항상 보이도록 오버레이)
+		if (dbg && pImpl->m_debugDraw)
+		{
+			// === FBX/SkinnedMesh 디버그 AABB 박스 ===
+			// - SkinnedMeshRegistry의 sourceModel(FbxModel)에서 로컬 AABB를 얻어,
+			//   엔티티 Transform(S*R*T)을 적용한 OBB(로컬 AABB의 월드 변환)를 라인으로 표시합니다.
+			auto AddBoxLines = [&](const DirectX::XMFLOAT3 corners[8], const DirectX::XMFLOAT4& col)
+			{
+				// bottom
+				dbg->AddLine(corners[0], corners[1], col);
+				dbg->AddLine(corners[1], corners[2], col);
+				dbg->AddLine(corners[2], corners[3], col);
+				dbg->AddLine(corners[3], corners[0], col);
+				// top
+				dbg->AddLine(corners[4], corners[5], col);
+				dbg->AddLine(corners[5], corners[6], col);
+				dbg->AddLine(corners[6], corners[7], col);
+				dbg->AddLine(corners[7], corners[4], col);
+				// sides
+				dbg->AddLine(corners[0], corners[4], col);
+				dbg->AddLine(corners[1], corners[5], col);
+				dbg->AddLine(corners[2], corners[6], col);
+				dbg->AddLine(corners[3], corners[7], col);
+			};
+
+			for (const auto& [entityId, skinned] : pImpl->m_world.GetComponents<SkinnedMeshComponent>())
+			{
+				if (skinned.meshAssetPath.empty())
+					continue;
+
+				const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
+				if (!t)
+					continue;
+
+				auto mesh = pImpl->m_skinnedMeshRegistry.Find(skinned.meshAssetPath);
+				if (!mesh || !mesh->sourceModel)
+					continue;
+
+				DirectX::XMFLOAT3 mn{}, mx{};
+				if (!mesh->sourceModel->GetLocalBounds(mn, mx))
+					continue;
+
+				// 로컬 AABB 8 코너
+				DirectX::XMFLOAT3 local[8] = {
+					{mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mn.y, mx.z}, {mn.x, mn.y, mx.z},
+					{mn.x, mx.y, mn.z}, {mx.x, mx.y, mn.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
 				};
 
-				AddGridXZ(
-					1.0f, 20, 0.0f,
-					{ 0.25f, 0.25f, 0.25f, 1.0f },
-					{ 0.35f, 0.35f, 0.35f, 1.0f }
+				// 월드 행렬 (렌더러/피커와 동일: S*R*T)
+				using namespace DirectX;
+				const XMVECTOR S = XMLoadFloat3(&t->scale);
+				const XMVECTOR R = XMLoadFloat3(&t->rotation);
+				const XMVECTOR T = XMLoadFloat3(&t->position);
+				const XMMATRIX worldM =
+					XMMatrixScalingFromVector(S) *
+					XMMatrixRotationRollPitchYawFromVector(R) *
+					XMMatrixTranslationFromVector(T);
+
+				// 월드 코너로 변환
+				DirectX::XMFLOAT3 worldCorners[8]{};
+				for (int i = 0; i < 8; ++i)
+				{
+					const XMVECTOR p = XMVectorSet(local[i].x, local[i].y, local[i].z, 1.0f);
+					const XMVECTOR pw = XMVector3TransformCoord(p, worldM);
+					XMStoreFloat3(&worldCorners[i], pw);
+				}
+
+				// 선택된 엔티티는 빨강, 나머지는 노랑
+				const DirectX::XMFLOAT4 col = (entityId == pImpl->m_selectedEntity)
+					? DirectX::XMFLOAT4(1.f, 0.f, 0.f, 1.f)
+					: DirectX::XMFLOAT4(1.f, 1.f, 0.f, 1.f);
+
+				AddBoxLines(worldCorners, col);
+			}
+
+			// AudioSource: 감쇠 반경 시각화
+			auto DrawRing = [&](const DirectX::XMFLOAT3& center, float radius, const DirectX::XMFLOAT3& axisX, const DirectX::XMFLOAT3& axisZ, const DirectX::XMFLOAT4& color)
+			{
+				const int segments = 24;
+				const float step = DirectX::XM_2PI / segments;
+
+				DirectX::XMFLOAT3 prev;
+				// 초기점: center + axisX * radius
+				{
+					using namespace DirectX;
+					XMVECTOR c = XMLoadFloat3(&center);
+					XMVECTOR ax = XMLoadFloat3(&axisX);
+					XMVECTOR p = c + ax * radius;
+					XMStoreFloat3(&prev, p);
+				}
+
+				for (int i = 1; i <= segments; ++i)
+				{
+					float angle = step * i;
+					float c = cosf(angle);
+					float s = sinf(angle);
+
+					using namespace DirectX;
+					XMVECTOR cent = XMLoadFloat3(&center);
+					XMVECTOR ax = XMLoadFloat3(&axisX);
+					XMVECTOR az = XMLoadFloat3(&axisZ);
+
+					XMVECTOR currVec = cent + (ax * c * radius) + (az * s * radius);
+					DirectX::XMFLOAT3 curr;
+					XMStoreFloat3(&curr, currVec);
+
+					dbg->AddLine(prev, curr, color);
+					prev = curr;
+				}
+			};
+
+			for (const auto& [entityId, src] : pImpl->m_world.GetComponents<AudioSourceComponent>())
+			{
+				if (!src.is3D) continue;
+				if (entityId != pImpl->m_selectedEntity && !src.debugDraw) continue;
+
+				const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
+				if (!t) continue;
+
+				// Min Distance (Green)
+				DrawRing(t->position, src.minDistance, { 1,0,0 }, { 0,0,1 }, { 0,1,0,1 }); // XZ plane
+				DrawRing(t->position, src.minDistance, { 0,1,0 }, { 1,0,0 }, { 0,1,0,1 }); // YX plane
+
+				// Max Distance (Red)
+				DrawRing(t->position, src.maxDistance, { 1,0,0 }, { 0,0,1 }, { 1,0,0,1 }); // XZ plane
+				DrawRing(t->position, src.maxDistance, { 0,1,0 }, { 1,0,0 }, { 1,0,0,1 }); // YX plane
+			}
+		}
+	}
+
+	void Engine::RenderEnsureAnimationIfNotUpdated()
+	{
+		if (pImpl->m_animUpdatedThisFrame) return;
+
+		const double dtSec = static_cast<double>(pImpl->m_timer.DeltaTime());
+		pImpl->m_attackDriverSystem.Update(pImpl->m_world);
+		pImpl->m_advancedAnimSystem.Update(pImpl->m_world, dtSec);
+		pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, dtSec);
+		pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
+		pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
+		pImpl->m_animUpdatedThisFrame = true;
+	}
+
+	void Engine::RenderBuildSkinnedDrawList()
+	{
+		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
+	}
+
+	void Engine::RenderOnDemandSkinnedMeshLoading()
+	{
+		FbxImporter importer(pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
+		auto* device = pImpl->m_renderDevice ? pImpl->m_renderDevice->GetDevice() : nullptr;
+		if (!device) return;
+
+		const auto& skinnedMap = pImpl->m_world.GetComponents<SkinnedMeshComponent>();
+		for (const auto& [entityId, comp] : skinnedMap)
+		{
+			if (comp.meshAssetPath.empty()) continue;
+
+			if (!pImpl->m_skinnedMeshRegistry.Has(comp.meshAssetPath) && !comp.instanceAssetPath.empty())
+			{
+				ALICE_LOG_INFO("[Engine] On-demand loading mesh: meshKey=\"%s\" instanceAssetPath=\"%s\"",
+					comp.meshAssetPath.c_str(), comp.instanceAssetPath.c_str());
+
+				pImpl->m_skinnedMeshRegistry.LoadFromFbxAsset(
+					comp.meshAssetPath, comp.instanceAssetPath,
+					pImpl->m_resourceManager, importer, device
 				);
 			}
-
-			pImpl->m_debugDrawComponentSystem.Build(
-				pImpl->m_world,
-				dbg,
-				gizmo,
-				pImpl->m_selectedEntity,
-				pImpl->m_debugDraw,
-				true
-			);
-
-			// 나머지 디버그 요소 (항상 보이도록 오버레이)
-			if (dbg && pImpl->m_debugDraw)
-			{
-				// === FBX/SkinnedMesh 디버그 AABB 박스 ===
-				// - SkinnedMeshRegistry의 sourceModel(FbxModel)에서 로컬 AABB를 얻어,
-				//   엔티티 Transform(S*R*T)을 적용한 OBB(로컬 AABB의 월드 변환)를 라인으로 표시합니다.
-				auto AddBoxLines = [&](const DirectX::XMFLOAT3 corners[8], const DirectX::XMFLOAT4& col)
-					{
-						// bottom
-						dbg->AddLine(corners[0], corners[1], col);
-						dbg->AddLine(corners[1], corners[2], col);
-						dbg->AddLine(corners[2], corners[3], col);
-						dbg->AddLine(corners[3], corners[0], col);
-						// top
-						dbg->AddLine(corners[4], corners[5], col);
-						dbg->AddLine(corners[5], corners[6], col);
-						dbg->AddLine(corners[6], corners[7], col);
-						dbg->AddLine(corners[7], corners[4], col);
-						// sides
-						dbg->AddLine(corners[0], corners[4], col);
-						dbg->AddLine(corners[1], corners[5], col);
-						dbg->AddLine(corners[2], corners[6], col);
-						dbg->AddLine(corners[3], corners[7], col);
-					};
-
-				for (const auto& [entityId, skinned] : pImpl->m_world.GetComponents<SkinnedMeshComponent>())
-				{
-					if (skinned.meshAssetPath.empty())
-						continue;
-
-					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
-					if (!t)
-						continue;
-
-					auto mesh = pImpl->m_skinnedMeshRegistry.Find(skinned.meshAssetPath);
-					if (!mesh || !mesh->sourceModel)
-						continue;
-
-					DirectX::XMFLOAT3 mn{}, mx{};
-					if (!mesh->sourceModel->GetLocalBounds(mn, mx))
-						continue;
-
-					// 로컬 AABB 8 코너
-					DirectX::XMFLOAT3 local[8] = {
-						{mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mn.y, mx.z}, {mn.x, mn.y, mx.z},
-						{mn.x, mx.y, mn.z}, {mx.x, mx.y, mn.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
-					};
-
-					// 월드 행렬 (렌더러/피커와 동일: S*R*T)
-					using namespace DirectX;
-					const XMVECTOR S = XMLoadFloat3(&t->scale);
-					const XMVECTOR R = XMLoadFloat3(&t->rotation);
-					const XMVECTOR T = XMLoadFloat3(&t->position);
-					const XMMATRIX worldM =
-						XMMatrixScalingFromVector(S) *
-						XMMatrixRotationRollPitchYawFromVector(R) *
-						XMMatrixTranslationFromVector(T);
-
-					// 월드 코너로 변환
-					DirectX::XMFLOAT3 worldCorners[8]{};
-					for (int i = 0; i < 8; ++i)
-					{
-						const XMVECTOR p = XMVectorSet(local[i].x, local[i].y, local[i].z, 1.0f);
-						const XMVECTOR pw = XMVector3TransformCoord(p, worldM);
-						XMStoreFloat3(&worldCorners[i], pw);
-					}
-
-					// 선택된 엔티티는 빨강, 나머지는 노랑
-					const DirectX::XMFLOAT4 col = (entityId == pImpl->m_selectedEntity)
-						? DirectX::XMFLOAT4(1.f, 0.f, 0.f, 1.f)
-						: DirectX::XMFLOAT4(1.f, 1.f, 0.f, 1.f);
-
-					AddBoxLines(worldCorners, col);
-				}
-
-				// AudioSource: 감쇠 반경 시각화
-				auto DrawRing = [&](const DirectX::XMFLOAT3& center, float radius, const DirectX::XMFLOAT3& axisX, const DirectX::XMFLOAT3& axisZ, const DirectX::XMFLOAT4& color)
-					{
-						const int segments = 24;
-						const float step = DirectX::XM_2PI / segments;
-
-						DirectX::XMFLOAT3 prev;
-						// 초기점: center + axisX * radius
-						{
-							using namespace DirectX;
-							XMVECTOR c = XMLoadFloat3(&center);
-							XMVECTOR ax = XMLoadFloat3(&axisX);
-							XMVECTOR p = c + ax * radius;
-							XMStoreFloat3(&prev, p);
-						}
-
-						for (int i = 1; i <= segments; ++i)
-						{
-							float angle = step * i;
-							float c = cosf(angle);
-							float s = sinf(angle);
-
-							using namespace DirectX;
-							XMVECTOR cent = XMLoadFloat3(&center);
-							XMVECTOR ax = XMLoadFloat3(&axisX);
-							XMVECTOR az = XMLoadFloat3(&axisZ);
-
-							XMVECTOR currVec = cent + (ax * c * radius) + (az * s * radius);
-							DirectX::XMFLOAT3 curr;
-							XMStoreFloat3(&curr, currVec);
-
-							dbg->AddLine(prev, curr, color);
-							prev = curr;
-						}
-					};
-
-				for (const auto& [entityId, src] : pImpl->m_world.GetComponents<AudioSourceComponent>())
-				{
-					if (!src.is3D) continue;
-					if (entityId != pImpl->m_selectedEntity && !src.debugDraw) continue;
-
-					const auto* t = pImpl->m_world.GetComponent<TransformComponent>(entityId);
-					if (!t) continue;
-
-					// Min Distance (Green)
-					DrawRing(t->position, src.minDistance, { 1,0,0 }, { 0,0,1 }, { 0,1,0,1 }); // XZ plane
-					DrawRing(t->position, src.minDistance, { 0,1,0 }, { 1,0,0 }, { 0,1,0,1 }); // YX plane
-
-					// Max Distance (Red)
-					DrawRing(t->position, src.maxDistance, { 1,0,0 }, { 0,0,1 }, { 1,0,0,1 }); // XZ plane
-					DrawRing(t->position, src.maxDistance, { 0,1,0 }, { 1,0,0 }, { 1,0,0,1 }); // YX plane
-				}
-			}
 		}
+	}
 
-		// ============================================= 애니메이션 =============================================
-		// 스키닝 업데이트 및 드로우 커맨드 빌드
-
-		if (!pImpl->m_animUpdatedThisFrame)
-		{
-			const double dtSec = static_cast<double>(pImpl->m_timer.DeltaTime());
-			pImpl->m_attackDriverSystem.Update(pImpl->m_world);
-			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, dtSec);
-			pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, dtSec);
-			pImpl->m_socketWorldUpdateSystem.Update(pImpl->m_world);
-			pImpl->m_socketAttachmentSystem.Update(pImpl->m_world);
-			pImpl->m_animUpdatedThisFrame = true;
-		}
-
-		//pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
-		//pImpl->m_skinnedAnimSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
-
-		pImpl->m_skinnedMeshSystem.BuildDrawList(pImpl->m_world, pImpl->m_skinnedDrawCommands);
-
-		// 온디맨드 메시 로딩: meshKey가 레지스트리에 없으면 fbxasset으로부터 로드
-		{
-			FbxImporter importer(pImpl->m_resourceManager, &pImpl->m_skinnedMeshRegistry);
-			auto* device = pImpl->m_renderDevice ? pImpl->m_renderDevice->GetDevice() : nullptr;
-			if (device)
-			{
-				const auto& skinnedMap = pImpl->m_world.GetComponents<SkinnedMeshComponent>();
-				for (const auto& [entityId, comp] : skinnedMap)
-				{
-					if (comp.meshAssetPath.empty())
-						continue;
-
-					// meshKey가 레지스트리에 없고 instanceAssetPath가 있으면 온디맨드 로딩 시도
-					if (!pImpl->m_skinnedMeshRegistry.Has(comp.meshAssetPath) && !comp.instanceAssetPath.empty())
-					{
-						ALICE_LOG_INFO("[Engine] On-demand loading mesh: meshKey=\"%s\" instanceAssetPath=\"%s\"",
-							comp.meshAssetPath.c_str(), comp.instanceAssetPath.c_str());
-						pImpl->m_skinnedMeshRegistry.LoadFromFbxAsset(
-							comp.meshAssetPath,
-							comp.instanceAssetPath,
-							pImpl->m_resourceManager,
-							importer,
-							device
-						);
-					}
-				}
-			}
-		}
-
-
+	void Engine::RenderAudioUpdate()
+	{
 		pImpl->m_audioSystem.Update(pImpl->m_world, static_cast<double>(pImpl->m_timer.DeltaTime()));
-		// 오디오 업데이트
+	}
+
+	void Engine::RenderMainPass()
+	{
 		EntityId renderEntity = (pImpl->m_sceneManager) ? pImpl->m_sceneManager->GetPrimaryRenderableEntity() : InvalidEntityId;
-		// Forward/Deferred 렌더링 모드에 따라 분기
-		// ============================================= 렌더링 =============================================
 
-			// 카메라 엔티티 ID 집합 구성
 		std::unordered_set<EntityId> cameraIDs;
-		for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>()) cameraIDs.insert(id);
+		for (const auto& [id, _] : pImpl->m_world.GetComponents<CameraComponent>())
+			cameraIDs.insert(id);
 
-		const int finalShadingMode = pImpl->m_editorMode ? static_cast<int>(pImpl->m_shadingMode) : static_cast<int>(Impl::ShadingMode::PBR);
+		const int finalShadingMode = pImpl->m_editorMode
+			? static_cast<int>(pImpl->m_shadingMode)
+			: static_cast<int>(Impl::ShadingMode::PBR);
 
-
-	if (pImpl->m_useForwardRendering)
-	{
-		// Forward 렌더링
-		pImpl->m_forwardRenderSystem->Render(
-			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
-			pImpl->m_uiWorld
-		);
+		if (pImpl->m_useForwardRendering)
+		{
+			pImpl->m_forwardRenderSystem->Render(
+				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
+				pImpl->m_uiWorld
+			);
+		}
+		else
+		{
+			pImpl->m_deferredRenderSystem->Render(
+				pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
+				finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
+				pImpl->m_uiWorld, pImpl->m_editorMode, pImpl->m_isPlaying
+			);
+		}
 	}
-	else
-	{
-		// Deferred 렌더링
-		pImpl->m_deferredRenderSystem->Render(
-			pImpl->m_world, pImpl->m_camera, renderEntity, cameraIDs,
-			finalShadingMode, pImpl->m_useFillLight, pImpl->m_skinnedDrawCommands,
-			pImpl->m_uiWorld, pImpl->m_editorMode, pImpl->m_isPlaying
-		);
-	}
 
-		// 렌더 직후: DSV만 unbind (depth SRV 읽기 전 필수)
-		// DirectX11에서는 같은 리소스를 DSV와 SRV로 동시에 바인딩할 수 없음
-		// RTV는 유지 (RestoreBackBuffer에서 설정한 백버퍼 RTV 유지)
+	void Engine::RenderUnbindDepthOnly()
+	{
 		ID3D11RenderTargetView* currentRTV = nullptr;
 		ID3D11DepthStencilView* currentDSV = nullptr;
-		pImpl->m_renderDevice->GetImmediateContext()->OMGetRenderTargets(1, &currentRTV, &currentDSV);
+
+		auto* ctx = pImpl->m_renderDevice->GetImmediateContext();
+		ctx->OMGetRenderTargets(1, &currentRTV, &currentDSV);
+
 		if (currentRTV)
 		{
-			// RTV는 유지하고 DSV만 nullptr로 설정
-			pImpl->m_renderDevice->GetImmediateContext()->OMSetRenderTargets(1, &currentRTV, nullptr);
-			currentRTV->Release(); // OMGetRenderTargets가 AddRef를 호출하므로 Release 필요
+			ctx->OMSetRenderTargets(1, &currentRTV, nullptr);
+			currentRTV->Release();
 		}
 		if (currentDSV)
-		{
-			currentDSV->Release(); // OMGetRenderTargets가 AddRef를 호출하므로 Release 필요
-		}
+			currentDSV->Release();
+	}
 
-		// ============================================= 컴퓨트 이펙트 (렌더링 이후 실행 - depth가 최신 상태) =============================================
-		// 씬 전환 중이거나 리소스가 유효하지 않으면 스킵 (안전성 보장)
+	void Engine::RenderComputeEffects()
+	{
 		if (pImpl->m_computeEffectSystem &&
 			((pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem) ||
 				(!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)))
 		{
-			// 렌더 시스템에서 실제로 사용한 카메라 행렬 사용 (에디터 뷰포트 카메라와 메인 카메라 불일치 해결)
 			DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
 			DirectX::XMFLOAT3 cameraPos(0.0f, 0.0f, -5.0f);
 
@@ -1633,8 +1721,6 @@ namespace Alice
 				cameraPos = pImpl->m_deferredRenderSystem->GetLastCameraPos();
 			}
 
-			// Scene Depth SRV (depth test용) - 렌더링 이후이므로 최신 depth 사용 가능
-			// DSV는 이미 위에서 unbind했으므로 SRV로 안전하게 읽을 수 있음
 			ID3D11ShaderResourceView* depthSRV = nullptr;
 			if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
 			{
@@ -1645,16 +1731,16 @@ namespace Alice
 				depthSRV = pImpl->m_deferredRenderSystem->GetSceneDepthSRV();
 			}
 
-			// Execute에 depthSRV, near/far, dt를 직접 전달
-			// depthSRV가 nullptr이어도 Execute 내부에서 안전하게 처리됨
 			float dtSec = pImpl->m_timer.DeltaTime();
 			float nearPlane = pImpl->m_camera.GetNearPlane();
 			float farPlane = pImpl->m_camera.GetFarPlane();
 			pImpl->m_computeEffectSystem->Execute(pImpl->m_world, viewProj, cameraPos, depthSRV, nearPlane, farPlane, dtSec);
 		}
+	}
 
-		// ============================================= 파티클 오버레이 합성 =============================================
-		// 에디터 모드: 뷰포트 렌더 타겟에 파티클 오버레이 합성 (CS 실행 이후 - 같은 프레임 결과 사용)
+	void Engine::RenderParticleOverlayComposite()
+	{
+		// 에디터 모드: 뷰포트 렌더 타겟에 파티클 오버레이 합성
 		if (pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_computeEffectSystem->HasActiveEffect())
 		{
 			ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
@@ -1671,26 +1757,6 @@ namespace Alice
 			}
 		}
 
-		// 에디터 모드: DebugDraw를 뷰포트 렌더 타겟에 합성
-		if (pImpl->m_editorMode)
-		{
-			auto RenderDebugOverlay = [&](DebugDrawSystem* system, bool depthTest)
-			{
-				if (!system) return;
-				if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
-				{
-					pImpl->m_forwardRenderSystem->RenderDebugOverlayToViewport(*system, pImpl->m_camera, depthTest);
-				}
-				else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
-				{
-					pImpl->m_deferredRenderSystem->RenderDebugOverlayToViewport(*system, pImpl->m_camera, depthTest);
-				}
-			};
-
-			RenderDebugOverlay(pImpl->m_gizmoDrawSystem.get(), true);
-			RenderDebugOverlay(pImpl->m_debugDrawSystem.get(), false);
-		}
-
 		// 게임 모드: 백버퍼에 파티클 오버레이 합성
 		if (!pImpl->m_editorMode && pImpl->m_computeEffectSystem && pImpl->m_computeEffectSystem->HasActiveEffect() && pImpl->m_forwardRenderSystem)
 		{
@@ -1702,7 +1768,6 @@ namespace Alice
 				viewport.Height = static_cast<float>(pImpl->m_height);
 				viewport.MaxDepth = 1.0f;
 
-				// 게임 모드에서는 톤매핑 후 오버레이
 				if (pImpl->m_useForwardRendering)
 				{
 					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
@@ -1715,62 +1780,78 @@ namespace Alice
 					deferred->RenderPostProcess(backBufferRTV, viewport);
 				}
 
-				// 파티클 오버레이 합성 (톤매핑 후)
 				ID3D11ShaderResourceView* particleSRV = pImpl->m_computeEffectSystem->GetOutputSRV();
 				if (particleSRV)
 				{
 					pImpl->m_forwardRenderSystem->RenderParticleOverlay(particleSRV, backBufferRTV, viewport);
 				}
 
-				// UI 렌더링: 최상단
 				pImpl->m_aliceUIRenderer.RenderScreen(pImpl->m_world, pImpl->m_camera, backBufferRTV, viewport.Width, viewport.Height);
 			}
 		}
-		else if (!pImpl->m_editorMode)
+	}
+
+	void Engine::RenderDebugOverlayComposite()
+	{
+		if (!pImpl->m_editorMode) return;
+
+		auto RenderDebugOverlay = [&](DebugDrawSystem* system, bool depthTest)
 		{
-			// 게임 모드에서만 톤매핑 (파티클 오버레이 없을 때)
-			ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
-			if (backBufferRTV)
+			if (!system) return;
+			if (pImpl->m_useForwardRendering && pImpl->m_forwardRenderSystem)
 			{
-				D3D11_VIEWPORT viewport = {};
-				viewport.Width = static_cast<float>(pImpl->m_width);
-				viewport.Height = static_cast<float>(pImpl->m_height);
-				viewport.MaxDepth = 1.0f;
-
-				if (pImpl->m_useForwardRendering)
-				{
-					pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
-					// UI 렌더링: Post-processing 이후
-					pImpl->m_aliceUIRenderer.RenderScreen(pImpl->m_world, pImpl->m_camera, backBufferRTV, viewport.Width, viewport.Height);
-				}
-				else
-				{
-					DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
-					ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
-					//if (deferred->GetBloomSettings().enabled)
-					//{
-					//	deferred->RenderBloomPass(sceneSRV, backBufferRTV, viewport);
-					//}
-					//else
-					//{
-						//deferred->RenderToneMapping(sceneSRV, backBufferRTV, viewport);
-					deferred->RenderPostProcess(backBufferRTV, viewport);
-
-					// UI 렌더링: Post-processing 이후
-					pImpl->m_aliceUIRenderer.RenderScreen(pImpl->m_world, pImpl->m_camera, backBufferRTV, viewport.Width, viewport.Height);
-				}
+				pImpl->m_forwardRenderSystem->RenderDebugOverlayToViewport(*system, pImpl->m_camera, depthTest);
 			}
+			else if (!pImpl->m_useForwardRendering && pImpl->m_deferredRenderSystem)
+			{
+				pImpl->m_deferredRenderSystem->RenderDebugOverlayToViewport(*system, pImpl->m_camera, depthTest);
+			}
+		};
+
+		RenderDebugOverlay(pImpl->m_gizmoDrawSystem.get(), true);
+		RenderDebugOverlay(pImpl->m_debugDrawSystem.get(), false);
+	}
+
+	void Engine::RenderGameModeToneMappingAndUI()
+	{
+		if (pImpl->m_editorMode) return;
+
+		ID3D11RenderTargetView* backBufferRTV = pImpl->m_renderDevice->GetBackBufferRTV();
+		if (!backBufferRTV) return;
+
+		D3D11_VIEWPORT viewport = {};
+		viewport.Width = static_cast<float>(pImpl->m_width);
+		viewport.Height = static_cast<float>(pImpl->m_height);
+		viewport.MaxDepth = 1.0f;
+
+		if (pImpl->m_useForwardRendering)
+		{
+			pImpl->m_forwardRenderSystem->RenderToneMapping(backBufferRTV, viewport);
+			pImpl->m_aliceUIRenderer.RenderScreen(pImpl->m_world, pImpl->m_camera, backBufferRTV, viewport.Width, viewport.Height);
 		}
+		else
+		{
+			DeferredRenderSystem* deferred = pImpl->m_deferredRenderSystem.get();
+			ID3D11ShaderResourceView* sceneSRV = deferred->GetSceneColorSRV();
+			deferred->RenderPostProcess(backBufferRTV, viewport);
+			pImpl->m_aliceUIRenderer.RenderScreen(pImpl->m_world, pImpl->m_camera, backBufferRTV, viewport.Width, viewport.Height);
+		}
+	}
 
-                
-
-		// ============================================= 오버레이 =============================================
-		// 디버그 드로우 및 ImGui(에디터 전용)
+	void Engine::RenderOverlayEffects()
+	{
 		if (pImpl->m_effectSystem) pImpl->m_effectSystem->Render(pImpl->m_world, pImpl->m_camera);
-		if (pImpl->m_trailRenderSystem)pImpl->m_trailRenderSystem->Render(pImpl->m_world, pImpl->m_camera);
-		// SwordRenderSystem은 DeferredRenderSystem 내부에서 호출되므로 여기서는 호출하지 않음
-		if (pImpl->m_editorMode)      pImpl->m_editorCore.RenderDrawData();
+		if (pImpl->m_trailRenderSystem) pImpl->m_trailRenderSystem->Render(pImpl->m_world, pImpl->m_camera);
+	}
 
+	void Engine::RenderEditorDraw()
+	{
+		if (pImpl->m_editorMode)
+			pImpl->m_editorCore.RenderDrawData();
+	}
+
+	void Engine::RenderEndFrame()
+	{
 		pImpl->m_renderDevice->EndFrame();
 	}
 
