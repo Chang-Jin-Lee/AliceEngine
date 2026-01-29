@@ -25,6 +25,7 @@
 #include "Components/SkinnedAnimationComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/AttackDriverComponent.h"
+#include "Components/AdvancedAnimationComponent.h"
 #include "Components/HurtboxComponent.h"
 #include "Components/WeaponTraceComponent.h"
 #include "Components/SocketAttachmentComponent.h"
@@ -6518,6 +6519,8 @@ namespace Alice
 					return;
 				}
 
+				changed |= ImGui::Checkbox("Debug Draw", &collider->debugDraw);
+
 				// Collider Type 선택
 				ImGui::Text("Collider Type");
 				ImGui::Indent();
@@ -6668,6 +6671,8 @@ namespace Alice
 					g_SceneDirty = true;
 					return;
 				}
+
+				changed |= ImGui::Checkbox("Debug Draw", &meshCollider->debugDraw);
 
 				// Mesh Collider Type 선택
 				ImGui::Text("Mesh Collider Type");
@@ -9128,6 +9133,7 @@ namespace Alice
 				// Clip picker (SkinnedMesh animation list)
 				{
 					std::vector<std::string> clipNames;
+					const auto* animComp = world.GetComponent<AdvancedAnimationComponent>(_selectedEntity);
 					if (m_skinnedRegistry)
 					{
 						if (const auto* skinned = world.GetComponent<SkinnedMeshComponent>(_selectedEntity))
@@ -9141,45 +9147,148 @@ namespace Alice
 						}
 					}
 
-					if (!clipNames.empty())
+					ImGui::Separator();
+					ImGui::Text("Clip Timings");
+					if (ImGui::Button("+ Add Clip"))
 					{
-						const char* preview = driver->clipName.empty() ? "(none)" : driver->clipName.c_str();
-						if (ImGui::BeginCombo("Clip", preview))
+						driver->clips.emplace_back();
+						changed = true;
+					}
+
+					auto ResolveClipNameForUI = [&](const AttackDriverClip& clip) -> std::string {
+						if (!animComp)
+							return clip.clipName;
+
+						switch (clip.source)
 						{
-							const bool selNone = driver->clipName.empty();
-							if (ImGui::Selectable("(none)", selNone))
+						case AttackDriverClipSource::BaseA: return animComp->base.clipA;
+						case AttackDriverClipSource::BaseB: return animComp->base.clipB;
+						case AttackDriverClipSource::UpperA: return animComp->upper.clipA;
+						case AttackDriverClipSource::UpperB: return animComp->upper.clipB;
+						case AttackDriverClipSource::Additive: return animComp->additive.clip;
+						case AttackDriverClipSource::Explicit:
+						default: return clip.clipName;
+						}
+					};
+
+					for (size_t i = 0; i < driver->clips.size(); ++i)
+					{
+						AttackDriverClip& clip = driver->clips[i];
+						ImGui::PushID(static_cast<int>(i));
+
+						const std::string resolvedName = ResolveClipNameForUI(clip);
+						const char* clipPreview = resolvedName.empty() ? "(none)" : resolvedName.c_str();
+						bool open = ImGui::TreeNode("Clip", "%s [%.2f - %.2f]", clipPreview, clip.startTimeSec, clip.endTimeSec);
+
+						ImGui::SameLine();
+						bool moveUp = ImGui::SmallButton("^");
+						ImGui::SameLine();
+						bool moveDown = ImGui::SmallButton("v");
+						ImGui::SameLine();
+						bool duplicate = ImGui::SmallButton("Dup");
+						ImGui::SameLine();
+						bool remove = ImGui::SmallButton("Remove");
+
+						if (moveUp && i > 0)
+						{
+							std::swap(driver->clips[i - 1], driver->clips[i]);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (moveDown && (i + 1) < driver->clips.size())
+						{
+							std::swap(driver->clips[i + 1], driver->clips[i]);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (duplicate)
+						{
+							driver->clips.insert(driver->clips.begin() + static_cast<ptrdiff_t>(i + 1), clip);
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+						if (remove)
+						{
+							driver->clips.erase(driver->clips.begin() + static_cast<ptrdiff_t>(i));
+							changed = true;
+							ImGui::PopID();
+							if (open) ImGui::TreePop();
+							continue;
+						}
+
+						if (open)
+						{
+							changed |= ImGui::Checkbox("Enabled", &clip.enabled);
+
+							const char* sourceLabels[] = { "Explicit", "Base A", "Base B", "Upper A", "Upper B", "Additive" };
+							int sourceIndex = static_cast<int>(clip.source);
+							if (ImGui::Combo("Source", &sourceIndex, sourceLabels, IM_ARRAYSIZE(sourceLabels)))
 							{
-								driver->clipName.clear();
+								clip.source = static_cast<AttackDriverClipSource>(sourceIndex);
 								changed = true;
 							}
-							if (selNone)
-								ImGui::SetItemDefaultFocus();
 
-							for (const auto& name : clipNames)
+							if (clip.source == AttackDriverClipSource::Explicit)
 							{
-								const bool sel = (driver->clipName == name);
-								if (ImGui::Selectable(name.c_str(), sel))
+								if (!clipNames.empty())
 								{
-									driver->clipName = name;
-									changed = true;
+									if (ImGui::BeginCombo("Clip", clip.clipName.empty() ? "(none)" : clip.clipName.c_str()))
+									{
+										const bool selNone = clip.clipName.empty();
+										if (ImGui::Selectable("(none)", selNone))
+										{
+											clip.clipName.clear();
+											changed = true;
+										}
+										if (selNone)
+											ImGui::SetItemDefaultFocus();
+
+										for (const auto& name : clipNames)
+										{
+											const bool sel = (clip.clipName == name);
+											if (ImGui::Selectable(name.c_str(), sel))
+											{
+												clip.clipName = name;
+												changed = true;
+											}
+											if (sel)
+												ImGui::SetItemDefaultFocus();
+										}
+										ImGui::EndCombo();
+									}
 								}
-								if (sel)
-									ImGui::SetItemDefaultFocus();
+								else
+								{
+									ImGui::TextDisabled("No animation clips available (SkinnedMesh/FBX not ready).");
+								}
 							}
-							ImGui::EndCombo();
+							else
+							{
+								ImGui::Text("Clip: %s", resolvedName.empty() ? "(none)" : resolvedName.c_str());
+							}
+
+							changed |= ImGui::DragFloat("Start Time (sec)", &clip.startTimeSec, 0.01f, 0.0f, 60.0f);
+							changed |= ImGui::DragFloat("End Time (sec)", &clip.endTimeSec, 0.01f, 0.0f, 60.0f);
+
+							if (clip.endTimeSec < clip.startTimeSec)
+							{
+								clip.endTimeSec = clip.startTimeSec;
+								changed = true;
+								ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "Warning: End < Start");
+							}
+
+							ImGui::TreePop();
 						}
-					}
-					else
-					{
-						ImGui::TextDisabled("No animation clips available (SkinnedMesh/FBX not ready).");
+
+						ImGui::PopID();
 					}
 				}
-
-				changed |= ImGui::DragFloat("Start Time (sec)", &driver->startTimeSec, 0.01f, 0.0f, 60.0f);
-				changed |= ImGui::DragFloat("End Time (sec)", &driver->endTimeSec, 0.01f, 0.0f, 60.0f);
-
-				if (driver->endTimeSec < driver->startTimeSec)
-					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "Warning: End < Start");
 
 				if (changed) g_SceneDirty = true;
 			}

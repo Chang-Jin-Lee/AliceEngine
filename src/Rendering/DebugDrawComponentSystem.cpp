@@ -4,14 +4,21 @@
 #include "Components/DebugDrawBoxComponent.h"
 #include "Components/SoundBoxComponent.h"
 #include "Components/TransformComponent.h"
+#include "Components/WeaponTraceComponent.h"
+#include "Components/IDComponent.h"
+#include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_MeshColliderComponent.h"
 
 #include <algorithm>
 #include <vector>
+#include <cmath>
 
 namespace Alice
 {
 	namespace
 	{
+        using namespace DirectX;
+
         void AddBoxLines(DebugDrawSystem& dbg, const DirectX::XMFLOAT3 corners[8], const DirectX::XMFLOAT4& col)
         {
             // bottom
@@ -29,6 +36,259 @@ namespace Alice
             dbg.AddLine(corners[1], corners[5], col);
             dbg.AddLine(corners[2], corners[6], col);
             dbg.AddLine(corners[3], corners[7], col);
+        }
+
+        XMVECTOR EulerToQuaternion(const XMFLOAT3& euler)
+        {
+            return XMQuaternionRotationRollPitchYaw(euler.x, euler.y, euler.z);
+        }
+
+        XMVECTOR RotateVector(const XMVECTOR& v, const XMVECTOR& q)
+        {
+            return XMVector3Rotate(v, q);
+        }
+
+        void GetBoxCorners(const XMFLOAT3& center, const XMFLOAT3& halfExtents, const XMVECTOR& rot, XMFLOAT3 corners[8])
+        {
+            XMVECTOR pos = XMLoadFloat3(&center);
+
+            XMFLOAT3 localCorners[8] = {
+                { -halfExtents.x, -halfExtents.y, -halfExtents.z },
+                {  halfExtents.x, -halfExtents.y, -halfExtents.z },
+                {  halfExtents.x, -halfExtents.y,  halfExtents.z },
+                { -halfExtents.x, -halfExtents.y,  halfExtents.z },
+                { -halfExtents.x,  halfExtents.y, -halfExtents.z },
+                {  halfExtents.x,  halfExtents.y, -halfExtents.z },
+                {  halfExtents.x,  halfExtents.y,  halfExtents.z },
+                { -halfExtents.x,  halfExtents.y,  halfExtents.z },
+            };
+
+            for (int i = 0; i < 8; ++i)
+            {
+                XMVECTOR local = XMLoadFloat3(&localCorners[i]);
+                XMVECTOR rotated = RotateVector(local, rot);
+                XMVECTOR world = XMVectorAdd(pos, rotated);
+                XMStoreFloat3(&corners[i], world);
+            }
+        }
+
+        void DrawBox(DebugDrawSystem& dbg, const XMFLOAT3& center, const XMFLOAT3& halfExtents, const XMVECTOR& rot, const XMFLOAT4& color)
+        {
+            XMFLOAT3 corners[8];
+            GetBoxCorners(center, halfExtents, rot, corners);
+            AddBoxLines(dbg, corners, color);
+        }
+
+        void DrawSphere(DebugDrawSystem& dbg, const XMFLOAT3& center, float radius, const XMFLOAT4& color)
+        {
+            const int segments = 16;
+            const float angleStep = XM_2PI / segments;
+
+            for (int i = 0; i < segments; ++i)
+            {
+                float a1 = i * angleStep;
+                float a2 = (i + 1) * angleStep;
+                XMFLOAT3 p1 = { center.x + radius * std::cos(a1), center.y + radius * std::sin(a1), center.z };
+                XMFLOAT3 p2 = { center.x + radius * std::cos(a2), center.y + radius * std::sin(a2), center.z };
+                dbg.AddLine(p1, p2, color);
+            }
+
+            for (int i = 0; i < segments; ++i)
+            {
+                float a1 = i * angleStep;
+                float a2 = (i + 1) * angleStep;
+                XMFLOAT3 p1 = { center.x + radius * std::cos(a1), center.y, center.z + radius * std::sin(a1) };
+                XMFLOAT3 p2 = { center.x + radius * std::cos(a2), center.y, center.z + radius * std::sin(a2) };
+                dbg.AddLine(p1, p2, color);
+            }
+
+            for (int i = 0; i < segments; ++i)
+            {
+                float a1 = i * angleStep;
+                float a2 = (i + 1) * angleStep;
+                XMFLOAT3 p1 = { center.x, center.y + radius * std::cos(a1), center.z + radius * std::sin(a1) };
+                XMFLOAT3 p2 = { center.x, center.y + radius * std::cos(a2), center.z + radius * std::sin(a2) };
+                dbg.AddLine(p1, p2, color);
+            }
+        }
+
+        void DrawCapsule(DebugDrawSystem& dbg, const XMFLOAT3& center, float radius, float halfHeight, bool alignYAxis, const XMVECTOR& rot, const XMFLOAT4& color)
+        {
+            const int segments = 16;
+            const float angleStep = XM_2PI / segments;
+
+            XMVECTOR pos = XMLoadFloat3(&center);
+
+            if (alignYAxis)
+            {
+                for (int i = 0; i < segments; ++i)
+                {
+                    float a1 = i * angleStep;
+                    float a2 = (i + 1) * angleStep;
+                    float y1 = halfHeight + radius * std::sin(a1);
+                    float y2 = halfHeight + radius * std::sin(a2);
+                    float r1 = radius * std::cos(a1);
+                    float r2 = radius * std::cos(a2);
+
+                    XMVECTOR p1 = XMVectorSet(r1, y1, 0.0f, 0.0f);
+                    XMVECTOR p2 = XMVectorSet(r2, y2, 0.0f, 0.0f);
+                    p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                    p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                    XMFLOAT3 f1, f2;
+                    XMStoreFloat3(&f1, p1);
+                    XMStoreFloat3(&f2, p2);
+                    dbg.AddLine(f1, f2, color);
+                }
+
+                for (int i = 0; i < segments; ++i)
+                {
+                    float a1 = i * angleStep;
+                    float a2 = (i + 1) * angleStep;
+                    float y1 = -halfHeight - radius * std::sin(a1);
+                    float y2 = -halfHeight - radius * std::sin(a2);
+                    float r1 = radius * std::cos(a1);
+                    float r2 = radius * std::cos(a2);
+
+                    XMVECTOR p1 = XMVectorSet(r1, y1, 0.0f, 0.0f);
+                    XMVECTOR p2 = XMVectorSet(r2, y2, 0.0f, 0.0f);
+                    p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                    p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                    XMFLOAT3 f1, f2;
+                    XMStoreFloat3(&f1, p1);
+                    XMStoreFloat3(&f2, p2);
+                    dbg.AddLine(f1, f2, color);
+                }
+
+                for (int i = 0; i < segments; ++i)
+                {
+                    float a1 = i * angleStep;
+                    float a2 = (i + 1) * angleStep;
+                    float r1 = radius * std::cos(a1);
+                    float r2 = radius * std::cos(a2);
+                    float z1 = radius * std::sin(a1);
+                    float z2 = radius * std::sin(a2);
+
+                    XMVECTOR p1 = XMVectorSet(r1, halfHeight, z1, 0.0f);
+                    XMVECTOR p2 = XMVectorSet(r2, halfHeight, z2, 0.0f);
+                    p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                    p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                    XMFLOAT3 f1, f2;
+                    XMStoreFloat3(&f1, p1);
+                    XMStoreFloat3(&f2, p2);
+                    dbg.AddLine(f1, f2, color);
+
+                    p1 = XMVectorSet(r1, -halfHeight, z1, 0.0f);
+                    p2 = XMVectorSet(r2, -halfHeight, z2, 0.0f);
+                    p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                    p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                    XMStoreFloat3(&f1, p1);
+                    XMStoreFloat3(&f2, p2);
+                    dbg.AddLine(f1, f2, color);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < segments; ++i)
+                {
+                    float a1 = i * angleStep;
+                    float a2 = (i + 1) * angleStep;
+                    float x1 = halfHeight + radius * std::sin(a1);
+                    float x2 = halfHeight + radius * std::sin(a2);
+                    float r1 = radius * std::cos(a1);
+                    float r2 = radius * std::cos(a2);
+
+                    XMVECTOR p1 = XMVectorSet(x1, r1, 0.0f, 0.0f);
+                    XMVECTOR p2 = XMVectorSet(x2, r2, 0.0f, 0.0f);
+                    p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                    p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                    XMFLOAT3 f1, f2;
+                    XMStoreFloat3(&f1, p1);
+                    XMStoreFloat3(&f2, p2);
+                    dbg.AddLine(f1, f2, color);
+                }
+
+                for (int i = 0; i < segments; ++i)
+                {
+                    float a1 = i * angleStep;
+                    float a2 = (i + 1) * angleStep;
+                    float x1 = -halfHeight - radius * std::sin(a1);
+                    float x2 = -halfHeight - radius * std::sin(a2);
+                    float r1 = radius * std::cos(a1);
+                    float r2 = radius * std::cos(a2);
+
+                    XMVECTOR p1 = XMVectorSet(x1, r1, 0.0f, 0.0f);
+                    XMVECTOR p2 = XMVectorSet(x2, r2, 0.0f, 0.0f);
+                    p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                    p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                    XMFLOAT3 f1, f2;
+                    XMStoreFloat3(&f1, p1);
+                    XMStoreFloat3(&f2, p2);
+                    dbg.AddLine(f1, f2, color);
+                }
+
+                for (int i = 0; i < segments; ++i)
+                {
+                    float a1 = i * angleStep;
+                    float a2 = (i + 1) * angleStep;
+                    float r1 = radius * std::cos(a1);
+                    float r2 = radius * std::cos(a2);
+                    float z1 = radius * std::sin(a1);
+                    float z2 = radius * std::sin(a2);
+
+                    XMVECTOR p1 = XMVectorSet(halfHeight, r1, z1, 0.0f);
+                    XMVECTOR p2 = XMVectorSet(halfHeight, r2, z2, 0.0f);
+                    p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                    p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                    XMFLOAT3 f1, f2;
+                    XMStoreFloat3(&f1, p1);
+                    XMStoreFloat3(&f2, p2);
+                    dbg.AddLine(f1, f2, color);
+
+                    p1 = XMVectorSet(-halfHeight, r1, z1, 0.0f);
+                    p2 = XMVectorSet(-halfHeight, r2, z2, 0.0f);
+                    p1 = XMVectorAdd(pos, RotateVector(p1, rot));
+                    p2 = XMVectorAdd(pos, RotateVector(p2, rot));
+                    XMStoreFloat3(&f1, p1);
+                    XMStoreFloat3(&f2, p2);
+                    dbg.AddLine(f1, f2, color);
+                }
+            }
+        }
+
+        bool TryGetBasisPose(World& world, EntityId basis, XMFLOAT3& outPos, XMFLOAT4& outRot)
+        {
+            XMMATRIX worldMatrix = world.ComputeWorldMatrix(basis);
+            XMVECTOR s, r, t;
+            if (!XMMatrixDecompose(&s, &r, &t, worldMatrix))
+                return false;
+            XMStoreFloat3(&outPos, t);
+            XMStoreFloat4(&outRot, r);
+            return true;
+        }
+
+        XMMATRIX BuildBasisWorldMatrix(const XMFLOAT3& pos, const XMFLOAT4& rot)
+        {
+            XMVECTOR q = XMLoadFloat4(&rot);
+            XMMATRIX R = XMMatrixRotationQuaternion(q);
+            XMMATRIX T = XMMatrixTranslation(pos.x, pos.y, pos.z);
+            return R * T;
+        }
+
+        bool ComputeShapeWorldPose(const WeaponTraceShape& shape, const XMMATRIX& basisWorld, XMFLOAT3& outCenter, XMFLOAT4& outRot)
+        {
+            const float rx = XMConvertToRadians(shape.localRotDeg.x);
+            const float ry = XMConvertToRadians(shape.localRotDeg.y);
+            const float rz = XMConvertToRadians(shape.localRotDeg.z);
+            const XMMATRIX R = XMMatrixRotationRollPitchYaw(rx, ry, rz);
+            const XMMATRIX T = XMMatrixTranslation(shape.localPos.x, shape.localPos.y, shape.localPos.z);
+            const XMMATRIX local = R * T;
+            const XMMATRIX world = local * basisWorld;
+            XMVECTOR s, r, t;
+            if (!XMMatrixDecompose(&s, &r, &t, world))
+                return false;
+            XMStoreFloat3(&outCenter, t);
+            XMStoreFloat4(&outRot, r);
+            return true;
         }
     }
 
@@ -107,6 +367,149 @@ namespace Alice
             };
 
             AddBoxLines(*target, corners, box.color);
+        }
+
+        if (!debugEnabled)
+            return;
+
+        DebugDrawSystem* target = overlay ? overlay : depth;
+        if (!target)
+            return;
+
+        // Collider debug draw
+        for (const auto& [entityId, collider] : world.GetComponents<Phy_ColliderComponent>())
+        {
+            if (!collider.debugDraw)
+                continue;
+
+            const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
+            if (!tr) continue;
+
+            XMFLOAT3 scale = tr->scale;
+            scale.x = std::abs(scale.x);
+            scale.y = std::abs(scale.y);
+            scale.z = std::abs(scale.z);
+
+            const XMFLOAT4 color = collider.isTrigger
+                ? XMFLOAT4(0.9f, 0.35f, 0.05f, 1.0f)
+                : XMFLOAT4(0.35f, 0.6f, 1.0f, 1.0f);
+            XMVECTOR rot = EulerToQuaternion(tr->rotation);
+
+            if (collider.type == ColliderType::Box)
+            {
+                XMFLOAT3 he = collider.halfExtents;
+                he.x *= scale.x;
+                he.y *= scale.y;
+                he.z *= scale.z;
+                DrawBox(*target, tr->position, he, rot, color);
+            }
+            else if (collider.type == ColliderType::Sphere)
+            {
+                float sMax = std::max({ scale.x, scale.y, scale.z });
+                float radius = collider.radius * sMax;
+                DrawSphere(*target, tr->position, radius, color);
+            }
+            else if (collider.type == ColliderType::Capsule)
+            {
+                float radius = 0.0f;
+                float halfHeight = 0.0f;
+                if (collider.capsuleAlignYAxis)
+                {
+                    float radial = std::max(scale.x, scale.z);
+                    radius = collider.capsuleRadius * radial;
+                    halfHeight = collider.capsuleHalfHeight * scale.y;
+                }
+                else
+                {
+                    float radial = std::max(scale.y, scale.z);
+                    radius = collider.capsuleRadius * radial;
+                    halfHeight = collider.capsuleHalfHeight * scale.x;
+                }
+                DrawCapsule(*target, tr->position, radius, halfHeight, collider.capsuleAlignYAxis, rot, color);
+            }
+        }
+
+        // Mesh collider debug draw (approximate box)
+        for (const auto& [entityId, meshCollider] : world.GetComponents<Phy_MeshColliderComponent>())
+        {
+            if (!meshCollider.debugDraw)
+                continue;
+
+            const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
+            if (!tr) continue;
+
+            XMFLOAT3 scale = tr->scale;
+            scale.x = std::abs(scale.x);
+            scale.y = std::abs(scale.y);
+            scale.z = std::abs(scale.z);
+
+            XMFLOAT3 he{ 0.5f * scale.x, 0.5f * scale.y, 0.5f * scale.z };
+            XMVECTOR rot = EulerToQuaternion(tr->rotation);
+            const XMFLOAT4 color = meshCollider.isTrigger
+                ? XMFLOAT4(0.95f, 0.25f, 0.45f, 1.0f)
+                : XMFLOAT4(0.45f, 0.9f, 0.9f, 1.0f);
+
+            DrawBox(*target, tr->position, he, rot, color);
+        }
+
+        // WeaponTrace shapes debug draw
+        for (const auto& [entityId, trace] : world.GetComponents<WeaponTraceComponent>())
+        {
+            if (!trace.debugDraw || trace.shapes.empty())
+                continue;
+
+            EntityId basis = entityId;
+            if (trace.traceBasisGuid != 0)
+            {
+                EntityId resolved = world.FindEntityByGuid(trace.traceBasisGuid);
+                if (resolved == InvalidEntityId)
+                    continue;
+                basis = resolved;
+            }
+
+            XMFLOAT3 basisPos{};
+            XMFLOAT4 basisRot{};
+            if (!TryGetBasisPose(world, basis, basisPos, basisRot))
+                continue;
+
+            const XMMATRIX basisWorld = BuildBasisWorldMatrix(basisPos, basisRot);
+            const XMFLOAT4 inactiveColor = (entityId == selectedEntity)
+                ? XMFLOAT4(0.2f, 0.9f, 0.2f, 1.0f)
+                : XMFLOAT4(0.1f, 0.7f, 0.1f, 1.0f);
+            const XMFLOAT4 activeColor = (entityId == selectedEntity)
+                ? XMFLOAT4(0.2f, 0.4f, 1.0f, 1.0f)
+                : XMFLOAT4(0.1f, 0.4f, 0.9f, 1.0f);
+            const XMFLOAT4 hitColor = (entityId == selectedEntity)
+                ? XMFLOAT4(1.0f, 0.2f, 0.2f, 1.0f)
+                : XMFLOAT4(0.9f, 0.1f, 0.1f, 1.0f);
+
+            const bool hasHit = trace.active && !trace.hitVictims.empty();
+            const XMFLOAT4 color = hasHit ? hitColor : (trace.active ? activeColor : inactiveColor);
+
+            for (const auto& shape : trace.shapes)
+            {
+                if (!shape.enabled)
+                    continue;
+
+                XMFLOAT3 center{};
+                XMFLOAT4 rot{};
+                if (!ComputeShapeWorldPose(shape, basisWorld, center, rot))
+                    continue;
+
+                XMVECTOR rotQ = XMLoadFloat4(&rot);
+                if (shape.type == WeaponTraceShapeType::Sphere)
+                {
+                    DrawSphere(*target, center, shape.radius, color);
+                }
+                else if (shape.type == WeaponTraceShapeType::Capsule)
+                {
+                    DrawCapsule(*target, center, shape.radius, shape.capsuleHalfHeight, true, rotQ, color);
+                }
+                else if (shape.type == WeaponTraceShapeType::Box)
+                {
+                    DrawBox(*target, center, shape.boxHalfExtents, rotQ, color);
+                }
+            }
         }
     }
 }
