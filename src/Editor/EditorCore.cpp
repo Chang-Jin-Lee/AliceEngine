@@ -9113,6 +9113,9 @@ namespace Alice
 		t.size = DirectX::XMFLOAT2(200.0f, 80.0f);
 		t.pivot = DirectX::XMFLOAT2(0.5f, 0.5f);
 
+		// Always attach a 3D Transform so UI can be switched to World space later.
+		world.AddComponent<TransformComponent>(e);
+
 		return e;
 	}
 

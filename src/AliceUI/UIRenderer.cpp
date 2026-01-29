@@ -989,6 +989,14 @@ namespace Alice
 				DirectX::XMVECTOR forward = invView.r[2];
 				DirectX::XMVECTOR pos = worldM.r[3];
 
+				// Preserve world scale when billboarding (world text uses Transform scale).
+				const float sx = std::max(0.0001f, DirectX::XMVectorGetX(DirectX::XMVector3Length(worldM.r[0])));
+				const float sy = std::max(0.0001f, DirectX::XMVectorGetX(DirectX::XMVector3Length(worldM.r[1])));
+				const float sz = std::max(0.0001f, DirectX::XMVectorGetX(DirectX::XMVector3Length(worldM.r[2])));
+				right = DirectX::XMVectorScale(right, sx);
+				up = DirectX::XMVectorScale(up, sy);
+				forward = DirectX::XMVectorScale(forward, sz);
+
 				DirectX::XMMATRIX billboard = DirectX::XMMatrixIdentity();
 				billboard.r[0] = right;
 				billboard.r[1] = up;
