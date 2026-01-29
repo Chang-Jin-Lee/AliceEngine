@@ -144,6 +144,8 @@ namespace Alice
             }
         }
 
+        static std::string NormalizePathToRelative(const std::string& path);
+
         static bool ParseUIAnimProperty(const JsonRttr::json& jval, UIAnimProperty& out)
         {
             if (jval.is_number_integer())
@@ -214,6 +216,53 @@ namespace Alice
             }
 
             return true;
+        }
+
+        static const char* ToStringUIAnimProperty(UIAnimProperty prop)
+        {
+            switch (prop)
+            {
+            case UIAnimProperty::PositionX: return "PositionX";
+            case UIAnimProperty::PositionY: return "PositionY";
+            case UIAnimProperty::ScaleX: return "ScaleX";
+            case UIAnimProperty::ScaleY: return "ScaleY";
+            case UIAnimProperty::Rotation: return "Rotation";
+            case UIAnimProperty::ImageAlpha: return "ImageAlpha";
+            case UIAnimProperty::TextAlpha: return "TextAlpha";
+            case UIAnimProperty::GlobalAlpha: return "GlobalAlpha";
+            case UIAnimProperty::OutlineThickness: return "OutlineThickness";
+            case UIAnimProperty::RadialFill: return "RadialFill";
+            case UIAnimProperty::GlowStrength: return "GlowStrength";
+            case UIAnimProperty::VitalAmplitude: return "VitalAmplitude";
+            default: return "PositionX";
+            }
+        }
+
+        static JsonRttr::json SaveUIAnimationComponent(const UIAnimationComponent& comp)
+        {
+            JsonRttr::json j = JsonRttr::json::object();
+            j["playOnStart"] = comp.playOnStart;
+            JsonRttr::json tracks = JsonRttr::json::array();
+
+            for (const auto& t : comp.tracks)
+            {
+                JsonRttr::json jt = JsonRttr::json::object();
+                jt["name"] = t.name;
+                jt["property"] = ToStringUIAnimProperty(t.property);
+                jt["curvePath"] = NormalizePathToRelative(t.curvePath);
+                jt["duration"] = t.duration;
+                jt["delay"] = t.delay;
+                jt["from"] = t.from;
+                jt["to"] = t.to;
+                jt["loop"] = t.loop;
+                jt["pingPong"] = t.pingPong;
+                jt["useNormalizedTime"] = t.useNormalizedTime;
+                jt["additive"] = t.additive;
+                tracks.push_back(jt);
+            }
+
+            j["tracks"] = tracks;
+            return j;
         }
 
         template<typename T>
@@ -693,11 +742,7 @@ namespace Alice
             }
             if (const auto* uiAnim = world.GetComponent<UIAnimationComponent>(id); uiAnim)
             {
-                UIAnimationComponent copy = *uiAnim;
-                for (auto& track : copy.tracks)
-                    track.curvePath = NormalizePathToRelative(track.curvePath);
-                rttr::instance inst = copy;
-                outEntity["UIAnimation"] = JsonRttr::ToJsonObject(inst);
+                outEntity["UIAnimation"] = SaveUIAnimationComponent(*uiAnim);
             }
             if (const auto* uiShake = world.GetComponent<UIShakeComponent>(id); uiShake)
             {
