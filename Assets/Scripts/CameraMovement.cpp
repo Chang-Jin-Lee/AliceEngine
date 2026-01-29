@@ -51,6 +51,11 @@ namespace Alice
             t->position.y += 1.0f;
         }
 
+        if (input->GetMouseButtonDown(MouseCode::Right))
+        {
+			t->position.y -= 1.0f;
+        }
+
 		ALICE_LOG_INFO("CameraMovement Input: X={0}, Z={1}", inputX, inputZ);
 
         // 입력이 없으면 연산 중단

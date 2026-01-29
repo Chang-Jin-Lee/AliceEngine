@@ -22,7 +22,7 @@
                 "transparent": true
             },
             "PostProcessVolume": {
-                "blendRadius": 7.73199987411499,
+                "blendRadius": 1.5460000038146973,
                 "blendWeight": 1.0,
                 "boxSize": {
                     "x": 10.0,
@@ -30,6 +30,7 @@
                     "z": 10.0
                 },
                 "priority": 0,
+                "referenceObjectName": "Camera1",
                 "settings": {
                     "bOverride_BloomDownsample": false,
                     "bOverride_BloomGaussianIntensity": false,
@@ -37,8 +38,8 @@
                     "bOverride_BloomKnee": false,
                     "bOverride_BloomRadius": false,
                     "bOverride_BloomThreshold": false,
-                    "bOverride_ColorGradingContrast": false,
-                    "bOverride_ColorGradingGain": true,
+                    "bOverride_ColorGradingContrast": true,
+                    "bOverride_ColorGradingGain": false,
                     "bOverride_ColorGradingGamma": false,
                     "bOverride_ColorGradingSaturation": true,
                     "bOverride_Exposure": false,
@@ -50,15 +51,15 @@
                     "bloomRadius": 1.0,
                     "bloomThreshold": 1.0,
                     "contrast": {
-                        "x": 1.0,
-                        "y": 1.0,
-                        "z": 1.0
+                        "x": 0.5868725776672363,
+                        "y": 0.0,
+                        "z": 0.0
                     },
                     "exposure": 0.0,
                     "gain": {
-                        "x": 0.6138995885848999,
-                        "y": 0.31524571776390076,
-                        "z": 0.31524571776390076
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
                     },
                     "gamma": {
                         "x": 1.0,
@@ -67,14 +68,15 @@
                     },
                     "maxHDRNits": 1000.0,
                     "saturation": {
-                        "x": 0.07863625884056091,
-                        "y": 0.8146718144416809,
-                        "z": 0.754993200302124
+                        "x": 0.992277979850769,
+                        "y": 0.0,
+                        "z": 0.0
                     }
                 },
                 "shape": "Box",
                 "sphereRadius": 5.0,
-                "unbound": false
+                "unbound": false,
+                "useReferenceObject": true
             },
             "SkinnedAnimation": {
                 "clipIndex": 0,
@@ -90,7 +92,7 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 2.845813512802124,
+                    "x": 4.100765705108643,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -128,9 +130,9 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 2.505669593811035,
-                    "y": 0.5025606155395508,
-                    "z": -3.121406078338623
+                    "x": -6.557415008544922,
+                    "y": 7.502560615539551,
+                    "z": -10.650533676147461
                 },
                 "rotation": {
                     "x": 0.0,
@@ -167,13 +169,70 @@
                 "shadingMode": -1,
                 "transparent": false
             },
+            "PostProcessVolume": {
+                "blendRadius": 2.061000108718872,
+                "blendWeight": 1.0,
+                "boxSize": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": 10.0
+                },
+                "priority": 0,
+                "referenceObjectName": "Camera1",
+                "settings": {
+                    "bOverride_BloomDownsample": false,
+                    "bOverride_BloomGaussianIntensity": false,
+                    "bOverride_BloomIntensity": false,
+                    "bOverride_BloomKnee": false,
+                    "bOverride_BloomRadius": false,
+                    "bOverride_BloomThreshold": false,
+                    "bOverride_ColorGradingContrast": true,
+                    "bOverride_ColorGradingGain": false,
+                    "bOverride_ColorGradingGamma": false,
+                    "bOverride_ColorGradingSaturation": true,
+                    "bOverride_Exposure": false,
+                    "bOverride_MaxHDRNits": false,
+                    "bloomDownsample": 2,
+                    "bloomGaussianIntensity": 1.0,
+                    "bloomIntensity": 0.5,
+                    "bloomKnee": 0.5,
+                    "bloomRadius": 1.0,
+                    "bloomThreshold": 1.0,
+                    "contrast": {
+                        "x": 0.0,
+                        "y": 0.4478764533996582,
+                        "z": 0.006917022168636322
+                    },
+                    "exposure": 0.0,
+                    "gain": {
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "gamma": {
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "maxHDRNits": 1000.0,
+                    "saturation": {
+                        "x": 0.0,
+                        "y": 1.0,
+                        "z": 0.038609981536865234
+                    }
+                },
+                "shape": "Box",
+                "sphereRadius": 5.0,
+                "unbound": false,
+                "useReferenceObject": true
+            },
             "Scripts": [
                 {
                     "enabled": true,
                     "name": "SceneSwitchExample",
                     "props": {
-                        "targetSceneA": "PPVTestScene.scene",
-                        "targetSceneB": ""
+                        "targetSceneA": "SceneChange\\SceneChange1.scene",
+                        "targetSceneB": "SceneChange\\SceneChange2.scene"
                     }
                 }
             ],
@@ -191,7 +250,7 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.0,
+                    "x": -6.577139854431152,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -206,10 +265,10 @@
                     "z": 1.0
                 }
             },
-            "guid": "7232207099047793066",
+            "guid": "18180725579263286824",
             "name": "Cube(FBX)"
         }
     ],
-    "sceneName": "SceneChange1",
+    "sceneName": "PPVTestScene",
     "version": 1
 }
