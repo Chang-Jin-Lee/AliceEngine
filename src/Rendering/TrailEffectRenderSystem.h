@@ -64,6 +64,7 @@ namespace Alice
 		bool CreateShadersAndInputLayout();
 		bool EnsureVertexBufferSize(std::size_t vertexCount);
 		bool LoadTexture();
+		bool CreateDefaultTexture(); // 텍스처 로드 실패 시 기본 1x1 흰색 텍스처 생성
 
 	private:
 		ID3D11RenderDevice& m_renderDevice;

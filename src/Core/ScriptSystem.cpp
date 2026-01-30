@@ -420,6 +420,27 @@ namespace Alice
         }
     }
 
+    void ScriptSystem::CallPostCombatUpdate(World& world, float deltaTime)
+    {
+        auto& allScripts = world.GetAllScriptsInWorld();
+        for (auto it = allScripts.begin(); it != allScripts.end(); ++it)
+        {
+            EntityId entityId = it->first;
+            auto& list = it->second;
+
+            for (size_t i = 0; i < list.size(); ++i)
+            {
+                if (i >= list.size()) break;
+                auto& comp = list[i];
+                if (!comp.instance || !comp.enabled) continue;
+
+                comp.instance->SetContext(&world, entityId);
+                comp.instance->SetServices(&m_services);
+                comp.instance->PostCombatUpdate(deltaTime);
+            }
+        }
+    }
+
     bool ScriptSystem::HasPendingSceneRequests() const
     {
         return !m_pendingSwitch.empty() || !m_pendingSceneFile.empty();
@@ -489,6 +510,12 @@ namespace Alice
         // (중요) 씬 요청 커밋은 여기서 하지 않는다.
         // Engine::Update()의 안전 지점에서 CommitSceneRequests()를 호출한다.
         // ProcessSceneRequests(world);
+    }
+
+    void ScriptSystem::PostCombatUpdate(World& world, float deltaTime)
+    {
+        EnsureServicesBound(world);
+        CallPostCombatUpdate(world, deltaTime);
     }
 
     void ScriptSystem::OnApplicationQuit(World& world)

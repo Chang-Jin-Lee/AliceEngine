@@ -63,7 +63,7 @@ namespace Alice
                     //ALICE_LOG_INFO("[SkinnedMeshSystem]  - skip: entity=%u no Transform", static_cast<unsigned>(entityId));
                     continue;
                 }
-                if (!t->enabled) continue;
+                if (!t->enabled || !t->visible) continue;
 
                 // 월드 행렬 계산 (c.txt 참조: 부모부터 루트까지 스택에 쌓고 역순으로 곱하기)
                 using namespace DirectX;

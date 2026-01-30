@@ -33,6 +33,7 @@ namespace Alice
 
         // Unity-style tick
         void Tick(World& world, float deltaTime);
+        void PostCombatUpdate(World& world, float deltaTime);
 
         // 종료 시 호출
         void OnApplicationQuit(World& world);
@@ -74,6 +75,7 @@ namespace Alice
         void EnsureServicesBound(World& world);
         void CallUpdate(World& world, float deltaTime);
         void CallLateUpdate(World& world, float deltaTime);
+        void CallPostCombatUpdate(World& world, float deltaTime);
         void CallFixedUpdate(World& world, float fixedDt);
         void ProcessSceneRequests(World& world, UIWorldManager* uiWorldManager = nullptr);
         bool GetKeyInternal(KeyCode key) const;

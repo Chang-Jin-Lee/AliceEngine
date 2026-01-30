@@ -321,6 +321,17 @@ namespace Alice
                 rttr::instance inst = t;
                 if (!JsonRttr::FromJsonObject(inst, *itT))
                     return InvalidEntityId;
+                if (itT->find("visible") == itT->end())
+                {
+                    auto itLegacy = itT->find("renderEnabled");
+                    if (itLegacy != itT->end())
+                    {
+                        if (itLegacy->is_boolean())
+                            t.visible = itLegacy->get<bool>();
+                        else if (itLegacy->is_number())
+                            t.visible = (itLegacy->get<double>() != 0.0);
+                    }
+                }
             }
 
             // Scripts (여러 개)

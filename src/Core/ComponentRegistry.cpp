@@ -64,6 +64,11 @@
 #include "AliceUI/UITextComponent.h"
 #include "AliceUI/UIButtonComponent.h"
 #include "AliceUI/UIGaugeComponent.h"
+#include "AliceUI/UIEffectComponent.h"
+#include "AliceUI/UIAnimationComponent.h"
+#include "AliceUI/UIShakeComponent.h"
+#include "AliceUI/UIHover3DComponent.h"
+#include "AliceUI/UIVitalComponent.h"
 
 using namespace DirectX;
 
@@ -75,6 +80,22 @@ namespace Alice
 
     RTTR_REGISTRATION
     {
+        rttr::registration::enumeration<UIAnimProperty>("UIAnimProperty")
+            (
+                rttr::value("PositionX", UIAnimProperty::PositionX),
+                rttr::value("PositionY", UIAnimProperty::PositionY),
+                rttr::value("ScaleX", UIAnimProperty::ScaleX),
+                rttr::value("ScaleY", UIAnimProperty::ScaleY),
+                rttr::value("Rotation", UIAnimProperty::Rotation),
+                rttr::value("ImageAlpha", UIAnimProperty::ImageAlpha),
+                rttr::value("TextAlpha", UIAnimProperty::TextAlpha),
+                rttr::value("GlobalAlpha", UIAnimProperty::GlobalAlpha),
+                rttr::value("OutlineThickness", UIAnimProperty::OutlineThickness),
+                rttr::value("RadialFill", UIAnimProperty::RadialFill),
+                rttr::value("GlowStrength", UIAnimProperty::GlowStrength),
+                rttr::value("VitalAmplitude", UIAnimProperty::VitalAmplitude)
+            );
+
         // === DirectX 타입 등록 ===
         rttr::registration::class_<XMFLOAT2>("XMFLOAT2")
             .constructor<>()
@@ -133,7 +154,8 @@ namespace Alice
             .property("position", &TransformComponent::position)
             .property("rotation", &TransformComponent::rotation)
             .property("scale", &TransformComponent::scale)
-            .property("enabled", &TransformComponent::enabled);
+            .property("enabled", &TransformComponent::enabled)
+            .property("visible", &TransformComponent::visible);
 
         // === MaterialComponent 등록 ===
         rttr::registration::class_<MaterialComponent>("MaterialComponent")
@@ -373,10 +395,32 @@ namespace Alice
 			.property("currentHealth", &HealthComponent::currentHealth)
 			.property("invulnDuration", &HealthComponent::invulnDuration)
 			.property("invulnRemaining", &HealthComponent::invulnRemaining)
+			.property("dodgeActive", &HealthComponent::dodgeActive)
+			.property("guardActive", &HealthComponent::guardActive)
+			.property("guardDamageScale", &HealthComponent::guardDamageScale)
+			.property("groggy", &HealthComponent::groggy)
+			.property("groggyMax", &HealthComponent::groggyMax)
+			.property("groggyGainScale", &HealthComponent::groggyGainScale)
+			.property("groggyDuration", &HealthComponent::groggyDuration)
+			.property("hitThisFrame", &HealthComponent::hitThisFrame)
+			.property("guardHitThisFrame", &HealthComponent::guardHitThisFrame)
+			.property("dodgeAvoidedThisFrame", &HealthComponent::dodgeAvoidedThisFrame)
+			.property("lastHitDamage", &HealthComponent::lastHitDamage)
+			.property("lastHitAttacker", &HealthComponent::lastHitAttacker)
+			.property("lastHitPart", &HealthComponent::lastHitPart)
+			.property("lastHitPosWS", &HealthComponent::lastHitPosWS)
+			.property("lastHitNormalWS", &HealthComponent::lastHitNormalWS)
 			.property("alive", &HealthComponent::alive)
 			.property("teamId", &HealthComponent::teamId);
 
 		// AttackDriverComponent 등록
+		rttr::registration::enumeration<AttackDriverNotifyType>("AttackDriverNotifyType")
+			(
+				rttr::value("Attack", AttackDriverNotifyType::Attack),
+				rttr::value("Dodge", AttackDriverNotifyType::Dodge),
+				rttr::value("Guard", AttackDriverNotifyType::Guard)
+				);
+
 		rttr::registration::enumeration<AttackDriverClipSource>("AttackDriverClipSource")
 			(
 				rttr::value("Explicit", AttackDriverClipSource::Explicit),
@@ -389,11 +433,13 @@ namespace Alice
 
 		rttr::registration::class_<AttackDriverClip>("AttackDriverClip")
 			.constructor<>()
+			.property("type", &AttackDriverClip::type)
 			.property("source", &AttackDriverClip::source)
 			.property("clipName", &AttackDriverClip::clipName)
 			.property("startTimeSec", &AttackDriverClip::startTimeSec)
 			.property("endTimeSec", &AttackDriverClip::endTimeSec)
-			.property("enabled", &AttackDriverClip::enabled);
+			.property("enabled", &AttackDriverClip::enabled)
+			.property("canBeInterrupted", &AttackDriverClip::canBeInterrupted);
 
 		rttr::registration::class_<AttackDriverComponent>("AttackDriverComponent")
 			.constructor<>()
@@ -582,15 +628,13 @@ namespace Alice
         // === PostProcessVolumeComponent 등록 ===
         rttr::registration::enumeration<PostProcessVolumeShape>("PostProcessVolumeShape")
             (
-                rttr::value("Box", PostProcessVolumeShape::Box),
-                rttr::value("Sphere", PostProcessVolumeShape::Sphere)
+                rttr::value("Box", PostProcessVolumeShape::Box)
             );
         rttr::registration::class_<PostProcessVolumeComponent>("PostProcessVolumeComponent")
             .constructor<>()
             .property("shape", &PostProcessVolumeComponent::GetShape, &PostProcessVolumeComponent::SetShape)
             .property("unbound", &PostProcessVolumeComponent::GetUnbound, &PostProcessVolumeComponent::SetUnbound)
             .property("boxSize", &PostProcessVolumeComponent::GetBoxSize, &PostProcessVolumeComponent::SetBoxSize)
-            .property("sphereRadius", &PostProcessVolumeComponent::GetSphereRadius, &PostProcessVolumeComponent::SetSphereRadius)
             .property("blendRadius", &PostProcessVolumeComponent::GetBlendRadius, &PostProcessVolumeComponent::SetBlendRadius)
                 (rttr::metadata("Min", 0.0f))
             .property("blendWeight", &PostProcessVolumeComponent::GetBlendWeight, &PostProcessVolumeComponent::SetBlendWeight)
@@ -703,6 +747,7 @@ namespace Alice
             .constructor<>()
             .property("type", &Phy_ColliderComponent::type)
             .property("halfExtents", &Phy_ColliderComponent::halfExtents)
+            .property("offset", &Phy_ColliderComponent::offset)
             .property("radius", &Phy_ColliderComponent::radius)
             .property("capsuleRadius", &Phy_ColliderComponent::capsuleRadius)
             .property("capsuleHalfHeight", &Phy_ColliderComponent::capsuleHalfHeight)
@@ -1116,6 +1161,76 @@ namespace Alice
             .property("fillColor", &UIGaugeComponent::fillColor)
             .property("backgroundColor", &UIGaugeComponent::backgroundColor)
             .property("smoothing", &UIGaugeComponent::smoothing);
+        rttr::registration::class_<UIEffectComponent>("UIEffectComponent")
+            .constructor<>()
+            .property("outlineEnabled", &UIEffectComponent::outlineEnabled)
+            .property("outlineColor", &UIEffectComponent::outlineColor)
+            .property("outlineThickness", &UIEffectComponent::outlineThickness)
+            .property("radialEnabled", &UIEffectComponent::radialEnabled)
+            .property("radialFill", &UIEffectComponent::radialFill)
+            .property("radialInner", &UIEffectComponent::radialInner)
+            .property("radialOuter", &UIEffectComponent::radialOuter)
+            .property("radialSoftness", &UIEffectComponent::radialSoftness)
+            .property("radialAngleOffset", &UIEffectComponent::radialAngleOffset)
+            .property("radialClockwise", &UIEffectComponent::radialClockwise)
+            .property("radialDim", &UIEffectComponent::radialDim)
+            .property("glowEnabled", &UIEffectComponent::glowEnabled)
+            .property("glowColor", &UIEffectComponent::glowColor)
+            .property("glowStrength", &UIEffectComponent::glowStrength)
+            .property("glowWidth", &UIEffectComponent::glowWidth)
+            .property("glowSpeed", &UIEffectComponent::glowSpeed)
+            .property("glowAngle", &UIEffectComponent::glowAngle)
+            .property("vitalEnabled", &UIEffectComponent::vitalEnabled)
+            .property("vitalColor", &UIEffectComponent::vitalColor)
+            .property("vitalBgColor", &UIEffectComponent::vitalBgColor)
+            .property("vitalAmplitude", &UIEffectComponent::vitalAmplitude)
+            .property("vitalFrequency", &UIEffectComponent::vitalFrequency)
+            .property("vitalSpeed", &UIEffectComponent::vitalSpeed)
+            .property("vitalThickness", &UIEffectComponent::vitalThickness)
+            .property("globalAlpha", &UIEffectComponent::globalAlpha)
+            .property("grayscale", &UIEffectComponent::grayscale);
+
+        rttr::registration::class_<UIAnimTrack>("UIAnimTrack")
+            .constructor<>()
+            .property("name", &UIAnimTrack::name)
+            .property("property", &UIAnimTrack::property)
+            .property("curvePath", &UIAnimTrack::curvePath)
+            .property("duration", &UIAnimTrack::duration)
+            .property("delay", &UIAnimTrack::delay)
+            .property("from", &UIAnimTrack::from)
+            .property("to", &UIAnimTrack::to)
+            .property("loop", &UIAnimTrack::loop)
+            .property("pingPong", &UIAnimTrack::pingPong)
+            .property("useNormalizedTime", &UIAnimTrack::useNormalizedTime)
+            .property("additive", &UIAnimTrack::additive);
+
+        rttr::registration::class_<UIAnimationComponent>("UIAnimationComponent")
+            .constructor<>()
+            .property("playOnStart", &UIAnimationComponent::playOnStart)
+            .property("tracks", &UIAnimationComponent::tracks);
+
+        rttr::registration::class_<UIShakeComponent>("UIShakeComponent")
+            .constructor<>()
+            .property("amplitude", &UIShakeComponent::amplitude)
+            .property("frequency", &UIShakeComponent::frequency)
+            .property("duration", &UIShakeComponent::duration);
+
+        rttr::registration::class_<UIHover3DComponent>("UIHover3DComponent")
+            .constructor<>()
+            .property("enabled", &UIHover3DComponent::enabled)
+            .property("maxAngle", &UIHover3DComponent::maxAngle)
+            .property("speed", &UIHover3DComponent::speed)
+            .property("perspective", &UIHover3DComponent::perspective);
+
+        rttr::registration::class_<UIVitalComponent>("UIVitalComponent")
+            .constructor<>()
+            .property("color", &UIVitalComponent::color)
+            .property("backgroundColor", &UIVitalComponent::backgroundColor)
+            .property("amplitude", &UIVitalComponent::amplitude)
+            .property("frequency", &UIVitalComponent::frequency)
+            .property("speed", &UIVitalComponent::speed)
+            .property("thickness", &UIVitalComponent::thickness);
+
     }
 
     // EditorComponentRegistry에 컴포넌트 등록
@@ -1185,6 +1300,11 @@ namespace Alice
         r.Register<UITextComponent>("UI Text", "UI");
         r.Register<UIButtonComponent>("UI Button", "UI");
         r.Register<UIGaugeComponent>("UI Gauge", "UI");
+        r.Register<UIEffectComponent>("UI Effect", "UI");
+        r.Register<UIAnimationComponent>("UI Animation", "UI");
+        r.Register<UIShakeComponent>("UI Shake", "UI");
+        r.Register<UIHover3DComponent>("UI Hover 3D", "UI");
+        r.Register<UIVitalComponent>("UI Vital", "UI");
 
         r.SortByCategoryThenName();
     }

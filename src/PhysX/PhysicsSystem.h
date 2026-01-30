@@ -151,6 +151,7 @@ private:
     {
         ColliderType type{};
         DirectX::XMFLOAT3 halfExtents{};
+        DirectX::XMFLOAT3 offset{};
         float radius{};
         float capsuleRadius{};
         float capsuleHalfHeight{};

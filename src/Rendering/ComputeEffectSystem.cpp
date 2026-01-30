@@ -280,6 +280,8 @@ namespace Alice
         {
             if (!effect.enabled || effect.shaderName.empty())
                 continue;
+            if (const auto* tr = world.GetComponent<TransformComponent>(entityId); tr && (!tr->enabled || !tr->visible))
+                continue;
 
             // 등록된 프리셋이 있는지 확인
             if (m_presets.find(effect.shaderName) == m_presets.end())

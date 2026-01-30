@@ -37,6 +37,7 @@ namespace Alice
         virtual void Start() {}
         virtual void Update(float /*deltaTime*/) {}
         virtual void LateUpdate(float /*deltaTime*/) {}
+        virtual void PostCombatUpdate(float /*deltaTime*/) {}
         virtual void FixedUpdate(float /*fixedDeltaTime*/) {}
         virtual void OnDisable() {}
         virtual void OnDestroy() {}

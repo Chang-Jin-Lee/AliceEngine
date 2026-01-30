@@ -38,6 +38,7 @@
 #include "AliceUI/UIButtonComponent.h"
 #include "AliceUI/UIGaugeComponent.h"
 #include "AliceUI/UIRenderer.h"
+#include "AliceUI/UICurveAsset.h"
 #include <cstdint>
 #include <cstdio>
 #include <set>
@@ -524,6 +525,17 @@ namespace Alice
 				{
 					rttr::instance inst = t;
 					if (!JsonRttr::FromJsonObject(inst, *itT)) return false;
+					if (itT->is_object() && itT->find("visible") == itT->end())
+					{
+						auto itLegacy = itT->find("renderEnabled");
+						if (itLegacy != itT->end())
+						{
+							if (itLegacy->is_boolean())
+								t.visible = itLegacy->get<bool>();
+							else if (itLegacy->is_number())
+								t.visible = (itLegacy->get<double>() != 0.0);
+						}
+					}
 				}
 
 				// Scripts
@@ -854,6 +866,7 @@ namespace Alice
 				DirectX::XMFLOAT3 rotation;
 				DirectX::XMFLOAT3 scale;
 				bool enabled;
+				bool visible;
 			};
 			TransformData oldData;
 			TransformData newData;
@@ -873,6 +886,7 @@ namespace Alice
 					transform->rotation = newData.rotation;
 					transform->scale = newData.scale;
 					transform->enabled = newData.enabled;
+					transform->visible = newData.visible;
 					world.MarkTransformDirty(entityId);
 				}
 			}
@@ -885,6 +899,7 @@ namespace Alice
 					transform->rotation = oldData.rotation;
 					transform->scale = oldData.scale;
 					transform->enabled = oldData.enabled;
+					transform->visible = oldData.visible;
 					world.MarkTransformDirty(entityId);
 				}
 			}
@@ -1794,6 +1809,12 @@ namespace Alice
 		bool                     g_MaterialEditorOpen = false;
 		std::filesystem::path    g_MaterialEditorPath;
 		MaterialComponent        g_MaterialEditorData;
+
+		// UI 커브 에셋 편집기 상태
+		bool                     g_UICurveEditorOpen = false;
+		std::filesystem::path    g_UICurveEditorPath;
+		UICurveAsset             g_UICurveEditorData;
+		int                      g_UICurveEditorSelected = -1;
 	}
 
 	EditorCore::~EditorCore()
@@ -3007,9 +3028,12 @@ namespace Alice
 			std::vector<EntityId> rootEntities = world.GetRootEntities();
 
 			// AliceUI 엔티티들도 Hierarchy에 포함 (TransformComponent 없는 경우 대비)
+			// 단, 부모가 있는 UI 위젯은 루트 목록에 다시 넣지 않는다.
 			std::set<EntityId> rootSet(rootEntities.begin(), rootEntities.end());
 			for (auto [id, widget] : world.GetComponents<UIWidgetComponent>())
 			{
+				if (world.GetParent(id) != InvalidEntityId)
+					continue;
 				if (rootSet.insert(id).second)
 					rootEntities.push_back(id);
 			}
@@ -3155,7 +3179,7 @@ namespace Alice
 					g_SceneDirty = true;
 				}
 
-				RenderUIHeirarcy();
+				// RenderUIHeirarcy(); // disabled
 				
 			}
 
@@ -3265,13 +3289,6 @@ namespace Alice
 				}
 				else if (selectedEntity == InvalidEntityId) {
 					Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
-					
-					// Default Post Process Settings UI
-					ImGui::Separator();
-					if (ImGui::CollapsingHeader("Default Post Process Settings", ImGuiTreeNodeFlags_DefaultOpen))
-					{
-						DrawDefaultPostProcessSettings();
-					}
 				}
 				else {
 					// World 엔티티 Inspector 표시 (기존 로직)
@@ -3797,6 +3814,7 @@ namespace Alice
 							gizmoStartTransform.rotation = transform->rotation;
 							gizmoStartTransform.scale = transform->scale;
 							gizmoStartTransform.enabled = transform->enabled;
+							gizmoStartTransform.visible = transform->visible;
 						}
 
 						if (manipulated)
@@ -4049,6 +4067,7 @@ namespace Alice
 							newTransform.rotation = transform->rotation;
 							newTransform.scale = transform->scale;
 							newTransform.enabled = transform->enabled;
+							newTransform.visible = transform->visible;
 
 							// Transform이 실제로 변경되었는지 확인 (float 비교는 epsilon 사용)
 							constexpr float kFloatEpsilon = 1e-6f;
@@ -4064,7 +4083,8 @@ namespace Alice
 								FloatNotEqual(gizmoStartTransform.scale.x, newTransform.scale.x) ||
 								FloatNotEqual(gizmoStartTransform.scale.y, newTransform.scale.y) ||
 								FloatNotEqual(gizmoStartTransform.scale.z, newTransform.scale.z) ||
-								(gizmoStartTransform.enabled != newTransform.enabled);
+								(gizmoStartTransform.enabled != newTransform.enabled) ||
+								(gizmoStartTransform.visible != newTransform.visible);
 
 							if (hasChanged)
 							{
@@ -4731,6 +4751,191 @@ namespace Alice
 			ImGui::End();
 		}
 
+		// === UI Curve Asset Editor (.uicurve double-click) ===
+		if (g_UICurveEditorOpen)
+		{
+			if (ImGui::Begin("UI Curve Asset Editor", &g_UICurveEditorOpen))
+			{
+				ImGui::Text("Asset: %s", g_UICurveEditorPath.string().c_str());
+				ImGui::Separator();
+
+				bool changed = false;
+
+				ImVec2 graphSize = ImVec2(ImGui::GetContentRegionAvail().x, 180.0f);
+				ImVec2 graphPos = ImGui::GetCursorScreenPos();
+				ImGui::InvisibleButton("UICurveGraph", graphSize);
+				ImDrawList* drawList = ImGui::GetWindowDrawList();
+				ImVec2 graphMin = graphPos;
+				ImVec2 graphMax = ImVec2(graphPos.x + graphSize.x, graphPos.y + graphSize.y);
+				drawList->AddRect(graphMin, graphMax, IM_COL32(100, 100, 100, 255));
+
+				float tMin = 0.0f;
+				float tMax = 1.0f;
+				float vMin = 0.0f;
+				float vMax = 1.0f;
+				for (const auto& key : g_UICurveEditorData.keys)
+				{
+					tMin = std::min(tMin, key.time);
+					tMax = std::max(tMax, key.time);
+					vMin = std::min(vMin, key.value);
+					vMax = std::max(vMax, key.value);
+				}
+				const float tRange = std::max(0.0001f, tMax - tMin);
+				const float vRange = std::max(0.0001f, vMax - vMin);
+				auto ToScreen = [&](float t, float v)
+				{
+					const float x = (t - tMin) / tRange;
+					const float y = (v - vMin) / vRange;
+					return ImVec2(graphMin.x + x * graphSize.x, graphMax.y - y * graphSize.y);
+				};
+
+				for (int i = 1; i < 4; ++i)
+				{
+					const float tx = graphMin.x + (graphSize.x * i / 4.0f);
+					const float ty = graphMin.y + (graphSize.y * i / 4.0f);
+					drawList->AddLine(ImVec2(tx, graphMin.y), ImVec2(tx, graphMax.y), IM_COL32(60, 60, 60, 255));
+					drawList->AddLine(ImVec2(graphMin.x, ty), ImVec2(graphMax.x, ty), IM_COL32(60, 60, 60, 255));
+				}
+
+				if (!g_UICurveEditorData.keys.empty())
+				{
+					const int steps = 120;
+					ImVec2 prev = ToScreen(tMin, g_UICurveEditorData.Evaluate(tMin));
+					for (int i = 1; i < steps; ++i)
+					{
+						const float t = tMin + (tRange * (static_cast<float>(i) / (steps - 1)));
+						ImVec2 cur = ToScreen(t, g_UICurveEditorData.Evaluate(t));
+						drawList->AddLine(prev, cur, IM_COL32(120, 200, 255, 255), 2.0f);
+						prev = cur;
+					}
+				}
+
+				for (std::size_t i = 0; i < g_UICurveEditorData.keys.size(); ++i)
+				{
+					const auto& key = g_UICurveEditorData.keys[i];
+					ImVec2 p = ToScreen(key.time, key.value);
+					drawList->AddCircleFilled(p, 4.0f, IM_COL32(255, 200, 80, 255));
+					if (static_cast<int>(i) == g_UICurveEditorSelected)
+						drawList->AddCircle(p, 6.0f, IM_COL32(255, 255, 255, 200));
+				}
+
+				if (ImGui::IsItemHovered())
+				{
+					const ImVec2 mouse = ImGui::GetIO().MousePos;
+					if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+					{
+						float bestDist = 999999.0f;
+						int bestIdx = -1;
+						for (std::size_t i = 0; i < g_UICurveEditorData.keys.size(); ++i)
+						{
+							ImVec2 p = ToScreen(g_UICurveEditorData.keys[i].time, g_UICurveEditorData.keys[i].value);
+							const float dx = mouse.x - p.x;
+							const float dy = mouse.y - p.y;
+							const float dist = dx * dx + dy * dy;
+							if (dist < bestDist)
+							{
+								bestDist = dist;
+								bestIdx = static_cast<int>(i);
+							}
+						}
+						if (bestIdx >= 0 && bestDist < 144.0f)
+							g_UICurveEditorSelected = bestIdx;
+					}
+					if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+					{
+						float u = (mouse.x - graphMin.x) / std::max(1.0f, graphSize.x);
+						float v = 1.0f - (mouse.y - graphMin.y) / std::max(1.0f, graphSize.y);
+						u = std::clamp(u, 0.0f, 1.0f);
+						v = std::clamp(v, 0.0f, 1.0f);
+						UICurveKey key{};
+						key.time = tMin + u * tRange;
+						key.value = vMin + v * vRange;
+						key.interp = UICurveInterp::Cubic;
+						key.tangentMode = UICurveTangentMode::Auto;
+						g_UICurveEditorData.keys.push_back(key);
+						g_UICurveEditorSelected = static_cast<int>(g_UICurveEditorData.keys.size()) - 1;
+						changed = true;
+					}
+				}
+
+				ImGui::Separator();
+				if (ImGui::Button("Add Key"))
+				{
+					UICurveKey key{};
+					key.time = tMax;
+					key.value = 1.0f;
+					key.interp = UICurveInterp::Cubic;
+					key.tangentMode = UICurveTangentMode::Auto;
+					g_UICurveEditorData.keys.push_back(key);
+					g_UICurveEditorSelected = static_cast<int>(g_UICurveEditorData.keys.size()) - 1;
+					changed = true;
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Delete Key") && g_UICurveEditorSelected >= 0 && g_UICurveEditorSelected < static_cast<int>(g_UICurveEditorData.keys.size()))
+				{
+					g_UICurveEditorData.keys.erase(g_UICurveEditorData.keys.begin() + g_UICurveEditorSelected);
+					g_UICurveEditorSelected = -1;
+					changed = true;
+				}
+
+				const char* interpItems[] = { "Constant", "Linear", "Cubic" };
+				const char* tangentItems[] = { "Auto", "User", "Break" };
+
+				if (ImGui::BeginTable("UICurveKeys", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+				{
+					ImGui::TableSetupColumn("Idx");
+					ImGui::TableSetupColumn("Time");
+					ImGui::TableSetupColumn("Value");
+					ImGui::TableSetupColumn("Interp");
+					ImGui::TableSetupColumn("Tangent");
+					ImGui::TableSetupColumn("In");
+					ImGui::TableSetupColumn("Out");
+					ImGui::TableHeadersRow();
+					for (std::size_t i = 0; i < g_UICurveEditorData.keys.size(); ++i)
+					{
+						auto& key = g_UICurveEditorData.keys[i];
+						ImGui::TableNextRow();
+						ImGui::TableSetColumnIndex(0);
+						ImGui::PushID(static_cast<int>(i));
+						if (ImGui::Selectable(std::to_string(i).c_str(), g_UICurveEditorSelected == static_cast<int>(i)))
+							g_UICurveEditorSelected = static_cast<int>(i);
+						ImGui::TableSetColumnIndex(1);
+						changed |= ImGui::DragFloat("##time", &key.time, 0.01f);
+						ImGui::TableSetColumnIndex(2);
+						changed |= ImGui::DragFloat("##value", &key.value, 0.01f);
+						ImGui::TableSetColumnIndex(3);
+						int interpIdx = static_cast<int>(key.interp);
+						if (ImGui::Combo("##interp", &interpIdx, interpItems, IM_ARRAYSIZE(interpItems)))
+						{
+							key.interp = static_cast<UICurveInterp>(interpIdx);
+							changed = true;
+						}
+						ImGui::TableSetColumnIndex(4);
+						int tangentIdx = static_cast<int>(key.tangentMode);
+						if (ImGui::Combo("##tangent", &tangentIdx, tangentItems, IM_ARRAYSIZE(tangentItems)))
+						{
+							key.tangentMode = static_cast<UICurveTangentMode>(tangentIdx);
+							changed = true;
+						}
+						ImGui::TableSetColumnIndex(5);
+						changed |= ImGui::DragFloat("##in", &key.inTangent, 0.01f);
+						ImGui::TableSetColumnIndex(6);
+						changed |= ImGui::DragFloat("##out", &key.outTangent, 0.01f);
+						ImGui::PopID();
+					}
+					ImGui::EndTable();
+				}
+
+				if (changed)
+				{
+					g_UICurveEditorData.Sort();
+					g_UICurveEditorData.RecalcAutoTangents();
+					SaveUICurveAsset(g_UICurveEditorPath, g_UICurveEditorData);
+				}
+			}
+			ImGui::End();
+		}
+
 		// === 씬 변경사항 저장 확인 모달 ===
 		if (g_RequestSceneLoad)
 		{
@@ -5085,6 +5290,7 @@ namespace Alice
 					editStartTransform.rotation = transform->rotation;
 					editStartTransform.scale = transform->scale;
 					editStartTransform.enabled = transform->enabled;
+					editStartTransform.visible = transform->visible;
 					isEditing = true;
 					lastEditedEntity = _selectedEntity;
 				}
@@ -5146,6 +5352,14 @@ namespace Alice
 					anyTransformItemActivated |= ImGui::IsItemActivated();
 				}
 
+				// ---- Render Enabled
+				{
+					auto r = ReflectionUI::RenderProperty(*transform, "visible", "Visible");
+					changed |= r.changed;
+					anyTransformItemActive |= ImGui::IsItemActive();
+					anyTransformItemActivated |= ImGui::IsItemActivated();
+				}
+
 				// === 편집 시작 감지 (Transform 위젯 중 하나라도 막 활성화됐을 때)
 				if (!isEditing && anyTransformItemActivated)
 				{
@@ -5156,6 +5370,7 @@ namespace Alice
 					editStartTransform.rotation = transform->rotation;
 					editStartTransform.scale = transform->scale;
 					editStartTransform.enabled = transform->enabled;
+					editStartTransform.visible = transform->visible;
 				}
 
 				// === Transform 변경 시: 물리 텔레포트 + 월드행렬 캐시 무효화 + dirty
@@ -5166,6 +5381,12 @@ namespace Alice
 
 					if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
 						cct->teleport = true;
+
+					// PostProcessVolumeComponent가 있으면 DebugDrawBoxComponent 업데이트
+					if (auto* volume = world.GetComponent<PostProcessVolumeComponent>(_selectedEntity))
+					{
+						world.UpdatePostProcessVolumeDebugBox(_selectedEntity, *volume);
+					}
 
 					world.MarkTransformDirty(_selectedEntity);
 					g_SceneDirty = true;
@@ -5179,6 +5400,7 @@ namespace Alice
 					newTransform.rotation = transform->rotation;
 					newTransform.scale = transform->scale;
 					newTransform.enabled = transform->enabled;
+					newTransform.visible = transform->visible;
 
 					// float 비교(너무 타이트하면 커맨드가 과하게 쌓임)
 					constexpr float kEps = 1e-5f;
@@ -5194,7 +5416,8 @@ namespace Alice
 						NE(editStartTransform.scale.x, newTransform.scale.x) ||
 						NE(editStartTransform.scale.y, newTransform.scale.y) ||
 						NE(editStartTransform.scale.z, newTransform.scale.z) ||
-						(editStartTransform.enabled != newTransform.enabled);
+						(editStartTransform.enabled != newTransform.enabled) ||
+						(editStartTransform.visible != newTransform.visible);
 
 					if (hasChanged)
 					{
@@ -5839,85 +6062,6 @@ namespace Alice
 		}
 	}
 
-	void EditorCore::DrawDefaultPostProcessSettings()
-	{
-		PostProcessSettings& settings = m_defaultPostProcessSettings;
-		bool changed = false;
-
-		// 저장/로드 버튼
-		ImGui::Text("Default Post Process Settings");
-		if (ImGui::Button("Save to EngineSettings.json"))
-		{
-			SaveDefaultPostProcessSettings();
-		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("현재 설정을 EngineSettings.json에 저장합니다.");
-		
-		ImGui::SameLine();
-		if (ImGui::Button("Load from EngineSettings.json"))
-		{
-			LoadDefaultPostProcessSettings();
-		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("EngineSettings.json에서 설정을 불러옵니다.");
-
-		ImGui::Separator();
-
-		// Exposure
-		if (ImGui::TreeNode("Exposure##DefaultPostProcess"))
-		{
-			changed |= ImGui::SliderFloat("Exposure##DefaultPostProcess", &settings.exposure, -3.0f, 3.0f, "%.2f");
-			ImGui::TreePop();
-		}
-
-		// Max HDR Nits
-		if (ImGui::TreeNode("Max HDR Nits##DefaultPostProcess"))
-		{
-			changed |= ImGui::SliderFloat("Max HDR Nits##DefaultPostProcess", &settings.maxHDRNits, 100.0f, 10000.0f, "%.0f nits");
-			ImGui::TreePop();
-		}
-
-		// Color Grading
-		if (ImGui::TreeNode("Color Grading##DefaultPostProcess"))
-		{
-			ImGui::Text("Saturation (RGB)");
-			changed |= ImGui::ColorEdit3("Saturation (RGB)##DefaultPostProcess", &settings.saturation.x,
-				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
-
-			ImGui::Text("Contrast (RGB)");
-			changed |= ImGui::ColorEdit3("Contrast (RGB)##DefaultPostProcess", &settings.contrast.x,
-				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
-
-			ImGui::Text("Gamma (RGB)");
-			changed |= ImGui::ColorEdit3("Gamma (RGB)##DefaultPostProcess", &settings.gamma.x,
-				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
-
-			ImGui::Text("Gain (RGB)");
-			changed |= ImGui::ColorEdit3("Gain (RGB)##DefaultPostProcess", &settings.gain.x,
-				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
-
-			ImGui::TreePop();
-		}
-
-		// Bloom
-		if (ImGui::TreeNode("Bloom##DefaultPostProcess"))
-		{
-			changed |= ImGui::SliderFloat("Bloom Threshold##DefaultPostProcess", &settings.bloomThreshold, 0.0f, 5.0f);
-			changed |= ImGui::SliderFloat("Bloom Knee##DefaultPostProcess", &settings.bloomKnee, 0.0f, 1.0f);
-			changed |= ImGui::SliderFloat("Bloom Intensity##DefaultPostProcess", &settings.bloomIntensity, 0.0f, 5.0f);
-			changed |= ImGui::SliderFloat("Bloom Gaussian Intensity##DefaultPostProcess", &settings.bloomGaussianIntensity, 0.0f, 5.0f);
-			changed |= ImGui::SliderFloat("Bloom Radius##DefaultPostProcess", &settings.bloomRadius, 0.0f, 10.0f);
-			changed |= ImGui::SliderInt("Bloom Downsample##DefaultPostProcess", &settings.bloomDownsample, 1, 8);
-			ImGui::TreePop();
-		}
-
-		if (changed)
-		{
-			// 변경사항이 있으면 자동 저장 (선택사항)
-			// SaveDefaultPostProcessSettings();
-		}
-	}
-
 	void EditorCore::SaveDefaultPostProcessSettings()
 	{
 		namespace fs = std::filesystem;
@@ -6081,6 +6225,7 @@ namespace Alice
 
 				// ==== Unbound 설정 (최상단) ====
 				ImGui::Text("Volume Type");
+				bool unboundBefore = volume->unbound;
 				changed |= ImGui::Checkbox("Unbound (전역 적용)##PostProcessVolume", &volume->unbound);
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Unbound: ON이면 항상 전역 적용 (무한 범위)\nOFF이면 Shape + BlendRadius 기반 공간 적용");
@@ -6096,84 +6241,41 @@ namespace Alice
 					ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.3f, 1.0f), "[공간 기반 적용]");
 				}
 
+				// Unbound 변경 시 DebugDrawBoxComponent 업데이트
+				if (unboundBefore != volume->unbound)
+				{
+					world.UpdatePostProcessVolumeDebugBox(_selectedEntity, *volume);
+				}
+
 				ImGui::Separator();
 
 				// ==== Bound 설정 (Unbound OFF일 때만 의미 있음) ====
 				if (volume->unbound)
 				{
-					// Unbound ON: Shape/BlendRadius 비활성화
+					// Unbound ON: Bound 비활성화
 					ImGui::BeginDisabled();
 				}
 
-				// ==== Shape 설정 ====
-				ImGui::Text("Shape");
-				const char* shapeNames[] = { "Box", "Sphere" };
-				int currentShape = static_cast<int>(volume->shape);
-				if (ImGui::Combo("Shape##PostProcessVolume", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames)))
-				{
-					volume->SetShape(static_cast<PostProcessVolumeShape>(currentShape));
-					changed = true;
-				}
-				if (volume->unbound && ImGui::IsItemHovered())
-					ImGui::SetTooltip("Unbound가 켜져 있어 Shape는 적용되지 않습니다.");
-
-				if (volume->shape == PostProcessVolumeShape::Box)
-				{
-					DirectX::XMFLOAT3 boxSize = volume->GetBoxSize();
-					if (ImGui::SliderFloat3("Box Size##PostProcessVolume", &boxSize.x, 0.1f, 100.0f))
-					{
-						volume->SetBoxSize(boxSize);
-						changed = true;
-					}
-				}
-				else if (volume->shape == PostProcessVolumeShape::Sphere)
-				{
-					float radius = volume->GetSphereRadius();
-					if (ImGui::SliderFloat("Sphere Radius##PostProcessVolume", &radius, 0.1f, 50.0f))
-					{
-						volume->SetSphereRadius(radius);
-						changed = true;
-					}
-				}
-
-				ImGui::Separator();
-
-				// ==== 블렌딩 파라미터 ====
-				ImGui::Text("Blending");
 				float blendRadius = volume->GetBlendRadius();
-				if (ImGui::SliderFloat("Blend Radius##PostProcessVolume", &blendRadius, 0.0f, 50.0f))
+				if (ImGui::SliderFloat("Bound##PostProcessVolume", &blendRadius, 0.0f, 50.0f))
 				{
 					volume->SetBlendRadius(blendRadius);
+					// DebugDrawBoxComponent bounds 업데이트
+					world.UpdatePostProcessVolumeDebugBox(_selectedEntity, *volume);
 					changed = true;
 				}
 				if (ImGui::IsItemHovered())
 				{
 					if (volume->unbound)
-						ImGui::SetTooltip("Unbound가 켜져 있어 BlendRadius는 적용되지 않습니다.");
+						ImGui::SetTooltip("Unbound가 켜져 있어 Bound는 적용되지 않습니다.");
 					else
-						ImGui::SetTooltip("볼륨 외부에서도 블렌딩되는 거리 (0이면 내부에서만 적용)");
+						ImGui::SetTooltip("보간이 적용되는 범위 (0이면 내부에서만 적용)");
 				}
 
 				if (volume->unbound)
 				{
 					ImGui::EndDisabled();
 				}
-
-				float blendWeight = volume->GetBlendWeight();
-				if (ImGui::SliderFloat("Blend Weight##PostProcessVolume", &blendWeight, 0.0f, 1.0f))
-				{
-					volume->SetBlendWeight(blendWeight);
-					changed = true;
-				}
-
-				int priority = volume->GetPriority();
-				if (ImGui::InputInt("Priority##PostProcessVolume", &priority))
-				{
-					volume->SetPriority(priority);
-					changed = true;
-				}
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("우선순위: 높을수록 나중에 블렌딩되어 영향이 큼");
 
 				ImGui::Separator();
 
@@ -8161,6 +8263,36 @@ namespace Alice
 					}
 				}
 
+				// 새 UI Curve Asset 생성
+				if (ImGui::MenuItem("Create CurveAsset"))
+				{
+					const std::string baseName = "NewCurve";
+					fs::path curvePath = path / (baseName + ".uicurve");
+
+					int index = 1;
+					while (fs::exists(curvePath))
+					{
+						curvePath = path / (baseName + std::to_string(index) + ".uicurve");
+						++index;
+					}
+
+					UICurveAsset asset;
+					asset.name = curvePath.stem().string();
+					asset.keys.push_back({ 0.0f, 0.0f, 0.0f, 0.0f, UICurveInterp::Cubic, UICurveTangentMode::Auto });
+					asset.keys.push_back({ 1.0f, 1.0f, 0.0f, 0.0f, UICurveInterp::Cubic, UICurveTangentMode::Auto });
+					asset.Sort();
+					asset.RecalcAutoTangents();
+
+					if (SaveUICurveAsset(curvePath, asset))
+					{
+						ALICE_LOG_INFO("[EditorCore] Created new Curve asset: %s", curvePath.string().c_str());
+					}
+					else
+					{
+						ALICE_LOG_ERRORF("[EditorCore] Failed to create Curve asset: %s", curvePath.string().c_str());
+					}
+				}
+
 				// Unity 스타일: C++ 스크립트(.h/.cpp)와 프리팹을 간단하게 생성합니다.
 				if (ImGui::MenuItem("Create C++ Script"))
 				{
@@ -8263,6 +8395,8 @@ namespace Alice
 						{ "position", { { "x", 0.0f }, { "y", 0.0f }, { "z", 0.0f } } },
 						{ "rotation", { { "x", 0.0f }, { "y", 0.0f }, { "z", 0.0f } } },
 						{ "scale",    { { "x", 1.0f }, { "y", 1.0f }, { "z", 1.0f } } },
+						{ "enabled", true },
+						{ "visible", true }
 					};
 					j["Scripts"] = nlohmann::json::array();
 
@@ -8408,6 +8542,21 @@ namespace Alice
 					MaterialFile::Load(path, g_MaterialEditorData, &ResourceManager::Get());
 					g_MaterialEditorData.assetPath = path.string();
 					g_MaterialEditorOpen = true;
+				}
+				else if (ext == ".uicurve")
+				{
+					g_UICurveEditorPath = path;
+					g_UICurveEditorData = {};
+					if (!LoadUICurveAsset(path, g_UICurveEditorData))
+					{
+						g_UICurveEditorData.name = path.stem().string();
+						g_UICurveEditorData.keys.push_back({ 0.0f, 0.0f, 0.0f, 0.0f, UICurveInterp::Cubic, UICurveTangentMode::Auto });
+						g_UICurveEditorData.keys.push_back({ 1.0f, 1.0f, 0.0f, 0.0f, UICurveInterp::Cubic, UICurveTangentMode::Auto });
+					}
+					g_UICurveEditorData.Sort();
+					g_UICurveEditorData.RecalcAutoTangents();
+					g_UICurveEditorSelected = -1;
+					g_UICurveEditorOpen = true;
 				}
 			}
 
@@ -8874,6 +9023,9 @@ namespace Alice
 		t.position = DirectX::XMFLOAT2(0.0f, 0.0f);
 		t.size = DirectX::XMFLOAT2(200.0f, 80.0f);
 		t.pivot = DirectX::XMFLOAT2(0.5f, 0.5f);
+
+		// Always attach a 3D Transform so UI can be switched to World space later.
+		world.AddComponent<TransformComponent>(e);
 
 		return e;
 	}
@@ -9409,7 +9561,10 @@ namespace Alice
 					ImGui::Text("Clip Timings");
 					if (ImGui::Button("+ Add Clip"))
 					{
-						driver->clips.emplace_back();
+						AttackDriverClip newClip{};
+						newClip.type = AttackDriverNotifyType::Attack;
+						newClip.source = AttackDriverClipSource::Explicit;
+						driver->clips.emplace_back(std::move(newClip));
 						changed = true;
 					}
 
@@ -9483,6 +9638,14 @@ namespace Alice
 						if (open)
 						{
 							changed |= ImGui::Checkbox("Enabled", &clip.enabled);
+
+							const char* typeLabels[] = { "Attack", "Dodge", "Guard" };
+							int typeIndex = static_cast<int>(clip.type);
+							if (ImGui::Combo("Type", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+							{
+								clip.type = static_cast<AttackDriverNotifyType>(typeIndex);
+								changed = true;
+							}
 
 							const char* sourceLabels[] = { "Explicit", "Base A", "Base B", "Upper A", "Upper B", "Additive" };
 							int sourceIndex = static_cast<int>(clip.source);

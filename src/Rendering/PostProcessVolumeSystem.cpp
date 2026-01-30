@@ -55,7 +55,7 @@ namespace Alice
                 {
                     // TransformComponent가 여전히 존재하는지 확인
                     auto* transform = world.GetComponent<TransformComponent>(m_referenceEntityId);
-                    if (!transform || !transform->enabled)
+                    if (!transform || !transform->enabled || !transform->visible)
                     {
                         needRefresh = true;
                     }
@@ -89,7 +89,7 @@ namespace Alice
             if (m_referenceEntityId != InvalidEntityId && m_referenceResolved)
             {
                 auto* transform = world.GetComponent<TransformComponent>(m_referenceEntityId);
-                if (transform && transform->enabled)
+                if (transform && transform->enabled && transform->visible)
                 {
                     referencePosition = transform->position;
                 }
@@ -139,6 +139,56 @@ namespace Alice
             activeCandidate->weight = ComputeUEWeight(activeCandidate->signedDistance, br, bw);
         }
 
+        // 3.5. Bound 변경 감지 및 보간 기준값 재설정
+        if (activeCandidate && !activeCandidate->volume->unbound && 
+            m_transitionState.activeVolumeId == activeCandidate->entityId)
+        {
+            float currentBound = activeCandidate->volume->bound;
+            // Transform의 scale도 고려하여 월드 공간 bound 계산
+            auto* transform = world.GetComponent<TransformComponent>(activeCandidate->entityId);
+            if (transform)
+            {
+                // Scale의 평균값을 사용하여 bound 스케일링 (정육면체 가정)
+                float avgScale = (transform->scale.x + transform->scale.y + transform->scale.z) / 3.0f;
+                currentBound *= avgScale;
+            }
+
+            // Bound가 변경되었는지 확인
+            if (m_transitionState.cachedBound >= 0.0f && 
+                std::abs(m_transitionState.cachedBound - currentBound) > 0.001f)
+            {
+                // Bound가 변경되었으면 현재 상태를 outsideSnapshot으로 재설정
+                // 이전 프레임의 final 값이 있으면 그것을 사용, 없으면 defaultSettings + Unbound만 적용
+                if (m_transitionState.hasPreviousFrameFinal)
+                {
+                    m_transitionState.outsideSnapshot = m_transitionState.previousFrameFinal;
+                }
+                else
+                {
+                    // 이전 프레임 값이 없으면 defaultSettings + Unbound 볼륨들만 적용된 값
+                    PostProcessSettings outsideFinal = defaultSettings;
+                    for (const auto& candidate : candidates)
+                    {
+                        if (candidate.volume->unbound && candidate.weight > 0.0f)
+                        {
+                            PostProcessBlend::BlendSettings(outsideFinal, candidate.volume->settings, candidate.weight);
+                        }
+                    }
+                    m_transitionState.outsideSnapshot = outsideFinal;
+                }
+                m_transitionState.hasOutsideSnapshot = true;
+            }
+
+            // 현재 bound 값 캐시
+            m_transitionState.cachedBound = currentBound;
+        }
+        else if (!activeCandidate || activeCandidate->volume->unbound || 
+                 m_transitionState.activeVolumeId != activeCandidate->entityId)
+        {
+            // Active 볼륨이 변경되었거나 없으면 캐시 초기화
+            m_transitionState.cachedBound = -1.0f;
+        }
+
         // 4. 영향 시작 감지 및 스냅샷 저장 (w > 0이 되는 순간)
         bool isAffectingNow = (activeCandidate != nullptr && !activeCandidate->volume->unbound && activeCandidate->weight > 0.0f);
         bool wasAffecting = m_transitionState.wasAffecting;
@@ -167,6 +217,18 @@ namespace Alice
             }
             m_transitionState.hasOutsideSnapshot = true;
             m_transitionState.activeVolumeId = activeCandidate->entityId;
+            
+            // Bound 캐시 초기화 (새로운 볼륨 진입 시)
+            auto* transform = world.GetComponent<TransformComponent>(activeCandidate->entityId);
+            if (transform)
+            {
+                float avgScale = (transform->scale.x + transform->scale.y + transform->scale.z) / 3.0f;
+                m_transitionState.cachedBound = activeCandidate->volume->bound * avgScale;
+            }
+            else
+            {
+                m_transitionState.cachedBound = activeCandidate->volume->bound;
+            }
         }
 
         // 5. OutsideSnapshot 결정
@@ -216,6 +278,8 @@ namespace Alice
             // activeVolumeId 무효화 (복귀 완료)
             m_transitionState.activeVolumeId = InvalidEntityId;
             // outsideSnapshot은 그대로 유지 (복귀 목표 값)
+            // Bound 캐시도 초기화
+            m_transitionState.cachedBound = -1.0f;
         }
         else if (!isAffectingNow && !m_transitionState.hasOutsideSnapshot)
         {
@@ -243,7 +307,7 @@ namespace Alice
         {
             // TransformComponent 필요
             auto* transform = world.GetComponent<TransformComponent>(entityId);
-            if (!transform || !transform->enabled)
+            if (!transform || !transform->enabled || !transform->visible)
                 continue;
 
             // Unbound는 항상 후보
@@ -260,12 +324,14 @@ namespace Alice
             }
 
             // Bound 볼륨: signed distance 계산
-            XMFLOAT3 worldBoxSize;
-            worldBoxSize.x = volume.boxSize.x * transform->scale.x;
-            worldBoxSize.y = volume.boxSize.y * transform->scale.y;
-            worldBoxSize.z = volume.boxSize.z * transform->scale.z;
+            // bound * scale을 사용하여 보간 시작 기준점을 설정 (DebugBoxDraw로 그려지는 면)
+            XMFLOAT3 worldBoundSize;
+            float boundScaled = volume.bound;
+            worldBoundSize.x = boundScaled * transform->scale.x;
+            worldBoundSize.y = boundScaled * transform->scale.y;
+            worldBoundSize.z = boundScaled * transform->scale.z;
 
-            float sd = DistanceToBoxSurface(referencePosition, transform->position, worldBoxSize, transform->rotation);
+            float sd = DistanceToBoxSurface(referencePosition, transform->position, worldBoundSize, transform->rotation);
 
             // Weight 계산 (거리 기반)
             float weight = CalculateVolumeWeight(volume, *transform, referencePosition, sd);
@@ -357,7 +423,7 @@ namespace Alice
         // 로컬 공간 좌표
         XMFLOAT3 local;
         XMStoreFloat3(&local, localPoint);
-
+        
         float halfSizeX = boxSize.x * 0.5f;
         float halfSizeY = boxSize.y * 0.5f;
         float halfSizeZ = boxSize.z * 0.5f;
@@ -379,9 +445,12 @@ namespace Alice
         else
         {
             // 외부: 가장 가까운 점까지의 거리
-            float closestX = std::clamp(local.x, -halfSizeX, halfSizeX);
-            float closestY = std::clamp(local.y, -halfSizeY, halfSizeY);
-            float closestZ = std::clamp(local.z, -halfSizeZ, halfSizeZ);
+            
+            DirectX::XMFLOAT3 limits = { std::max(0.01f,halfSizeX) ,std::max(0.01f,halfSizeY) , std::max(0.01f,halfSizeZ)};
+            
+			float closestX = std::clamp(local.x, -limits.x,  limits.x);
+            float closestY = std::clamp(local.y, -limits.y,  limits.y);
+            float closestZ = std::clamp(local.z, -limits.z,  limits.z);
 
             XMVECTOR closest = XMVectorSet(closestX, closestY, closestZ, 0.0f);
             XMVECTOR diff = XMVectorSubtract(localPoint, closest);

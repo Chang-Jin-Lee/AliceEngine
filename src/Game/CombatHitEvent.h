@@ -16,8 +16,12 @@ namespace Alice
 
         uint32_t part = 0;
         uint32_t attackInstanceId = 0;
+        uint32_t subShapeIndex = 0;
         float damage = 0.0f;
         bool debugLog = false;
+
+        float sweepFraction = 0.0f;
+        bool hasSweepFraction = false;
 
         DirectX::XMFLOAT3 hitPosWS{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 hitNormalWS{ 0.0f, 1.0f, 0.0f };

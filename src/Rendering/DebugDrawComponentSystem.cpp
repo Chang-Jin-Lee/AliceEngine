@@ -7,6 +7,7 @@
 #include "Components/WeaponTraceComponent.h"
 #include "Components/IDComponent.h"
 #include "PhysX/Components/Phy_ColliderComponent.h"
+#include "PhysX/Components/Phy_CCTComponent.h"
 #include "PhysX/Components/Phy_MeshColliderComponent.h"
 
 #include <algorithm>
@@ -348,6 +349,7 @@ namespace Alice
             if (!target) continue;
 
             const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
+            if (tr && !tr->enabled) continue;
             const DirectX::XMFLOAT3 pos = tr ? tr->position : DirectX::XMFLOAT3(0, 0, 0);
             const DirectX::XMFLOAT3 scale = tr ? tr->scale : DirectX::XMFLOAT3(1, 1, 1);
 
@@ -383,7 +385,7 @@ namespace Alice
                 continue;
 
             const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMFLOAT3 scale = tr->scale;
             scale.x = std::abs(scale.x);
@@ -395,19 +397,29 @@ namespace Alice
                 : XMFLOAT4(0.35f, 0.6f, 1.0f, 1.0f);
             XMVECTOR rot = EulerToQuaternion(tr->rotation);
 
+            XMFLOAT3 localOffset = collider.offset;
+            localOffset.x *= scale.x;
+            localOffset.y *= scale.y;
+            localOffset.z *= scale.z;
+            XMVECTOR offsetV = RotateVector(XMLoadFloat3(&localOffset), rot);
+            XMFLOAT3 center = tr->position;
+            center.x += XMVectorGetX(offsetV);
+            center.y += XMVectorGetY(offsetV);
+            center.z += XMVectorGetZ(offsetV);
+
             if (collider.type == ColliderType::Box)
             {
                 XMFLOAT3 he = collider.halfExtents;
                 he.x *= scale.x;
                 he.y *= scale.y;
                 he.z *= scale.z;
-                DrawBox(*target, tr->position, he, rot, color);
+                DrawBox(*target, center, he, rot, color);
             }
             else if (collider.type == ColliderType::Sphere)
             {
                 float sMax = std::max({ scale.x, scale.y, scale.z });
                 float radius = collider.radius * sMax;
-                DrawSphere(*target, tr->position, radius, color);
+                DrawSphere(*target, center, radius, color);
             }
             else if (collider.type == ColliderType::Capsule)
             {
@@ -425,7 +437,7 @@ namespace Alice
                     radius = collider.capsuleRadius * radial;
                     halfHeight = collider.capsuleHalfHeight * scale.x;
                 }
-                DrawCapsule(*target, tr->position, radius, halfHeight, collider.capsuleAlignYAxis, rot, color);
+                DrawCapsule(*target, center, radius, halfHeight, collider.capsuleAlignYAxis, rot, color);
             }
         }
 
@@ -436,7 +448,7 @@ namespace Alice
                 continue;
 
             const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
-            if (!tr) continue;
+            if (!tr || !tr->enabled) continue;
 
             XMFLOAT3 scale = tr->scale;
             scale.x = std::abs(scale.x);
@@ -450,6 +462,28 @@ namespace Alice
                 : XMFLOAT4(0.45f, 0.9f, 0.9f, 1.0f);
 
             DrawBox(*target, tr->position, he, rot, color);
+        }
+
+        // CCT debug draw
+        for (const auto& [entityId, cct] : world.GetComponents<Phy_CCTComponent>())
+        {
+            const TransformComponent* tr = world.GetComponent<TransformComponent>(entityId);
+            if (!tr || !tr->enabled) continue;
+
+            XMFLOAT3 scale = tr->scale;
+            scale.x = std::abs(scale.x);
+            scale.y = std::abs(scale.y);
+            scale.z = std::abs(scale.z);
+
+            const float radial = std::max(scale.x, scale.z);
+            const float radius = cct.radius * radial;
+            const float halfHeight = cct.halfHeight * scale.y;
+
+            XMFLOAT3 center = tr->position;
+            center.y += (halfHeight + radius);
+
+            const XMFLOAT4 color(0.95f, 0.85f, 0.2f, 1.0f);
+            DrawCapsule(*target, center, radius, halfHeight, true, XMQuaternionIdentity(), color);
         }
 
         // WeaponTrace shapes debug draw
