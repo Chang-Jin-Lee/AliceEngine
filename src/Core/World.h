@@ -175,6 +175,12 @@ namespace Alice
                     MarkTransformDirty(id);
                 }
                 
+                // PostProcessVolumeComponent 추가 시 DebugDrawBoxComponent도 자동 추가
+                if constexpr (std::is_same_v<T, PostProcessVolumeComponent>)
+                {
+                    UpdatePostProcessVolumeDebugBox(id, *result);
+                }
+                
                 return *result;
             }
         }
@@ -419,6 +425,11 @@ namespace Alice
         /// 특정 엔티티와 모든 자식의 Transform을 dirty로 표시합니다.
         /// Transform 변경 시 자동으로 호출되지만, 수동 호출도 가능합니다.
         void MarkTransformDirty(EntityId entityId);
+
+        // ==== PostProcessVolume 헬퍼 ====
+        /// PostProcessVolumeComponent의 DebugDrawBoxComponent를 업데이트합니다.
+        /// boxSize 변경 시 호출하여 bounds를 동기화합니다.
+        void UpdatePostProcessVolumeDebugBox(EntityId id, const PostProcessVolumeComponent& volume);
 
         // ==== 지연 파괴 시스템 ====
         /// 지연 파괴를 예약합니다. (delay 초 후에 파괴)

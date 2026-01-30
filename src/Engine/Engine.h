@@ -3,6 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <memory>
+#include <filesystem>
 #include <Core/ComponentRegistry.h>
 
 namespace Alice
@@ -34,46 +35,16 @@ namespace Alice
         // Win32 전역 윈도우 프로시저 → Engine 인스턴스로 위임
         static LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-        /// 한 프레임의 업데이트(게임 로직)를 수행합니다.
-        void Update();
-
-        /// 한 프레임의 렌더링을 수행합니다.
-        void Render();
-
-        /// 기본 윈도우를 생성합니다.
-        bool CreateMainWindow(int nCmdShow);
-
-        /// 윈도우 크기 변경 시 호출됩니다.
-        void OnResize(std::uint32_t width, std::uint32_t height);
-
         /// 월드 안의 SkinnedMeshComponent 들에 대해,
         /// SkinnedMeshRegistry 에 GPU 메시가 등록되어 있는지 확인하고,
         /// 필요 시 FBX 를 다시 임포트해서 등록합니다.
         void EnsureSkinnedMeshesRegisteredForWorld();
-
-        /// 씬 전환 시 IBL 세트를 업데이트합니다.
-        /// - onAfterSceneLoaded 델리게이트에 연결되어 자동으로 호출됩니다.
-        void UpdateIblForScene();
-
         void TrimVideoMemory();
 
-        /// 렌더링 모드를 설정합니다 (true: Forward, false: Deferred)
-        void SetUseForwardRendering(bool useForward);
-        bool GetUseForwardRendering() const;
-        //===========================================
-        //물리
         void RefreshPhysicsForCurrentWorld();
-        void TickPhysics(float dt);
-        void ProcessPhysicsEvents();
-        void ProcessCombatHits();
-        /// 월드와 물리 시스템을 함께 정리하는 안전한 진입점
-        /// World::Clear()와 PhysicsSystem 정리를 함께 처리하여 누락을 방지
-        void ClearWorldAndPhysics();
-        //===========================================
 
     private:
         struct Impl;
         std::unique_ptr<Impl> pImpl;
     };
 }
-

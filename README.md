@@ -13,6 +13,16 @@ DirectX 11 기반 3D 게임 엔진
 - 엔진 구조
 <img width="2961" height="857" alt="다이어그램" src="https://github.com/user-attachments/assets/53ca1e2a-85f8-4628-a621-f424545b0f2c" />
 
+- 엔진 루프
+  - 메인 루프
+    <img width="1648" height="385" alt="Run메인루프" src="https://github.com/user-attachments/assets/e5c31321-52c3-4c47-94a1-2a6fdf6aff42" />
+
+  - Update 루프
+    <img width="4128" height="492" alt="Update루프" src="https://github.com/user-attachments/assets/4747c04f-1579-4302-9fff-7e9512f312e0" />
+
+  - Render 루프
+    <img width="5172" height="493" alt="Render루프" src="https://github.com/user-attachments/assets/e5f5ae3b-c6a7-48cf-91e0-8e646f85a70a" />
+
 
 - 빌드 과정
   - Setup.bat 파일을 실행해서 vcpkg, assimp등 의존성을 전부 다운로드하세요. (Setup.bat 파일 내부에 경로 설정이 가능합니다. 디폴트는 D:\vcpkg)

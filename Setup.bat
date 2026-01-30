@@ -112,7 +112,7 @@ echo.
 echo [4/5] 스카이박스 리소스 확인 및 다운로드...
 
 REM GitHub Releases 링크
-set "DOWNLOAD_URL=https://github.com/Chang-Jin-Lee/D3D11-AliceTutorial/releases/download/Skybox/Skybox.7z"
+set "DOWNLOAD_URL=https://github.com/Chang-Jin-Lee/D3D11-AliceTutorial/releases/download/Skybox_2/Skybox.7z"
 
 REM 현재 배치 파일이 있는 위치 기준으로 Resource 폴더 경로 설정
 set "RES_ROOT=%~dp0Resource\Skybox"

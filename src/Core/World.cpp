@@ -3,7 +3,11 @@
 #include "Core/ScriptFactory.h"
 #include "Core/ThreadSafety.h"
 #include "Components/IDComponent.h"
+#include "Components/DebugDrawBoxComponent.h"
+#include "Components/PostProcessVolumeComponent.h"
+#include "Components/TransformComponent.h"
 #include <random>
+#include <algorithm>
 #include <Game/FbxImporter.h>
 
 namespace Alice {
@@ -715,6 +719,39 @@ namespace Alice {
 			t->enabled = enabled;
 			MarkTransformDirty(id);
 		}
+	}
+
+	void World::UpdatePostProcessVolumeDebugBox(EntityId id, const PostProcessVolumeComponent& volume)
+	{
+		// DebugDrawBoxComponent가 없으면 추가
+		auto* debugBox = GetComponent<DebugDrawBoxComponent>(id);
+		if (!debugBox)
+		{
+			debugBox = &AddComponent<DebugDrawBoxComponent>(id);
+		}
+
+		if (volume.unbound)
+		{
+			// Unbound 볼륨은 그리지 않음
+			debugBox->enabled = false;
+		}
+		else
+		{
+			// 로컬 공간 bounds 설정 (DebugDrawComponentSystem에서 Transform을 자동 적용)
+			// 보간이 적용되는 전체 범위를 그리기: bound + blendRadius
+			// bound는 보간 시작 기준점(박스 표면), bound + blendRadius까지 보간이 적용됨
+			float blendRadius = volume.blendRadius;
+			float halfSize = (volume.bound * 0.5f) + blendRadius;
+			
+			debugBox->boundsMin = DirectX::XMFLOAT3(-halfSize, -halfSize, -halfSize);
+			debugBox->boundsMax = DirectX::XMFLOAT3(halfSize, halfSize, halfSize);
+			debugBox->enabled = true;
+		}
+
+		// 색상 설정
+		float alpha = 0.5f + volume.blendWeight * 0.5f; // 0.5 ~ 1.0
+		debugBox->color = DirectX::XMFLOAT4(0.0f, 1.0f, 0.0f, alpha);
+		debugBox->depthTest = false;
 	}
 
 } // namespace Alice
