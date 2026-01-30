@@ -165,7 +165,7 @@ namespace Alice
 					if (id == InvalidEntityId) continue;
 
 					auto* tr = m_world.GetComponent<TransformComponent>(id);
-					if (!tr) continue;
+					if (!tr || !tr->enabled) continue;
 
 					tr->position = { at.position.x, at.position.y, at.position.z };
 					// 회전도 동기화 (static 메서드이므로 PhysicsSystem 인스턴스 없이도 호출 가능)
@@ -292,6 +292,12 @@ namespace Alice
 	{
 		if (m_combatHitQueue.empty())
 			return;
+
+		if (m_world.IsScriptCombatEnabled())
+		{
+			m_combatHitQueue.clear();
+			return;
+		}
 
 		m_combatSystem.ProcessHits(m_world, m_combatHitQueue);
 		m_combatHitQueue.clear();

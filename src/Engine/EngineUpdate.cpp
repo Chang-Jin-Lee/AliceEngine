@@ -10,6 +10,13 @@ namespace Alice
 		const bool updateFromScene = UpdateShouldUpdateFromScene();
 		bool sceneChangedThisFrame = false;
 
+		const bool playJustStarted = (m_editorMode && m_isPlaying && !m_prevIsPlaying);
+		if (playJustStarted)
+		{
+			m_skipPhysicsNextFrame = true;
+			m_physAccum = 0.0f;
+		}
+
 		if (updateFromScene)
 		{
 			UpdateSceneAndScript(dt);
@@ -20,8 +27,17 @@ namespace Alice
 				UpdateAttackDriver();
 
 				UpdateEnsurePhysicsWorldIfNeeded();
-				UpdatePhysicsBridge(dt);
-				UpdatePhysicsSim(dt);
+
+				float physicsDt = dt;
+				if (m_skipPhysicsNextFrame)
+				{
+					physicsDt = 0.0f;
+					m_physAccum = 0.0f;
+					m_skipPhysicsNextFrame = false;
+				}
+
+				UpdatePhysicsBridge(physicsDt);
+				UpdatePhysicsSim(physicsDt);
 
 				UpdateAnimationAndSockets(dt);
 				UpdateCombat(dt);
@@ -83,6 +99,7 @@ namespace Alice
 				m_sceneManager->CommitPendingSceneChange(m_world, &m_uiWorld);
 
 			sceneChangedThisFrame = true;
+			m_skipPhysicsNextFrame = true;
 		}
 
 		return sceneChangedThisFrame;
@@ -90,7 +107,8 @@ namespace Alice
 
 	void Engine::Impl::UpdateAttackDriver()
 	{
-		m_attackDriverSystem.Update(m_world);
+		//m_attackDriverSystem.Update(m_world);
+		m_attackDriverSystem.PreUpdate(m_world);
 	}
 
 	void Engine::Impl::UpdateEnsurePhysicsWorldIfNeeded()
@@ -111,6 +129,7 @@ namespace Alice
 	{
 		if (m_physicsSystem)
 			m_physicsSystem->Update(dt);
+
 	}
 
 	void Engine::Impl::UpdatePhysicsSim(float dt)
@@ -122,11 +141,18 @@ namespace Alice
 	{
 		m_advancedAnimSystem.Update(m_world, static_cast<double>(dt));
 		m_skinnedAnimSystem.Update(m_world, static_cast<double>(dt));
+		m_attackDriverSystem.PostUpdate(m_world);
 		m_socketWorldUpdateSystem.Update(m_world);
 		m_socketAttachmentSystem.Update(m_world);
 		m_animUpdatedThisFrame = true;
 
+		m_combatSystem.BeginFrame(m_world);
+
 		m_weaponTraceSystem.Update(m_world, dt, &m_combatHitQueue);
+		// Script-side combat resolution (same-frame hit processing)
+		m_world.SetFrameCombatHits(&m_combatHitQueue);
+		m_scriptSystem.PostCombatUpdate(m_world, dt);
+		m_world.SetFrameCombatHits(nullptr);
 	}
 
 	void Engine::Impl::UpdateCombat(float dt)
@@ -229,6 +255,8 @@ namespace Alice
 		//m_uiWorld.Update(m_width, m_height);
 		m_aliceUIRenderer.Update(m_world, m_inputSystem, m_camera,
 			static_cast<float>(m_width), static_cast<float>(m_height), m_timer.DeltaTime());
+
+		m_prevIsPlaying = m_isPlaying;
 	}
 
 	//=========================================================

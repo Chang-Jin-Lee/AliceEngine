@@ -124,6 +124,8 @@ namespace Alice
 		float m_physAccum = 0.0f;
 		float m_physFixedDt = 1.0f / 60.0f;
 		int   m_physMaxSubsteps = 4;
+		bool  m_skipPhysicsNextFrame = false;
+		bool  m_prevIsPlaying = false;
 
 		// 물리 이벤트 큐 (한 프레임 안전하게 처리하기 위함)
 		std::vector<PhysicsEvent> m_physicsEventQueue;
