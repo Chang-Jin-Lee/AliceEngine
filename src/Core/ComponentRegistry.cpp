@@ -154,7 +154,8 @@ namespace Alice
             .property("position", &TransformComponent::position)
             .property("rotation", &TransformComponent::rotation)
             .property("scale", &TransformComponent::scale)
-            .property("enabled", &TransformComponent::enabled);
+            .property("enabled", &TransformComponent::enabled)
+            .property("visible", &TransformComponent::visible);
 
         // === MaterialComponent 등록 ===
         rttr::registration::class_<MaterialComponent>("MaterialComponent")
@@ -394,10 +395,32 @@ namespace Alice
 			.property("currentHealth", &HealthComponent::currentHealth)
 			.property("invulnDuration", &HealthComponent::invulnDuration)
 			.property("invulnRemaining", &HealthComponent::invulnRemaining)
+			.property("dodgeActive", &HealthComponent::dodgeActive)
+			.property("guardActive", &HealthComponent::guardActive)
+			.property("guardDamageScale", &HealthComponent::guardDamageScale)
+			.property("groggy", &HealthComponent::groggy)
+			.property("groggyMax", &HealthComponent::groggyMax)
+			.property("groggyGainScale", &HealthComponent::groggyGainScale)
+			.property("groggyDuration", &HealthComponent::groggyDuration)
+			.property("hitThisFrame", &HealthComponent::hitThisFrame)
+			.property("guardHitThisFrame", &HealthComponent::guardHitThisFrame)
+			.property("dodgeAvoidedThisFrame", &HealthComponent::dodgeAvoidedThisFrame)
+			.property("lastHitDamage", &HealthComponent::lastHitDamage)
+			.property("lastHitAttacker", &HealthComponent::lastHitAttacker)
+			.property("lastHitPart", &HealthComponent::lastHitPart)
+			.property("lastHitPosWS", &HealthComponent::lastHitPosWS)
+			.property("lastHitNormalWS", &HealthComponent::lastHitNormalWS)
 			.property("alive", &HealthComponent::alive)
 			.property("teamId", &HealthComponent::teamId);
 
 		// AttackDriverComponent 등록
+		rttr::registration::enumeration<AttackDriverNotifyType>("AttackDriverNotifyType")
+			(
+				rttr::value("Attack", AttackDriverNotifyType::Attack),
+				rttr::value("Dodge", AttackDriverNotifyType::Dodge),
+				rttr::value("Guard", AttackDriverNotifyType::Guard)
+				);
+
 		rttr::registration::enumeration<AttackDriverClipSource>("AttackDriverClipSource")
 			(
 				rttr::value("Explicit", AttackDriverClipSource::Explicit),
@@ -410,11 +433,13 @@ namespace Alice
 
 		rttr::registration::class_<AttackDriverClip>("AttackDriverClip")
 			.constructor<>()
+			.property("type", &AttackDriverClip::type)
 			.property("source", &AttackDriverClip::source)
 			.property("clipName", &AttackDriverClip::clipName)
 			.property("startTimeSec", &AttackDriverClip::startTimeSec)
 			.property("endTimeSec", &AttackDriverClip::endTimeSec)
-			.property("enabled", &AttackDriverClip::enabled);
+			.property("enabled", &AttackDriverClip::enabled)
+			.property("canBeInterrupted", &AttackDriverClip::canBeInterrupted);
 
 		rttr::registration::class_<AttackDriverComponent>("AttackDriverComponent")
 			.constructor<>()
@@ -722,6 +747,7 @@ namespace Alice
             .constructor<>()
             .property("type", &Phy_ColliderComponent::type)
             .property("halfExtents", &Phy_ColliderComponent::halfExtents)
+            .property("offset", &Phy_ColliderComponent::offset)
             .property("radius", &Phy_ColliderComponent::radius)
             .property("capsuleRadius", &Phy_ColliderComponent::capsuleRadius)
             .property("capsuleHalfHeight", &Phy_ColliderComponent::capsuleHalfHeight)

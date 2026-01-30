@@ -55,7 +55,7 @@ namespace Alice
                 {
                     // TransformComponent가 여전히 존재하는지 확인
                     auto* transform = world.GetComponent<TransformComponent>(m_referenceEntityId);
-                    if (!transform || !transform->enabled)
+                    if (!transform || !transform->enabled || !transform->visible)
                     {
                         needRefresh = true;
                     }
@@ -89,7 +89,7 @@ namespace Alice
             if (m_referenceEntityId != InvalidEntityId && m_referenceResolved)
             {
                 auto* transform = world.GetComponent<TransformComponent>(m_referenceEntityId);
-                if (transform && transform->enabled)
+                if (transform && transform->enabled && transform->visible)
                 {
                     referencePosition = transform->position;
                 }
@@ -307,7 +307,7 @@ namespace Alice
         {
             // TransformComponent 필요
             auto* transform = world.GetComponent<TransformComponent>(entityId);
-            if (!transform || !transform->enabled)
+            if (!transform || !transform->enabled || !transform->visible)
                 continue;
 
             // Unbound는 항상 후보

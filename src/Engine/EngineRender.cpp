@@ -364,9 +364,10 @@ namespace Alice
 		if (m_animUpdatedThisFrame) return;
 
 		const double dtSec = static_cast<double>(m_timer.DeltaTime());
-		m_attackDriverSystem.Update(m_world);
+		m_attackDriverSystem.PreUpdate(m_world);
 		m_advancedAnimSystem.Update(m_world, dtSec);
 		m_skinnedAnimSystem.Update(m_world, dtSec);
+		m_attackDriverSystem.PostUpdate(m_world);
 		m_socketWorldUpdateSystem.Update(m_world);
 		m_socketAttachmentSystem.Update(m_world);
 		m_animUpdatedThisFrame = true;

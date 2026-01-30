@@ -9,7 +9,8 @@ namespace Alice
     {
     public:
         void SetSkinnedMeshRegistry(SkinnedMeshRegistry* registry) { m_registry = registry; }
-        void Update(World& world);
+        void PreUpdate(World& world);
+        void PostUpdate(World& world);
 
     private:
         SkinnedMeshRegistry* m_registry = nullptr;

@@ -158,7 +158,7 @@ namespace Alice
             if (id == InvalidEntityId) return false;
             auto* tr = world.GetComponent<TransformComponent>(id);
             auto* cam = world.GetComponent<CameraComponent>(id);
-            if (!tr || !cam) return false;
+            if (!tr || !cam || !tr->enabled) return false;
 
             outPos = tr->position;
             outRot = tr->rotation; // Euler Radian
@@ -191,7 +191,7 @@ namespace Alice
             if (id == InvalidEntityId) return;
             auto* tr = world.GetComponent<TransformComponent>(id);
             auto* cam = world.GetComponent<CameraComponent>(id);
-            if (!tr || !cam) return;
+            if (!tr || !cam || !tr->enabled) return;
             tr->position = pos;
             tr->rotation = rot;
             // Camera 객체에 FOV, Near, Far 설정
@@ -209,7 +209,7 @@ namespace Alice
         for (auto [id, camComp] : world.GetComponents<CameraComponent>())
         {
             auto* tc = world.GetComponent<TransformComponent>(id);
-            if (!tc) continue;
+            if (!tc || !tc->enabled) continue;
 
             // TransformComponent는 오일러 회전을 가짐 (내부적으로 Euler 저장)
             // Camera 객체에 동기화
@@ -231,7 +231,7 @@ namespace Alice
 
         auto* outputTr = world.GetComponent<TransformComponent>(outputId);
         auto* outputCam = world.GetComponent<CameraComponent>(outputId);
-        if (!outputTr || !outputCam)
+        if (!outputTr || !outputCam || !outputTr->enabled)
             return;
 
         auto* blendComp = world.GetComponent<CameraBlendComponent>(outputId);
@@ -422,7 +422,7 @@ namespace Alice
                 goto FollowDone;
 
             const auto* targetTr = world.GetComponent<TransformComponent>(targetId);
-            if (!targetTr)
+            if (!targetTr || !targetTr->enabled)
                 goto FollowDone;
 
             // 모드 거리/시야각
@@ -484,7 +484,8 @@ namespace Alice
             DirectX::XMFLOAT3 desiredForward = GetForward(yawRad, DegToRad(followComp->pitchDeg));
             if (followComp->lockOnActive && followComp->lockOnTargetId != InvalidEntityId)
             {
-                if (const auto* lockTr = world.GetComponent<TransformComponent>(followComp->lockOnTargetId))
+                if (const auto* lockTr = world.GetComponent<TransformComponent>(followComp->lockOnTargetId);
+                    lockTr && lockTr->enabled)
                 {
                     const DirectX::XMFLOAT3 to = {
                         lockTr->position.x - pivot.x,
@@ -600,7 +601,8 @@ namespace Alice
             auto go = world.FindGameObject(lookAtComp->targetName);
             if (go.IsValid())
             {
-                if (const auto* targetTr = world.GetComponent<TransformComponent>(go.id()))
+                if (const auto* targetTr = world.GetComponent<TransformComponent>(go.id());
+                    targetTr && targetTr->enabled)
                 {
                     const DirectX::XMFLOAT3 to = {
                         targetTr->position.x - outputTr->position.x,

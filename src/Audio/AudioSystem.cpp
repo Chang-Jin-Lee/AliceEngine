@@ -105,6 +105,8 @@ namespace Alice
             for (auto [id, src] : world.GetComponents<AudioSourceComponent>())
             {
                 if (src.soundPath.empty()) continue;
+                if (const auto* tr = world.GetComponent<TransformComponent>(id); tr && !tr->enabled)
+                    continue;
 
                 // Runtime 데이터 초기화
                 Runtime& rt = m_runtime[id];
@@ -188,6 +190,10 @@ namespace Alice
                 if (box.soundPath.empty())
                     continue;
 
+                const TransformComponent* boxTr = world.GetComponent<TransformComponent>(id);
+                if (boxTr && !boxTr->enabled)
+                    continue;
+
                 SoundBoxRuntime& rt = m_soundBoxRuntime[id];
                 if (rt.key.empty())
                 {
@@ -205,8 +211,6 @@ namespace Alice
                 if (!rt.loaded)
                     continue;
 
-                const TransformComponent* boxTr = world.GetComponent<TransformComponent>(id);
-                
                 // 반응할 위치(checkPos) 결정
                 DirectX::XMFLOAT3 checkPos = listenerPos; // 기본값: 카메라(리스너)
 
@@ -215,7 +219,8 @@ namespace Alice
                     // 타겟 엔티티가 설정되어 있다면 그 엔티티의 위치를 사용
                     if (const auto* targetTr = world.GetComponent<TransformComponent>(box.targetEntity))
                     {
-                        checkPos = targetTr->position;
+                        if (targetTr->enabled)
+                            checkPos = targetTr->position;
                     }
                 }
 
@@ -263,7 +268,9 @@ namespace Alice
 		{
 			if (listener.primary)
 			{
-				targetTr = world.GetComponent<TransformComponent>(id);
+				const auto* tr = world.GetComponent<TransformComponent>(id);
+				if (tr && tr->enabled)
+					targetTr = tr;
 				break;
 			}
 		}
@@ -274,7 +281,9 @@ namespace Alice
 			EntityId camId = world.GetMainCameraEntityId();
 			if (camId != InvalidEntityId)
 			{
-				targetTr = world.GetComponent<TransformComponent>(camId);
+				const auto* tr = world.GetComponent<TransformComponent>(camId);
+				if (tr && tr->enabled)
+					targetTr = tr;
 			}
 		}
 

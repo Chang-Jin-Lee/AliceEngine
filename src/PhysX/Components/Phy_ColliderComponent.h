@@ -20,6 +20,9 @@ struct Phy_ColliderComponent
     // Box 파라미터
     DirectX::XMFLOAT3 halfExtents = { 0.5f, 0.5f, 0.5f };
 
+    // Shape local offset (pivot-based). Applied in local space before rotation.
+    DirectX::XMFLOAT3 offset = { 0.0f, 0.0f, 0.0f };
+
     // Sphere 파라미터
     float radius = 0.5f;
 
