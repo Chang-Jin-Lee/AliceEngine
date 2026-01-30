@@ -73,7 +73,7 @@ set(BUILD_RTTR_DYNAMIC ON CACHE BOOL "" FORCE)
 set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
 
 # RTTR 서브모듈 추가
-add_subdirectory("${ALICE_ROOT}/ThirdParty/rttr" "${CMAKE_BINARY_DIR}/ThirdParty/rttr")
+add_subdirectory("${ALICE_ROOT}/Engine/ThirdParty/rttr" "${CMAKE_BINARY_DIR}/Engine/ThirdParty/rttr")
 
 message(STATUS "-----------------------------------------------------------")
 
@@ -119,17 +119,17 @@ endif()
 # 나머지 헤더 경로 설정
 target_include_directories(AliceScripts
     PRIVATE
-        "${ALICE_ROOT}/src"
-        "${ALICE_ROOT}/ThirdParty/ImGui"
-        "${ALICE_ROOT}/ThirdParty/ImGui/backends"
-        "${ALICE_ROOT}/ThirdParty/rttr/src"
+        "${ALICE_ROOT}/Engine/src"
+        "${ALICE_ROOT}/Engine/ThirdParty/ImGui"
+        "${ALICE_ROOT}/Engine/ThirdParty/ImGui/backends"
+        "${ALICE_ROOT}/Engine/ThirdParty/rttr/src"
 )
 
 # ==============================================================================
 # [FMOD] 스크립트 프로젝트용 설정 (수정됨)
 # ==============================================================================
 # 1. 경로 설정 (ALICE_ROOT는 상단에서 정의된 프로젝트 루트)
-set(FMOD_ROOT_SCRIPT "${ALICE_ROOT}/ThirdParty/FMOD")
+set(FMOD_ROOT_SCRIPT "${ALICE_ROOT}/Engine/ThirdParty/FMOD")
 set(FMOD_LIB_DIR_SCRIPT "${FMOD_ROOT_SCRIPT}/64x") # 폴더명: 64x
 set(FMOD_INC_DIR_SCRIPT "${FMOD_ROOT_SCRIPT}/inc")
 
