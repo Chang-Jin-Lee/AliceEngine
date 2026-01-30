@@ -51,6 +51,8 @@ namespace Alice {
 		m_transformDirty.clear();
 		m_worldMatrixCache.clear();
 		InvalidateChildrenCache();
+		m_frameCombatHits = nullptr;
+		m_scriptCombatEnabled = false;
 
 		// 3. World Epoch 증가 (씬 전환 시 이전 userData 무효화)
 		//    EntityId는 재사용하지 않고 단조 증가하여 안전성 보장

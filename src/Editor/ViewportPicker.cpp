@@ -104,7 +104,7 @@ namespace Alice
         for (const auto& [entityId, transform] : transforms)
         {
             // Transform.enabled == false는 스킵
-            if (!transform.enabled)
+            if (!transform.enabled || !transform.visible)
                 continue;
 
             // 피킹 가능한 컴포넌트가 있는지 확인

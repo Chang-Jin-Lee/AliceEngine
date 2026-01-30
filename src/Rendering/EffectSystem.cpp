@@ -166,7 +166,7 @@ float4 main(PSInput input) : SV_TARGET
 			if (!effectComp.enabled) continue;
 
 			const TransformComponent* transform = world.GetComponent<TransformComponent>(entityId);
-			if (!transform) continue;
+			if (!transform || !transform->enabled || !transform->visible) continue;
 
 			// 월드 행렬 계산 (S * R * T)
 			XMVECTOR S = XMLoadFloat3(&transform->scale);

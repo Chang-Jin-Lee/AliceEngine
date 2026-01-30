@@ -106,6 +106,9 @@ namespace Alice
 
         for (const EntityId owner : owners)
         {
+            if (const auto* tr = world.GetComponent<TransformComponent>(owner); tr && !tr->enabled)
+                continue;
+
             std::vector<SocketPose> poses;
             SocketPoseSource source = SocketPoseSource::None;
 

@@ -165,6 +165,8 @@ namespace Alice
 		for (const auto& [entityId, swordEffectComp] : swordEffects)
 		{
 			if (!swordEffectComp.enabled) continue;
+			if (const auto* tr = world.GetComponent<TransformComponent>(entityId); tr && (!tr->enabled || !tr->visible))
+				continue;
 
 			// 트레일 샘플이 2개 미만이면 스킵 (Triangle Strip 최소 요구)
 			if (swordEffectComp.trailSamples.size() < 2) continue;

@@ -42,6 +42,9 @@ namespace Alice
 
             for (const auto& [entityId, skinned] : skinnedMap)
             {
+                if (const auto* tr = world.GetComponent<TransformComponent>(entityId); tr && !tr->enabled)
+                    continue;
+
                 auto* bpComp = world.GetComponent<AnimBlueprintComponent>(entityId);
                 if (!bpComp || bpComp->blueprintPath.empty())
                     continue;
