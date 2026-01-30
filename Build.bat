@@ -11,35 +11,60 @@ if /i "%~1" neq "__INVOKED" (
 )
 
 echo ========================================================
-echo [Build.bat] Engine 빌드 시스템 (Folder Mode)
-echo 목표: 라이브러리 셋업 및 솔루션 생성 자동화
+echo [Build.bat] Engine 스마트 빌드 시스템 (Monorepo)
+echo 목표: ThirdParty 서브모듈 동기화 + 라이브러리 셋업 + 빌드
 echo ========================================================
 
 set "EXIT_CODE=0"
 set "ENGINE_DIR=%~dp0Engine"
 
 REM -----------------------------------------------------------
-REM 1. Engine 폴더 확인
-REM (서브모듈이 아니므로 없으면 다운로드할 수 없음, 에러 처리)
+REM 1. Git 설치 확인
+REM -----------------------------------------------------------
+where git >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [FAIL] Git이 없습니다.
+    set "EXIT_CODE=1"
+    goto :End
+)
+
+REM -----------------------------------------------------------
+REM 2. Engine 폴더 존재 확인
+REM (이제 서브모듈이 아니므로 폴더가 없으면 진행 불가)
 REM -----------------------------------------------------------
 if not exist "%ENGINE_DIR%\" (
     echo.
-    echo [FAIL] 'Engine' 폴더를 찾을 수 없습니다!
+    echo [FAIL] 'Engine' 폴더가 없습니다!
     echo 이 배치 파일과 같은 위치에 Engine 폴더가 있는지 확인해주세요.
     set "EXIT_CODE=1"
     goto :End
 )
 
 REM -----------------------------------------------------------
-REM 2. Setup 및 CMake 빌드 실행
+REM 3. ThirdParty 서브모듈 업데이트
+REM Engine 내부의 서브모듈(.gitmodules에 정의된 것들)을 가져옵니다.
 REM -----------------------------------------------------------
 echo.
-echo [STEP 1] Engine Setup (라이브러리 설정)
+echo [STEP 1] ThirdParty 서브모듈 업데이트 (rttr, imgui 등)...
+git submodule update --init --recursive
+if errorlevel 1 (
+    echo [FAIL] 서브모듈 업데이트 실패.
+    echo 인터넷 연결을 확인하거나, .gitmodules 설정을 확인하세요.
+    set "EXIT_CODE=1"
+    goto :End
+)
+
+REM -----------------------------------------------------------
+REM 4. Setup 및 CMake 빌드 (중간 멈춤 방지 적용)
+REM -----------------------------------------------------------
+:BuildSequence
+echo.
+echo [STEP 2] Engine Setup (라이브러리 설정)
 pushd "%ENGINE_DIR%"
 
 if exist "Setup.bat" (
     REM [핵심] echo. | call ... 
-    REM 내부 pause를 스킵하여 매끄럽게 진행
+    REM Setup.bat 내부의 pause를 엔터 입력으로 스킵
     echo. | call Setup.bat
     if errorlevel 1 (
         echo [FAIL] Setup.bat 실행 실패
@@ -55,10 +80,10 @@ if exist "Setup.bat" (
 )
 
 echo.
-echo [STEP 2] 솔루션 생성 (build_msvc.cmd)
+echo [STEP 3] 솔루션 생성 (build_msvc.cmd)
 if exist "build_msvc.cmd" (
     REM [핵심] echo. | call ...
-    REM 내부 pause를 스킵
+    REM build_msvc.cmd 내부의 pause를 엔터 입력으로 스킵
     echo. | call build_msvc.cmd
     if errorlevel 1 (
         echo [FAIL] build_msvc.cmd 실행 실패
