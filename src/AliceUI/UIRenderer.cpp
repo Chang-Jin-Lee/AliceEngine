@@ -19,6 +19,12 @@
 #include "AliceUI/UITextComponent.h"
 #include "AliceUI/UIButtonComponent.h"
 #include "AliceUI/UIGaugeComponent.h"
+#include "AliceUI/UIEffectComponent.h"
+#include "AliceUI/UIAnimationComponent.h"
+#include "AliceUI/UIShakeComponent.h"
+#include "AliceUI/UIHover3DComponent.h"
+#include "AliceUI/UIVitalComponent.h"
+#include "AliceUI/UICurveAsset.h"
 
 #include "Core/World.h"
 #include "Core/InputSystem.h"
@@ -26,6 +32,7 @@
 #include "Core/ResourceManager.h"
 #include "Components/TransformComponent.h"
 #include "Rendering/Camera.h"
+
 
 namespace Alice
 {
@@ -39,6 +46,99 @@ namespace Alice
 			return v.x == 0.0f && v.y == 0.0f;
 		}
 
+		inline float Lerp(float a, float b, float t)
+		{
+			return a + (b - a) * t;
+		}
+
+		bool GetAnimValue(World& world, EntityId id, UIAnimProperty prop, float& outValue)
+		{
+			switch (prop)
+			{
+			case UIAnimProperty::PositionX:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { outValue = t->position.x; return true; }
+				break;
+			case UIAnimProperty::PositionY:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { outValue = t->position.y; return true; }
+				break;
+			case UIAnimProperty::ScaleX:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { outValue = t->scale.x; return true; }
+				break;
+			case UIAnimProperty::ScaleY:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { outValue = t->scale.y; return true; }
+				break;
+			case UIAnimProperty::Rotation:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { outValue = t->rotationRad; return true; }
+				break;
+			case UIAnimProperty::ImageAlpha:
+				if (auto* img = world.GetComponent<UIImageComponent>(id)) { outValue = img->color.w; return true; }
+				break;
+			case UIAnimProperty::TextAlpha:
+				if (auto* txt = world.GetComponent<UITextComponent>(id)) { outValue = txt->color.w; return true; }
+				break;
+			case UIAnimProperty::GlobalAlpha:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { outValue = fx->globalAlpha; return true; }
+				break;
+			case UIAnimProperty::OutlineThickness:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { outValue = fx->outlineThickness; return true; }
+				break;
+			case UIAnimProperty::RadialFill:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { outValue = fx->radialFill; return true; }
+				break;
+			case UIAnimProperty::GlowStrength:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { outValue = fx->glowStrength; return true; }
+				break;
+			case UIAnimProperty::VitalAmplitude:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { outValue = fx->vitalAmplitude; return true; }
+				break;
+			}
+			return false;
+		}
+
+		bool SetAnimValue(World& world, EntityId id, UIAnimProperty prop, float value)
+		{
+			switch (prop)
+			{
+			case UIAnimProperty::PositionX:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { t->position.x = value; return true; }
+				break;
+			case UIAnimProperty::PositionY:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { t->position.y = value; return true; }
+				break;
+			case UIAnimProperty::ScaleX:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { t->scale.x = value; return true; }
+				break;
+			case UIAnimProperty::ScaleY:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { t->scale.y = value; return true; }
+				break;
+			case UIAnimProperty::Rotation:
+				if (auto* t = world.GetComponent<UITransformComponent>(id)) { t->rotationRad = value; return true; }
+				break;
+			case UIAnimProperty::ImageAlpha:
+				if (auto* img = world.GetComponent<UIImageComponent>(id)) { img->color.w = value; return true; }
+				break;
+			case UIAnimProperty::TextAlpha:
+				if (auto* txt = world.GetComponent<UITextComponent>(id)) { txt->color.w = value; return true; }
+				break;
+			case UIAnimProperty::GlobalAlpha:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { fx->globalAlpha = value; return true; }
+				break;
+			case UIAnimProperty::OutlineThickness:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { fx->outlineThickness = value; return true; }
+				break;
+			case UIAnimProperty::RadialFill:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { fx->radialFill = value; return true; }
+				break;
+			case UIAnimProperty::GlowStrength:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { fx->glowStrength = value; return true; }
+				break;
+			case UIAnimProperty::VitalAmplitude:
+				if (auto* fx = world.GetComponent<UIEffectComponent>(id)) { fx->vitalAmplitude = value; return true; }
+				break;
+			}
+			return false;
+		}
+		
 		const char* NextUtf8(const char* p, const char* end, std::uint32_t& out)
 		{
 			if (p >= end)
@@ -82,6 +182,7 @@ namespace Alice
 
 	bool UIRenderer::Initialize(ID3D11Device* device, ID3D11DeviceContext* context, ResourceManager* resources)
 	{
+		m_initialized = false;
 		if (!device || !context)
 			return false;
 
@@ -162,7 +263,19 @@ namespace Alice
 			return false;
 		}
 
-		// Dynamic VB
+		// Pixel constant buffer
+		D3D11_BUFFER_DESC pcbDesc{};
+		pcbDesc.ByteWidth = sizeof(UIPixelConstants);
+		pcbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		pcbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+		pcbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		if (FAILED(m_device->CreateBuffer(&pcbDesc, nullptr, m_cbUIPixel.ReleaseAndGetAddressOf())))
+		{
+			ALICE_LOG_ERRORF("[AliceUI] CreatePixelConstantBuffer failed.");
+			return false;
+		}
+
+	// Dynamic VB
 		D3D11_BUFFER_DESC vbDesc{};
 		vbDesc.ByteWidth = static_cast<UINT>(sizeof(UIVertex) * kMaxVerts);
 		vbDesc.Usage = D3D11_USAGE_DYNAMIC;
@@ -287,15 +400,18 @@ namespace Alice
 			return false;
 		}
 
+		m_initialized = true;
 		return true;
 	}
 
 	void UIRenderer::Shutdown()
 	{
+		m_initialized = false;
 		m_textureCache.clear();
 		m_customPS.clear();
 		m_screenLayouts.clear();
 		m_screenRects.clear();
+		m_curveCache.clear();
 
 		m_whiteSRV.Reset();
 		m_vs.Reset();
@@ -303,6 +419,7 @@ namespace Alice
 		m_psGray.Reset();
 		m_layout.Reset();
 		m_cbUI.Reset();
+		m_cbUIPixel.Reset();
 		m_vb.Reset();
 		m_ib.Reset();
 		m_sampler.Reset();
@@ -386,19 +503,29 @@ namespace Alice
 		cfg.MergeMode = false;
 		cfg.FontDataOwnedByAtlas = true;
 
-		void* ownedData = IM_ALLOC(fontBytes.size());
-		if (!ownedData)
+		struct ImOwnedData
+		{
+			void* ptr{ nullptr };
+			explicit ImOwnedData(size_t size) { ptr = IM_ALLOC(size); }
+			~ImOwnedData() { if (ptr) IM_FREE(ptr); }
+			void* get() const { return ptr; }
+			void release() { ptr = nullptr; }
+		};
+
+		ImOwnedData owned(fontBytes.size());
+		if (!owned.get())
 			return false;
-		memcpy(ownedData, fontBytes.data(), fontBytes.size());
+		memcpy(owned.get(), fontBytes.data(), fontBytes.size());
 
 		ImFont* font = runtime.atlas->AddFontFromMemoryTTF(
-			ownedData,
+			owned.get(),
 			static_cast<int>(fontBytes.size()),
 			runtime.baseSize,
 			&cfg,
 			runtime.atlas->GetGlyphRangesKorean());
 		if (!font)
 			return false;
+		owned.release();
 
 		unsigned char* pixels = nullptr;
 		int width = 0, height = 0;
@@ -478,8 +605,139 @@ namespace Alice
 		m_mouseOverrideActive = false;
 	}
 
-	void UIRenderer::Update(World& world, InputSystem& input, const Camera& /*camera*/, float screenW, float screenH)
+	void UIRenderer::Update(World& world, InputSystem& input, const Camera& /*camera*/, float screenW, float screenH, float deltaTime)
 	{
+		m_timeSeconds += (deltaTime > 0.0f ? deltaTime : 0.0f);
+
+		for (auto&& [id, anim] : world.GetComponents<UIAnimationComponent>())
+		{
+			if (!anim.started)
+			{
+				if (anim.playOnStart)
+					anim.PlayAll(true);
+				anim.started = true;
+			}
+
+			for (auto& track : anim.tracks)
+			{
+				if (!track.playing)
+					continue;
+
+				const UICurveAsset* curve = GetCurveAsset(track.curvePath);
+				float duration = track.duration;
+				if (duration <= 0.0f)
+					duration = (track.useNormalizedTime ? 1.0f : (curve ? curve->GetDuration() : 1.0f));
+				if (duration <= 0.0f)
+					duration = 1.0f;
+
+				const float direction = track.reverse ? -1.0f : 1.0f;
+				track.time += deltaTime * direction;
+
+				if (!track.reverse && track.time > duration)
+				{
+					if (track.pingPong)
+					{
+						track.reverse = true;
+						track.time = duration;
+					}
+					else if (track.loop)
+					{
+						track.time = -track.delay;
+						track.baseCaptured = false;
+					}
+					else
+					{
+						track.playing = false;
+						continue;
+					}
+				}
+				else if (track.reverse && track.time < 0.0f)
+				{
+					if (track.pingPong)
+					{
+						if (track.loop)
+						{
+							track.reverse = false;
+							track.time = 0.0f;
+						}
+						else
+						{
+							track.playing = false;
+							continue;
+						}
+					}
+					else if (track.loop)
+					{
+						track.reverse = false;
+						track.time = 0.0f;
+					}
+					else
+					{
+						track.playing = false;
+						continue;
+					}
+				}
+
+				if (track.time < 0.0f)
+					continue;
+
+				float tNorm = track.useNormalizedTime ? (track.time / duration) : track.time;
+				if (track.useNormalizedTime)
+					tNorm = AliceUI::Clamp01(tNorm);
+
+				float curveT = tNorm;
+				float u = tNorm;
+				if (curve)
+				{
+					if (track.useNormalizedTime)
+					{
+						const float curveDur = curve->GetDuration();
+						curveT = (curveDur > 0.0f) ? (tNorm * curveDur) : tNorm;
+					}
+					u = curve->Evaluate(curveT);
+				}
+
+				float value = Lerp(track.from, track.to, u);
+				if (track.additive)
+				{
+					if (!track.baseCaptured)
+					{
+						float base = 0.0f;
+						if (GetAnimValue(world, id, track.property, base))
+						{
+							track.baseValue = base;
+							track.baseCaptured = true;
+						}
+					}
+					if (track.baseCaptured)
+						value += track.baseValue;
+				}
+
+				SetAnimValue(world, id, track.property, value);
+			}
+		}
+
+		for (auto&& [id, shake] : world.GetComponents<UIShakeComponent>())
+		{
+			if (!shake.playing)
+			{
+				shake.offset = DirectX::XMFLOAT2(0.0f, 0.0f);
+				continue;
+			}
+
+			shake.elapsed += deltaTime;
+			if (shake.duration <= 0.0f || shake.elapsed >= shake.duration)
+			{
+				shake.Stop();
+				continue;
+			}
+
+			const float damp = 1.0f - (shake.elapsed / shake.duration);
+			const float omega = shake.frequency * 6.2831853f;
+			shake.offset.x = std::sin(shake.elapsed * omega) * shake.amplitude * damp;
+			shake.offset.y = std::cos(shake.elapsed * omega * 1.3f) * shake.amplitude * damp;
+		}
+
 		float layoutW = screenW;
 		float layoutH = screenH;
 		if (m_inputRectActive && m_inputRenderW > 0.0f && m_inputRenderH > 0.0f)
@@ -490,7 +748,66 @@ namespace Alice
 		BuildScreenLayout(world, layoutW, layoutH);
 		UpdateButtonStates(world, input, layoutW, layoutH);
 
-		for (auto [id, gauge] : world.GetComponents<UIGaugeComponent>())
+		float mouseX = 0.0f;
+		float mouseY = 0.0f;
+		if (m_mouseOverrideActive)
+		{
+			mouseX = m_mouseOverrideX;
+			mouseY = m_mouseOverrideY;
+		}
+		else
+		{
+			const POINT mouse = input.GetMousePosition();
+			mouseX = static_cast<float>(mouse.x);
+			mouseY = static_cast<float>(mouse.y);
+			if (m_inputRectActive && m_inputRectW > 0.0f && m_inputRectH > 0.0f)
+			{
+				const float u = (mouseX - m_inputRectX) / m_inputRectW;
+				const float v = (mouseY - m_inputRectY) / m_inputRectH;
+				mouseX = u * (m_inputRenderW > 0.0f ? m_inputRenderW : m_inputRectW);
+				mouseY = v * (m_inputRenderH > 0.0f ? m_inputRenderH : m_inputRectH);
+			}
+		}
+
+		for (auto&& [id, hover] : world.GetComponents<UIHover3DComponent>())
+		{
+			const auto* widget = world.GetComponent<UIWidgetComponent>(id);
+			if (!hover.enabled || !widget || widget->space != AliceUI::UISpace::Screen || widget->visibility != AliceUI::UIVisibility::Visible)
+			{
+				hover.hovered = false;
+				hover.angleX = Lerp(hover.angleX, 0.0f, std::clamp(hover.speed * deltaTime, 0.0f, 1.0f));
+				hover.angleY = Lerp(hover.angleY, 0.0f, std::clamp(hover.speed * deltaTime, 0.0f, 1.0f));
+				continue;
+			}
+
+			ScreenRect rect{};
+			if (!GetScreenRect(id, rect))
+				continue;
+
+			const bool hovered = (mouseX >= rect.minX && mouseX <= rect.maxX &&
+				mouseY >= rect.minY && mouseY <= rect.maxY);
+			hover.hovered = hovered;
+
+			float targetX = 0.0f;
+			float targetY = 0.0f;
+			if (hovered)
+			{
+				const float centerX = (rect.minX + rect.maxX) * 0.5f;
+				const float centerY = (rect.minY + rect.maxY) * 0.5f;
+				const float halfW = std::max(1.0f, (rect.maxX - rect.minX) * 0.5f);
+				const float halfH = std::max(1.0f, (rect.maxY - rect.minY) * 0.5f);
+				const float nx = std::clamp((mouseX - centerX) / halfW, -1.0f, 1.0f);
+				const float ny = std::clamp((centerY - mouseY) / halfH, -1.0f, 1.0f);
+				targetY = nx * hover.maxAngle;
+				targetX = ny * hover.maxAngle;
+			}
+
+			const float lerpT = std::clamp(hover.speed * deltaTime, 0.0f, 1.0f);
+			hover.angleX = Lerp(hover.angleX, targetX, lerpT);
+			hover.angleY = Lerp(hover.angleY, targetY, lerpT);
+		}
+
+		for (auto&& [id, gauge] : world.GetComponents<UIGaugeComponent>())
 		{
 			float target = gauge.normalized ? gauge.value : (gauge.value - gauge.minValue) / std::max(0.0001f, gauge.maxValue - gauge.minValue);
 			target = AliceUI::Clamp01(target);
@@ -508,7 +825,7 @@ namespace Alice
 
 	void UIRenderer::RenderScreen(const World& world, const Camera& camera, ID3D11RenderTargetView* targetRTV, float screenW, float screenH)
 	{
-		if (!targetRTV || !m_context || !m_vs)
+		if (!m_initialized || !targetRTV || !m_context || !m_vs || !m_cbUI)
 			return;
 
 		BuildScreenLayout(world, screenW, screenH);
@@ -581,6 +898,7 @@ namespace Alice
 			const auto* text = world.GetComponent<UITextComponent>(id);
 			const auto* image = world.GetComponent<UIImageComponent>(id);
 
+
 			if (gauge)
 			{
 				RenderGauge(world, id, layout);
@@ -622,7 +940,7 @@ namespace Alice
 
 	void UIRenderer::RenderWorld(const World& world, const Camera& camera, ID3D11RenderTargetView* targetRTV, ID3D11DepthStencilView* dsv)
 	{
-		if (!targetRTV || !m_context || !m_vs)
+		if (!m_initialized || !targetRTV || !m_context || !m_vs || !m_cbUI)
 			return;
 
 		m_context->OMSetRenderTargets(1, &targetRTV, dsv);
@@ -662,6 +980,7 @@ namespace Alice
 			const auto* text = world.GetComponent<UITextComponent>(id);
 			const auto* gauge = world.GetComponent<UIGaugeComponent>(id);
 			const auto* button = world.GetComponent<UIButtonComponent>(id);
+			const auto* shake = world.GetComponent<UIShakeComponent>(id);
 
 			ScreenLayout layout{};
 			layout.size = DirectX::XMFLOAT2(
@@ -680,6 +999,14 @@ namespace Alice
 				DirectX::XMVECTOR forward = invView.r[2];
 				DirectX::XMVECTOR pos = worldM.r[3];
 
+				// Preserve world scale when billboarding (world text uses Transform scale).
+				const float sx = std::max(0.0001f, DirectX::XMVectorGetX(DirectX::XMVector3Length(worldM.r[0])));
+				const float sy = std::max(0.0001f, DirectX::XMVectorGetX(DirectX::XMVector3Length(worldM.r[1])));
+				const float sz = std::max(0.0001f, DirectX::XMVectorGetX(DirectX::XMVector3Length(worldM.r[2])));
+				right = DirectX::XMVectorScale(right, sx);
+				up = DirectX::XMVectorScale(up, sy);
+				forward = DirectX::XMVectorScale(forward, sz);
+
 				DirectX::XMMATRIX billboard = DirectX::XMMatrixIdentity();
 				billboard.r[0] = right;
 				billboard.r[1] = up;
@@ -695,6 +1022,14 @@ namespace Alice
 			// World-space UI uses Y-up; flip local Y (screen-style Y-down) without moving position.
 			const DirectX::XMMATRIX flipY = DirectX::XMMatrixScaling(1.0f, -1.0f, 1.0f);
 			layout.world = flipY * layout.world;
+			if ((uiTransform->position.x != 0.0f || uiTransform->position.y != 0.0f))
+			{
+				layout.world = layout.world * DirectX::XMMatrixTranslation(uiTransform->position.x, uiTransform->position.y, 0.0f);
+			}
+			if (shake && (shake->offset.x != 0.0f || shake->offset.y != 0.0f))
+			{
+				layout.world = layout.world * DirectX::XMMatrixTranslation(shake->offset.x, shake->offset.y, 0.0f);
+			}
 
 			if (gauge)
 			{
@@ -759,6 +1094,7 @@ namespace Alice
 	{
 		const auto* widget = world.GetComponent<UIWidgetComponent>(id);
 		const auto* transform = world.GetComponent<UITransformComponent>(id);
+		const auto* shake = world.GetComponent<UIShakeComponent>(id);
 		if (!widget || !transform)
 			return;
 
@@ -768,6 +1104,10 @@ namespace Alice
 		DirectX::XMFLOAT2 size;
 		DirectX::XMFLOAT2 pivot;
 		DirectX::XMMATRIX local = BuildScreenLocalMatrix(*transform, parentSize, size, pivot);
+		if (shake && (shake->offset.x != 0.0f || shake->offset.y != 0.0f))
+		{
+			local = local * DirectX::XMMatrixTranslation(shake->offset.x, -shake->offset.y, 0.0f);
+		}
 		const DirectX::XMMATRIX worldM = local * parent;
 
 		ScreenLayout layout{};
@@ -855,7 +1195,30 @@ namespace Alice
 		const bool leftPressed = input.IsMouseButtonPressed(0);
 		const bool leftReleased = input.IsMouseButtonReleased(0);
 
-		for (auto [id, button] : world.GetComponents<UIButtonComponent>())
+		auto InvokeDelegates = [&](auto& list, const char* label)
+		{
+			for (auto& entry : list)
+			{
+				if (entry.invalid)
+					continue;
+				if (entry.isValid && !entry.isValid())
+				{
+					entry.invalid = true;
+					continue;
+				}
+				try
+				{
+					if (entry.fn)
+						entry.fn();
+				}
+				catch (...)
+				{
+					ALICE_LOG_ERRORF("[AliceUI] Button delegate threw exception (%s).", label);
+				}
+			}
+		};
+
+		for (auto&& [id, button] : world.GetComponents<UIButtonComponent>())
 		{
 			button.clicked = false;
 			const auto prevState = button.state;
@@ -890,15 +1253,13 @@ namespace Alice
 
 			if (hovered && !prevHovered)
 			{
-				for (auto& fn : button.onHovered)
-					fn();
+				InvokeDelegates(button.onHovered, "Hovered");
 			}
 
 			if (hovered && leftPressed)
 			{
 				button.wasPressed = true;
-				for (auto& fn : button.onPressed)
-					fn();
+				InvokeDelegates(button.onPressed, "Pressed");
 			}
 
 			if (leftReleased)
@@ -907,8 +1268,7 @@ namespace Alice
 					button.clicked = true;
 				if (button.wasPressed)
 				{
-					for (auto& fn : button.onReleased)
-						fn();
+					InvokeDelegates(button.onReleased, "Released");
 				}
 				button.wasPressed = false;
 			}
@@ -919,6 +1279,8 @@ namespace Alice
 				button.state = AliceUI::UIButtonState::Hovered;
 			else
 				button.state = AliceUI::UIButtonState::Normal;
+
+			button.CullInvalidDelegates();
 		}
 	}
 
@@ -929,6 +1291,8 @@ namespace Alice
 			return;
 
 		const auto* image = world.GetComponent<UIImageComponent>(id);
+		const auto* hover = world.GetComponent<UIHover3DComponent>(id);
+		const UIPixelConstants pixel = BuildPixelConstants(world, id);
 
 		DirectX::XMFLOAT4 baseColor(1, 1, 1, 1);
 		DirectX::XMFLOAT4 uvRect(0, 0, 1, 1);
@@ -963,9 +1327,29 @@ namespace Alice
 		};
 
 		UIVertex verts[4]{};
+		const bool useHover = hover && hover->enabled && widget->space == AliceUI::UISpace::Screen &&
+			(std::abs(hover->angleX) > 0.0001f || std::abs(hover->angleY) > 0.0001f);
+		const DirectX::XMMATRIX tilt = useHover
+			? DirectX::XMMatrixRotationX(hover->angleX) * DirectX::XMMatrixRotationY(hover->angleY)
+			: DirectX::XMMatrixIdentity();
+
 		for (int i = 0; i < 4; ++i)
 		{
-			DirectX::XMVECTOR p = DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&corners[i]), layout.world);
+			DirectX::XMVECTOR p = DirectX::XMLoadFloat3(&corners[i]);
+			if (useHover)
+			{
+				p = DirectX::XMVector3TransformCoord(p, tilt);
+				const float persp = 1.0f + DirectX::XMVectorGetZ(p) * hover->perspective;
+				if (persp != 0.0f)
+				{
+					const float invPersp = 1.0f / persp;
+					p = DirectX::XMVectorSet(DirectX::XMVectorGetX(p) * invPersp,
+						DirectX::XMVectorGetY(p) * invPersp,
+						DirectX::XMVectorGetZ(p),
+						1.0f);
+				}
+			}
+			p = DirectX::XMVector3TransformCoord(p, layout.world);
 			DirectX::XMStoreFloat3(&verts[i].position, p);
 			verts[i].color = color;
 		}
@@ -975,7 +1359,7 @@ namespace Alice
 		verts[2].uv = DirectX::XMFLOAT2(uvRect.x, uvRect.w);
 		verts[3].uv = DirectX::XMFLOAT2(uvRect.z, uvRect.w);
 
-		DrawQuad(verts, GetTexture(texPath), GetPixelShader(widget->shaderName));
+		DrawQuad(verts, GetTexture(texPath), GetPixelShader(widget->shaderName), pixel);
 	}
 
 	void UIRenderer::RenderText(const World& world, EntityId id, const ScreenLayout& layout)
@@ -984,6 +1368,7 @@ namespace Alice
 		const auto* text = world.GetComponent<UITextComponent>(id);
 		if (!widget || !text)
 			return;
+		const UIPixelConstants pixel = BuildPixelConstants(world, id);
 		if (text->text.empty())
 			return;
 
@@ -1130,7 +1515,7 @@ namespace Alice
 				x += adv;
 			}
 
-			DrawGlyphs(verts, srv, GetPixelShader(widget->shaderName));
+			DrawGlyphs(verts, srv, GetPixelShader(widget->shaderName), pixel);
 			return;
 		}
 
@@ -1284,7 +1669,7 @@ namespace Alice
 			x += adv;
 		}
 
-		DrawGlyphs(verts, fontSrv ? fontSrv : m_whiteSRV.Get(), GetPixelShader(widget->shaderName));
+		DrawGlyphs(verts, fontSrv ? fontSrv : m_whiteSRV.Get(), GetPixelShader(widget->shaderName), pixel);
 	}
 
 	void UIRenderer::RenderGauge(const World& world, EntityId id, const ScreenLayout& layout)
@@ -1293,6 +1678,8 @@ namespace Alice
 		const auto* gauge = world.GetComponent<UIGaugeComponent>(id);
 		if (!widget || !gauge)
 			return;
+
+		const UIPixelConstants pixel = BuildPixelConstants(world, id);
 
 		DirectX::XMFLOAT4 bgColor = gauge->backgroundColor;
 		DirectX::XMFLOAT4 fillColor = gauge->fillColor;
@@ -1320,7 +1707,7 @@ namespace Alice
 			verts[2].uv = DirectX::XMFLOAT2(0, 1);
 			verts[3].uv = DirectX::XMFLOAT2(1, 1);
 
-			DrawQuad(verts, GetTexture(gauge->backgroundTexture), GetPixelShader(widget->shaderName));
+			DrawQuad(verts, GetTexture(gauge->backgroundTexture), GetPixelShader(widget->shaderName), pixel);
 		}
 
 		float ratio = gauge->displayedValue;
@@ -1371,20 +1758,20 @@ namespace Alice
 		verts[2].uv = DirectX::XMFLOAT2(u0, v1);
 		verts[3].uv = DirectX::XMFLOAT2(u1, v1);
 
-		DrawQuad(verts, GetTexture(gauge->fillTexture), GetPixelShader(widget->shaderName));
+		DrawQuad(verts, GetTexture(gauge->fillTexture), GetPixelShader(widget->shaderName), pixel);
 	}
 
-	void UIRenderer::DrawQuad(const UIVertex* verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps)
+	void UIRenderer::DrawQuad(const UIVertex* verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps, const UIPixelConstants& pixel)
 	{
 		if (!verts)
 			return;
 
 		UIVertex temp[4] = { verts[0], verts[1], verts[2], verts[3] };
 		std::vector<UIVertex> list(temp, temp + 4);
-		DrawGlyphs(list, texture, ps);
+		DrawGlyphs(list, texture, ps, pixel);
 	}
 
-	void UIRenderer::DrawGlyphs(const std::vector<UIVertex>& verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps)
+	void UIRenderer::DrawGlyphs(const std::vector<UIVertex>& verts, ID3D11ShaderResourceView* texture, ID3D11PixelShader* ps, const UIPixelConstants& pixel)
 	{
 		if (verts.empty())
 			return;
@@ -1392,12 +1779,25 @@ namespace Alice
 			return;
 
 		ID3D11ShaderResourceView* srv = texture ? texture : m_whiteSRV.Get();
-		ID3D11PixelShader* pixel = ps ? ps : m_psDefault.Get();
+		ID3D11PixelShader* psToUse = ps ? ps : m_psDefault.Get();
 
-		m_context->PSSetShader(pixel, nullptr, 0);
+		m_context->PSSetShader(psToUse, nullptr, 0);
 		ID3D11SamplerState* sampler = m_sampler.Get();
 		m_context->PSSetSamplers(0, 1, &sampler);
 		m_context->PSSetShaderResources(0, 1, &srv);
+
+		// Update pixel constants
+		if (m_cbUIPixel)
+		{
+			D3D11_MAPPED_SUBRESOURCE mappedPixel{};
+			if (SUCCEEDED(m_context->Map(m_cbUIPixel.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedPixel)))
+			{
+				memcpy(mappedPixel.pData, &pixel, sizeof(UIPixelConstants));
+				m_context->Unmap(m_cbUIPixel.Get(), 0);
+			}
+			ID3D11Buffer* pscb[] = { m_cbUIPixel.Get() };
+			m_context->PSSetConstantBuffers(1, 1, pscb);
+		}
 
 		std::size_t offset = 0;
 		while (offset < verts.size())
@@ -1458,6 +1858,85 @@ namespace Alice
 			: t.pivot;
 		// pivot stored as centered range [-0.5, 0.5] with +Y up, convert to normalized [0,1] with +Y down
 		return DirectX::XMFLOAT2(pivot.x + 0.5f, 0.5f - pivot.y);
+	}
+
+	Alice::UIRenderer::UIPixelConstants UIRenderer::BuildPixelConstants(const World& world, EntityId id) const
+	{
+		UIPixelConstants pixel{};
+		const auto* effect = world.GetComponent<UIEffectComponent>(id);
+		const auto* vital = world.GetComponent<UIVitalComponent>(id);
+		if (effect)
+		{
+			pixel.outlineColor = effect->outlineColor;
+			pixel.glowColor = effect->glowColor;
+			pixel.vitalColor = effect->vitalColor;
+			pixel.vitalBgColor = effect->vitalBgColor;
+			pixel.params0 = DirectX::XMFLOAT4(effect->outlineThickness, effect->outlineEnabled ? 1.0f : 0.0f, effect->radialEnabled ? 1.0f : 0.0f, effect->radialFill);
+			pixel.params1 = DirectX::XMFLOAT4(effect->radialInner, effect->radialOuter, effect->radialSoftness, effect->radialClockwise ? 1.0f : 0.0f);
+			pixel.params2 = DirectX::XMFLOAT4(effect->radialAngleOffset, effect->radialDim, effect->glowEnabled ? 1.0f : 0.0f, effect->glowStrength);
+			pixel.params3 = DirectX::XMFLOAT4(effect->glowWidth, effect->glowSpeed, effect->glowAngle, effect->grayscale);
+			pixel.params4 = DirectX::XMFLOAT4(effect->vitalEnabled ? 1.0f : 0.0f, effect->vitalAmplitude, effect->vitalFrequency, effect->vitalSpeed);
+			pixel.params5 = DirectX::XMFLOAT4(effect->vitalThickness, 0.0f, 0.0f, 0.0f);
+			pixel.time = DirectX::XMFLOAT4(m_timeSeconds, effect->globalAlpha, 0.0f, 0.0f);
+		}
+		else
+		{
+			pixel.time = DirectX::XMFLOAT4(m_timeSeconds, 1.0f, 0.0f, 0.0f);
+		}
+
+		if (vital)
+		{
+			pixel.vitalColor = vital->color;
+			pixel.vitalBgColor = vital->backgroundColor;
+			pixel.params4 = DirectX::XMFLOAT4(1.0f, vital->amplitude, vital->frequency, vital->speed);
+			pixel.params5 = DirectX::XMFLOAT4(vital->thickness, 0.0f, 0.0f, 0.0f);
+		}
+		return pixel;
+	}
+
+	const UICurveAsset* UIRenderer::GetCurveAsset(const std::string& path)
+	{
+		if (path.empty())
+			return nullptr;
+
+		std::filesystem::path resolved = path;
+		if (m_resources)
+			resolved = m_resources->Resolve(path);
+
+		std::error_code ec;
+		const bool exists = std::filesystem::exists(resolved, ec);
+		const auto timestamp = exists ? std::filesystem::last_write_time(resolved, ec) : std::filesystem::file_time_type{};
+
+		auto it = m_curveCache.find(path);
+		if (it != m_curveCache.end() && it->second.valid && exists && it->second.timestamp == timestamp)
+			return &it->second.asset;
+
+		if (!exists)
+		{
+			if (it == m_curveCache.end())
+				m_curveCache[path] = CurveCacheEntry{};
+			return nullptr;
+		}
+
+		UICurveAsset asset{};
+		if (!LoadUICurveAsset(resolved, asset))
+		{
+			CurveCacheEntry entry{};
+			entry.timestamp = timestamp;
+			entry.valid = false;
+			m_curveCache[path] = entry;
+			return nullptr;
+		}
+
+		asset.Sort();
+		asset.RecalcAutoTangents();
+
+		CurveCacheEntry entry{};
+		entry.asset = std::move(asset);
+		entry.timestamp = timestamp;
+		entry.valid = true;
+		m_curveCache[path] = std::move(entry);
+		return &m_curveCache[path].asset;
 	}
 
 	ID3D11ShaderResourceView* UIRenderer::GetTexture(const std::string& path)
