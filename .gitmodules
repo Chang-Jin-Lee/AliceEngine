@@ -1,4 +1,0 @@
-[submodule "Engine"]
-    path = Engine
-    url = https://github.com/Cosmic-Disaster/AliceEngineSource.git
-    branch = stable
