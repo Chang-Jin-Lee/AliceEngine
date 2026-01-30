@@ -50,63 +50,64 @@ namespace Alice
         const float alphaStep = Get_m_alphaStep();
         const float valueStep = Get_m_valueStep();
 
-        if (input->GetKeyDown(KeyCode::Alpha1)) { mat->color = { 1.0f, 0.0f, 0.0f }; changed = true; }
-        if (input->GetKeyDown(KeyCode::Alpha2)) { mat->color = { 0.0f, 1.0f, 0.0f }; changed = true; }
-        if (input->GetKeyDown(KeyCode::Alpha3)) { mat->color = { 0.0f, 0.0f, 1.0f }; changed = true; }
-        if (input->GetKeyDown(KeyCode::Alpha4)) { mat->color = { 1.0f, 1.0f, 1.0f }; changed = true; }
+        if (input->GetKeyDown(KeyCode::Alpha1)) { mat->Set_color({ 1.0f, 0.0f, 0.0f }); changed = true; }
+        if (input->GetKeyDown(KeyCode::Alpha1)) { mat->Set_color({ 1.0f, 0.0f, 0.0f }); changed = true; }
+        if (input->GetKeyDown(KeyCode::Alpha2)) { mat->Set_color({ 0.0f, 1.0f, 0.0f }); changed = true; }
+        if (input->GetKeyDown(KeyCode::Alpha3)) { mat->Set_color({ 0.0f, 0.0f, 1.0f }); changed = true; }
+        if (input->GetKeyDown(KeyCode::Alpha4)) { mat->Set_color({ 1.0f, 1.0f, 1.0f }); changed = true; }
 
         if (input->GetKeyDown(KeyCode::Q))
         {
-            mat->alpha = std::clamp(mat->alpha - alphaStep, 0.0f, 1.0f);
+            mat->Set_alpha(std::clamp(mat->Get_alpha() - alphaStep, 0.0f, 1.0f));
             changed = true;
         }
         if (input->GetKeyDown(KeyCode::E))
         {
-            mat->alpha = std::clamp(mat->alpha + alphaStep, 0.0f, 1.0f);
+            mat->Set_alpha(std::clamp(mat->Get_alpha() + alphaStep, 0.0f, 1.0f));
             changed = true;
         }
 
         if (input->GetKeyDown(KeyCode::Z))
         {
-            mat->roughness = std::clamp(mat->roughness - valueStep, 0.0f, 1.0f);
+            mat->Set_roughness(std::clamp(mat->Get_roughness() - valueStep, 0.0f, 1.0f));
             changed = true;
         }
         if (input->GetKeyDown(KeyCode::X))
         {
-            mat->roughness = std::clamp(mat->roughness + valueStep, 0.0f, 1.0f);
+            mat->Set_roughness(std::clamp(mat->Get_roughness() + valueStep, 0.0f, 1.0f));
             changed = true;
         }
 
         if (input->GetKeyDown(KeyCode::C))
         {
-            mat->metalness = std::clamp(mat->metalness - valueStep, 0.0f, 1.0f);
+            mat->Set_metalness(std::clamp(mat->Get_metalness() - valueStep, 0.0f, 1.0f));
             changed = true;
         }
         if (input->GetKeyDown(KeyCode::V))
         {
-            mat->metalness = std::clamp(mat->metalness + valueStep, 0.0f, 1.0f);
+            mat->Set_metalness(std::clamp(mat->Get_metalness() + valueStep, 0.0f, 1.0f));
             changed = true;
         }
 
         if (input->GetKeyDown(KeyCode::T))
         {
-            mat->transparent = !mat->transparent;
+            mat->Set_transparent(!mat->Get_transparent());
             changed = true;
         }
 
         if (input->GetKeyDown(KeyCode::R))
         {
-            mat->alpha = 1.0f;
-            mat->roughness = 0.5f;
-            mat->metalness = 0.0f;
+            mat->Set_alpha(1.0f);
+            mat->Set_roughness(0.5f);
+            mat->Set_metalness(0.0f);
             changed = true;
         }
 
         if (changed && Get_m_autoTransparent())
         {
-            if (mat->alpha < 0.999f)
+            if (mat->Get_alpha() < 0.999f)
             {
-                mat->transparent = true;
+                mat->Set_transparent(true);
             }
         }
     }

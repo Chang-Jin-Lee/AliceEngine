@@ -3,6 +3,16 @@
 #include <DirectXMath.h>
 #include <string>
 
+#ifndef ALICE_GET_SET
+#define ALICE_GET_SET(name) \
+    const decltype(name)& Get_##name() const { return name; } \
+    void Set_##name(const decltype(name)& value) { name = value; }
+#endif
+
+#ifndef Alice_Get_Set
+#define Alice_Get_Set(name) ALICE_GET_SET(name)
+#endif
+
 namespace Alice {
     /// 머티리얼 컴포넌트
     /// - 베이스 컬러 + 알파 + 러프니스/메탈니스 등을 포함합니다.
@@ -37,5 +47,26 @@ namespace Alice {
         float toonPbrLevel3{ 0.7f };
         float toonPbrStrength{ 1.0f }; // 0: 부드러운 PBR, 1: 완전 Toon
         bool  toonPbrBlur{ false };    // 계단 사이를 부드럽게 블러 처리
+
+        Alice_Get_Set(color);
+        Alice_Get_Set(alpha);
+        Alice_Get_Set(roughness);
+        Alice_Get_Set(metalness);
+        Alice_Get_Set(ambientOcclusion);
+        Alice_Get_Set(shadingMode);
+        Alice_Get_Set(assetPath);
+        Alice_Get_Set(albedoTexturePath);
+        Alice_Get_Set(transparent);
+        Alice_Get_Set(normalStrength);
+        Alice_Get_Set(outlineColor);
+        Alice_Get_Set(outlineWidth);
+        Alice_Get_Set(toonPbrCut1);
+        Alice_Get_Set(toonPbrCut2);
+        Alice_Get_Set(toonPbrCut3);
+        Alice_Get_Set(toonPbrLevel1);
+        Alice_Get_Set(toonPbrLevel2);
+        Alice_Get_Set(toonPbrLevel3);
+        Alice_Get_Set(toonPbrStrength);
+        Alice_Get_Set(toonPbrBlur);
     };
 }
