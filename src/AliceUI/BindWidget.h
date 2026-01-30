@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <string>
 #include <rttr/type.h>
@@ -14,6 +14,11 @@
 #include "AliceUI/UITextComponent.h"
 #include "AliceUI/UIButtonComponent.h"
 #include "AliceUI/UIGaugeComponent.h"
+#include "AliceUI/UIEffectComponent.h"
+#include "AliceUI/UIAnimationComponent.h"
+#include "AliceUI/UIShakeComponent.h"
+#include "AliceUI/UIHover3DComponent.h"
+#include "AliceUI/UIVitalComponent.h"
 
 #define UI_META_BIND_WIDGET "BindWidget"
 #define UI_META_OPTIONAL    "Optional"
@@ -128,7 +133,7 @@ namespace Alice
 					return found;
 			}
 
-			// ·çÆ®/ÀÚ½Ä Æ®¸®¿¡ ¾øÀ¸¸é, ÀüÃ¼ UIWidgetComponent¿¡¼­ ÇÑ ¹ø ´õ °Ë»ö (ºÎ¸ğ °ü°è°¡ ¾øÀ» ¶§ ´ëºñ)
+			// ë£¨íŠ¸/ìì‹ íŠ¸ë¦¬ì— ì—†ìœ¼ë©´, ì „ì²´ UIWidgetComponentì—ì„œ í•œ ë²ˆ ë” ê²€ìƒ‰ (ë¶€ëª¨ ê´€ê³„ê°€ ì—†ì„ ë•Œ ëŒ€ë¹„)
 			for (auto [id, widget] : world.GetComponents<UIWidgetComponent>())
 			{
 				const std::string widgetName = GetWidgetNameForEntity(world, id);
@@ -175,6 +180,31 @@ namespace Alice
 			if (rawType == rttr::type::get<UIGaugeComponent>())
 			{
 				auto* comp = world.GetComponent<UIGaugeComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UIEffectComponent>())
+			{
+				auto* comp = world.GetComponent<UIEffectComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UIAnimationComponent>())
+			{
+				auto* comp = world.GetComponent<UIAnimationComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UIShakeComponent>())
+			{
+				auto* comp = world.GetComponent<UIShakeComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UIHover3DComponent>())
+			{
+				auto* comp = world.GetComponent<UIHover3DComponent>(id);
+				return comp ? rttr::variant{ comp } : rttr::variant{};
+			}
+			if (rawType == rttr::type::get<UIVitalComponent>())
+			{
+				auto* comp = world.GetComponent<UIVitalComponent>(id);
 				return comp ? rttr::variant{ comp } : rttr::variant{};
 			}
 			return rttr::variant{};

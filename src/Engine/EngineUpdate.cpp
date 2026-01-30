@@ -226,10 +226,9 @@ namespace Alice
 
 	void Engine::Impl::UpdateUI(float /*dt*/)
 	{
-		m_uiWorld.Update(m_width, m_height);
-		m_aliceUIRenderer.Update(
-			m_world, m_inputSystem, m_camera,
-			static_cast<float>(m_width), static_cast<float>(m_height));
+		//m_uiWorld.Update(m_width, m_height);
+		m_aliceUIRenderer.Update(m_world, m_inputSystem, m_camera,
+			static_cast<float>(m_width), static_cast<float>(m_height), m_timer.DeltaTime());
 	}
 
 	//=========================================================

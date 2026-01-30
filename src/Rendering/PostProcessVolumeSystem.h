@@ -29,6 +29,7 @@ namespace Alice
         EntityId activeVolumeId = InvalidEntityId;  // 현재 트랜지션 대상 볼륨
         PostProcessSettings previousFrameFinal;  // 이전 프레임의 최종값 (진입 감지용)
         bool hasPreviousFrameFinal = false;  // 이전 프레임 값이 유효한지
+        float cachedBound = -1.0f;  // 이전 프레임의 bound 값 (변경 감지용)
     };
 
     /// Post Process Volume 시스템
