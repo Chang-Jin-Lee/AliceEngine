@@ -3275,13 +3275,6 @@ namespace Alice
 				}
 				else if (selectedEntity == InvalidEntityId) {
 					Alice::ImGuiText(L"선택된 엔티티가 없습니다.");
-					
-					// Default Post Process Settings UI
-					ImGui::Separator();
-					if (ImGui::CollapsingHeader("Default Post Process Settings", ImGuiTreeNodeFlags_DefaultOpen))
-					{
-						DrawDefaultPostProcessSettings();
-					}
 				}
 				else {
 					// World 엔티티 Inspector 표시 (기존 로직)
@@ -5360,6 +5353,12 @@ namespace Alice
 					if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
 						cct->teleport = true;
 
+					// PostProcessVolumeComponent가 있으면 DebugDrawBoxComponent 업데이트
+					if (auto* volume = world.GetComponent<PostProcessVolumeComponent>(_selectedEntity))
+					{
+						world.UpdatePostProcessVolumeDebugBox(_selectedEntity, *volume);
+					}
+
 					world.MarkTransformDirty(_selectedEntity);
 					g_SceneDirty = true;
 				}
@@ -6032,85 +6031,6 @@ namespace Alice
 		}
 	}
 
-	void EditorCore::DrawDefaultPostProcessSettings()
-	{
-		PostProcessSettings& settings = m_defaultPostProcessSettings;
-		bool changed = false;
-
-		// 저장/로드 버튼
-		ImGui::Text("Default Post Process Settings");
-		if (ImGui::Button("Save to EngineSettings.json"))
-		{
-			SaveDefaultPostProcessSettings();
-		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("현재 설정을 EngineSettings.json에 저장합니다.");
-		
-		ImGui::SameLine();
-		if (ImGui::Button("Load from EngineSettings.json"))
-		{
-			LoadDefaultPostProcessSettings();
-		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("EngineSettings.json에서 설정을 불러옵니다.");
-
-		ImGui::Separator();
-
-		// Exposure
-		if (ImGui::TreeNode("Exposure##DefaultPostProcess"))
-		{
-			changed |= ImGui::SliderFloat("Exposure##DefaultPostProcess", &settings.exposure, -3.0f, 3.0f, "%.2f");
-			ImGui::TreePop();
-		}
-
-		// Max HDR Nits
-		if (ImGui::TreeNode("Max HDR Nits##DefaultPostProcess"))
-		{
-			changed |= ImGui::SliderFloat("Max HDR Nits##DefaultPostProcess", &settings.maxHDRNits, 100.0f, 10000.0f, "%.0f nits");
-			ImGui::TreePop();
-		}
-
-		// Color Grading
-		if (ImGui::TreeNode("Color Grading##DefaultPostProcess"))
-		{
-			ImGui::Text("Saturation (RGB)");
-			changed |= ImGui::ColorEdit3("Saturation (RGB)##DefaultPostProcess", &settings.saturation.x,
-				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
-
-			ImGui::Text("Contrast (RGB)");
-			changed |= ImGui::ColorEdit3("Contrast (RGB)##DefaultPostProcess", &settings.contrast.x,
-				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
-
-			ImGui::Text("Gamma (RGB)");
-			changed |= ImGui::ColorEdit3("Gamma (RGB)##DefaultPostProcess", &settings.gamma.x,
-				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
-
-			ImGui::Text("Gain (RGB)");
-			changed |= ImGui::ColorEdit3("Gain (RGB)##DefaultPostProcess", &settings.gain.x,
-				ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float);
-
-			ImGui::TreePop();
-		}
-
-		// Bloom
-		if (ImGui::TreeNode("Bloom##DefaultPostProcess"))
-		{
-			changed |= ImGui::SliderFloat("Bloom Threshold##DefaultPostProcess", &settings.bloomThreshold, 0.0f, 5.0f);
-			changed |= ImGui::SliderFloat("Bloom Knee##DefaultPostProcess", &settings.bloomKnee, 0.0f, 1.0f);
-			changed |= ImGui::SliderFloat("Bloom Intensity##DefaultPostProcess", &settings.bloomIntensity, 0.0f, 5.0f);
-			changed |= ImGui::SliderFloat("Bloom Gaussian Intensity##DefaultPostProcess", &settings.bloomGaussianIntensity, 0.0f, 5.0f);
-			changed |= ImGui::SliderFloat("Bloom Radius##DefaultPostProcess", &settings.bloomRadius, 0.0f, 10.0f);
-			changed |= ImGui::SliderInt("Bloom Downsample##DefaultPostProcess", &settings.bloomDownsample, 1, 8);
-			ImGui::TreePop();
-		}
-
-		if (changed)
-		{
-			// 변경사항이 있으면 자동 저장 (선택사항)
-			// SaveDefaultPostProcessSettings();
-		}
-	}
-
 	void EditorCore::SaveDefaultPostProcessSettings()
 	{
 		namespace fs = std::filesystem;
@@ -6274,6 +6194,7 @@ namespace Alice
 
 				// ==== Unbound 설정 (최상단) ====
 				ImGui::Text("Volume Type");
+				bool unboundBefore = volume->unbound;
 				changed |= ImGui::Checkbox("Unbound (전역 적용)##PostProcessVolume", &volume->unbound);
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Unbound: ON이면 항상 전역 적용 (무한 범위)\nOFF이면 Shape + BlendRadius 기반 공간 적용");
@@ -6289,84 +6210,41 @@ namespace Alice
 					ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.3f, 1.0f), "[공간 기반 적용]");
 				}
 
+				// Unbound 변경 시 DebugDrawBoxComponent 업데이트
+				if (unboundBefore != volume->unbound)
+				{
+					world.UpdatePostProcessVolumeDebugBox(_selectedEntity, *volume);
+				}
+
 				ImGui::Separator();
 
 				// ==== Bound 설정 (Unbound OFF일 때만 의미 있음) ====
 				if (volume->unbound)
 				{
-					// Unbound ON: Shape/BlendRadius 비활성화
+					// Unbound ON: Bound 비활성화
 					ImGui::BeginDisabled();
 				}
 
-				// ==== Shape 설정 ====
-				ImGui::Text("Shape");
-				const char* shapeNames[] = { "Box", "Sphere" };
-				int currentShape = static_cast<int>(volume->shape);
-				if (ImGui::Combo("Shape##PostProcessVolume", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames)))
-				{
-					volume->SetShape(static_cast<PostProcessVolumeShape>(currentShape));
-					changed = true;
-				}
-				if (volume->unbound && ImGui::IsItemHovered())
-					ImGui::SetTooltip("Unbound가 켜져 있어 Shape는 적용되지 않습니다.");
-
-				if (volume->shape == PostProcessVolumeShape::Box)
-				{
-					DirectX::XMFLOAT3 boxSize = volume->GetBoxSize();
-					if (ImGui::SliderFloat3("Box Size##PostProcessVolume", &boxSize.x, 0.1f, 100.0f))
-					{
-						volume->SetBoxSize(boxSize);
-						changed = true;
-					}
-				}
-				else if (volume->shape == PostProcessVolumeShape::Sphere)
-				{
-					float radius = volume->GetSphereRadius();
-					if (ImGui::SliderFloat("Sphere Radius##PostProcessVolume", &radius, 0.1f, 50.0f))
-					{
-						volume->SetSphereRadius(radius);
-						changed = true;
-					}
-				}
-
-				ImGui::Separator();
-
-				// ==== 블렌딩 파라미터 ====
-				ImGui::Text("Blending");
 				float blendRadius = volume->GetBlendRadius();
-				if (ImGui::SliderFloat("Blend Radius##PostProcessVolume", &blendRadius, 0.0f, 50.0f))
+				if (ImGui::SliderFloat("Bound##PostProcessVolume", &blendRadius, 0.0f, 50.0f))
 				{
 					volume->SetBlendRadius(blendRadius);
+					// DebugDrawBoxComponent bounds 업데이트
+					world.UpdatePostProcessVolumeDebugBox(_selectedEntity, *volume);
 					changed = true;
 				}
 				if (ImGui::IsItemHovered())
 				{
 					if (volume->unbound)
-						ImGui::SetTooltip("Unbound가 켜져 있어 BlendRadius는 적용되지 않습니다.");
+						ImGui::SetTooltip("Unbound가 켜져 있어 Bound는 적용되지 않습니다.");
 					else
-						ImGui::SetTooltip("볼륨 외부에서도 블렌딩되는 거리 (0이면 내부에서만 적용)");
+						ImGui::SetTooltip("보간이 적용되는 범위 (0이면 내부에서만 적용)");
 				}
 
 				if (volume->unbound)
 				{
 					ImGui::EndDisabled();
 				}
-
-				float blendWeight = volume->GetBlendWeight();
-				if (ImGui::SliderFloat("Blend Weight##PostProcessVolume", &blendWeight, 0.0f, 1.0f))
-				{
-					volume->SetBlendWeight(blendWeight);
-					changed = true;
-				}
-
-				int priority = volume->GetPriority();
-				if (ImGui::InputInt("Priority##PostProcessVolume", &priority))
-				{
-					volume->SetPriority(priority);
-					changed = true;
-				}
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("우선순위: 높을수록 나중에 블렌딩되어 영향이 큼");
 
 				ImGui::Separator();
 
