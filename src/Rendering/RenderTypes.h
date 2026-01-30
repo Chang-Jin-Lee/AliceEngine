@@ -176,6 +176,7 @@ namespace Alice
         std::uint32_t     boneCount   { 0 };
 
         DirectX::XMFLOAT3 color       { 0.7f, 0.7f, 0.7f };
+        float             alpha       { 1.0f };
         float             roughness   { 0.5f };
         float             metalness   { 0.0f };
         float             ambientOcclusion { 1.0f };

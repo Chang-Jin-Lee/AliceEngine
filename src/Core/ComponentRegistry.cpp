@@ -161,6 +161,7 @@ namespace Alice
         rttr::registration::class_<MaterialComponent>("MaterialComponent")
             .constructor<>()
             .property("color", &MaterialComponent::color)
+            .property("alpha", &MaterialComponent::alpha)
             .property("roughness", &MaterialComponent::roughness)
             .property("metalness", &MaterialComponent::metalness)
             .property("ambientOcclusion", &MaterialComponent::ambientOcclusion)

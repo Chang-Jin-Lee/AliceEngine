@@ -3,13 +3,24 @@
 #include <DirectXMath.h>
 #include <string>
 
+#ifndef ALICE_GET_SET
+#define ALICE_GET_SET(name) \
+    const decltype(name)& Get_##name() const { return name; } \
+    void Set_##name(const decltype(name)& value) { name = value; }
+#endif
+
+#ifndef Alice_Get_Set
+#define Alice_Get_Set(name) ALICE_GET_SET(name)
+#endif
+
 namespace Alice {
     /// 머티리얼 컴포넌트
-    /// - 현재는 베이스 컬러 + 러프니스/메탈니스만 가집니다.
+    /// - 베이스 컬러 + 알파 + 러프니스/메탈니스 등을 포함합니다.
     /// - 추후 더 많은 파라미터를 확장할 수 있습니다.
     struct MaterialComponent 
     {
         DirectX::XMFLOAT3 color{ 0.7f, 0.7f, 0.7f }; // 베이스 색상 (albedo)
+        float alpha{ 1.0f };                         // 0~1 알파 (투명도)
         float roughness{ 0.5f };                     // 0~1 러프니스 (PBR)
         float metalness{ 0.0f };                     // 0~1 메탈니스 (PBR)
         float ambientOcclusion{ 1.0f };              // 0~1 AO (Ambient Occlusion)
@@ -36,5 +47,26 @@ namespace Alice {
         float toonPbrLevel3{ 0.7f };
         float toonPbrStrength{ 1.0f }; // 0: 부드러운 PBR, 1: 완전 Toon
         bool  toonPbrBlur{ false };    // 계단 사이를 부드럽게 블러 처리
+
+        Alice_Get_Set(color);
+        Alice_Get_Set(alpha);
+        Alice_Get_Set(roughness);
+        Alice_Get_Set(metalness);
+        Alice_Get_Set(ambientOcclusion);
+        Alice_Get_Set(shadingMode);
+        Alice_Get_Set(assetPath);
+        Alice_Get_Set(albedoTexturePath);
+        Alice_Get_Set(transparent);
+        Alice_Get_Set(normalStrength);
+        Alice_Get_Set(outlineColor);
+        Alice_Get_Set(outlineWidth);
+        Alice_Get_Set(toonPbrCut1);
+        Alice_Get_Set(toonPbrCut2);
+        Alice_Get_Set(toonPbrCut3);
+        Alice_Get_Set(toonPbrLevel1);
+        Alice_Get_Set(toonPbrLevel2);
+        Alice_Get_Set(toonPbrLevel3);
+        Alice_Get_Set(toonPbrStrength);
+        Alice_Get_Set(toonPbrBlur);
     };
 }

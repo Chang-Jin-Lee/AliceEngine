@@ -499,7 +499,7 @@ namespace Alice
 
                 // 그 외 프로퍼티는 자동으로 렌더링
                 UIEditEvent event;
-                if (propName == "roughness" || propName == "metalness")
+                if (propName == "roughness" || propName == "metalness" || propName == "alpha")
                 {
                     event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, "", world);
                 }
@@ -575,7 +575,7 @@ namespace Alice
 
                 // roughness, metalness는 자동으로 SliderFloat로 렌더링
                 UIEditEvent event;
-                if (propName == "roughness" || propName == "metalness")
+                if (propName == "roughness" || propName == "metalness" || propName == "alpha")
                 {
                     event = Detail::RenderPropertyWithRange(prop, inst, 0.0f, 1.0f, displayLabel, world);
                 }

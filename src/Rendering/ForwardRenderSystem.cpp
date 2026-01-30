@@ -519,7 +519,11 @@ namespace Alice
 		ComPtr<ID3DBlob> errorBlob;
 
 		// 2. 문자열 병합 (안전하게 줄바꿈 문자 추가 추천)
-		std::string finalPBRPS = std::string(ForwardShader::PBRPS_Part1) + "\n" + ForwardShader::PBRPS_Part2;
+		std::string finalPBRPS =
+			std::string(ForwardShader::PBRPS_Part1) + "\n" +
+			ForwardShader::PBRPS_Part2 + "\n" +
+			ForwardShader::PBRPS_Part3;
+
 
 		// 3. D3DCompile 호출 (마지막 인자에 &errorBlob 전달)
 		HRESULT hr = D3DCompile(
@@ -1220,7 +1224,7 @@ namespace Alice
                 key.baseVertex = cmd.baseVertex;
                 key.diffuseSRV = diff;
                 key.normalSRV = norm;
-                key.color = XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f);
+                key.color = XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, cmd.alpha);
                 key.roughness = r;
                 key.metalness = m;
                 key.ambientOcclusion = ao;
@@ -1378,7 +1382,7 @@ namespace Alice
                     
                     // [Pass 1] 원본
                     UpdatePerObjectCB(cmd.world, view, proj,
-                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, ao, true, (m_flatNormalSRV != nullptr),
+                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, cmd.alpha), r, m, ao, true, (m_flatNormalSRV != nullptr),
                         objectShadingMode, cmd.normalStrength, cmd.toonPbrCuts, cmd.toonPbrLevels, outlineColor, 0.0f);
                     m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
                     
@@ -1387,7 +1391,7 @@ namespace Alice
                     {
                         m_context->RSSetState(m_rsCullFront.Get());
                         UpdatePerObjectCB(cmd.world, view, proj,
-                            XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, ao, true, (m_flatNormalSRV != nullptr),
+                            XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, cmd.alpha), r, m, ao, true, (m_flatNormalSRV != nullptr),
                             objectShadingMode, cmd.normalStrength, cmd.toonPbrCuts, cmd.toonPbrLevels, outlineColor, outlineWidth);
                         m_context->DrawIndexed(sub.indexCount, sub.startIndex, cmd.baseVertex);
                         // 상태 복구
@@ -1406,7 +1410,7 @@ namespace Alice
                 
                 // [Pass 1] 원본
                 UpdatePerObjectCB(cmd.world, view, proj,
-                    XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, ao, true, (m_flatNormalSRV != nullptr),
+                    XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, cmd.alpha), r, m, ao, true, (m_flatNormalSRV != nullptr),
                     objectShadingMode, cmd.normalStrength, cmd.toonPbrCuts, cmd.toonPbrLevels, outlineColor, 0.0f);
                 m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 
@@ -1415,7 +1419,7 @@ namespace Alice
                 {
                     m_context->RSSetState(m_rsCullFront.Get());
                     UpdatePerObjectCB(cmd.world, view, proj,
-                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, 1.0f), r, m, ao, true, (m_flatNormalSRV != nullptr),
+                        XMFLOAT4(cmd.color.x, cmd.color.y, cmd.color.z, cmd.alpha), r, m, ao, true, (m_flatNormalSRV != nullptr),
                         objectShadingMode, cmd.normalStrength, cmd.toonPbrCuts, cmd.toonPbrLevels, outlineColor, outlineWidth);
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                     // 상태 복구
@@ -1890,7 +1894,7 @@ namespace Alice
 
             const MaterialComponent* mat = world.GetComponent<MaterialComponent>(id);
             if (mat) {
-                color = { mat->color.x, mat->color.y, mat->color.z, 1.0f };
+                color = { mat->color.x, mat->color.y, mat->color.z, mat->alpha };
                 rough = mat->roughness; metal = mat->metalness;
                 if (mat->shadingMode >= 0)
                     ao = mat->ambientOcclusion;

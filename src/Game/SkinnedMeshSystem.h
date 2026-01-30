@@ -117,6 +117,7 @@ namespace Alice
                 if (const MaterialComponent* mat = world.GetComponent<MaterialComponent>(entityId))
                 {
                     cmd.color = mat->color;
+                    cmd.alpha = mat->alpha;
                     cmd.roughness = mat->roughness;
                     cmd.metalness = mat->metalness;
                     cmd.ambientOcclusion = mat->ambientOcclusion;

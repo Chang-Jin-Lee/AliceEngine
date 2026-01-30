@@ -412,6 +412,13 @@ Texture2D  g_DiffuseMap : register(t0);
 Texture2D  g_NormalMap  : register(t1);
 SamplerState g_Sam : register(s0);
 
+float DitherThreshold(float2 pos)
+{
+    // Interleaved gradient noise (per-pixel hash, less visible grid)
+    float n = 0.06711056f * pos.x + 0.00583715f * pos.y;
+    return frac(52.9829189f * frac(n));
+}
+
 GBufferOut main(VertexOut pIn)
 {
     GBufferOut gOut;
@@ -443,7 +450,18 @@ GBufferOut main(VertexOut pIn)
     }
     
     float alphaTex = textureColor.a * gMaterialColor.a;
-    clip(alphaTex - 0.1f);
+    // 알파 테스트는 텍스처 알파에만 적용 (머티리얼 알파는 블렌딩으로 처리)
+    if (gUseTexture != 0)
+    {
+        clip(textureColor.a - 0.1f);
+    }
+    // NDC 기반 디더링으로 투명도 처리 (알파 블렌딩 대신 화면 도트 컷아웃)
+    float alpha = saturate(alphaTex);
+    if (alpha < 1.0f)
+    {
+        float threshold = DitherThreshold(pIn.Position.xy);
+        clip(alpha - threshold);
+    }
     
     float3 baseColor = gMaterialColor.rgb;
     if (gUseTexture != 0)
@@ -1346,6 +1364,13 @@ struct PSIn
     float3 BitanW   : TEXCOORD4;
 };
 
+float DitherThreshold(float2 pos)
+{
+    // Interleaved gradient noise (per-pixel hash, less visible grid)
+    float n = 0.06711056f * pos.x + 0.00583715f * pos.y;
+    return frac(52.9829189f * frac(n));
+}
+
 float3 LinearToSRGB(float3 linearColor)
 {
     return pow(max(linearColor, 0.0f), 1.0f / 2.2f);
@@ -1359,10 +1384,21 @@ float4 main(PSIn pIn) : SV_Target
 
     float alphaTex = tex.a * gMaterialColor.a;
 
-    // 컷아웃(완전 투명 근처) 제거
-    clip(alphaTex - 0.99f);
+    // 컷아웃은 텍스처 알파로만 처리 (머티리얼 알파는 블렌딩)
+    if (gUseTexture != 0)
+    {
+        clip(tex.a - 0.1f);
+    }
+    // NDC 기반 디더링으로 투명도 처리 (알파 블렌딩 대신 화면 도트 컷아웃)
+    float alpha = saturate(alphaTex);
+    if (alpha < 1.0f)
+    {
+        float threshold = DitherThreshold(pIn.Position.xy);
+        clip(alpha - threshold);
+    }
     // 거의 불투명은 디퍼드에서 처리하므로 여기서는 제외
     if (alphaTex >= 0.99f) discard;
+    float alphaOut = 1.0f;
 
     float3 baseColor = gMaterialColor.rgb;
     if (gUseTexture != 0)
@@ -1371,7 +1407,7 @@ float4 main(PSIn pIn) : SV_Target
     // shadingMode == 6: TextureOnly (빛의 영향을 받지 않는 텍스처만 반환)
     if (gShadingMode == 6)
     {
-        return float4(baseColor, alphaTex);
+        return float4(baseColor, alphaOut);
     }
 
     float3 albedoLinear = pow(max(baseColor, 0.0f), 2.2f);
@@ -1441,7 +1477,7 @@ float4 main(PSIn pIn) : SV_Target
     float3 ibl = (diffuseIBL + specularIBL) * ao;
 
     float3 outLinear = direct + ibl;
-    return float4(outLinear, alphaTex);
+    return float4(outLinear, alphaOut);
 }
 )";
 

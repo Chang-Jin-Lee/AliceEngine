@@ -4669,6 +4669,7 @@ namespace Alice
 
 				bool changed = false;
 				changed |= ImGui::ColorEdit3("Base Color", &g_MaterialEditorData.color.x);
+				changed |= ImGui::SliderFloat("Alpha", &g_MaterialEditorData.alpha, 0.0f, 1.0f);
 				changed |= ImGui::SliderFloat("Roughness", &g_MaterialEditorData.roughness, 0.0f, 1.0f);
 				changed |= ImGui::SliderFloat("Metalness", &g_MaterialEditorData.metalness, 0.0f, 1.0f);
 
@@ -4730,6 +4731,7 @@ namespace Alice
 						if (mat->assetPath == targetPath)
 						{
 							mat->color = g_MaterialEditorData.color;
+							mat->alpha = g_MaterialEditorData.alpha;
 							mat->roughness = g_MaterialEditorData.roughness;
 							mat->metalness = g_MaterialEditorData.metalness;
 						}
