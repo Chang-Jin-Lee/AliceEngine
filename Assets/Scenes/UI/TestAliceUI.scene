@@ -121,11 +121,11 @@
                 "color": {
                     "w": 1.0,
                     "x": 1.0,
-                    "y": 0.949999988079071,
-                    "z": 0.949999988079071
+                    "y": 0.0,
+                    "z": 0.0
                 },
                 "fontPath": "Resource/Fonts/NotoSansKR-Regular.ttf",
-                "fontSize": 32.0,
+                "fontSize": 70.0,
                 "lineSpacing": 2.0,
                 "maxWidth": 0.0,
                 "text": "W 키가 눌렸음",
@@ -187,7 +187,7 @@
             "Transform": {
                 "enabled": true,
                 "position": {
-                    "x": 0.2677098512649536,
+                    "x": -1.4184041023254395,
                     "y": 0.0,
                     "z": 0.0
                 },
@@ -385,6 +385,38 @@
             },
             "guid": "1102842527072772255",
             "name": "TargetGauge"
+        },
+        {
+            "Scripts": [
+                {
+                    "enabled": true,
+                    "name": "SceneSwitchExample",
+                    "props": {
+                        "targetSceneA": "Assets/Scenes/UI/AdvancedAliceUI.scene",
+                        "targetSceneB": ""
+                    }
+                }
+            ],
+            "Transform": {
+                "enabled": true,
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "152825248170633588",
+            "name": "GameObject148"
         }
     ],
     "sceneName": "TestAliceUI",

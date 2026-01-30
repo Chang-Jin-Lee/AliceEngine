@@ -71,20 +71,74 @@ namespace Alice
 		return true;
 	}
 
-	bool TrailEffectRenderSystem::LoadTexture()
+	bool TrailEffectRenderSystem::CreateDefaultTexture()
 	{
-		if (!m_resources || !m_device) return false;
+		// 1x1 흰색 텍스처 생성
+		D3D11_TEXTURE2D_DESC texDesc = {};
+		texDesc.Width = 1;
+		texDesc.Height = 1;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.Usage = D3D11_USAGE_DEFAULT;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		texDesc.CPUAccessFlags = 0;
 
-		auto srv = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Test/Image/Hanako.png", m_device.Get());
-		if (!srv)
+		// 흰색 픽셀 데이터 (RGBA = 255, 255, 255, 255)
+		UINT32 whitePixel = 0xFFFFFFFF;
+		D3D11_SUBRESOURCE_DATA initData = {};
+		initData.pSysMem = &whitePixel;
+		initData.SysMemPitch = 4; // 4 bytes per pixel (RGBA)
+		initData.SysMemSlicePitch = 0;
+
+		ComPtr<ID3D11Texture2D> texture;
+		if (FAILED(m_device->CreateTexture2D(&texDesc, &initData, texture.GetAddressOf())))
 		{
-			ALICE_LOG_WARN("[TrailEffectRenderSystem] Failed to load texture: Resource/Test/Image/Hanako.png");
+			ALICE_LOG_ERRORF("[TrailEffectRenderSystem] Failed to create default texture");
 			return false;
 		}
 
-		m_textureSRV = srv;
-		ALICE_LOG_INFO("[TrailEffectRenderSystem] Texture loaded: Resource/Test/Image/Hanako.png");
+		// ShaderResourceView 생성
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = texDesc.Format;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+
+		if (FAILED(m_device->CreateShaderResourceView(texture.Get(), &srvDesc, m_textureSRV.ReleaseAndGetAddressOf())))
+		{
+			ALICE_LOG_ERRORF("[TrailEffectRenderSystem] Failed to create default texture SRV");
+			return false;
+		}
+
+		ALICE_LOG_INFO("[TrailEffectRenderSystem] Default white texture created");
 		return true;
+	}
+
+	bool TrailEffectRenderSystem::LoadTexture()
+	{
+		if (!m_device) return false;
+
+		// 텍스처 로드 시도 (ResourceManager가 있으면 사용)
+		if (m_resources)
+		{
+			auto srv = m_resources->LoadData<ID3D11ShaderResourceView>("Resource/Test/Image/Hanako.png", m_device.Get());
+			if (srv)
+			{
+				m_textureSRV = srv;
+				ALICE_LOG_INFO("[TrailEffectRenderSystem] Texture loaded: Resource/Test/Image/Hanako.png");
+				return true;
+			}
+			else
+			{
+				ALICE_LOG_WARN("[TrailEffectRenderSystem] Failed to load texture: Resource/Test/Image/Hanako.png, using default texture");
+			}
+		}
+
+		// 텍스처 로드 실패 시 기본 텍스처 생성
+		return CreateDefaultTexture();
 	}
 
 	void TrailEffectRenderSystem::Render(const World& world, const Camera& camera)
@@ -248,6 +302,15 @@ namespace Alice
 			m_context->UpdateSubresource(m_cbPerSwordEffectPS.Get(), 0, nullptr, &cbPS, 0, 0);
 
 			// 텍스처 및 샘플러 바인딩 (register(t20))
+			// 텍스처가 없으면 기본 텍스처를 생성 (안전장치)
+			if (!m_textureSRV)
+			{
+				if (!CreateDefaultTexture())
+				{
+					ALICE_LOG_ERRORF("[TrailEffectRenderSystem] Failed to create default texture in Render(), skipping");
+					continue;
+				}
+			}
 			ID3D11ShaderResourceView* textureSRV = m_textureSRV.Get();
 			m_context->PSSetShaderResources(20, 1, &textureSRV);
 			ID3D11SamplerState* sampler = m_samplerState.Get();
