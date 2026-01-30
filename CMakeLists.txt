@@ -51,12 +51,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Ï∂úÎ†• ?îÎ†â?∞Î¶¨ ?§Ï†ï (ÎπåÎìú ?¥Îçî ?¥Î? bin/)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
-set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGui")
-set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/ImGuizmo")
-#set(IMGUI_NODE_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/imgui-node-editor")
-set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/3DModel")
-set(FMOD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/FMOD")
+set(ALICE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Engine/src")
+set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Engine/ThirdParty/ImGui")
+set(IMGUIZMO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Engine/ThirdParty/ImGuizmo")
+#set(IMGUI_NODE_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Engine/ThirdParty/imgui-node-editor")
+set(THIRDPARTY_3DMODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Engine/ThirdParty/3DModel")
+set(FMOD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Engine/ThirdParty/FMOD")
 
 # ==========================================
 # [?§Ï†ï] RTTR ?ºÏù¥Î∏åÎü¨Î¶?(Engine???µÌï©)
@@ -76,8 +76,8 @@ set(BUILD_RTTR_DYNAMIC ON CACHE BOOL "" FORCE)
 # ?∞Ì????ºÏù¥Î∏åÎü¨Î¶??§Ï†ï (vcpkg Î∞??îÏßÑÍ≥?ÎßûÏ∂îÍ∏??ÑÌï¥ Static Runtime ??-> MD/MDd ?¨Ïö©)
 set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
 
-# RTTR ?úÎ∏åÎ™®Îìà Ï∂îÍ? (Í≤ΩÎ°ú: ThirdParty/rttr)
-add_subdirectory(ThirdParty/rttr)
+# RTTR º≠∫Í∏µ‚ √ﬂ∞° (∞Ê∑Œ: ThirdParty/rttr)
+add_subdirectory(Engine/ThirdParty/rttr)
 
 # window, std ?òÏùò min, max Ï∂©Îèå??†ú
 add_compile_definitions(NOMINMAX)
@@ -169,34 +169,34 @@ set(ENGINE_SOURCES
 
      #UI Component
     ${ALICE_SRC_DIR}/UI/IUIComponent.cpp
-	${ALICE_SRC_DIR}/UI/UITransform.cpp
-	${ALICE_SRC_DIR}/UI/UI_ImageComponent.cpp
-	
-	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.cpp
-	${ALICE_SRC_DIR}/UI/IUIScript.cpp
-	${ALICE_SRC_DIR}/UI/UI_InputComponent.cpp
-	
+    ${ALICE_SRC_DIR}/UI/UITransform.cpp
+    ${ALICE_SRC_DIR}/UI/UI_ImageComponent.cpp
+    
+    ${ALICE_SRC_DIR}/UI/UI_ScriptComponent.cpp
+    ${ALICE_SRC_DIR}/UI/IUIScript.cpp
+    ${ALICE_SRC_DIR}/UI/UI_InputComponent.cpp
+    
      #UI Object
      ${ALICE_SRC_DIR}/UI/UIBase.cpp
-	 ${ALICE_SRC_DIR}/UI/UIImage.cpp
-	 ${ALICE_SRC_DIR}/UI/UIButton.cpp
-	
-	#UI IUIScripts
-	${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
-	${ALICE_SRC_DIR}/UI/UIScriptFactory.cpp
+     ${ALICE_SRC_DIR}/UI/UIImage.cpp
+     ${ALICE_SRC_DIR}/UI/UIButton.cpp
+    
+    #UI IUIScripts
+    ${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
+    ${ALICE_SRC_DIR}/UI/UIScriptFactory.cpp
 
     # ?êÏù¥??ÏΩîÎìú Î¨∂Ïùå
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.cpp
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.cpp
-	${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
-	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
-	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
-	${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/EffectSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.cpp
+    ${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
+    ${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.cpp
 
-	${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
+    ${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
 
-    # AliceUI (Shader Í∏∞Î∞ò UI)
+    # AliceUI (Shader ±‚π› UI)
     ${ALICE_SRC_DIR}/AliceUI/UIFont.cpp
     ${ALICE_SRC_DIR}/AliceUI/UIRenderer.cpp
     ${ALICE_SRC_DIR}/AliceUI/UIShaderCode.cpp
@@ -254,7 +254,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Audio/SoundManager.h
 
     
-    #Ïª¥Ìè¨?åÌä∏??
+    # ƒƒ∆˜≥Õ∆ÆµÈ
     ${ALICE_SRC_DIR}/Components/ComponentStorage.h
     ${ALICE_SRC_DIR}/Components/CameraBlendComponent.h
     ${ALICE_SRC_DIR}/Components/CameraComponent.h
@@ -315,7 +315,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/DeferredShader.h
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/ForwardShader.h
     ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
-	  ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
     ${ALICE_SRC_DIR}/Game/AdvancedAnimSystem.h
     ${ALICE_SRC_DIR}/Game/SocketAttachmentSystem.h
     ${ALICE_SRC_DIR}/Game/SocketWorldUpdateSystem.h
@@ -331,19 +331,19 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/PhysXContext.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld.h
     ${ALICE_SRC_DIR}/PhysX/PhysXWorld_Internal.h
-	${ALICE_SRC_DIR}/PhysX/PhysicsSystem.h
+    ${ALICE_SRC_DIR}/PhysX/PhysicsSystem.h
 
     #Module
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsEcsBridge.h
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.h
     #Components
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
     ${ALICE_SRC_DIR}/PhysX/Components/Phy_SettingsComponent.h
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h	
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_MeshColliderComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_ColliderComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_RigidBodyComponent.h    
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_TerrainHeightFieldComponent.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_MeshColliderComponent.h
     ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
     ${ALICE_SRC_DIR}/PhysX/Components/Phy_JointComponent.h
 
@@ -352,10 +352,10 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/UI/UIWorldManager.h
     ${ALICE_SRC_DIR}/UI/UISceneManager.h
     ${ALICE_SRC_DIR}/UI/UIRenderStruct.h
-	${ALICE_SRC_DIR}/UI/UITransform.h
-	${ALICE_SRC_DIR}/UI/UICompDelegate.h
-	${ALICE_SRC_DIR}/UI/IUIScript.h
-	${ALICE_SRC_DIR}/UI/UIScriptSystem.h
+    ${ALICE_SRC_DIR}/UI/UITransform.h
+    ${ALICE_SRC_DIR}/UI/UICompDelegate.h
+    ${ALICE_SRC_DIR}/UI/IUIScript.h
+    ${ALICE_SRC_DIR}/UI/UIScriptSystem.h
 
      #UI Component
     ${ALICE_SRC_DIR}/UI/IUIComponent.h
@@ -363,7 +363,7 @@ set(ENGINE_HEADERS
      #UI Object
     ${ALICE_SRC_DIR}/UI/UIBase.h
 
-    # AliceUI (Shader Í∏∞Î∞ò UI)
+    # AliceUI (Shader ±‚π› UI)
     ${ALICE_SRC_DIR}/AliceUI/UICommon.h
     ${ALICE_SRC_DIR}/AliceUI/UIWidgetComponent.h
     ${ALICE_SRC_DIR}/AliceUI/UITransformComponent.h
@@ -386,27 +386,27 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/json/json.hpp
     ${ALICE_SRC_DIR}/json/json_fwd.hpp
 
-	${ALICE_SRC_DIR}/Rendering/EffectSystem.h
-	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
-	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
-	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
-	${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
-	${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
-	${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
-	${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
-	${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
+    ${ALICE_SRC_DIR}/Rendering/EffectSystem.h
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/TrailEffectShader.h
+    ${ALICE_SRC_DIR}/PhysX/Components/Phy_CCTComponent.h
+    ${ALICE_SRC_DIR}/Components/ComputeEffectComponent.h
+    ${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.h
+    ${ALICE_SRC_DIR}/Rendering/ShaderCode/ComputeEffectShader.h
     ${ALICE_SRC_DIR}/Core/SocketSerialization.h
 
 
-	${ALICE_SRC_DIR}/UI/UI_ImageComponent.h
-	${ALICE_SRC_DIR}/UI/UIImage.h
-	${ALICE_SRC_DIR}/UI/UI_ScriptComponent.h
-	${ALICE_SRC_DIR}/UI/UI_InputComponent.h
-	${ALICE_SRC_DIR}/UI/UIButton.h
+    ${ALICE_SRC_DIR}/UI/UI_ImageComponent.h
+    ${ALICE_SRC_DIR}/UI/UIImage.h
+    ${ALICE_SRC_DIR}/UI/UI_ScriptComponent.h
+    ${ALICE_SRC_DIR}/UI/UI_InputComponent.h
+    ${ALICE_SRC_DIR}/UI/UIButton.h
 
-	${ALICE_SRC_DIR}/UI/UIGaugeBar.h
+    ${ALICE_SRC_DIR}/UI/UIGaugeBar.h
 )
 
 add_library(Engine STATIC
@@ -499,7 +499,7 @@ target_include_directories(Engine
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
         ${IMGUI_NODE_EDITOR_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/rttr/src  # RTTR ?§Îçî Í≤ΩÎ°ú
+        ${CMAKE_CURRENT_SOURCE_DIR}/Engine/ThirdParty/rttr/src  # RTTR «Ï¥ı ∞Ê∑Œ
 )
 
 
@@ -731,8 +731,8 @@ if(MSVC)
       "$<$<CONFIG:Debug>:/NODEFAULTLIB:PhysXExtensions_static_64.lib>"
     )
   endforeach()
-  
-    # vcpkg toolchain?????∞Îäî Íµ¨ÏÑ±?¥ÎùºÎ©? find_packageÍ∞Ä Ï∞æÏùÑ ???àÍ≤å prefixÎß?Ï∂îÍ?
+   
+    # vcpkg toolchain¿ª æ» æ≤¥¬ ±∏º∫¿Ã∂Û∏È, find_package∞° √£¿ª ºˆ ¿÷∞‘ prefix∏∏ √ﬂ∞°
     list(PREPEND CMAKE_PREFIX_PATH
         "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET_DYNAMIC}"
     )

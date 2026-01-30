@@ -1,5 +1,6 @@
 {
     "albedoTexturePath": "Resource/Textures/Rapi/Rapi_D_3.png",
+    "ambientOcclusion": 1.0,
     "assetPath": "Assets/Materials/Rapi_3.mat",
     "color": {
         "x": 0.699999988079071,
@@ -13,7 +14,16 @@
         "y": 0.0,
         "z": 0.0
     },
-    "outlineWidth": 0.009999999776482582,
+    "outlineWidth": 0.0,
     "roughness": 0.5,
-    "shadingMode": -1
+    "shadingMode": -1,
+    "toonPbrBlur": false,
+    "toonPbrCut1": 0.20000000298023224,
+    "toonPbrCut2": 0.5,
+    "toonPbrCut3": 0.949999988079071,
+    "toonPbrLevel1": 0.10000000149011612,
+    "toonPbrLevel2": 0.4000000059604645,
+    "toonPbrLevel3": 0.699999988079071,
+    "toonPbrStrength": 1.0,
+    "transparent": false
 }
