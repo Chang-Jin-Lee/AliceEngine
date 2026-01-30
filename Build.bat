@@ -11,109 +11,30 @@ if /i "%~1" neq "__INVOKED" (
 )
 
 echo ========================================================
-echo [Build.bat] Engine 스마트 빌드 시스템
-echo 목표: 완전 자동화 (중간 멈춤 없음 -> 결과 확인 후 종료)
+echo [Build.bat] Engine 빌드 시스템 (Folder Mode)
+echo 목표: 라이브러리 셋업 및 솔루션 생성 자동화
 echo ========================================================
 
 set "EXIT_CODE=0"
 set "ENGINE_DIR=%~dp0Engine"
 
 REM -----------------------------------------------------------
-REM 1. Git 설치 및 폴더 확인
+REM 1. Engine 폴더 확인
+REM (서브모듈이 아니므로 없으면 다운로드할 수 없음, 에러 처리)
 REM -----------------------------------------------------------
-where git >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [FAIL] Git이 없습니다.
+if not exist "%ENGINE_DIR%\" (
+    echo.
+    echo [FAIL] 'Engine' 폴더를 찾을 수 없습니다!
+    echo 이 배치 파일과 같은 위치에 Engine 폴더가 있는지 확인해주세요.
     set "EXIT_CODE=1"
     goto :End
 )
 
-if not exist "%ENGINE_DIR%\.git" (
-    echo [INFO] Engine 폴더가 비어있어 초기화를 진행합니다.
-    git submodule update --init --recursive
-)
-
 REM -----------------------------------------------------------
-REM 2. Engine 변경사항 감지 (Dirty Check)
+REM 2. Setup 및 CMake 빌드 실행
 REM -----------------------------------------------------------
 echo.
-echo [STEP 1] Engine 로컬 변경사항 확인 중...
-pushd "%ENGINE_DIR%"
-
-set "IS_DIRTY=0"
-git diff --quiet
-if errorlevel 1 set "IS_DIRTY=1"
-git diff --cached --quiet
-if errorlevel 1 set "IS_DIRTY=1"
-for /f "delims=" %%F in ('git ls-files --others --exclude-standard') do set "IS_DIRTY=1"
-popd
-
-REM -----------------------------------------------------------
-REM 3. 분기 처리
-REM -----------------------------------------------------------
-if "%IS_DIRTY%"=="0" (
-    echo [INFO] 변경사항이 없습니다. 최신 버전 동기화를 진행합니다.
-    goto :DoUpdate
-)
-
-echo.
-echo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-echo [WARN] Engine 내부에 수정된 코드나 새로운 파일이 있습니다!
-echo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-echo.
-echo [Y] : 내 변경사항 삭제(Reset) 후 최신 버전 빌드 (권장)
-echo [N] : 현재 내가 수정한 코드 그대로 빌드
-echo.
-set /p USER_CHOICE="선택하세요 (Y/N): "
-
-if /i "!USER_CHOICE!"=="Y" goto :DoUpdate
-if /i "!USER_CHOICE!"=="N" goto :SkipUpdate
-
-echo [INFO] 유효하지 않은 입력입니다. 현재 코드로 진행합니다.
-goto :SkipUpdate
-
-
-REM -----------------------------------------------------------
-REM [루틴 A] 강제 업데이트
-REM -----------------------------------------------------------
-:DoUpdate
-echo.
-echo [STEP 2] Engine을 Stable 최신으로 강제 동기화합니다...
-pushd "%ENGINE_DIR%"
-
-git fetch origin
-if errorlevel 1 (
-    echo [FAIL] Git Fetch 실패. 인터넷 상태를 확인하세요.
-    popd
-    set "EXIT_CODE=1"
-    goto :End
-)
-
-git checkout -B stable origin/stable
-git reset --hard origin/stable
-git clean -fd
-git submodule update --init --recursive
-
-popd
-echo [OK] 최신 버전 동기화 완료.
-goto :BuildSequence
-
-
-REM -----------------------------------------------------------
-REM [루틴 B] 업데이트 건너뛰기
-REM -----------------------------------------------------------
-:SkipUpdate
-echo.
-echo [STEP 2] Git 업데이트를 건너뛰고 현재 상태로 빌드합니다.
-goto :BuildSequence
-
-
-REM -----------------------------------------------------------
-REM 4. Setup 및 CMake 빌드 (중간 멈춤 방지 적용)
-REM -----------------------------------------------------------
-:BuildSequence
-echo.
-echo [STEP 3] Engine Setup (라이브러리 설정)
+echo [STEP 1] Engine Setup (라이브러리 설정)
 pushd "%ENGINE_DIR%"
 
 if exist "Setup.bat" (
@@ -134,9 +55,10 @@ if exist "Setup.bat" (
 )
 
 echo.
-echo [STEP 4] 솔루션 생성 (build_msvc.cmd)
+echo [STEP 2] 솔루션 생성 (build_msvc.cmd)
 if exist "build_msvc.cmd" (
     REM [핵심] echo. | call ...
+    REM 내부 pause를 스킵
     echo. | call build_msvc.cmd
     if errorlevel 1 (
         echo [FAIL] build_msvc.cmd 실행 실패
@@ -156,6 +78,7 @@ popd
 echo.
 echo ========================================================
 echo [SUCCESS] 모든 작업이 완료되었습니다.
+echo Build 폴더에서 솔루션 파일을 확인하세요.
 echo ========================================================
 
 :End
