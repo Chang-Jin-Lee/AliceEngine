@@ -602,15 +602,13 @@ namespace Alice
         // === PostProcessVolumeComponent 등록 ===
         rttr::registration::enumeration<PostProcessVolumeShape>("PostProcessVolumeShape")
             (
-                rttr::value("Box", PostProcessVolumeShape::Box),
-                rttr::value("Sphere", PostProcessVolumeShape::Sphere)
+                rttr::value("Box", PostProcessVolumeShape::Box)
             );
         rttr::registration::class_<PostProcessVolumeComponent>("PostProcessVolumeComponent")
             .constructor<>()
             .property("shape", &PostProcessVolumeComponent::GetShape, &PostProcessVolumeComponent::SetShape)
             .property("unbound", &PostProcessVolumeComponent::GetUnbound, &PostProcessVolumeComponent::SetUnbound)
             .property("boxSize", &PostProcessVolumeComponent::GetBoxSize, &PostProcessVolumeComponent::SetBoxSize)
-            .property("sphereRadius", &PostProcessVolumeComponent::GetSphereRadius, &PostProcessVolumeComponent::SetSphereRadius)
             .property("blendRadius", &PostProcessVolumeComponent::GetBlendRadius, &PostProcessVolumeComponent::SetBlendRadius)
                 (rttr::metadata("Min", 0.0f))
             .property("blendWeight", &PostProcessVolumeComponent::GetBlendWeight, &PostProcessVolumeComponent::SetBlendWeight)

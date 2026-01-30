@@ -9,8 +9,7 @@ namespace Alice
     /// Post Process Volume의 Shape 타입
     enum class PostProcessVolumeShape
     {
-        Box = 0,    // AABB 또는 OBB 박스
-        Sphere = 1  // 구 (미래 확장)
+        Box = 0    // AABB 또는 OBB 박스
     };
 
     /// Unreal Engine 스타일의 Post Process Volume 컴포넌트
@@ -30,8 +29,8 @@ namespace Alice
         /// Box 크기 (월드 스케일 기준, TransformComponent의 scale과 곱해짐)
         DirectX::XMFLOAT3 boxSize = { 10.0f, 10.0f, 10.0f };
 
-        /// Sphere 반지름 (미래 확장용, 현재는 사용 안 함)
-        float sphereRadius = 5.0f;
+        /// Bound: 보간 시작 기준이 되는 박스 크기 (Scale과 곱해져서 DebugBoxDraw로 그려짐)
+        float bound = 10.0f;
 
         // ==== 블렌딩 파라미터 ====
         /// BlendRadius: 볼륨 외부에서도 블렌딩되는 거리 (>= 0)
@@ -79,8 +78,8 @@ namespace Alice
             boxSize.z = std::max(0.01f, val.z);
         }
 
-        float GetSphereRadius() const { return sphereRadius; }
-        void SetSphereRadius(float val) { sphereRadius = std::max(0.01f, val); }
+        float GetBound() const { return bound; }
+        void SetBound(float val) { bound = std::max(0.01f, val); }
 
         const std::string& GetReferenceObjectName() const { return referenceObjectName; }
         void SetReferenceObjectName(const std::string& val) { referenceObjectName = val; }

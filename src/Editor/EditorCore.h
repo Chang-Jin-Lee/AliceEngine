@@ -255,7 +255,6 @@ namespace Alice
         void DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity);
 		
 		// Default Post Process Settings UI
-		void DrawDefaultPostProcessSettings();
 		void SaveDefaultPostProcessSettings();
 		void LoadDefaultPostProcessSettings();
 		
