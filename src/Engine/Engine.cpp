@@ -122,6 +122,8 @@ namespace Alice
 		float m_physAccum = 0.0f;
 		float m_physFixedDt = 1.0f / 60.0f;
 		int   m_physMaxSubsteps = 4;
+		bool  m_skipPhysicsNextFrame = false;
+		bool  m_prevIsPlaying = false;
 
 		// 물리 이벤트 큐 (한 프레임 안전하게 처리하기 위함)
 		std::vector<PhysicsEvent> m_physicsEventQueue;
@@ -750,6 +752,12 @@ namespace Alice
 
 		// 씬이 바뀐 프레임에는 "월드에 접근하는 코드"를 전부 스킵하기 위한 플래그
 		bool sceneChangedThisFrame = false;
+		const bool playJustStarted = (pImpl->m_editorMode && pImpl->m_isPlaying && !pImpl->m_prevIsPlaying);
+		if (playJustStarted)
+		{
+			pImpl->m_skipPhysicsNextFrame = true;
+			pImpl->m_physAccum = 0.0f;
+		}
 
 		if (updateFromScene)
 		{
@@ -792,6 +800,7 @@ namespace Alice
 
 				// 4) 이 프레임은 더 이상 월드에 접근하면 안 됨 (방금 갈아엎었을 수 있으니까)
 				sceneChangedThisFrame = true;
+				pImpl->m_skipPhysicsNextFrame = true;
 			}
 			// ===================================================================
 
@@ -818,12 +827,20 @@ namespace Alice
 				}
 
 				// PhysicsSystem 업데이트 (Game → Physics 동기화)
-				if (pImpl->m_physicsSystem)
+				float physicsDt = dt;
+				if (pImpl->m_skipPhysicsNextFrame)
 				{
-					pImpl->m_physicsSystem->Update(dt);
+					physicsDt = 0.0f;
+					pImpl->m_physAccum = 0.0f;
+					pImpl->m_skipPhysicsNextFrame = false;
 				}
 
-			TickPhysics(dt); // 물리 시뮬레이션 및 Physics → Game 동기화
+				if (pImpl->m_physicsSystem)
+				{
+					pImpl->m_physicsSystem->Update(physicsDt);
+				}
+
+			TickPhysics(physicsDt); // 물리 시뮬레이션 및 Physics → Game 동기화
 
 			// 2-4. 애니메이션/소켓 업데이트 (물리 이후: 최신 Transform 반영)
 			pImpl->m_advancedAnimSystem.Update(pImpl->m_world, static_cast<double>(dt));
@@ -944,6 +961,7 @@ namespace Alice
 		pImpl->m_aliceUIRenderer.Update(pImpl->m_world, pImpl->m_inputSystem, pImpl->m_camera,
 			static_cast<float>(pImpl->m_width), static_cast<float>(pImpl->m_height));
 
+		pImpl->m_prevIsPlaying = pImpl->m_isPlaying;
 	}
 
 	//=========================================================
