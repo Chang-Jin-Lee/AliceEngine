@@ -88,6 +88,11 @@ add_compile_definitions(NOMINMAX)
 set(ENGINE_SOURCES
     # ?�진 계층
     ${ALICE_SRC_DIR}/Engine/Engine.cpp
+    ${ALICE_SRC_DIR}/Engine/EngineInitialize.cpp
+    ${ALICE_SRC_DIR}/Engine/EngineUpdate.cpp
+    ${ALICE_SRC_DIR}/Engine/EngineRender.cpp
+    ${ALICE_SRC_DIR}/Engine/EnginePhysics.cpp
+    ${ALICE_SRC_DIR}/Engine/EngineWindow.cpp
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.cpp
     ${ALICE_SRC_DIR}/Editor/EditorCore.cpp
     ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.cpp
@@ -201,6 +206,7 @@ set(ENGINE_SOURCES
 set(ENGINE_HEADERS
     # ?�진 계층
     ${ALICE_SRC_DIR}/Engine/Engine.h
+    ${ALICE_SRC_DIR}/Engine/EngineImpl.h
     ${ALICE_SRC_DIR}/Editor/ViewportPicker.h
     ${ALICE_SRC_DIR}/Editor/EditorCore.h
     ${ALICE_SRC_DIR}/Editor/Blueprint/AnimBlueprintEditor.h
