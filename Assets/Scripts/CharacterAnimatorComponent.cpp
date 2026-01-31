@@ -10,7 +10,6 @@
 #include "Runtime/Foundation/Logger.h"
 #include "Runtime/ECS/World.h"
 #include "Runtime/Gameplay/Animation/AdvancedAnimationComponent.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 // [추가] ComputeEffectComponent 헤더 포함
 #include "Runtime/Rendering/Components/ComputeEffectComponent.h"
 

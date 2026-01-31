@@ -3,7 +3,6 @@
 #include "Runtime/Foundation/Logger.h"
 #include "Runtime/ECS/GameObject.h"
 #include "Runtime/Physics/Components/Phy_TerrainHeightFieldComponent.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 #include <cmath>
 #include <algorithm>
 #include <random>

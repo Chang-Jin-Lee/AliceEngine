@@ -2,6 +2,7 @@
 
 #include "Runtime/Scripting/IScript.h"
 #include "Runtime/Scripting/ScriptReflection.h"
+#include <DirectXMath.h>
 
 namespace Alice
 {

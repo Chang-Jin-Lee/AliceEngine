@@ -3,7 +3,6 @@
 #include "Runtime/ECS/GameObject.h"
 #include "Runtime/Input/InputTypes.h"
 
-#include "Runtime/ECS/Components/TransformComponent.h"
 #include "Runtime/Rendering/Components/CameraComponent.h"
 #include "Runtime/Rendering/Components/CameraBlendComponent.h"
 #include "Runtime/Rendering/Components/CameraShakeComponent.h"

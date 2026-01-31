@@ -84,6 +84,7 @@
 
 // 텍스처 로딩용 DirectXTK
 #include <DirectXTK/WICTextureLoader.h>
+#include "Runtime/ECS/Components/TransformComponent.h"
 
 using namespace DirectX;
 

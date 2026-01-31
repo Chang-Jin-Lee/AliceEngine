@@ -5,7 +5,6 @@
 #include "Runtime/Resources/Prefab.h"
 #include "Runtime/Input/Input.h"
 #include "Runtime/ECS/GameObject.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 #include <cmath>
 #include <filesystem>
 

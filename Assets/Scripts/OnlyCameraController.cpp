@@ -2,7 +2,6 @@
 #include "Runtime/Scripting/ScriptFactory.h"
 #include "Runtime/ECS/GameObject.h"
 #include "Runtime/Input/Input.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 #include <DirectXMath.h>
 #include <algorithm> // std::clamp
 

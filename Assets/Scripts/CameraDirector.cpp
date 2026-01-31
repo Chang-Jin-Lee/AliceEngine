@@ -2,7 +2,6 @@
 #include "Runtime/Scripting/ScriptFactory.h"
 #include "Runtime/ECS/GameObject.h"
 #include "Runtime/ECS/World.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 #include "Runtime/Rendering/Components/CameraComponent.h"
 #include "Runtime/Rendering/Camera.h"
 

@@ -9,7 +9,6 @@
 #include "Runtime/Rendering/Components/CameraSpringArmComponent.h"
 #include "Runtime/Rendering/Components/CameraFollowComponent.h"
 #include "Runtime/Rendering/Components/CameraLookAtComponent.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 
 #include <DirectXMath.h>
 

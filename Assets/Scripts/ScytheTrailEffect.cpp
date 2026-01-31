@@ -3,7 +3,6 @@
 #include "Runtime/Scripting/ScriptFactory.h"
 #include "Runtime/Foundation/Logger.h"
 #include "Runtime/Rendering/Components/EffectComponent.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 #include <cmath>
 #include <DirectXMath.h>
 

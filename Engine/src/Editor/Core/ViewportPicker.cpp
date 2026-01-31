@@ -6,9 +6,11 @@
 
 #include "Runtime/Rendering/SkinnedMeshRegistry.h"
 #include "Runtime/Importing/FbxModel.h"
+#include "Runtime/Rendering/Components/SkinnedMeshComponent.h"
 #include "Runtime/Rendering/Components/PointLightComponent.h"
 #include "Runtime/Rendering/Components/SpotLightComponent.h"
 #include "Runtime/Rendering/Components/RectLightComponent.h"
+#include "Runtime/ECS/Components/TransformComponent.h"
 
 using namespace DirectX;
 
