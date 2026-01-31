@@ -163,27 +163,10 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsDebug.cpp
     ${ALICE_SRC_DIR}/PhysX/Module/PhysicsModule.cpp
 
-    #UI
-     ${ALICE_SRC_DIR}/UI/UIWorldManager.cpp
-     ${ALICE_SRC_DIR}/UI/UISceneManager.cpp
 
-     #UI Component
-    ${ALICE_SRC_DIR}/UI/IUIComponent.cpp
-    ${ALICE_SRC_DIR}/UI/UITransform.cpp
-    ${ALICE_SRC_DIR}/UI/UI_ImageComponent.cpp
     
-    ${ALICE_SRC_DIR}/UI/UI_ScriptComponent.cpp
-    ${ALICE_SRC_DIR}/UI/IUIScript.cpp
-    ${ALICE_SRC_DIR}/UI/UI_InputComponent.cpp
     
-     #UI Object
-     ${ALICE_SRC_DIR}/UI/UIBase.cpp
-     ${ALICE_SRC_DIR}/UI/UIImage.cpp
-     ${ALICE_SRC_DIR}/UI/UIButton.cpp
     
-    #UI IUIScripts
-    ${ALICE_SRC_DIR}/UI/UIScriptSystem.cpp
-    ${ALICE_SRC_DIR}/UI/UIScriptFactory.cpp
 
     # ?êÏù¥??ÏΩîÎìú Î¨∂Ïùå
     ${ALICE_SRC_DIR}/Rendering/ShaderCode/CommonShaderCode.cpp
@@ -194,7 +177,6 @@ set(ENGINE_SOURCES
     ${ALICE_SRC_DIR}/Rendering/ComputeEffectSystem.cpp
     ${ALICE_SRC_DIR}/Rendering/DebugDrawComponentSystem.cpp
 
-    ${ALICE_SRC_DIR}/UI/UIGaugeBar.cpp
 
     # AliceUI (Shader ±‚π› UI)
     ${ALICE_SRC_DIR}/AliceUI/UIFont.cpp
@@ -348,20 +330,8 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/PhysX/Components/Phy_JointComponent.h
 
 
-     #UI
-    ${ALICE_SRC_DIR}/UI/UIWorldManager.h
-    ${ALICE_SRC_DIR}/UI/UISceneManager.h
-    ${ALICE_SRC_DIR}/UI/UIRenderStruct.h
-    ${ALICE_SRC_DIR}/UI/UITransform.h
-    ${ALICE_SRC_DIR}/UI/UICompDelegate.h
-    ${ALICE_SRC_DIR}/UI/IUIScript.h
-    ${ALICE_SRC_DIR}/UI/UIScriptSystem.h
 
-     #UI Component
-    ${ALICE_SRC_DIR}/UI/IUIComponent.h
 
-     #UI Object
-    ${ALICE_SRC_DIR}/UI/UIBase.h
 
     # AliceUI (Shader ±‚π› UI)
     ${ALICE_SRC_DIR}/AliceUI/UICommon.h
@@ -400,13 +370,7 @@ set(ENGINE_HEADERS
     ${ALICE_SRC_DIR}/Core/SocketSerialization.h
 
 
-    ${ALICE_SRC_DIR}/UI/UI_ImageComponent.h
-    ${ALICE_SRC_DIR}/UI/UIImage.h
-    ${ALICE_SRC_DIR}/UI/UI_ScriptComponent.h
-    ${ALICE_SRC_DIR}/UI/UI_InputComponent.h
-    ${ALICE_SRC_DIR}/UI/UIButton.h
 
-    ${ALICE_SRC_DIR}/UI/UIGaugeBar.h
 )
 
 add_library(Engine STATIC
