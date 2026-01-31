@@ -174,9 +174,22 @@ set_target_properties(AliceScripts PROPERTIES
     OUTPUT_NAME "AliceScripts"
 )
 
-# 핫리로드시 PDB 잠금 방지 (/DEBUG:NONE)
+# Debug 빌드: PDB 이름을 (CMake configure 시점 기준) 매번 바꿔서 잠금 문제를 회피합니다.
 if(MSVC)
-    target_link_options(AliceScripts PRIVATE "/DEBUG:NONE")
+    # =============== 이 부분
+    string(TIMESTAMP ALICE_PDB_TS "%Y%m%d_%H%M%S")
+    set_target_properties(AliceScripts PROPERTIES
+        PDB_NAME_DEBUG "AliceScripts_${ALICE_PDB_TS}"
+    )
+
+    target_link_options(AliceScripts PRIVATE
+        $<$<CONFIG:Release>:/DEBUG:NONE>
+    )
+    # ===================
+
+    # 문제가 된다면 위의 이 부분을 주석처리하고 밑의 한 줄로 바꿀 것
+    # 디버그를 위해서 시도한 거임.
+    # target_link_options(AliceScripts PRIVATE "/DEBUG:NONE")
 
     # 소스 파일 UTF-8 인코딩 명시 (C4819 경고 방지)
     target_compile_options(AliceScripts PRIVATE "/utf-8")
