@@ -112,11 +112,6 @@ endif()
 # [3] VCPKG 및 Include 설정 적용 (타겟 생성 후 실행)
 # ============================================================================
 if(MSVC)
-    # Script PCH (force include for autocomplete + no per-file includes)
-    target_precompile_headers(AliceScripts PRIVATE
-        "${ALICE_ROOT}/Engine/src/Runtime/Scripting/ScriptPCH.h"
-    )
-
     # Include 경로 설정
     target_include_directories(AliceScripts
         PRIVATE
@@ -210,5 +205,5 @@ if(MSVC)
     # target_link_options(AliceScripts PRIVATE "/DEBUG:NONE")
 
     # 소스 파일 UTF-8 인코딩 명시 (C4819 경고 방지)
-    target_compile_options(AliceScripts PRIVATE "/utf-8")
+    target_compile_options(AliceScripts PRIVATE "/utf-8" "/MP")
 endif()
