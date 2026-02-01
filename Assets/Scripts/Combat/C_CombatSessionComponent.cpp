@@ -12,7 +12,6 @@
 #include "Runtime/Gameplay/Combat/AttackDriverComponent.h"
 #include "Runtime/Gameplay/Animation/AdvancedAnimationComponent.h"
 #include "Runtime/Physics/Components/Phy_CCTComponent.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 
 #include "C_CombatContracts.h"
 #include "C_CombatEventBus.h"

@@ -5,7 +5,6 @@
 #include "Runtime/ECS/World.h"
 #include "Runtime/Input/Input.h"
 #include "Runtime/Physics/Components/Phy_CCTComponent.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 #include <cmath>
 
 #ifndef M_PI

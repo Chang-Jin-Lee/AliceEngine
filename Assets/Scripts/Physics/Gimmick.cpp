@@ -10,7 +10,6 @@
 #include "Runtime/Input/Input.h"
 #include "Runtime/Input/InputTypes.h"
 #include "Runtime/ECS/GameObject.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 #include "Runtime/Physics/Components/Phy_RigidBodyComponent.h"
 #include "Runtime/Physics/Components/Phy_ColliderComponent.h"
 #include "Runtime/Physics/Components/Phy_MeshColliderComponent.h"

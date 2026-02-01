@@ -1,0 +1,47 @@
+flowchart TD
+    Root[Engine/src]
+
+    Root --> Runtime
+    Root --> Editor
+    Root --> Samples
+    Root --> ThirdParty
+
+    Runtime --> Foundation
+    Runtime --> ECS
+    Runtime --> Engine
+    Runtime --> Input
+    Runtime --> Resources
+    Runtime --> Audio
+    Runtime --> Rendering
+    Runtime --> Physics
+    Runtime --> UI
+    Runtime --> Scripting
+    Runtime --> Importing
+    Runtime --> Gameplay
+
+    Resources --> Resources_Serialization[Serialization]
+
+    Rendering --> Rendering_Components[Components]
+    Rendering --> Rendering_Data[Data]
+    Rendering --> Rendering_D3D11[D3D11]
+    Rendering --> Rendering_ShaderCode[ShaderCode]
+
+    Physics --> Physics_Components[Components]
+    Physics --> Physics_Module[Module]
+
+    Audio --> Audio_Components[Components]
+    UI --> UI_Components[Components]
+    Scripting --> Scripting_Components[Components]
+
+    Gameplay --> Gameplay_Animation[Animation]
+    Gameplay --> Gameplay_Combat[Combat]
+    Gameplay --> Gameplay_Sockets[Sockets]
+
+    Editor --> Editor_Core[Core]
+    Editor --> Editor_Tools[Tools]
+    Editor_Tools --> Editor_Blueprint[Blueprint]
+
+    Samples --> Samples_Sandbox[Sandbox]
+    Samples --> Samples_Scenes[Scenes]
+
+    ThirdParty --> ThirdParty_json[json]

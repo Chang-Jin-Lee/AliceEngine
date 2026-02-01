@@ -5,7 +5,6 @@
 
 #include "Runtime/Scripting/ScriptFactory.h"
 #include "Runtime/ECS/World.h"
-#include "Runtime/ECS/Components/TransformComponent.h"
 
 namespace Alice
 {
