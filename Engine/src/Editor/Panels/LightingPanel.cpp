@@ -71,17 +71,8 @@ namespace Alice
 				&lighting.keyIntensity,
 				0.0f,
 				3.0f);
-			Alice::ImGuiSliderFloat(L"Fill Intensity (보조광)",
-				&lighting.fillIntensity,
-				0.0f,
-				3.0f);
-
 			Alice::ImGuiSliderFloat3(L"Key Direction (주광)",
 				&lighting.keyDirection.x,
-				-1.0f,
-				1.0f);
-			Alice::ImGuiSliderFloat3(L"Fill Direction (보조광)",
-				&lighting.fillDirection.x,
 				-1.0f,
 				1.0f);
 
