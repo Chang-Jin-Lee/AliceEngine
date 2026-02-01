@@ -197,37 +197,46 @@ namespace Alice
 				ImGui::EndMenu();
 			}
 
-			if (ImGui::MenuItem("Camera"))
+			if (ImGui::BeginMenu("Camera"))
 			{
-				EntityId e = world.CreateCamera();
-				PushCommand(std::make_unique<CreateEntityCommand>(e, "Camera"));
-				selectedEntity = e;
-				g_SceneDirty = true;
-				ImGui::CloseCurrentPopup();
+
+				if (ImGui::MenuItem("Camera"))
+				{
+					EntityId e = world.CreateCamera();
+					PushCommand(std::make_unique<CreateEntityCommand>(e, "Camera"));
+					selectedEntity = e;
+					g_SceneDirty = true;
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndMenu();
 			}
-			if (ImGui::MenuItem("Point Light"))
+			if (ImGui::BeginMenu("Light"))
 			{
-				EntityId e = world.CreatePointLight();
-				PushCommand(std::make_unique<CreateEntityCommand>(e, "Point Light"));
-				selectedEntity = e;
-				g_SceneDirty = true;
-				ImGui::CloseCurrentPopup();
-			}
-			if (ImGui::MenuItem("Spot Light"))
-			{
-				EntityId e = world.CreateSpotLight();
-				PushCommand(std::make_unique<CreateEntityCommand>(e, "Spot Light"));
-				selectedEntity = e;
-				g_SceneDirty = true;
-				ImGui::CloseCurrentPopup();
-			}
-			if (ImGui::MenuItem("Rect Light"))
-			{
-				EntityId e = world.CreateRectLight();
-				PushCommand(std::make_unique<CreateEntityCommand>(e, "Rect Light"));
-				selectedEntity = e;
-				g_SceneDirty = true;
-				ImGui::CloseCurrentPopup();
+				if (ImGui::MenuItem("Point Light"))
+				{
+					EntityId e = world.CreatePointLight();
+					PushCommand(std::make_unique<CreateEntityCommand>(e, "Point Light"));
+					selectedEntity = e;
+					g_SceneDirty = true;
+					ImGui::CloseCurrentPopup();
+				}
+				if (ImGui::MenuItem("Spot Light"))
+				{
+					EntityId e = world.CreateSpotLight();
+					PushCommand(std::make_unique<CreateEntityCommand>(e, "Spot Light"));
+					selectedEntity = e;
+					g_SceneDirty = true;
+					ImGui::CloseCurrentPopup();
+				}
+				if (ImGui::MenuItem("Rect Light"))
+				{
+					EntityId e = world.CreateRectLight();
+					PushCommand(std::make_unique<CreateEntityCommand>(e, "Rect Light"));
+					selectedEntity = e;
+					g_SceneDirty = true;
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("AliceUI"))
 			{

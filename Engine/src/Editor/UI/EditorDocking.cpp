@@ -38,19 +38,15 @@ namespace Alice
 			ImGuiID dockLeftBottom = 0;
 			ImGui::DockBuilderSplitNode(dockLeft, ImGuiDir_Down, 0.55f, &dockLeftBottom, &dockLeftTop);
 
-			ImGuiID dockRightTop = 0;
-			ImGuiID dockRightBottom = 0;
-			ImGui::DockBuilderSplitNode(dockRightCol, ImGuiDir_Down, 0.55f, &dockRightBottom, &dockRightTop);
-
 			ImGui::DockBuilderDockWindow("Hierarchy", dockLeftTop);
 			ImGui::DockBuilderDockWindow("Project", dockLeftBottom);
 			ImGui::DockBuilderDockWindow("Game", dockCenterTop);
 			ImGui::DockBuilderDockWindow("Camera", dockCenterBottom);
-			ImGui::DockBuilderDockWindow("Inspector", dockRightTop);
-			ImGui::DockBuilderDockWindow("Lighting", dockRightBottom);
+			// Inspector와 Lighting을 같은 도크에 배치해 탭으로 표시
+			ImGui::DockBuilderDockWindow("Inspector", dockRightCol);
+			ImGui::DockBuilderDockWindow("Lighting", dockRightCol);
 
 			ImGui::DockBuilderFinish(dockspaceId);
 		}
 	}
 }
-
