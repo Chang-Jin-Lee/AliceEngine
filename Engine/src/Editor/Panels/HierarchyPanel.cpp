@@ -254,7 +254,7 @@ namespace Alice
 			}
 
 			ImGui::PopID();
-		};
+			};
 
 		// 루트 엔티티들 가져오기
 		std::vector<EntityId> rootEntities = world.GetRootEntities();

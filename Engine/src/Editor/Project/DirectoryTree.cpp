@@ -17,7 +17,7 @@
 
 namespace Alice
 {
-							void EditorCore::DrawDirectoryNode(World& world,
+	void EditorCore::DrawDirectoryNode(World& world,
 		EntityId& selectedEntity,
 		const std::filesystem::path& path)
 	{
@@ -516,22 +516,22 @@ namespace Alice
 					}
 				}
 
-					// 씬 파일 저장/로드
-					if (ext == ".scene")
+				// 씬 파일 저장/로드
+				if (ext == ".scene")
+				{
+					if (ImGui::MenuItem("Load Scene"))
 					{
-						if (ImGui::MenuItem("Load Scene"))
-						{
-							g_NextScenePath = path;
-							g_RequestSceneLoad = true;
-						}
-						if (ImGui::MenuItem("Save Current Scene"))
-						{
-							SceneFile::Save(world, path);
-							g_CurrentScenePath = path;
-							g_HasCurrentScenePath = true;
-							g_SceneDirty = false;
-						}
+						g_NextScenePath = path;
+						g_RequestSceneLoad = true;
 					}
+					if (ImGui::MenuItem("Save Current Scene"))
+					{
+						SceneFile::Save(world, path);
+						g_CurrentScenePath = path;
+						g_HasCurrentScenePath = true;
+						g_SceneDirty = false;
+					}
+				}
 
 				// FBX 인스턴스 에셋(.fbxasset)을 월드에 배치
 				if (ext == ".fbxasset")

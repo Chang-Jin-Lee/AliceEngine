@@ -11,7 +11,7 @@
 
 namespace Alice
 {
-void EditorCore::DrawInspectorSocketAttachment(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorSocketAttachment(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* att = world.GetComponent<SocketAttachmentComponent>(_selectedEntity))
 		{
@@ -76,7 +76,7 @@ void EditorCore::DrawInspectorSocketAttachment(World& world, const EntityId& _se
 						if (value.empty()) return;
 						if (std::find(socketOptions.begin(), socketOptions.end(), value) == socketOptions.end())
 							socketOptions.push_back(value);
-					};
+						};
 					if (const auto* sc = world.GetComponent<SocketComponent>(resolvedOwner))
 					{
 						for (const auto& s : sc->sockets)
@@ -144,7 +144,7 @@ void EditorCore::DrawInspectorSocketAttachment(World& world, const EntityId& _se
 	}
 
 
-void EditorCore::DrawInspectorSocketComponent(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorSocketComponent(World& world, const EntityId& _selectedEntity)
 	{
 		auto* comp = world.GetComponent<SocketComponent>(_selectedEntity);
 		if (!comp)

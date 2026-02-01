@@ -12,7 +12,7 @@
 
 namespace Alice
 {
-void EditorCore::DrawInspectorAttackDriver(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorAttackDriver(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* driver = world.GetComponent<AttackDriverComponent>(_selectedEntity))
 		{
@@ -131,7 +131,7 @@ void EditorCore::DrawInspectorAttackDriver(World& world, const EntityId& _select
 						case AttackDriverClipSource::Explicit:
 						default: return clip.clipName;
 						}
-					};
+						};
 
 					for (size_t i = 0; i < driver->clips.size(); ++i)
 					{
@@ -266,7 +266,7 @@ void EditorCore::DrawInspectorAttackDriver(World& world, const EntityId& _select
 	}
 
 
-void EditorCore::DrawInspectorHurtbox(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorHurtbox(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* hb = world.GetComponent<HurtboxComponent>(_selectedEntity))
 		{
@@ -349,7 +349,7 @@ void EditorCore::DrawInspectorHurtbox(World& world, const EntityId& _selectedEnt
 	}
 
 
-void EditorCore::DrawInspectorWeaponTrace(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorWeaponTrace(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* trace = world.GetComponent<WeaponTraceComponent>(_selectedEntity))
 		{

@@ -13,16 +13,16 @@
 
 namespace Alice
 {
-namespace
-{
-inline bool MaterialInspectorFilter(const std::string& propName)
+	namespace
+	{
+		inline bool MaterialInspectorFilter(const std::string& propName)
 		{
 			// assetPath/albedoTexturePath/shadingMode는 특별 UI 처리하므로 제외
 			return propName != "assetPath" && propName != "albedoTexturePath" && propName != "shadingMode";
 		}
-}
+	}
 
-void EditorCore::DrawInspectorMaterial(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorMaterial(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* mat = world.GetComponent<MaterialComponent>(_selectedEntity)) {
 			ImGui::Text("Material");
@@ -94,42 +94,42 @@ void EditorCore::DrawInspectorMaterial(World& world, const EntityId& _selectedEn
 				auto* items = static_cast<const ShadingItem*>(data);
 				*out_text = items[idx].label;
 				return true;
-			}, (void*)shadingItems, (int)std::size(shadingItems)))
+				}, (void*)shadingItems, (int)std::size(shadingItems)))
 			{
 				mat->shadingMode = shadingItems[shadingIndex].value;
 				changed = true;
 			}
 
 			auto IsImageExt = [](std::string ext)
-			{
-				std::transform(ext.begin(), ext.end(), ext.begin(),
-					[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-				return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".dds" || ext == ".tga" || ext == ".bmp";
-			};
+				{
+					std::transform(ext.begin(), ext.end(), ext.begin(),
+						[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+					return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".dds" || ext == ".tga" || ext == ".bmp";
+				};
 
 			auto NormalizeToLogicalIfPossible = [&](const std::filesystem::path& p) -> std::string
-			{
-				// 기본은 입력 경로 문자열
-				std::string out = p.string();
-
-				// 가능하면 "논리 경로"로 변환
 				{
-					std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(p);
-					if (!logical.empty() && !logical.is_absolute())
-						out = logical.string();
-				}
-				return out;
-			};
+					// 기본은 입력 경로 문자열
+					std::string out = p.string();
+
+					// 가능하면 "논리 경로"로 변환
+					{
+						std::filesystem::path logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(p);
+						if (!logical.empty() && !logical.is_absolute())
+							out = logical.string();
+					}
+					return out;
+				};
 
 			auto ApplyAlbedoPath = [&](const std::filesystem::path& anyPath)
-			{
-				if (!IsImageExt(anyPath.extension().string()))
-					return;
+				{
+					if (!IsImageExt(anyPath.extension().string()))
+						return;
 
-				mat->albedoTexturePath = NormalizeToLogicalIfPossible(anyPath);
-				changed = true;
-				g_SceneDirty = true;
-			};
+					mat->albedoTexturePath = NormalizeToLogicalIfPossible(anyPath);
+					changed = true;
+					g_SceneDirty = true;
+				};
 
 			// ---- UI
 			ImGui::Text("Albedo: %s", mat->albedoTexturePath.empty() ? "None" : mat->albedoTexturePath.c_str());
@@ -179,7 +179,7 @@ void EditorCore::DrawInspectorMaterial(World& world, const EntityId& _selectedEn
 	}
 
 
-void EditorCore::DrawInspectorPointLight(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorPointLight(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* light = world.GetComponent<PointLightComponent>(_selectedEntity)) {
 			if (ImGui::CollapsingHeader("Point Light", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -201,7 +201,7 @@ void EditorCore::DrawInspectorPointLight(World& world, const EntityId& _selected
 	}
 
 
-void EditorCore::DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorSpotLight(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* light = world.GetComponent<SpotLightComponent>(_selectedEntity)) {
 			if (ImGui::CollapsingHeader("Spot Light", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -228,7 +228,7 @@ void EditorCore::DrawInspectorSpotLight(World& world, const EntityId& _selectedE
 	}
 
 
-void EditorCore::DrawInspectorRectLight(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorRectLight(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* light = world.GetComponent<RectLightComponent>(_selectedEntity)) {
 			if (ImGui::CollapsingHeader("Rect Light", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -252,10 +252,10 @@ void EditorCore::DrawInspectorRectLight(World& world, const EntityId& _selectedE
 	}
 
 
-void EditorCore::SaveDefaultPostProcessSettings()
+	void EditorCore::SaveDefaultPostProcessSettings()
 	{
 		namespace fs = std::filesystem;
-		
+
 		// 프로젝트 루트 경로 계산
 		wchar_t exePathW[MAX_PATH] = {};
 		GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
@@ -267,7 +267,7 @@ void EditorCore::SaveDefaultPostProcessSettings()
 		try
 		{
 			nlohmann::json j;
-			
+
 			// 기존 파일이 있으면 읽기
 			if (fs::exists(settingsPath))
 			{
@@ -316,10 +316,10 @@ void EditorCore::SaveDefaultPostProcessSettings()
 	}
 
 
-void EditorCore::LoadDefaultPostProcessSettings()
+	void EditorCore::LoadDefaultPostProcessSettings()
 	{
 		namespace fs = std::filesystem;
-		
+
 		// 프로젝트 루트 경로 계산
 		wchar_t exePathW[MAX_PATH] = {};
 		GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
@@ -350,40 +350,40 @@ void EditorCore::LoadDefaultPostProcessSettings()
 			if (j.contains("defaultPostProcess"))
 			{
 				const auto& ppSettings = j["defaultPostProcess"];
-				
+
 				if (ppSettings.contains("exposure"))
 					m_defaultPostProcessSettings.exposure = ppSettings["exposure"].get<float>();
 				if (ppSettings.contains("maxHDRNits"))
 					m_defaultPostProcessSettings.maxHDRNits = ppSettings["maxHDRNits"].get<float>();
-				
+
 				if (ppSettings.contains("saturation") && ppSettings["saturation"].is_array() && ppSettings["saturation"].size() >= 3)
 				{
 					m_defaultPostProcessSettings.saturation.x = ppSettings["saturation"][0].get<float>();
 					m_defaultPostProcessSettings.saturation.y = ppSettings["saturation"][1].get<float>();
 					m_defaultPostProcessSettings.saturation.z = ppSettings["saturation"][2].get<float>();
 				}
-				
+
 				if (ppSettings.contains("contrast") && ppSettings["contrast"].is_array() && ppSettings["contrast"].size() >= 3)
 				{
 					m_defaultPostProcessSettings.contrast.x = ppSettings["contrast"][0].get<float>();
 					m_defaultPostProcessSettings.contrast.y = ppSettings["contrast"][1].get<float>();
 					m_defaultPostProcessSettings.contrast.z = ppSettings["contrast"][2].get<float>();
 				}
-				
+
 				if (ppSettings.contains("gamma") && ppSettings["gamma"].is_array() && ppSettings["gamma"].size() >= 3)
 				{
 					m_defaultPostProcessSettings.gamma.x = ppSettings["gamma"][0].get<float>();
 					m_defaultPostProcessSettings.gamma.y = ppSettings["gamma"][1].get<float>();
 					m_defaultPostProcessSettings.gamma.z = ppSettings["gamma"][2].get<float>();
 				}
-				
+
 				if (ppSettings.contains("gain") && ppSettings["gain"].is_array() && ppSettings["gain"].size() >= 3)
 				{
 					m_defaultPostProcessSettings.gain.x = ppSettings["gain"][0].get<float>();
 					m_defaultPostProcessSettings.gain.y = ppSettings["gain"][1].get<float>();
 					m_defaultPostProcessSettings.gain.z = ppSettings["gain"][2].get<float>();
 				}
-				
+
 				if (ppSettings.contains("bloomThreshold"))
 					m_defaultPostProcessSettings.bloomThreshold = ppSettings["bloomThreshold"].get<float>();
 				if (ppSettings.contains("bloomKnee"))
@@ -407,7 +407,7 @@ void EditorCore::LoadDefaultPostProcessSettings()
 	}
 
 
-void EditorCore::DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorPostProcessVolume(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* volume = world.GetComponent<PostProcessVolumeComponent>(_selectedEntity))
 		{
@@ -421,7 +421,7 @@ void EditorCore::DrawInspectorPostProcessVolume(World& world, const EntityId& _s
 				changed |= ImGui::Checkbox("Unbound (전역 적용)##PostProcessVolume", &volume->unbound);
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Unbound: ON이면 항상 전역 적용 (무한 범위)\nOFF이면 Shape + BlendRadius 기반 공간 적용");
-				
+
 				if (volume->unbound)
 				{
 					ImGui::SameLine();
@@ -686,7 +686,7 @@ void EditorCore::DrawInspectorPostProcessVolume(World& world, const EntityId& _s
 	}
 
 
-void EditorCore::DrawInspectorComputeEffect(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorComputeEffect(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* effect = world.GetComponent<ComputeEffectComponent>(_selectedEntity)) {
 			if (ImGui::CollapsingHeader("Compute Effect", ImGuiTreeNodeFlags_DefaultOpen)) {

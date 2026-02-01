@@ -9,7 +9,7 @@
 
 namespace Alice
 {
-void EditorCore::DrawInspectorTransform(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorTransform(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* transform =
 			world.GetComponent<TransformComponent>(_selectedEntity)) {
@@ -169,7 +169,7 @@ void EditorCore::DrawInspectorTransform(World& world, const EntityId& _selectedE
 	}
 
 
-void EditorCore::DrawInspectorAnimationStatus(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorAnimationStatus(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* anim = world.GetComponent<SkinnedAnimationComponent>(_selectedEntity))
 		{

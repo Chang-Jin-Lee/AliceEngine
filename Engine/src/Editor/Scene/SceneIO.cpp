@@ -86,11 +86,11 @@ namespace Alice
 			return;
 		}
 
-			// 로드 성공: 후처리 및 상태 갱신
-	EnsureSkinnedMeshesRegistered(world);
-	g_CurrentScenePath = g_NextScenePath;
-	g_HasCurrentScenePath = true;
-	g_SceneDirty = false;
+		// 로드 성공: 후처리 및 상태 갱신
+		EnsureSkinnedMeshesRegistered(world);
+		g_CurrentScenePath = g_NextScenePath;
+		g_HasCurrentScenePath = true;
+		g_SceneDirty = false;
 	}
 
 }

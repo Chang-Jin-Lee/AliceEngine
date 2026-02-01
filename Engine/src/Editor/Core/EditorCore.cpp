@@ -337,10 +337,10 @@ namespace Alice
 		DrawLightingWindow(world, forward, deferred, shadingMode, useFillLight, useForwardRendering);
 
 		DrawMaterialAssetEditorWindow(world);
-	DrawUICurveAssetEditorWindow();
+		DrawUICurveAssetEditorWindow();
 
-	HandleSceneLoadFlow(world, sceneManager, isPlaying, selectedEntity);
-}
+		HandleSceneLoadFlow(world, sceneManager, isPlaying, selectedEntity);
+	}
 
 	// ComponentEditCommandRTTR 구현
 	ComponentEditCommandRTTR::ComponentEditCommandRTTR(EntityId id,

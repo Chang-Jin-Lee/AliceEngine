@@ -8,9 +8,9 @@
 
 namespace Alice
 {
-namespace
-{
-ReflectionUI::UIEditEvent RenderInspectorInstance(rttr::instance inst, World* world)
+	namespace
+	{
+		ReflectionUI::UIEditEvent RenderInspectorInstance(rttr::instance inst, World* world)
 		{
 			ReflectionUI::UIEditEvent result{};
 			if (!inst.is_valid()) return result;
@@ -36,9 +36,9 @@ ReflectionUI::UIEditEvent RenderInspectorInstance(rttr::instance inst, World* wo
 			}
 			return result;
 		}
-}
+	}
 
-void EditorCore::DrawInspectorScripts(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorScripts(World& world, const EntityId& _selectedEntity)
 	{
 		static std::vector<std::string> scriptNames;
 		if (ImGui::BeginCombo("Add Script", "Select Script...")) {

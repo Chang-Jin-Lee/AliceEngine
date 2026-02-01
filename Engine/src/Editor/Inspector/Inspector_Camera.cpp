@@ -3,7 +3,7 @@
 
 namespace Alice
 {
-void EditorCore::DrawInspectorCameraSpringArm(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorCameraSpringArm(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* comp = world.GetComponent<CameraSpringArmComponent>(_selectedEntity))
 		{
@@ -21,14 +21,14 @@ void EditorCore::DrawInspectorCameraSpringArm(World& world, const EntityId& _sel
 				changed |= ReflectionUI::RenderProperty(*comp, "probeRadius", "Probe Radius", &world).changed;
 				changed |= ReflectionUI::RenderProperty(*comp, "probePadding", "Probe Padding", &world).changed;
 				changed |= ReflectionUI::RenderProperty(*comp, "minHeight", "Min Height", &world).changed;
-				
+
 				if (changed) g_SceneDirty = true;
 			}
 		}
 	}
 
 
-void EditorCore::DrawInspectorCameraLookAt(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorCameraLookAt(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* comp = world.GetComponent<CameraLookAtComponent>(_selectedEntity))
 		{
@@ -38,40 +38,40 @@ void EditorCore::DrawInspectorCameraLookAt(World& world, const EntityId& _select
 				changed |= ReflectionUI::RenderProperty(*comp, "enabled", "Enabled", &world).changed;
 				changed |= ReflectionUI::RenderProperty(*comp, "targetName", "Target Name", &world).changed;
 				changed |= ReflectionUI::RenderProperty(*comp, "rotationDamping", "Rotation Damping", &world).changed;
-				
+
 				if (changed) g_SceneDirty = true;
 			}
 		}
 	}
 
 
-void EditorCore::DrawInspectorCameraFollow(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorCameraFollow(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* comp = world.GetComponent<CameraFollowComponent>(_selectedEntity))
 		{
 			if (ImGui::CollapsingHeader("Camera Follow", ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				bool changed = false;
-				
+
 				// 런타임 상태 필터 (직렬화/편집 대상 아님)
 				auto filter = [](const std::string& propName) -> bool {
 					// 런타임 상태 필드들은 인스펙터에서 제외
-					return propName != "lockOnTargetId" && 
-					       propName != "lockOnActive" && 
-					       propName != "initialized" &&
-					       propName != "smoothedPosition" &&
-					       propName != "smoothedRotation";
-				};
-				
+					return propName != "lockOnTargetId" &&
+						propName != "lockOnActive" &&
+						propName != "initialized" &&
+						propName != "smoothedPosition" &&
+						propName != "smoothedRotation";
+					};
+
 				changed |= ReflectionUI::RenderInspector(*comp, filter, &world).changed;
-				
+
 				if (changed) g_SceneDirty = true;
 			}
 		}
 	}
 
 
-void EditorCore::DrawInspectorCameraShake(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorCameraShake(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* comp = world.GetComponent<CameraShakeComponent>(_selectedEntity))
 		{
@@ -83,14 +83,14 @@ void EditorCore::DrawInspectorCameraShake(World& world, const EntityId& _selecte
 				changed |= ReflectionUI::RenderProperty(*comp, "frequency", "Frequency", &world).changed;
 				changed |= ReflectionUI::RenderProperty(*comp, "duration", "Duration", &world).changed;
 				changed |= ReflectionUI::RenderProperty(*comp, "decay", "Decay", &world).changed;
-				
+
 				if (changed) g_SceneDirty = true;
 			}
 		}
 	}
 
 
-void EditorCore::DrawInspectorCameraInput(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorCameraInput(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* comp = world.GetComponent<CameraInputComponent>(_selectedEntity))
 		{
@@ -98,14 +98,14 @@ void EditorCore::DrawInspectorCameraInput(World& world, const EntityId& _selecte
 			{
 				bool changed = false;
 				changed |= ReflectionUI::RenderInspector(*comp, nullptr, &world).changed;
-				
+
 				if (changed) g_SceneDirty = true;
 			}
 		}
 	}
 
 
-void EditorCore::DrawInspectorCameraBlend(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorCameraBlend(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* comp = world.GetComponent<CameraBlendComponent>(_selectedEntity))
 		{
@@ -119,7 +119,7 @@ void EditorCore::DrawInspectorCameraBlend(World& world, const EntityId& _selecte
 				changed |= ReflectionUI::RenderProperty(*comp, "slowTriggerT", "Slow Trigger T", &world).changed;
 				changed |= ReflectionUI::RenderProperty(*comp, "slowDuration", "Slow Duration", &world).changed;
 				changed |= ReflectionUI::RenderProperty(*comp, "slowTimeScale", "Slow Time Scale", &world).changed;
-				
+
 				if (changed) g_SceneDirty = true;
 			}
 		}

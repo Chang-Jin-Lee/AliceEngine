@@ -8,7 +8,7 @@
 
 namespace Alice
 {
-bool EditorCore::DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
+	bool EditorCore::DrawLayerMaskEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
 	{
 		bool changed = false;
 		ImGui::Text("%s", label);
@@ -40,7 +40,7 @@ bool EditorCore::DrawLayerMaskEditor(const char* label, uint32_t& mask, const st
 	}
 
 
-bool EditorCore::DrawLayerMaskChipEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
+	bool EditorCore::DrawLayerMaskChipEditor(const char* label, uint32_t& mask, const std::array<std::string, 32>& layerNames)
 	{
 		bool changed = false;
 		ImGui::Text("%s", label);
@@ -130,7 +130,7 @@ bool EditorCore::DrawLayerMaskChipEditor(const char* label, uint32_t& mask, cons
 	}
 
 
-bool EditorCore::DrawIgnoreLayersChipEditor(const char* label, uint32_t& ignoreLayers, const std::array<std::string, 32>& layerNames)
+	bool EditorCore::DrawIgnoreLayersChipEditor(const char* label, uint32_t& ignoreLayers, const std::array<std::string, 32>& layerNames)
 	{
 		bool changed = false;
 		ImGui::Text("%s", label);
@@ -228,7 +228,7 @@ bool EditorCore::DrawIgnoreLayersChipEditor(const char* label, uint32_t& ignoreL
 	}
 
 
-void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* collider = world.GetComponent<Phy_ColliderComponent>(_selectedEntity))
 		{
@@ -267,7 +267,7 @@ void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEn
 				ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*collider, [](const std::string& name) {
 					// type, layerBits는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
 					return name != "type" && name != "layerBits" && name != "physicsActorHandle";
-				});
+					});
 
 				// 편집 시작
 				if (event.activated && _selectedEntity != lastEditedColliderEntity)
@@ -382,7 +382,7 @@ void EditorCore::DrawInspectorCollider(World& world, const EntityId& _selectedEn
 	}
 
 
-void EditorCore::DrawInspectorMeshCollider(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorMeshCollider(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* meshCollider = world.GetComponent<Phy_MeshColliderComponent>(_selectedEntity))
 		{
@@ -422,7 +422,7 @@ void EditorCore::DrawInspectorMeshCollider(World& world, const EntityId& _select
 						name != "ignoreLayers" && name != "physicsActorHandle" &&
 						name != "flipNormals" && name != "doubleSidedQueries" && name != "validate" &&
 						name != "shiftVertices" && name != "vertexLimit";
-				});
+					});
 
 				// 편집 시작
 				if (event.activated && _selectedEntity != lastEditedMeshColliderEntity)
@@ -631,7 +631,7 @@ void EditorCore::DrawInspectorMeshCollider(World& world, const EntityId& _select
 	}
 
 
-void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* cct = world.GetComponent<Phy_CCTComponent>(_selectedEntity))
 		{
@@ -654,7 +654,7 @@ void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& 
 				ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*cct, [](const std::string& name) {
 					// layerBits는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
 					return name != "layerBits" && name != "controllerHandle";
-				});
+					});
 
 				// 편집 시작
 				if (event.activated && _selectedEntity != lastEditedCCTEntity)
@@ -769,7 +769,7 @@ void EditorCore::DrawInspectorCharacterController(World& world, const EntityId& 
 	}
 
 
-void EditorCore::DrawInspectorPhysicsSceneSettings(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorPhysicsSceneSettings(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* settings = world.GetComponent<Phy_SettingsComponent>(_selectedEntity))
 		{
@@ -803,7 +803,7 @@ void EditorCore::DrawInspectorPhysicsSceneSettings(World& world, const EntityId&
 						name != "enableGroundPlane" && name != "groundStaticFriction" && name != "groundDynamicFriction" &&
 						name != "groundRestitution" && name != "groundLayerBits" && name != "groundCollideMask" &&
 						name != "groundQueryMask" && name != "groundIgnoreLayers" && name != "groundIsTrigger";
-				});
+					});
 
 				// 편집 시작
 				if (event.activated && _selectedEntity != lastEditedPhysicsSettingsEntity)
@@ -989,7 +989,7 @@ void EditorCore::DrawInspectorPhysicsSceneSettings(World& world, const EntityId&
 	}
 
 
-void EditorCore::DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorTerrainHeightField(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* terrain = world.GetComponent<Phy_TerrainHeightFieldComponent>(_selectedEntity))
 		{
@@ -1012,7 +1012,7 @@ void EditorCore::DrawInspectorTerrainHeightField(World& world, const EntityId& _
 				ReflectionUI::UIEditEvent event = ReflectionUI::RenderInspector(*terrain, [](const std::string& name) {
 					// layerBits, heightSamples는 커스텀 UI로 처리 (collideMask/queryMask는 레이어 매트릭스로만 결정)
 					return name != "layerBits" && name != "heightSamples" && name != "physicsActorHandle";
-				});
+					});
 
 				// 편집 시작
 				if (event.activated && _selectedEntity != lastEditedTerrainEntity)
@@ -1180,7 +1180,7 @@ void EditorCore::DrawInspectorTerrainHeightField(World& world, const EntityId& _
 	}
 
 
-void EditorCore::DrawInspectorJoint(World& world, const EntityId& _selectedEntity)
+	void EditorCore::DrawInspectorJoint(World& world, const EntityId& _selectedEntity)
 	{
 		if (auto* joint = world.GetComponent<Phy_JointComponent>(_selectedEntity))
 		{
@@ -1272,16 +1272,16 @@ void EditorCore::DrawInspectorJoint(World& world, const EntityId& _selectedEntit
 				changed |= ImGui::DragFloat("Break Torque", &joint->breakTorque, 1.0f, 0.0f);
 
 				auto drawFrame = [&](const char* label, Phy_JointFrame& frame) -> bool
-				{
-					bool frameChanged = false;
-					if (ImGui::TreeNode(label))
 					{
-						frameChanged |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
-						frameChanged |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
-						ImGui::TreePop();
-					}
-					return frameChanged;
-				};
+						bool frameChanged = false;
+						if (ImGui::TreeNode(label))
+						{
+							frameChanged |= ImGui::DragFloat3("Position", &frame.position.x, 0.01f);
+							frameChanged |= ImGui::DragFloat3("Rotation (Rad)", &frame.rotation.x, 0.01f);
+							ImGui::TreePop();
+						}
+						return frameChanged;
+					};
 
 				changed |= drawFrame("Frame A", joint->frameA);
 				changed |= drawFrame("Frame B", joint->frameB);
@@ -1366,14 +1366,14 @@ void EditorCore::DrawInspectorJoint(World& world, const EntityId& _selectedEntit
 				{
 					const char* motionLabels[] = { "Locked", "Limited", "Free" };
 					auto drawMotion = [&](const char* label, Phy_D6Motion& m)
-					{
-						int idx = static_cast<int>(m);
-						if (ImGui::Combo(label, &idx, motionLabels, IM_ARRAYSIZE(motionLabels)))
 						{
-							m = static_cast<Phy_D6Motion>(idx);
-							changed = true;
-						}
-					};
+							int idx = static_cast<int>(m);
+							if (ImGui::Combo(label, &idx, motionLabels, IM_ARRAYSIZE(motionLabels)))
+							{
+								m = static_cast<Phy_D6Motion>(idx);
+								changed = true;
+							}
+						};
 
 					if (ImGui::TreeNode("Motions"))
 					{
@@ -1442,16 +1442,16 @@ void EditorCore::DrawInspectorJoint(World& world, const EntityId& _selectedEntit
 						changed |= ImGui::Checkbox("Drive Limits Are Forces", &joint->d6.driveLimitsAreForces);
 
 						auto drawDrive = [&](const char* label, Phy_D6JointDriveSettings& d)
-						{
-							if (ImGui::TreeNode(label))
 							{
-								changed |= ImGui::DragFloat("Stiffness", &d.stiffness, 0.01f);
-								changed |= ImGui::DragFloat("Damping", &d.damping, 0.01f);
-								changed |= ImGui::DragFloat("Force Limit", &d.forceLimit, 1.0f, 0.0f);
-								changed |= ImGui::Checkbox("Acceleration", &d.isAcceleration);
-								ImGui::TreePop();
-							}
-						};
+								if (ImGui::TreeNode(label))
+								{
+									changed |= ImGui::DragFloat("Stiffness", &d.stiffness, 0.01f);
+									changed |= ImGui::DragFloat("Damping", &d.damping, 0.01f);
+									changed |= ImGui::DragFloat("Force Limit", &d.forceLimit, 1.0f, 0.0f);
+									changed |= ImGui::Checkbox("Acceleration", &d.isAcceleration);
+									ImGui::TreePop();
+								}
+							};
 
 						drawDrive("Drive X", joint->d6.driveX);
 						drawDrive("Drive Y", joint->d6.driveY);
