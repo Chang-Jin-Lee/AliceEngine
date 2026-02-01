@@ -325,6 +325,42 @@ namespace Alice
         void SaveScene(World& );
         void LoadScene(World& );
 
+		// DrawEditorUI 분해용 헬퍼
+		void HandleGlobalUndoRedo(World& world, EntityId& selectedEntity, bool isPlaying);
+		void SetupDockSpaceAndDefaultLayout();
+		void DrawMainMenuBar(World& world,
+			float deltaTime,
+			float fps,
+			bool& isPlaying,
+			EntityId& selectedEntity,
+			bool& useForwardRendering,
+			bool& isDebugDraw);
+		void DrawPvdSettingsWindow(bool& pvdEnabled, std::string& pvdHost, int& pvdPort);
+		void DrawBuildGameWindow();
+		void DrawHierarchyWindow(World& world, EntityId& selectedEntity);
+		void DrawInspectorWindow(World& world, EntityId& selectedEntity);
+		void DrawProjectWindow(World& world, EntityId& selectedEntity);
+		void DrawGameViewportWindow(World& world,
+			Camera& camera,
+			ForwardRenderSystem& forward,
+			DeferredRenderSystem& deferred,
+			EntityId& selectedEntity,
+			ViewportPicker& picker,
+			float& cameraMoveSpeed,
+			bool& useForwardRendering,
+			bool& isPlaying,
+			int& shadingMode,
+			bool& useFillLight);
+		void DrawCameraWindow(World& world, Camera& camera, float& cameraMoveSpeed, EntityId& selectedEntity);
+		void DrawLightingWindow(World& world,
+			ForwardRenderSystem& forward,
+			DeferredRenderSystem& deferred,
+			int& shadingMode,
+			bool& useFillLight,
+			bool& useForwardRendering);
+		void DrawMaterialAssetEditorWindow(World& world);
+		void DrawUICurveAssetEditorWindow();
+		void HandleSceneLoadFlow(World& world, SceneManager* sceneManager, bool& isPlaying, EntityId& selectedEntity);
 
 		// UI
 		EntityId CreateAliceUIRoot(World& world, std::string_view name);
