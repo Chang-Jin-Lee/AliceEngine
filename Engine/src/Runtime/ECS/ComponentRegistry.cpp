@@ -252,6 +252,8 @@ namespace Alice
             .constructor<>()
             .property("enabled", &AdvancedAnimationComponent::enabled)
             .property("playing", &AdvancedAnimationComponent::playing)
+            .property("rootBoneName", &AdvancedAnimationComponent::rootBoneName)
+            .property("rootMotionUnlock", &AdvancedAnimationComponent::rootMotionUnlock)
             .property("base", &AdvancedAnimationComponent::base)    
             .property("upper", &AdvancedAnimationComponent::upper)
             .property("additive", &AdvancedAnimationComponent::additive)
