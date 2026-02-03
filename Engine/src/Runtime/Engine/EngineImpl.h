@@ -246,6 +246,7 @@ namespace Alice
 		void RenderOnDemandSkinnedMeshLoading();
 		void RenderAudioUpdate();
 		void RenderMainPass();
+		void RenderCameraPreview();
 		void RenderUnbindDepthOnly();
 		void RenderComputeEffects();
 		void RenderParticleOverlayComposite();
