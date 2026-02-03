@@ -1,4 +1,4 @@
-# AliceRenderer
+# AliceEngine
 DirectX 11 기반 3D 게임 엔진
 
 <img width="2002" height="1165" alt="image" src="https://github.com/user-attachments/assets/2ec812be-f0e4-4de7-b85b-bbf3489d0afc" />
