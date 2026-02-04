@@ -555,8 +555,11 @@ namespace Alice
         m_context->PSSetSamplers(0, 1, samplers);
 
         const auto& vfxMap = world.GetComponents<UnityVfxComponent>();
+        std::unordered_set<uint64_t> aliveIds;
+        aliveIds.reserve(vfxMap.size());
         for (const auto& [entityId, vfx] : vfxMap)
         {
+            aliveIds.insert(static_cast<uint64_t>(entityId));
             if (!vfx.enabled || vfx.effectPath.empty())
                 continue;
             if (!vfx.useMeshRenderer)
@@ -600,9 +603,20 @@ namespace Alice
                         br.remaining = b.cycleCount;
                         br.repeatInterval = b.repeatInterval;
                         rt.bursts.push_back(br);
-                    }
-                }
             }
+        }
+
+        if (!m_runtimeCache.empty())
+        {
+            for (auto it = m_runtimeCache.begin(); it != m_runtimeCache.end(); )
+            {
+                if (aliveIds.find(it->first) == aliveIds.end())
+                    it = m_runtimeCache.erase(it);
+                else
+                    ++it;
+            }
+        }
+    }
 
             size_t totalParticles = 0;
             for (const auto& er : runtime.emitters)
@@ -2025,7 +2039,7 @@ float4 main(PSInput input) : SV_TARGET
     {
         auto& cache = m_effectCache[effectPath];
         if (cache.loaded) return &cache;
-        cache.loaded = true;
+        cache.error.clear();
 
         auto jsonPtr = ResourceManager::Get().Load<nlohmann::json>(effectPath);
         if (!jsonPtr)
@@ -2276,6 +2290,7 @@ float4 main(PSInput input) : SV_TARGET
             cache.emitters.push_back(def);
         }
 
+        cache.loaded = true;
         cache.valid = !cache.emitters.empty();
         if (!cache.valid && cache.error.empty())
             cache.error = "no particle render nodes";
