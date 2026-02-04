@@ -1,4 +1,4 @@
-# AliceRenderer
+# AliceEngine
 DirectX 11 기반 3D 게임 엔진
 
 <img width="2002" height="1165" alt="image" src="https://github.com/user-attachments/assets/2ec812be-f0e4-4de7-b85b-bbf3489d0afc" />
@@ -25,11 +25,9 @@ DirectX 11 기반 3D 게임 엔진
 
 
 - 빌드 과정
-  - Setup.bat 파일을 실행해서 vcpkg, assimp등 의존성을 전부 다운로드하세요. (Setup.bat 파일 내부에 경로 설정이 가능합니다. 디폴트는 D:\vcpkg)
-  - build_msvc.cmd 파일을 실행해서 솔루션 빌드 파일을 만드세요. (build 폴더 내부에 폴더가 생깁니다)
-  - build 폴더안에 솔루션 파일을 실행해서 빌드하세요
-  - Launch 프로젝트를 시작 프로그램으로 설정하면 됩니다.
+  - Build.bat 파일을 실행해서 한번에 의존성 설치와 빌드까지 진행하세요.
+    - 만약 경로 문제가 생긴다면 AliceEngine/Engine/Setup.bat 파일에서 다운 파일 경로인 다음 부분을 바꾸세요.  (D:\vcpkg)
+  - AliceEngine/build/ 폴더안에 솔루션 파일을 실행하세요.
+  - Launch 프로젝트를 시작 프로그램으로 설정하고 F5키를 눌러 빌드를 진행하세요
     
     <img width="543" height="516" alt="image" src="https://github.com/user-attachments/assets/4bed66c5-44c4-419e-927d-5863f0a917a9" />
-    
-  - 경로에 한글이 없어야 합니다
