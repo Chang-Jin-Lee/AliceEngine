@@ -637,12 +637,13 @@ namespace Alice
                 const float scaleAvg = (def.localScale.x + def.localScale.y + def.localScale.z) / 3.0f;
                 const float dt = dtComponent;
 
-                const bool canSpawn = def.loop || rt.time < def.duration;
+                const bool loopEnabled = vfx.overrideLoop ? vfx.loop : def.loop;
+                const bool canSpawn = loopEnabled || rt.time < def.duration;
                 bool looped = false;
                 rt.time += dt;
                 if (def.duration > 0.0f && rt.time >= def.duration)
                 {
-                    if (def.loop)
+                    if (loopEnabled)
                     {
                         rt.time = std::fmod(rt.time, def.duration);
                         looped = true;

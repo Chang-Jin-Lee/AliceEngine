@@ -18,6 +18,8 @@ namespace Alice
         // Global playback/override controls
         float timeScale{ 1.0f };
         float lifetimeScale{ 1.0f };
+        bool overrideLoop{ false };
+        bool loop{ true };
 
         // 매핑 보정값 (Unity 단위 -> 엔진 파티클 파라미터)
         float sizeScale{ 10.0f };      // Unity size * sizeScale => sizePx

@@ -701,6 +701,8 @@ namespace Alice
             .property("useComputeEffect", &UnityVfxComponent::useComputeEffect)
             .property("timeScale", &UnityVfxComponent::timeScale)
             .property("lifetimeScale", &UnityVfxComponent::lifetimeScale)
+            .property("overrideLoop", &UnityVfxComponent::overrideLoop)
+            .property("loop", &UnityVfxComponent::loop)
             .property("sizeScale", &UnityVfxComponent::sizeScale)
             .property("speedScale", &UnityVfxComponent::speedScale)
             .property("intensityScale", &UnityVfxComponent::intensityScale)
