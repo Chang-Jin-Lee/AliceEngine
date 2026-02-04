@@ -28,8 +28,8 @@
                     "loopB": true,
                     "speedA": 1.0,
                     "speedB": 1.0,
-                    "timeA": 0.7299538850784302,
-                    "timeB": 0.7299538850784302
+                    "timeA": 1.7879600524902344,
+                    "timeB": 1.7879600524902344
                 },
                 "enabled": true,
                 "ik": {
@@ -50,7 +50,7 @@
                     "strength": 0.0,
                     "timeSec": 0.0
                 },
-                "rootBoneName": "c_root_master.x",
+                "rootBoneName": "c_pos",
                 "rootMotionUnlock": false,
                 "sockets": [],
                 "upper": {
