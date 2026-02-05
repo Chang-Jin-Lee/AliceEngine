@@ -36,6 +36,8 @@ namespace Alice
         ALICE_PROPERTY(bool, m_useComputeEffect, false);
         ALICE_PROPERTY(float, m_timeScale, 1.0f);
         ALICE_PROPERTY(float, m_lifetimeScale, 1.0f);
+        ALICE_PROPERTY(bool, m_overrideLoop, false);
+        ALICE_PROPERTY(bool, m_loop, true);
         ALICE_PROPERTY(float, m_sizeScale, 10.0f);
         ALICE_PROPERTY(float, m_speedScale, 1.0f);
         ALICE_PROPERTY(float, m_intensityScale, 1.0f);

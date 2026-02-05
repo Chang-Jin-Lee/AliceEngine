@@ -54,7 +54,7 @@ namespace Alice
         ce.shaderName = "Particle"; // 기본 파티클 셰이더
         ce.color = color;           // 색상 설정
         ce.sizePx = size;           // 크기 설정 (픽셀 단위)
-        ce.useTransform = true;     // Transform 위치 사용
+        //ce.useTransform = true;     // Transform 위치 사용
         ce.localOffset = { 0.0f, 0.0f, 0.0f };
 
         // 추가적인 파티클 물리 설정 (필요시 조정)
