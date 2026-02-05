@@ -466,6 +466,26 @@ add_executable(AlicePlayer
 source_group(TREE ${ALICE_SRC_DIR} FILES ${LAUNCH_MAIN} ${PLAYER_MAIN} ${APP_COMMON_SOURCES} ${APP_HEADERS})
 
 # ==========================================
+# [Windows Icon] Launch / AlicePlayer
+# ==========================================
+if(WIN32)
+    set(ALICE_EDITOR_ICON "${CMAKE_SOURCE_DIR}/Resource/Icon/EditorIcon.ico")
+    set(ALICE_GAME_ICON   "${CMAKE_SOURCE_DIR}/Resource/Icon/GameIcon.ico")
+
+    file(TO_CMAKE_PATH "${ALICE_EDITOR_ICON}" ALICE_EDITOR_ICON_RC_PATH)
+    file(TO_CMAKE_PATH "${ALICE_GAME_ICON}"   ALICE_GAME_ICON_RC_PATH)
+
+    set(ALICE_EDITOR_ICON_RC "${CMAKE_BINARY_DIR}/EditorIcon.rc")
+    set(ALICE_GAME_ICON_RC   "${CMAKE_BINARY_DIR}/GameIcon.rc")
+
+    file(WRITE "${ALICE_EDITOR_ICON_RC}" "IDI_ICON1 ICON \"${ALICE_EDITOR_ICON_RC_PATH}\"\n")
+    file(WRITE "${ALICE_GAME_ICON_RC}"   "IDI_ICON1 ICON \"${ALICE_GAME_ICON_RC_PATH}\"\n")
+
+    target_sources(Launch PRIVATE "${ALICE_EDITOR_ICON_RC}")
+    target_sources(AlicePlayer PRIVATE "${ALICE_GAME_ICON_RC}")
+endif()
+
+# ==========================================
 # [ThirdParty] ImGui
 # ==========================================
 
