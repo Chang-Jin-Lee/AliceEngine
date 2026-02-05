@@ -69,6 +69,8 @@ namespace Alice
         vfx.useComputeEffect = m_useComputeEffect;
         vfx.timeScale = m_timeScale;
         vfx.lifetimeScale = m_lifetimeScale;
+        vfx.overrideLoop = m_overrideLoop;
+        vfx.loop = m_loop;
         vfx.sizeScale = m_sizeScale;
         vfx.speedScale = m_speedScale;
         vfx.intensityScale = m_intensityScale;
