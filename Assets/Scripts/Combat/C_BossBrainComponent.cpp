@@ -3,9 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
-#include "Core/ScriptFactory.h"
-#include "Core/World.h"
-#include "Components/TransformComponent.h"
+#include "Runtime/Scripting/ScriptFactory.h"
+#include "Runtime/ECS/World.h"
 
 namespace Alice
 {

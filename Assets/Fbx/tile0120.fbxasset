@@ -1,7 +1,6 @@
 {
     "materials": [
-        "Assets/Materials/tile0120_0.mat",
-        "Assets/Materials/tile0120_1.mat"
+        "Assets/Materials/tile0120_0.mat"
     ],
     "mesh": "tile0120",
     "source_fbx": "Resource/fbx/tile0120.fbx"

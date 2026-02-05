@@ -3533,6 +3533,226 @@
             },
             "guid": "10970757830035052100",
             "name": "Weapon"
+        },
+        {
+            "ComputeEffect": {
+                "color": {
+                    "x": 1.0,
+                    "y": 0.20000000298023224,
+                    "z": 0.20000000298023224
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 6.0,
+                "useTransform": true
+            },
+            "Transform": {
+                "enabled": false,
+                "position": {
+                    "x": 0.055456873029470444,
+                    "y": 1.6027162075042725,
+                    "z": 1.2556483745574951
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "11566260142144995169",
+            "name": "GameObject143"
+        },
+        {
+            "ComputeEffect": {
+                "color": {
+                    "x": 0.800000011920929,
+                    "y": 0.800000011920929,
+                    "z": 0.800000011920929
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 3.0,
+                "useTransform": true
+            },
+            "Transform": {
+                "enabled": false,
+                "position": {
+                    "x": 0.09457390010356903,
+                    "y": 0.10000000149011612,
+                    "z": 0.592096209526062
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "8493895928731147671",
+            "name": "GameObject144"
+        },
+        {
+            "ComputeEffect": {
+                "color": {
+                    "x": 0.800000011920929,
+                    "y": 0.800000011920929,
+                    "z": 0.800000011920929
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 3.0,
+                "useTransform": true
+            },
+            "Transform": {
+                "enabled": false,
+                "position": {
+                    "x": 0.1389625072479248,
+                    "y": 0.10000000149011612,
+                    "z": 1.196610689163208
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "3259157480936176657",
+            "name": "GameObject145"
+        },
+        {
+            "ComputeEffect": {
+                "color": {
+                    "x": 0.800000011920929,
+                    "y": 0.800000011920929,
+                    "z": 0.800000011920929
+                },
+                "depthBiasMeters": 0.05000000074505806,
+                "depthTest": true,
+                "drag": 0.11999999731779099,
+                "effectParams": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "enabled": true,
+                "gravity": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0
+                },
+                "intensity": 1.0,
+                "lifeMax": 1.0,
+                "lifeMin": 0.5,
+                "localOffset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "radius": 0.5,
+                "shaderName": "Particle",
+                "sizePx": 3.0,
+                "useTransform": true
+            },
+            "Transform": {
+                "enabled": false,
+                "position": {
+                    "x": 0.17666217684745789,
+                    "y": 0.10000000149011612,
+                    "z": 1.801016926765442
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            },
+            "guid": "5294114924728819086",
+            "name": "GameObject146"
         }
     ],
     "sceneName": "ProtoCombat",

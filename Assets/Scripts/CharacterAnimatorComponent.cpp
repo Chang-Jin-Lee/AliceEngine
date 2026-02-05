@@ -4,15 +4,14 @@
 #include <cmath>
 #include <functional>
 
-#include "Core/ScriptFactory.h"
-#include "Core/GameObject.h"
-#include "Core/InputTypes.h"
-#include "Core/Logger.h"
-#include "Core/World.h"
-#include "Components/AdvancedAnimationComponent.h"
-#include "Components/TransformComponent.h"
+#include "Runtime/Scripting/ScriptFactory.h"
+#include "Runtime/ECS/GameObject.h"
+#include "Runtime/Input/InputTypes.h"
+#include "Runtime/Foundation/Logger.h"
+#include "Runtime/ECS/World.h"
+#include "Runtime/Gameplay/Animation/AdvancedAnimationComponent.h"
 // [추가] ComputeEffectComponent 헤더 포함
-#include "Components/ComputeEffectComponent.h"
+#include "Runtime/Rendering/Components/ComputeEffectComponent.h"
 
 namespace Alice
 {
@@ -55,7 +54,7 @@ namespace Alice
         ce.shaderName = "Particle"; // 기본 파티클 셰이더
         ce.color = color;           // 색상 설정
         ce.sizePx = size;           // 크기 설정 (픽셀 단위)
-        ce.useTransform = true;     // Transform 위치 사용
+        //ce.useTransform = true;     // Transform 위치 사용
         ce.localOffset = { 0.0f, 0.0f, 0.0f };
 
         // 추가적인 파티클 물리 설정 (필요시 조정)

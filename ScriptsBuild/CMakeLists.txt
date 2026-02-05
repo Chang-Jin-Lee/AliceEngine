@@ -8,6 +8,7 @@ project(AliceUserScripts LANGUAGES CXX)
 if(MSVC)
     add_compile_options("/utf-8")  # 소스 및 실행 문자셋을 UTF-8로 강제
     add_compile_options("/wd4819") # 인코딩 경고 무시 (이미 utf-8 설정을 했으므로 안전)
+    add_compile_options("/MP")
 endif()
 
 # =========================================================================
@@ -73,7 +74,7 @@ set(BUILD_RTTR_DYNAMIC ON CACHE BOOL "" FORCE)
 set(BUILD_WITH_STATIC_RUNTIME_LIBS OFF CACHE BOOL "" FORCE)
 
 # RTTR 서브모듈 추가
-add_subdirectory("${ALICE_ROOT}/ThirdParty/rttr" "${CMAKE_BINARY_DIR}/ThirdParty/rttr")
+add_subdirectory("${ALICE_ROOT}/Engine/ThirdParty/rttr" "${CMAKE_BINARY_DIR}/Engine/ThirdParty/rttr")
 
 message(STATUS "-----------------------------------------------------------")
 
@@ -94,6 +95,19 @@ endif()
 add_library(AliceScripts SHARED
     ${USER_SCRIPT_SOURCES}
 )
+
+## 디렉토리 관련 문제가 생긴다면 아래의 내용을 주석처리 할 것
+
+# ============================================================================
+# Visual Studio 필터를 실제 디렉토리 구조로 구성
+if(MSVC AND USER_SCRIPT_SOURCES)
+    source_group(
+        TREE "${ALICE_ROOT}/Assets/Scripts"
+        PREFIX "Assets\\Scripts"
+        FILES ${USER_SCRIPT_SOURCES}
+    )
+endif()
+# ============================================================================
 
 # ============================================================================
 # [3] VCPKG 및 Include 설정 적용 (타겟 생성 후 실행)
@@ -119,17 +133,17 @@ endif()
 # 나머지 헤더 경로 설정
 target_include_directories(AliceScripts
     PRIVATE
-        "${ALICE_ROOT}/src"
-        "${ALICE_ROOT}/ThirdParty/ImGui"
-        "${ALICE_ROOT}/ThirdParty/ImGui/backends"
-        "${ALICE_ROOT}/ThirdParty/rttr/src"
+        "${ALICE_ROOT}/Engine/src"
+        "${ALICE_ROOT}/Engine/ThirdParty/ImGui"
+        "${ALICE_ROOT}/Engine/ThirdParty/ImGui/backends"
+        "${ALICE_ROOT}/Engine/ThirdParty/rttr/src"
 )
 
 # ==============================================================================
 # [FMOD] 스크립트 프로젝트용 설정 (수정됨)
 # ==============================================================================
 # 1. 경로 설정 (ALICE_ROOT는 상단에서 정의된 프로젝트 루트)
-set(FMOD_ROOT_SCRIPT "${ALICE_ROOT}/ThirdParty/FMOD")
+set(FMOD_ROOT_SCRIPT "${ALICE_ROOT}/Engine/ThirdParty/FMOD")
 set(FMOD_LIB_DIR_SCRIPT "${FMOD_ROOT_SCRIPT}/64x") # 폴더명: 64x
 set(FMOD_INC_DIR_SCRIPT "${FMOD_ROOT_SCRIPT}/inc")
 
@@ -174,10 +188,23 @@ set_target_properties(AliceScripts PROPERTIES
     OUTPUT_NAME "AliceScripts"
 )
 
-# 핫리로드시 PDB 잠금 방지 (/DEBUG:NONE)
+# Debug 빌드: PDB 이름을 (CMake configure 시점 기준) 매번 바꿔서 잠금 문제를 회피합니다.
 if(MSVC)
-    target_link_options(AliceScripts PRIVATE "/DEBUG:NONE")
+    # =============== 이 부분
+    string(TIMESTAMP ALICE_PDB_TS "%Y%m%d_%H%M%S")
+    set_target_properties(AliceScripts PROPERTIES
+        PDB_NAME_DEBUG "AliceScripts_${ALICE_PDB_TS}"
+    )
+
+    target_link_options(AliceScripts PRIVATE
+        $<$<CONFIG:Release>:/DEBUG:NONE>
+    )
+    # ===================
+
+    # 문제가 된다면 위의 이 부분을 주석처리하고 밑의 한 줄로 바꿀 것
+    # 디버그를 위해서 시도한 거임.
+    # target_link_options(AliceScripts PRIVATE "/DEBUG:NONE")
 
     # 소스 파일 UTF-8 인코딩 명시 (C4819 경고 방지)
-    target_compile_options(AliceScripts PRIVATE "/utf-8")
+    target_compile_options(AliceScripts PRIVATE "/utf-8" "/MP")
 endif()
