@@ -24,6 +24,7 @@
 #include "Runtime/Scripting/Components/ScriptComponent.h"
 #include "Runtime/Rendering/Components/MaterialComponent.h"
 #include "Runtime/Rendering/Components/ComputeEffectComponent.h"
+#include "Runtime/Rendering/Components/UnityVfxComponent.h"
 #include "Runtime/Rendering/Components/EffectComponent.h"
 #include "Runtime/Rendering/Components/TrailEffectComponent.h"
 #include "Runtime/Rendering/Components/DebugDrawBoxComponent.h"
@@ -849,6 +850,12 @@ namespace Alice
                 outEntity["ComputeEffect"] = JsonRttr::ToJsonObject(inst);
             }
 
+            if (const auto* unityVfx = world.GetComponent<UnityVfxComponent>(id); unityVfx)
+            {
+                rttr::instance inst = const_cast<UnityVfxComponent&>(*unityVfx);
+                outEntity["UnityVfx"] = JsonRttr::ToJsonObject(inst);
+            }
+
             if (const auto* postProcessVolume = world.GetComponent<PostProcessVolumeComponent>(id); postProcessVolume)
             {
                 rttr::instance inst = const_cast<PostProcessVolumeComponent&>(*postProcessVolume);
@@ -1193,6 +1200,52 @@ namespace Alice
                 ComputeEffectComponent& ce = world.AddComponent<ComputeEffectComponent>(id);
                 rttr::instance inst = ce;
                 if (!JsonRttr::FromJsonObject(inst, *itCE)) return false;
+
+                // Legacy migration: effectParams/useTransform -> localOffset
+                auto itLegacyPos = itCE->find("effectParams");
+                if (itLegacyPos != itCE->end() && itLegacyPos->is_object())
+                {
+                    bool useTransform = true;
+                    auto itLegacyUse = itCE->find("useTransform");
+                    if (itLegacyUse != itCE->end())
+                    {
+                        if (itLegacyUse->is_boolean())
+                            useTransform = itLegacyUse->get<bool>();
+                        else if (itLegacyUse->is_number())
+                            useTransform = (itLegacyUse->get<double>() != 0.0);
+                    }
+
+                    if (!useTransform)
+                    {
+                        DirectX::XMFLOAT3 legacyPos{};
+                        const auto& posObj = *itLegacyPos;
+                        if (posObj.contains("x")) legacyPos.x = posObj["x"].get<float>();
+                        if (posObj.contains("y")) legacyPos.y = posObj["y"].get<float>();
+                        if (posObj.contains("z")) legacyPos.z = posObj["z"].get<float>();
+
+                        if (auto* tr = world.GetComponent<TransformComponent>(id))
+                        {
+                            DirectX::XMMATRIX worldM = world.ComputeWorldMatrix(id);
+                            DirectX::XMMATRIX invM = DirectX::XMMatrixInverse(nullptr, worldM);
+                            DirectX::XMVECTOR wp = DirectX::XMVectorSet(legacyPos.x, legacyPos.y, legacyPos.z, 1.0f);
+                            DirectX::XMVECTOR lp = DirectX::XMVector3TransformCoord(wp, invM);
+                            DirectX::XMStoreFloat3(&ce.localOffset, lp);
+                        }
+                        else
+                        {
+                            ce.localOffset = legacyPos;
+                        }
+                    }
+                }
+            }
+
+            // UnityVfx 선택
+            auto itUnityVfx = e.find("UnityVfx");
+            if (itUnityVfx != e.end() && itUnityVfx->is_object())
+            {
+                UnityVfxComponent& uv = world.AddComponent<UnityVfxComponent>(id);
+                rttr::instance inst = uv;
+                if (!JsonRttr::FromJsonObject(inst, *itUnityVfx)) return false;
             }
 
             // PostProcessVolume 선택

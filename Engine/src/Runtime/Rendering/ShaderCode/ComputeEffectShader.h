@@ -98,17 +98,30 @@ struct Particle
 struct EmitterGPU
 {
     float4 p0; // xyz = pos, w = radius
-    float4 p1; // xyz = color, w = sizePx
-    float4 p2; // xyz = gravity, w = drag
-    float4 p3; // x = lifeMin, y = lifeMax, z = intensity, w = depthBiasMeters
-    float4 p4; // x = depthTest (1.0 or 0.0), yzw unused
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
     float4 time;        // timeSec, dtSec, particleCount, spawnJitter
     float4 resolution;  // w,h,invW,invH
-    float4 emitterInfo; // x = emitterCount, y = nearZ, z = farZ, w = 0 (bias는 emitter별로 EmitterGPU.p3.w에 저장됨)
+    float4 emitterInfo; // x = emitterCount, y = nearZ, z = farZ, w = 0 (bias는 emitter별로 EmitterGPU.p6.z에 저장됨)
     float4x4 viewProj;
     float4 cameraPos;
 };
@@ -159,27 +172,45 @@ void main(uint3 id : SV_DispatchThreadID)
     }
 
     EmitterGPU e = gEmitters[emitterIdx];
-    float3 emitter = e.p0.xyz;
+    bool isLocal = (e.p3.w > 0.5);
     float radius = max(e.p0.w, 0.0001);
-    float3 gravity = e.p2.xyz;
-    float drag = e.p2.w;
-    float lifeMin = e.p3.x;
-    float lifeMax = e.p3.y;
+    float3 gravity = e.p5.xyz;
+    float drag = e.p5.w;
+    float lifeMin = e.p6.x;
+    float lifeMax = e.p6.y;
+    float startSpeed = max(e.p2.w, 0.001);
+    float spawnRate = saturate(e.p7.x);
 
     if (p.life <= 0.0)
     {
         float base = (float)i * 1.2345 + t * 13.37 + p.seed * 101.0;
+        if (Hash11(base + 17.0) > spawnRate)
+        {
+            p.life = 0.0;
+            particles[i] = p;
+            return;
+        }
 
         float2 r01 = Hash21(base);
         float3 r11 = float3(r01 * 2.0 - 1.0, Hash11(base + 37.0) * 2.0 - 1.0);
 
         float3 dir = normalize(r11 + 1e-5);
         float  rr  = sqrt(Hash11(base + 91.0)) * radius;
-
-        p.pos = emitter + dir * rr;
+        float3 localPos = dir * rr;
 
         float3 rv = float3(Hash21(base + 191.0) * 2.0 - 1.0, Hash11(base + 251.0) * 2.0 - 1.0);
-        p.vel = normalize(rv + 1e-5) * float3(0.20, 0.45, 0.20);
+        float3 localVel = normalize(rv + 1e-5) * float3(0.20, 0.45, 0.20) * startSpeed;
+
+        if (isLocal)
+        {
+            p.pos = localPos;
+            p.vel = localVel;
+        }
+        else
+        {
+            p.pos = EmitterToWorld(e, localPos);
+            p.vel = EmitterDirToWorld(e, localVel);
+        }
 
         p.life = lerp(lifeMin, lifeMax, Hash11(base + 311.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
@@ -211,17 +242,30 @@ struct Particle
 struct EmitterGPU
 {
     float4 p0; // xyz = pos, w = radius
-    float4 p1; // xyz = color, w = sizePx
-    float4 p2; // xyz = gravity, w = drag
-    float4 p3; // x = lifeMin, y = lifeMax, z = intensity, w = depthBiasMeters
-    float4 p4; // x = depthTest (1.0 or 0.0), yzw unused
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
     float4 time;        // timeSec, dtSec, particleCount, spawnJitter
     float4 resolution;  // w,h,invW,invH
-    float4 emitterInfo; // x = emitterCount, y = nearZ, z = farZ, w = 0 (bias는 emitter별로 EmitterGPU.p3.w에 저장됨)
+    float4 emitterInfo; // x = emitterCount, y = nearZ, z = farZ, w = 0 (bias는 emitter별로 EmitterGPU.p6.z에 저장됨)
     float4x4 viewProj;
     float4 cameraPos;
 };
@@ -257,15 +301,19 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    bool depthTest = (e.p4.x > 0.5);
-    float emitterIntensity = e.p3.z;
-    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    bool isLocal = (e.p3.w > 0.5);
+    bool depthTest = (e.p6.w > 0.5);
+    float emitterIntensity = e.p4.w;
+    float3 color = e.p4.xyz * emitterIntensity; // intensity 곱하기
     float size = max(e.p1.w, 1.0);
-    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+    float depthBiasMeters = e.p6.z;  // emitter별 depth bias
+
+    float3 worldPos3 = isLocal ? EmitterToWorld(e, p.pos) : p.pos;
+    float3 worldVel = isLocal ? EmitterDirToWorld(e, p.vel) : p.vel;
 
     // 월드 좌표 → 클립 공간
     // viewProj는 XMMatrixTranspose로 전달되므로 mul(vector, matrix) 사용 (다른 셰이더와 동일)
-    float4 worldPos = float4(p.pos, 1.0);
+    float4 worldPos = float4(worldPos3, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     // 클립 공간 → NDC → 스크린 좌표
@@ -303,7 +351,7 @@ void main(uint3 id : SV_DispatchThreadID)
 
     int r = (int)clamp(size * 0.5, 1.0, 6.0);
 
-    float speed = length(p.vel);
+    float speed = length(worldVel);
     float intensity = saturate(speed * 1.5) * saturate(p.life);
 
     for (int y = -r; y <= r; ++y)
@@ -347,12 +395,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -405,26 +466,45 @@ void main(uint3 id : SV_DispatchThreadID)
     }
 
     EmitterGPU e = gEmitters[emitterIdx];
-    float3 emitter = e.p0.xyz;
+    bool isLocal = (e.p3.w > 0.5);
     float radius = max(e.p0.w, 0.0001);
-    float3 gravity = e.p2.xyz;
-    float drag = e.p2.w;
-    float lifeMin = e.p3.x;
-    float lifeMax = e.p3.y;
+    float3 gravity = e.p5.xyz;
+    float drag = e.p5.w;
+    float lifeMin = e.p6.x;
+    float lifeMax = e.p6.y;
+    float startSpeed = max(e.p2.w, 0.001);
+    float spawnRate = saturate(e.p7.x);
 
     if (p.life <= 0.0)
     {
         float base = (float)i * 1.913 + t * 19.71 + p.seed * 97.0;
+        if (Hash11(base + 17.0) > spawnRate)
+        {
+            p.life = 0.0;
+            particles[i] = p;
+            return;
+        }
         float2 r = Hash21(base);
         float3 r3 = float3(r * 2.0 - 1.0, Hash11(base + 37.0) * 2.0 - 1.0);
 
         float3 dir = normalize(r3 + 1e-5);
         float rr = sqrt(Hash11(base + 91.0)) * radius;
-        p.pos = emitter + dir * rr;
+        float3 localPos = dir * rr;
 
         float3 rv = float3(Hash21(base + 131.0) * 2.0 - 1.0, Hash11(base + 251.0) * 2.0 - 1.0);
         float spd = 0.45 + Hash11(base + 171.0) * 0.85;
-        p.vel = normalize(rv + 1e-5) * spd;
+        float3 localVel = normalize(rv + 1e-5) * (spd * startSpeed);
+
+        if (isLocal)
+        {
+            p.pos = localPos;
+            p.vel = localVel;
+        }
+        else
+        {
+            p.pos = EmitterToWorld(e, localPos);
+            p.vel = EmitterDirToWorld(e, localVel);
+        }
 
         p.life = lerp(lifeMin, lifeMax, Hash11(base + 211.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
@@ -455,12 +535,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -499,13 +592,17 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    bool depthTest = (e.p4.x > 0.5);
-    float emitterIntensity = e.p3.z;
-    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    bool isLocal = (e.p3.w > 0.5);
+    bool depthTest = (e.p6.w > 0.5);
+    float emitterIntensity = e.p4.w;
+    float3 color = e.p4.xyz * emitterIntensity; // intensity 곱하기
     float baseSize = max(e.p1.w, 1.0);
-    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+    float depthBiasMeters = e.p6.z;  // emitter별 depth bias
 
-    float4 worldPos = float4(p.pos, 1.0);
+    float3 worldPos3 = isLocal ? EmitterToWorld(e, p.pos) : p.pos;
+    float3 worldVel = isLocal ? EmitterDirToWorld(e, p.vel) : p.vel;
+
+    float4 worldPos = float4(worldPos3, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
@@ -536,7 +633,7 @@ void main(uint3 id : SV_DispatchThreadID)
     }
     
     float2 vPx = float2(0.0, 0.0);
-    float4 clipPos2 = mul(float4(p.pos + p.vel * 0.03, 1.0), viewProj);
+    float4 clipPos2 = mul(float4(worldPos3 + worldVel * 0.03, 1.0), viewProj);
     if (clipPos2.w > 0.0)
     {
         float3 ndc2 = clipPos2.xyz / clipPos2.w;
@@ -599,12 +696,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -657,25 +767,44 @@ void main(uint3 id : SV_DispatchThreadID)
     }
 
     EmitterGPU e = gEmitters[emitterIdx];
-    float3 emitter = e.p0.xyz;
+    bool isLocal = (e.p3.w > 0.5);
     float radius = max(e.p0.w, 0.0001);
-    float3 gravity = e.p2.xyz;
-    float drag = e.p2.w;
-    float lifeMin = e.p3.x;
-    float lifeMax = e.p3.y;
+    float3 gravity = e.p5.xyz;
+    float drag = e.p5.w;
+    float lifeMin = e.p6.x;
+    float lifeMax = e.p6.y;
+    float startSpeed = max(e.p2.w, 0.001);
+    float spawnRate = saturate(e.p7.x);
 
     if (p.life <= 0.0)
     {
         float base = (float)i * 0.777 + t * 3.1 + p.seed * 113.0;
+        if (Hash11(base + 17.0) > spawnRate)
+        {
+            p.life = 0.0;
+            particles[i] = p;
+            return;
+        }
         float2 r = Hash21(base);
         float3 r3 = float3(r * 2.0 - 1.0, Hash11(base + 33.0) * 2.0 - 1.0);
 
         float3 dir = normalize(r3 + 1e-5);
         float rr = sqrt(Hash11(base + 33.0)) * radius;
-        p.pos = emitter + dir * rr;
+        float3 localPos = dir * rr;
 
         float3 rv = float3(Hash21(base + 77.0) * 2.0 - 1.0, Hash11(base + 97.0) * 2.0 - 1.0);
-        p.vel = float3(rv.x * 0.05, 0.10 + abs(rv.y) * 0.08, rv.z * 0.05);
+        float3 localVel = float3(rv.x * 0.05, 0.10 + abs(rv.y) * 0.08, rv.z * 0.05) * startSpeed;
+
+        if (isLocal)
+        {
+            p.pos = localPos;
+            p.vel = localVel;
+        }
+        else
+        {
+            p.pos = EmitterToWorld(e, localPos);
+            p.vel = EmitterDirToWorld(e, localVel);
+        }
 
         p.life = lerp(lifeMin, lifeMax, Hash11(base + 401.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
@@ -709,12 +838,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -755,15 +897,17 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    bool depthTest = (e.p4.x > 0.5);
-    float emitterIntensity = e.p3.z;
-    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    bool isLocal = (e.p3.w > 0.5);
+    bool depthTest = (e.p6.w > 0.5);
+    float emitterIntensity = e.p4.w;
+    float3 color = e.p4.xyz * emitterIntensity; // intensity 곱하기
     float baseSize = max(e.p1.w, 1.0);
-    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
-    float lifeMin = e.p3.x;
-    float lifeMax = e.p3.y;
+    float depthBiasMeters = e.p6.z;  // emitter별 depth bias
+    float lifeMin = e.p6.x;
+    float lifeMax = e.p6.y;
 
-    float4 worldPos = float4(p.pos, 1.0);
+    float3 worldPos3 = isLocal ? EmitterToWorld(e, p.pos) : p.pos;
+    float4 worldPos = float4(worldPos3, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
@@ -838,12 +982,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -896,25 +1053,45 @@ void main(uint3 id : SV_DispatchThreadID)
     }
 
     EmitterGPU e = gEmitters[emitterIdx];
-    float3 emitter = e.p0.xyz;
+    bool isLocal = (e.p3.w > 0.5);
+    float3 emitter = isLocal ? float3(0.0, 0.0, 0.0) : e.p0.xyz;
     float radius = max(e.p0.w, 0.0001);
-    float3 gravity = e.p2.xyz;
-    float drag = e.p2.w;
-    float lifeMin = e.p3.x;
-    float lifeMax = e.p3.y;
+    float3 gravity = e.p5.xyz;
+    float drag = e.p5.w;
+    float lifeMin = e.p6.x;
+    float lifeMax = e.p6.y;
+    float startSpeed = max(e.p2.w, 0.001);
+    float spawnRate = saturate(e.p7.x);
 
     if (p.life <= 0.0)
     {
         float base = (float)i * 2.11 + t * 7.7 + p.seed * 111.0;
+        if (Hash11(base + 17.0) > spawnRate)
+        {
+            p.life = 0.0;
+            particles[i] = p;
+            return;
+        }
         float2 r01 = Hash21(base);
         float ang = r01.x * 6.2831853;
         float rr = sqrt(r01.y) * radius;
         float h = (Hash11(base + 19.0) - 0.5) * radius * 0.5;
 
-        p.pos = emitter + float3(cos(ang) * rr, h, sin(ang) * rr);
+        float3 localPos = float3(cos(ang) * rr, h, sin(ang) * rr);
 
         float3 tang = float3(-sin(ang), 0.0, cos(ang));
-        p.vel = tang * (0.05 + Hash11(base + 19.0) * 0.10);
+        float3 localVel = tang * (0.05 + Hash11(base + 19.0) * 0.10) * startSpeed;
+
+        if (isLocal)
+        {
+            p.pos = localPos;
+            p.vel = localVel;
+        }
+        else
+        {
+            p.pos = EmitterToWorld(e, localPos);
+            p.vel = EmitterDirToWorld(e, localVel);
+        }
 
         p.life = lerp(lifeMin, lifeMax, Hash11(base + 211.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
@@ -957,12 +1134,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -1001,13 +1191,15 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    bool depthTest = (e.p4.x > 0.5);
-    float emitterIntensity = e.p3.z;
-    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    bool isLocal = (e.p3.w > 0.5);
+    bool depthTest = (e.p6.w > 0.5);
+    float emitterIntensity = e.p4.w;
+    float3 color = e.p4.xyz * emitterIntensity; // intensity 곱하기
     float size = clamp(max(e.p1.w, 1.0) * 0.9, 1.0, 10.0);
-    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+    float depthBiasMeters = e.p6.z;  // emitter별 depth bias
 
-    float4 worldPos = float4(p.pos, 1.0);
+    float3 worldPos3 = isLocal ? EmitterToWorld(e, p.pos) : p.pos;
+    float4 worldPos = float4(worldPos3, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
@@ -1075,12 +1267,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -1132,20 +1337,40 @@ void main(uint3 id : SV_DispatchThreadID)
     }
 
     EmitterGPU e = gEmitters[emitterIdx];
-    float3 emitter = e.p0.xyz;
+    bool isLocal = (e.p3.w > 0.5);
+    float3 emitter = isLocal ? float3(0.0, 0.0, 0.0) : e.p0.xyz;
     float radius = max(e.p0.w, 0.0001);
-    float3 gravity = e.p2.xyz;
-    float drag = e.p2.w;
-    float lifeMin = e.p3.x;
-    float lifeMax = e.p3.y;
+    float3 gravity = e.p5.xyz;
+    float drag = e.p5.w;
+    float lifeMin = e.p6.x;
+    float lifeMax = e.p6.y;
+    float startSpeed = max(e.p2.w, 0.001);
+    float spawnRate = saturate(e.p7.x);
     
     if (p.life <= 0.0)
     {
         float base = (float)i * 0.91 + t * 0.37 + p.seed * 401.0;
+        if (Hash11(base + 17.0) > spawnRate)
+        {
+            p.life = 0.0;
+            particles[i] = p;
+            return;
+        }
         float2 r = Hash21(base);
 
-        p.pos = emitter + float3((r.x - 0.5) * radius * 2.0, radius * 0.5 + r.y * radius, (r.y - 0.5) * radius * 2.0);
-        p.vel = float3((r.y - 0.5) * 0.05, -(0.05 + r.x * 0.08), 0.0);
+        float3 localPos = float3((r.x - 0.5) * radius * 2.0, radius * 0.5 + r.y * radius, (r.y - 0.5) * radius * 2.0);
+        float3 localVel = float3((r.y - 0.5) * 0.05, -(0.05 + r.x * 0.08), 0.0) * startSpeed;
+
+        if (isLocal)
+        {
+            p.pos = localPos;
+            p.vel = localVel;
+        }
+        else
+        {
+            p.pos = EmitterToWorld(e, localPos);
+            p.vel = EmitterDirToWorld(e, localVel);
+        }
         p.life = lerp(lifeMin, lifeMax, Hash11(base + 19.0));
         p.seed = frac(p.seed + Hash11(base + 401.0));
         p.emitterIndex = emitterIdx;
@@ -1181,12 +1406,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -1225,13 +1463,15 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    bool depthTest = (e.p4.x > 0.5);
-    float emitterIntensity = e.p3.z;
-    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    bool isLocal = (e.p3.w > 0.5);
+    bool depthTest = (e.p6.w > 0.5);
+    float emitterIntensity = e.p4.w;
+    float3 color = e.p4.xyz * emitterIntensity; // intensity 곱하기
     float size = clamp(max(e.p1.w, 1.0) * 0.6, 1.0, 6.0);
-    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+    float depthBiasMeters = e.p6.z;  // emitter별 depth bias
 
-    float4 worldPos = float4(p.pos, 1.0);
+    float3 worldPos3 = isLocal ? EmitterToWorld(e, p.pos) : p.pos;
+    float4 worldPos = float4(worldPos3, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
@@ -1299,12 +1539,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -1357,25 +1610,44 @@ void main(uint3 id : SV_DispatchThreadID)
     }
 
     EmitterGPU e = gEmitters[emitterIdx];
-    float3 emitter = e.p0.xyz;
+    bool isLocal = (e.p3.w > 0.5);
     float radius = max(e.p0.w, 0.0001);
-    float3 gravity = e.p2.xyz;
-    float drag = e.p2.w;
-    float lifeMin = e.p3.x;
-    float lifeMax = e.p3.y;
+    float3 gravity = e.p5.xyz;
+    float drag = e.p5.w;
+    float lifeMin = e.p6.x;
+    float lifeMax = e.p6.y;
+    float startSpeed = max(e.p2.w, 0.001);
+    float spawnRate = saturate(e.p7.x);
 
     if (p.life <= 0.0)
     {
         float base = (float)i * 1.57 + t * 9.0 + p.seed * 181.0;
+        if (Hash11(base + 17.0) > spawnRate)
+        {
+            p.life = 0.0;
+            particles[i] = p;
+            return;
+        }
         float2 r = Hash21(base);
         float3 r3 = float3(r * 2.0 - 1.0, Hash11(base + 31.0) * 2.0 - 1.0);
         float3 dir = normalize(r3 + 1e-5);
 
         float rr = sqrt(Hash11(base + 31.0)) * radius;
-        p.pos = emitter + dir * rr;
+        float3 localPos = dir * rr;
 
         float spd = 0.35 + Hash11(base + 71.0) * 0.95;
-        p.vel = dir * spd;
+        float3 localVel = dir * (spd * startSpeed);
+
+        if (isLocal)
+        {
+            p.pos = localPos;
+            p.vel = localVel;
+        }
+        else
+        {
+            p.pos = EmitterToWorld(e, localPos);
+            p.vel = EmitterDirToWorld(e, localVel);
+        }
 
         p.life = lerp(lifeMin, lifeMax, Hash11(base + 211.0));
         p.seed = frac(p.seed + Hash11(base + 401.0) * (1.0 + jitter));
@@ -1406,12 +1678,25 @@ struct Particle
 
 struct EmitterGPU
 {
-    float4 p0;
-    float4 p1;
-    float4 p2;
-    float4 p3;
-    float4 p4; // x = depthTest (1.0 or 0.0)
+    float4 p0; // xyz = pos, w = radius
+    float4 p1; // xyz = right, w = sizePx
+    float4 p2; // xyz = up, w = startSpeed
+    float4 p3; // xyz = forward, w = simulationSpace (0=World,1=Local)
+    float4 p4; // xyz = color, w = intensity
+    float4 p5; // xyz = gravity, w = drag
+    float4 p6; // x = lifeMin, y = lifeMax, z = depthBiasMeters, w = depthTest
+    float4 p7; // x = spawnRate(0..1), yzw = reserved
 };
+
+float3 EmitterToWorld(EmitterGPU e, float3 localPos)
+{
+    return e.p0.xyz + localPos.x * e.p1.xyz + localPos.y * e.p2.xyz + localPos.z * e.p3.xyz;
+}
+
+float3 EmitterDirToWorld(EmitterGPU e, float3 localDir)
+{
+    return localDir.x * e.p1.xyz + localDir.y * e.p2.xyz + localDir.z * e.p3.xyz;
+}
 
 cbuffer CBParams : register(b0)
 {
@@ -1452,13 +1737,16 @@ void main(uint3 id : SV_DispatchThreadID)
         emitterIdx = 0;
     }
     EmitterGPU e = gEmitters[emitterIdx];
-    bool depthTest = (e.p4.x > 0.5);
-    float emitterIntensity = e.p3.z;
-    float3 color = e.p1.xyz * emitterIntensity; // intensity 곱하기
+    bool isLocal = (e.p3.w > 0.5);
+    bool depthTest = (e.p6.w > 0.5);
+    float emitterIntensity = e.p4.w;
+    float3 color = e.p4.xyz * emitterIntensity; // intensity 곱하기
     float baseSize = max(e.p1.w, 1.0);
-    float depthBiasMeters = e.p3.w;  // emitter별 depth bias
+    float depthBiasMeters = e.p6.z;  // emitter별 depth bias
 
-    float4 worldPos = float4(p.pos, 1.0);
+    float3 worldPos3 = isLocal ? EmitterToWorld(e, p.pos) : p.pos;
+    float3 worldVel = isLocal ? EmitterDirToWorld(e, p.vel) : p.vel;
+    float4 worldPos = float4(worldPos3, 1.0);
     float4 clipPos = mul(worldPos, viewProj);
     
     if (clipPos.w <= 0.0) return;
@@ -1490,7 +1778,7 @@ void main(uint3 id : SV_DispatchThreadID)
     
     int2 ip = int2(screenPos);
 
-    float speed = length(p.vel);
+    float speed = length(worldVel);
     float size = clamp(baseSize * (1.0 + speed * 1.5), 2.0, 18.0);
     int r = (int)clamp(size * 0.5, 2.0, 10.0);
 
