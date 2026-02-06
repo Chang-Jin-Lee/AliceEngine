@@ -1159,7 +1159,7 @@ float4 main(PS_INPUT_QUAD pIn) : SV_Target
 
     diffuseIBL *= envDiffuseStrength;
     specularIBL *= envSpecularStrength;
-    
+
     float3 iblColor = (diffuseIBL + specularIBL) * ao;
 
     // 최종 색상 계산

@@ -3,88 +3,89 @@
 #include "Runtime/Foundation/ImGuiEx.h"
 #include "Runtime/Rendering/ForwardRenderSystem.h"
 #include "Runtime/Rendering/DeferredRenderSystem.h"
-#include "Runtime/Resources/ResourceManager.h"
-#include "Runtime/Foundation/Logger.h"
 #include "Runtime/ECS/GameObject.h"
 #include "Runtime/ECS/Components/TransformComponent.h"
+#include "Runtime/Resources/ResourceManager.h"
 
 #include "imgui.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <DirectXMath.h>
 #include <ShlObj.h>
-#include <Windows.h>
 
 namespace Alice
 {
 	namespace
 	{
-		static int CALLBACK BrowseFolderCallbackProc(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
+		int CALLBACK BrowseSkyboxFolderCallback(HWND hwnd, UINT uMsg, LPARAM /*lParam*/, LPARAM lpData)
 		{
-			if (uMsg == BFFM_INITIALIZED && lpData != 0)
+			if (uMsg == BFFM_INITIALIZED && lpData)
 			{
-				const wchar_t* initialPath = reinterpret_cast<const wchar_t*>(lpData);
-				if (initialPath && initialPath[0] != L'\0')
-				{
-					SendMessageW(hwnd, BFFM_SETSELECTIONW, TRUE, reinterpret_cast<LPARAM>(initialPath));
-				}
+				::SendMessage(hwnd, BFFM_SETSELECTIONW, TRUE, lpData);
 			}
 			return 0;
 		}
 
-		static bool TryReadDdsSize(const std::filesystem::path& absPath, int& outW, int& outH)
+		bool BrowseForSkyboxFolder(HWND owner, const std::filesystem::path& initialDir, std::filesystem::path& outDir)
 		{
-			outW = 0;
-			outH = 0;
+			BROWSEINFOW bi{};
+			wchar_t displayName[MAX_PATH] = {};
+			bi.hwndOwner = owner;
+			bi.pszDisplayName = displayName;
+			bi.lpszTitle = L"Select Skybox folder (Resource/Skybox/...)";
+			bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_USENEWUI;
+			const std::wstring initial = initialDir.wstring();
+			bi.lpfn = BrowseSkyboxFolderCallback;
+			bi.lParam = reinterpret_cast<LPARAM>(initial.c_str());
 
-			std::ifstream ifs(absPath, std::ios::binary);
-			if (!ifs.is_open())
-				return false;
+			PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
+			if (!pidl) return false;
 
-			char magic[4] = {};
-			ifs.read(magic, 4);
-			if (ifs.gcount() != 4 || std::memcmp(magic, "DDS ", 4) != 0)
-				return false;
+			wchar_t pathBuf[MAX_PATH] = {};
+			const bool ok = (SHGetPathFromIDListW(pidl, pathBuf) != FALSE);
+			CoTaskMemFree(pidl);
+			if (!ok) return false;
 
-			std::uint32_t header[5] = {};
-			ifs.read(reinterpret_cast<char*>(header), sizeof(header));
-			if (ifs.gcount() != sizeof(header))
-				return false;
-
-			outH = static_cast<int>(header[2]);
-			outW = static_cast<int>(header[3]);
-			return (outW > 0 && outH > 0);
+			outDir = std::filesystem::path(pathBuf);
+			return true;
 		}
 
-		static void ResolveSkyboxBaseAndPrefix(int skyboxChoice,
-			const std::string& customDir,
-			const std::string& customPrefix,
-			std::filesystem::path& outBase,
-			std::string& outPrefix)
+		std::string DetectSkyboxPrefixFromDir(const std::filesystem::path& dir)
 		{
-			outBase.clear();
-			outPrefix.clear();
+			static const char* kSuffixes[] = {
+				"EnvHDR", "EnvMDR",
+				"DiffuseHDR", "DiffuseMDR",
+				"SpecularHDR", "SpecularMDR",
+				"Brdf"
+			};
 
-			switch (skyboxChoice)
+			std::error_code ec;
+			if (!std::filesystem::exists(dir, ec) || !std::filesystem::is_directory(dir, ec))
+				return {};
+
+			for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
 			{
-			case 1: outBase = std::filesystem::path("Resource/Skybox") / "Bridge"; outPrefix = "bridge"; break;
-			case 2: outBase = std::filesystem::path("Resource/Skybox") / "Indoor"; outPrefix = "indoor"; break;
-			case 3: outBase = std::filesystem::path("Resource/Skybox") / "Sample"; outPrefix = "BakerSample"; break;
-			case 4: outBase = std::filesystem::path("Resource/Skybox") / "darkenv"; outPrefix = "darkenvDiffuseHDR"; break;
-			case 5:
-				if (!customDir.empty() && !customPrefix.empty())
+				if (ec) break;
+				if (!entry.is_regular_file(ec)) continue;
+
+				const auto& path = entry.path();
+				if (path.extension() != ".dds") continue;
+
+				std::string stem = path.stem().string();
+				for (const char* suffix : kSuffixes)
 				{
-					outBase = std::filesystem::path("Resource/Skybox") / customDir;
-					outPrefix = customPrefix;
+					const size_t suffixLen = std::strlen(suffix);
+					if (stem.size() >= suffixLen && stem.compare(stem.size() - suffixLen, suffixLen, suffix) == 0)
+					{
+						stem.erase(stem.size() - suffixLen);
+						return stem;
+					}
 				}
-				break;
-			default:
-				break;
 			}
+
+			return {};
 		}
 	}
 
@@ -196,7 +197,7 @@ namespace Alice
 						break;
 					default: break;
 					}
-			};
+				};
 
 			auto EditBgIfOff = [&](auto& renderer)
 				{
@@ -207,147 +208,55 @@ namespace Alice
 						renderer.SetBackgroundColor(bgColor);
 				};
 
+			if (skyboxChoice < 0 || skyboxChoice > 5) skyboxChoice = 0;
 			bool skyboxChanged = ImGui::Combo("Skybox Choice", &skyboxChoice, skyboxItems, IM_ARRAYSIZE(skyboxItems));
+			bool rendererChanged = (lastForward != useForwardRendering);
 
-			std::string resLabelHdr = "HDR";
-			std::string resLabelMdr = "MDR";
-			{
-				const auto& rm = ResourceManager::Get();
-				std::filesystem::path base;
-				std::string prefix;
-				ResolveSkyboxBaseAndPrefix(skyboxChoice, skyboxCustomDir, skyboxCustomPrefix, base, prefix);
-				if (!base.empty() && !prefix.empty())
-				{
-					int w = 0, h = 0;
-					const std::filesystem::path hdrAbs = rm.Resolve(base / (prefix + "EnvHDR.dds"));
-					if (TryReadDdsSize(hdrAbs, w, h))
-					{
-						resLabelHdr += " (" + std::to_string(w) + "x" + std::to_string(h) + ")";
-					}
-					w = 0; h = 0;
-					const std::filesystem::path mdrAbs = rm.Resolve(base / (prefix + "EnvMDR.dds"));
-					if (TryReadDdsSize(mdrAbs, w, h))
-					{
-						resLabelMdr += " (" + std::to_string(w) + "x" + std::to_string(h) + ")";
-					}
-				}
-			}
-
-			const char* skyboxResItems[] = { resLabelHdr.c_str(), resLabelMdr.c_str() };
+			const char* skyboxResItems[] = { "HDR", "MDR" };
 			if (skyboxResolution < 0 || skyboxResolution > 1) skyboxResolution = 0;
 			bool skyboxResChanged = ImGui::Combo("Skybox Resolution", &skyboxResolution, skyboxResItems, IM_ARRAYSIZE(skyboxResItems));
-			bool rendererChanged = (lastForward != useForwardRendering);
-			bool browsePressed = false;
-
+			bool customChanged = false;
 			if (skyboxChoice == 5)
 			{
+				char dirBuf[256] = {};
+
+				strncpy_s(dirBuf, sizeof(dirBuf), skyboxCustomDir.c_str(), _TRUNCATE);
+
+				ImGui::Text("Custom Dir: %s", dirBuf[0] ? dirBuf : "-");
 				ImGui::SameLine();
-				if (ImGui::Button("Browse..."))
+				if (ImGui::Button("Browse...##SkyboxCustom"))
 				{
 					const auto& rm = ResourceManager::Get();
-					std::filesystem::path initialPath = rm.Resolve("Resource/Skybox");
+					std::filesystem::path initial = rm.Resolve("Resource/Skybox");
 					if (!skyboxCustomDir.empty())
+						initial = rm.Resolve(std::filesystem::path("Resource/Skybox") / skyboxCustomDir);
+					if (!std::filesystem::exists(initial))
+						initial = rm.Resolve("Resource/Skybox");
+
+					std::filesystem::path selectedDir;
+					if (BrowseForSkyboxFolder(m_hwnd, initial, selectedDir))
 					{
-						initialPath = rm.Resolve(std::filesystem::path("Resource/Skybox") / skyboxCustomDir);
-					}
-					if (!std::filesystem::exists(initialPath))
-					{
-						initialPath = rm.Resolve("Resource/Skybox");
-					}
-					std::wstring initialPathW = initialPath.wstring();
+						const std::filesystem::path selectedAbs = std::filesystem::absolute(selectedDir);
+						const std::filesystem::path baseAbs = std::filesystem::absolute(rm.Resolve("Resource/Skybox"));
 
-					BROWSEINFOW bi{};
-					bi.hwndOwner = m_hwnd;
-					bi.lpszTitle = L"Select Skybox folder (Resource/Skybox/...)";
-					bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_USENEWUI;
-					bi.lpfn = BrowseFolderCallbackProc;
-					bi.lParam = reinterpret_cast<LPARAM>(initialPathW.c_str());
+						std::filesystem::path relativeDir;
+						if (selectedAbs.wstring().rfind(baseAbs.wstring(), 0) == 0)
+							relativeDir = selectedAbs.lexically_relative(baseAbs);
+						else
+							relativeDir = selectedAbs;
 
-					PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
-					if (pidl)
-					{
-						wchar_t folderW[MAX_PATH] = {};
-						if (SHGetPathFromIDListW(pidl, folderW))
-						{
-							std::filesystem::path selectedPath = folderW;
-							auto logical = ResourceManager::NormalizeResourcePathAbsoluteToLogical(selectedPath);
-							const std::string logicalStr = logical.generic_string();
-							const std::string skyboxRoot = "Resource/Skybox";
+						skyboxCustomDir = relativeDir.generic_string();
+						skyboxCustomPrefix = DetectSkyboxPrefixFromDir(selectedAbs);
+						if (skyboxCustomPrefix.empty())
+							skyboxCustomPrefix = DetectSkyboxPrefixFromDir(selectedAbs / ".");
 
-							std::string logicalLower = logicalStr;
-							for (char& c : logicalLower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-							std::string rootLower = skyboxRoot;
-							for (char& c : rootLower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-
-							if (logicalLower.find(rootLower) == 0)
-							{
-								std::filesystem::path rel = std::filesystem::path(logicalStr).lexically_relative(skyboxRoot);
-								if (rel == ".")
-									skyboxCustomDir.clear();
-								else
-									skyboxCustomDir = rel.generic_string();
-
-								auto EndsWithInsensitive = [](const std::string& value, const std::string& suffix)
-									{
-										if (value.size() < suffix.size()) return false;
-										const size_t off = value.size() - suffix.size();
-										for (size_t i = 0; i < suffix.size(); ++i)
-										{
-											char a = static_cast<char>(std::tolower(static_cast<unsigned char>(value[off + i])));
-											char b = static_cast<char>(std::tolower(static_cast<unsigned char>(suffix[i])));
-											if (a != b) return false;
-										}
-										return true;
-									};
-
-								std::string foundPrefix;
-								try
-								{
-									for (const auto& entry : std::filesystem::directory_iterator(selectedPath))
-									{
-										if (!entry.is_regular_file())
-											continue;
-										const std::string name = entry.path().filename().string();
-										const std::string suffix = "DiffuseHDR.dds";
-										if (EndsWithInsensitive(name, suffix))
-										{
-											foundPrefix = name.substr(0, name.size() - suffix.size());
-											break;
-										}
-									}
-								}
-								catch (...)
-								{
-									ALICE_LOG_WARN("Skybox Browse: failed to scan folder %s", selectedPath.string().c_str());
-								}
-
-								if (!foundPrefix.empty())
-								{
-									skyboxCustomPrefix = foundPrefix;
-									browsePressed = true;
-								}
-								else
-								{
-									ALICE_LOG_WARN("Skybox Browse: DiffuseHDR.dds not found in %s", selectedPath.string().c_str());
-								}
-							}
-							else
-							{
-								ALICE_LOG_WARN("Skybox Browse: folder must be inside Resource/Skybox. path=%s", selectedPath.string().c_str());
-							}
-						}
-						CoTaskMemFree(pidl);
+						customChanged = true;
 					}
 				}
-
-				if (!skyboxCustomDir.empty())
-					ImGui::Text("Custom Dir: %s", skyboxCustomDir.c_str());
-				if (!skyboxCustomPrefix.empty())
-					ImGui::Text("Custom Prefix: %s", skyboxCustomPrefix.c_str());
 			}
 
 			// 선택 변경 or 렌더러 토글 변경 시 반영 (초기 1회 포함)
-			if (skyboxChanged || skyboxResChanged || browsePressed || rendererChanged ||
+			if (skyboxChanged || skyboxResChanged || customChanged || rendererChanged ||
 				lastSkyboxChoice != skyboxChoice || lastSkyboxResolution != skyboxResolution)
 			{
 				ApplySkybox(forward);

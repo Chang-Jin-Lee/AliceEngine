@@ -206,7 +206,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblSpecularSRV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblBrdfLutSRV;
         std::string                                      m_currentIblSet; // 현재 IBL 세트 이름 (Bridge/Indoor/Sample)
-        std::string                                      m_currentIblSuffix{ "HDR" };
+        std::string                                      m_currentIblSuffix; // HDR/MDR
 
         // ==== 게임 뷰포트 렌더 타깃 (Scene Color) ====
         Microsoft::WRL::ComPtr<ID3D11Texture2D>         m_sceneColorTex;

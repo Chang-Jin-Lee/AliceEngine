@@ -194,7 +194,9 @@ namespace Alice
 		// Initialize helpers
 		bool InitializeAll(Engine& owner, HINSTANCE hInstance, int nCmdShow);
 		void InitializeMainThreadAndRegistry();
+		void InitializeDllSearchPath(const std::filesystem::path& exeDir);
 		std::filesystem::path InitializeResolveExeDir();
+		void ApplyEditorModeFromExeName(const std::filesystem::path& exeDir);
 		bool InitializeConfigureResourceManagers(const std::filesystem::path& exeDir);
 		bool InitializeValidateGameDataIfNeeded();
 		void InitializeLoadPvdSettings(const std::filesystem::path& exeDir);
@@ -204,6 +206,7 @@ namespace Alice
 		bool InitializeWindowAndInput(Engine& owner, int nCmdShow);
 		bool InitializeRenderDevice();
 		bool InitializeEditorCoreIfNeeded();
+		bool RenderStartupLogoFrames(float seconds);
 		void InitializeAudio();
 		bool InitializeRenderSystems();
 		bool InitializeUI();
@@ -232,6 +235,8 @@ namespace Alice
 		void UpdateEditorFreeCam(float dt);
 		void UpdateApplyFinalCameraLookAt();
 		void UpdateUI(float dt);
+		void UpdateHandlePlayStartReset();
+		float UpdateResolvePhysicsDelta(float dt);
 
 		// =========================
 		// Physics helpers

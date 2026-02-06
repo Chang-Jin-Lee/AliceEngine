@@ -283,14 +283,14 @@ namespace Alice
                                float ambientOcclusion,
                                bool useTexture,
                                bool enableNormalMap,
-                                int shadingMode,
-                                float normalStrength,
-                                const DirectX::XMFLOAT4& toonPbrCuts,
-                                const DirectX::XMFLOAT4& toonPbrLevels,
-                                float envDiffuseStrength = 1.0f,
-                                float envSpecularStrength = 1.0f,
-                                const DirectX::XMFLOAT3& outlineColor = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
-                                float outlineWidth = 0.00f);
+                               int shadingMode,
+                               float normalStrength,
+                               const DirectX::XMFLOAT4& toonPbrCuts,
+                               const DirectX::XMFLOAT4& toonPbrLevels,
+                               float envDiffuseStrength = 1.0f,
+                               float envSpecularStrength = 1.0f,
+                               const DirectX::XMFLOAT3& outlineColor = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f),
+                               float outlineWidth = 0.00f);
         void UpdateLightingCB(const Camera& camera,
                               int shadingMode,
                               bool enableFillLight,
@@ -496,7 +496,7 @@ namespace Alice
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblSpecularSRV;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_iblBrdfLutSRV;
         std::string                                      m_currentIblSet;
-        std::string                                      m_currentIblSuffix{ "HDR" };
+        std::string                                      m_currentIblSuffix;
 
         // ==== 스카이박스 리소스 ====
         bool                                             m_skyboxEnabled { true };

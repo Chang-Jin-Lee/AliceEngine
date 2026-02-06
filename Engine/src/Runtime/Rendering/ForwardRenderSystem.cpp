@@ -92,10 +92,10 @@ namespace Alice
 
                 if (roughness != rhs.roughness) return roughness < rhs.roughness;
                 if (metalness != rhs.metalness) return metalness < rhs.metalness;
-            if (ambientOcclusion != rhs.ambientOcclusion) return ambientOcclusion < rhs.ambientOcclusion;
-            if (envDiffuseStrength != rhs.envDiffuseStrength) return envDiffuseStrength < rhs.envDiffuseStrength;
-            if (envSpecularStrength != rhs.envSpecularStrength) return envSpecularStrength < rhs.envSpecularStrength;
-            if (normalStrength != rhs.normalStrength) return normalStrength < rhs.normalStrength;
+                if (ambientOcclusion != rhs.ambientOcclusion) return ambientOcclusion < rhs.ambientOcclusion;
+                if (envDiffuseStrength != rhs.envDiffuseStrength) return envDiffuseStrength < rhs.envDiffuseStrength;
+                if (envSpecularStrength != rhs.envSpecularStrength) return envSpecularStrength < rhs.envSpecularStrength;
+                if (normalStrength != rhs.normalStrength) return normalStrength < rhs.normalStrength;
                 if (toonPbrCuts.x != rhs.toonPbrCuts.x) return toonPbrCuts.x < rhs.toonPbrCuts.x;
                 if (toonPbrCuts.y != rhs.toonPbrCuts.y) return toonPbrCuts.y < rhs.toonPbrCuts.y;
                 if (toonPbrCuts.z != rhs.toonPbrCuts.z) return toonPbrCuts.z < rhs.toonPbrCuts.z;
@@ -473,7 +473,6 @@ namespace Alice
         if (!m_resources) return false;
 
         namespace fs = std::filesystem;
-        // 경로 및 이름 설정 (Sample -> BakerSample, 그 외 소문자 변환)
         fs::path base = fs::path("Resource/Skybox") / iblDir;
         const std::string suffix = iblSuffix.empty() ? "HDR" : iblSuffix;
         const bool allowFallback = (suffix != "HDR");
@@ -927,24 +926,24 @@ namespace Alice
         return srv.Get();
     }
 
-void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
-                                            const XMMATRIX& view,
-                                            const XMMATRIX& projection,
-                                            const XMFLOAT4& materialColor,
-                                            const float& roughness,
-                                            const float& metalness,
-                                            float ambientOcclusion,
-                                            const bool& useTexture,
-                                            const bool& enableNormalMap,
-                                            int shadingMode,
-                                            float normalStrength,
-                                            const XMFLOAT4& toonPbrCuts,
-                                            const XMFLOAT4& toonPbrLevels,
-                                            float envDiffuseStrength,
-                                            float envSpecularStrength,
-                                            const XMFLOAT3& outlineColor,
-                                            float outlineWidth)
-{
+    void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
+                                                const XMMATRIX& view,
+                                                const XMMATRIX& projection,
+                                                const XMFLOAT4& materialColor,
+                                                const float& roughness,
+                                                const float& metalness,
+                                                float ambientOcclusion,
+                                                const bool& useTexture,
+                                                const bool& enableNormalMap,
+                                                int shadingMode,
+                                                float normalStrength,
+                                                const XMFLOAT4& toonPbrCuts,
+                                                const XMFLOAT4& toonPbrLevels,
+                                                float envDiffuseStrength,
+                                                float envSpecularStrength,
+                                                const XMFLOAT3& outlineColor,
+                                                float outlineWidth)
+    {
         CBPerObject data = {};
         // HLSL에서 row-major로 사용할 수 있도록 전치 행렬 사용
         data.world         = XMMatrixTranspose(world);
@@ -953,16 +952,16 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
         data.materialColor = materialColor;
         data.roughness     = roughness;
         data.metalness     = metalness;
-    data.ambientOcclusion = ambientOcclusion;
-    data.envDiffuseStrength = envDiffuseStrength;
-    data.envSpecularStrength = envSpecularStrength;
-    data.useTexture    = useTexture ? 1 : 0;
+        data.ambientOcclusion = ambientOcclusion;
+        data.useTexture    = useTexture ? 1 : 0;
         data.enableNormalMap = enableNormalMap ? 1 : 0;
         data.shadingMode   = shadingMode;
         data.pad0          = 0;
         data.normalStrength = normalStrength;
         data.toonPbrCuts = toonPbrCuts;
         data.toonPbrLevels = toonPbrLevels;
+        data.envDiffuseStrength = envDiffuseStrength;
+        data.envSpecularStrength = envSpecularStrength;
         data.outlineColor  = outlineColor;
         data.outlineWidth  = outlineWidth;
 
@@ -1357,9 +1356,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
                                           batchKey.color, batchKey.roughness, batchKey.metalness, batchKey.ambientOcclusion,
                                           true, (batchKey.enableNormalMap != 0),
                                           batchKey.shadingMode, batchKey.normalStrength,
-                                           batchKey.toonPbrCuts, batchKey.toonPbrLevels,
-                                           batchKey.envDiffuseStrength, batchKey.envSpecularStrength,
-                                           XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                          batchKey.toonPbrCuts, batchKey.toonPbrLevels,
+                                          batchKey.envDiffuseStrength, batchKey.envSpecularStrength,
+                                          XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
 
                         m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
                                                         batchKey.startIndex, batchKey.baseVertex, 0);
@@ -1421,9 +1420,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
                                       batchKey.color, batchKey.roughness, batchKey.metalness, batchKey.ambientOcclusion,
                                       true, (batchKey.enableNormalMap != 0),
                                       batchKey.shadingMode, batchKey.normalStrength,
-                                        batchKey.toonPbrCuts, batchKey.toonPbrLevels,
-                                        batchKey.envDiffuseStrength, batchKey.envSpecularStrength,
-                                        XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                      batchKey.toonPbrCuts, batchKey.toonPbrLevels,
+                                      batchKey.envDiffuseStrength, batchKey.envSpecularStrength,
+                                      XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
 
                     m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
                                                     batchKey.startIndex, batchKey.baseVertex, 0);
@@ -1559,9 +1558,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
                                   batchKey.color, batchKey.roughness, batchKey.metalness, batchKey.ambientOcclusion,
                                   true, (batchKey.enableNormalMap != 0),
                                   batchKey.shadingMode, batchKey.normalStrength,
-                                    batchKey.toonPbrCuts, batchKey.toonPbrLevels,
-                                    batchKey.envDiffuseStrength, batchKey.envSpecularStrength,
-                                    XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                  batchKey.toonPbrCuts, batchKey.toonPbrLevels,
+                                  batchKey.envDiffuseStrength, batchKey.envSpecularStrength,
+                                  XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
 
                 m_context->DrawIndexedInstanced(batchKey.indexCount, (UINT)batchInstances.size(),
                                                 batchKey.startIndex, batchKey.baseVertex, 0);
@@ -1753,9 +1752,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
 
                 XMFLOAT4 dummy(1, 1, 1, 1);
                 UpdatePerObjectCB(worldM, lightView, lightProj, dummy, 1, 0, 1.0f, false, false, 0,
-                                   1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
-                                   1.0f, 1.0f,
-                                   XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                  1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
+                                  1.0f, 1.0f,
+                                  XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
                 //m_context->DrawIndexed(m_indexCount, 0, 0);
             }
 
@@ -1826,9 +1825,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
                     UpdateBonesCB(cmd.bones, cmd.boneCount);
                     XMFLOAT4 dummy(1, 1, 1, 1);
                     UpdatePerObjectCB(cmd.world, lightView, lightProj, dummy, 1, 0, 1.0f, false, false, 0,
-                                       1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
-                                       1.0f, 1.0f,
-                                       XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                      1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
+                                      1.0f, 1.0f,
+                                      XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
                     m_context->DrawIndexed(cmd.indexCount, cmd.startIndex, cmd.baseVertex);
                 }
 
@@ -1870,9 +1869,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
 
                                     XMFLOAT4 dummy(1, 1, 1, 1);
                                     UpdatePerObjectCB(DirectX::XMMatrixIdentity(), lightView, lightProj, dummy, 1, 0, 1.0f, false, false, 0,
-                                                       1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
-                                                       1.0f, 1.0f,
-                                                       XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                                      1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
+                                                      1.0f, 1.0f,
+                                                      XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
                                     m_context->DrawIndexedInstanced(currentKey.indexCount, (UINT)batchInstances.size(), currentKey.startIndex, currentKey.baseVertex, 0);
                                 }
 
@@ -1900,9 +1899,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
 
                             XMFLOAT4 dummy(1, 1, 1, 1);
                             UpdatePerObjectCB(DirectX::XMMatrixIdentity(), lightView, lightProj, dummy, 1, 0, 1.0f, false, false, 0,
-                                               1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
-                                               1.0f, 1.0f,
-                                               XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
+                                              1.0f, DefaultToonPbrCuts(), DefaultToonPbrLevels(),
+                                              1.0f, 1.0f,
+                                              XMFLOAT3(0.0f, 0.0f, 0.0f), 0.0f);
                             m_context->DrawIndexedInstanced(currentKey.indexCount, (UINT)batchInstances.size(), currentKey.startIndex, currentKey.baseVertex, 0);
                         }
 
@@ -2040,9 +2039,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
             
             // [Pass 1] 원본 물체 그리기 (아웃라인 두께 0으로 강제)
             UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, ao, useTex, useNormalMap,
-                             objectShadingMode, normalStrength, toonCuts, toonLevels,
-                             envDiffuseStrength, envSpecularStrength,
-                             outlineColor, 0.0f);
+                              objectShadingMode, normalStrength, toonCuts, toonLevels,
+                              envDiffuseStrength, envSpecularStrength,
+                              outlineColor, 0.0f);
             m_context->DrawIndexed(m_indexCount, 0, 0);
 
             // [Pass 2] 아웃라인 그리기 (설정된 경우만)
@@ -2052,9 +2051,9 @@ void ForwardRenderSystem::UpdatePerObjectCB(const XMMATRIX& world,
                 
                 // 아웃라인 값 적용
                 UpdatePerObjectCB(worldM, viewM, projM, color, rough, metal, ao, useTex, useNormalMap,
-                                 objectShadingMode, normalStrength, toonCuts, toonLevels,
-                                 envDiffuseStrength, envSpecularStrength,
-                                 outlineColor, outlineWidth);
+                                  objectShadingMode, normalStrength, toonCuts, toonLevels,
+                                  envDiffuseStrength, envSpecularStrength,
+                                  outlineColor, outlineWidth);
                 m_context->DrawIndexed(m_indexCount, 0, 0);
                 
                 // 상태 복구
